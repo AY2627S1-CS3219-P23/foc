@@ -12,13 +12,13 @@ withdrawn, or exchanged for money, and only circulate within the platform.
 
 ## Team Members
 
-| Name | Role |
-| ----- | ----- |
-| Your Name | Your ownership |
-| Your Name | Your ownership |
-| Your Name | Your ownership |
-| Your Name | Your ownership |
-| Your Name | Your ownership |
+| Name | Service In-Charge | Nice-to-have |
+| ----- | ----- | ----- |
+| Kwey Xiu Xi | User Service | Cloud Deployment and DevOps |
+| Alastair Tan Choon Wei | Supplier Service | — |
+| Aung Ko Khant | Order Service | Centralized Logging |
+| Ryan Ang Jun Wen | Credit Service | Order History |
+| Leong Wei Zhi | Notification Service | Rating System |
 
 ---
 
@@ -26,7 +26,8 @@ withdrawn, or exchanged for money, and only circulate within the platform.
 
 This repository follows a **one-service-per-folder** structure: each
 microservice (`user-service/`, `supplier-service/`, `order-service/`,
-`credit-service/`) lives in its own top-level folder.
+`credit-service/`, `notification-service/`) lives in its own top-level
+folder.
 
 ```text
 .
@@ -34,6 +35,7 @@ microservice (`user-service/`, `supplier-service/`, `order-service/`,
 ├── supplier-service/
 ├── order-service/
 ├── credit-service/
+├── notification-service/
 ├── <n2h-service>/
 └── README.md
 ```
