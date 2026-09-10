@@ -33,11 +33,18 @@ first**; they cost nothing to read, unlike Figma MCP calls:
 | `docs/wireframes/login.png` | Login — username/email + password |
 | `docs/wireframes/dashboard.png` | Dashboard — credit balance, requester/courier mode toggle, quick actions, active requests with status chips, recent activity |
 | `docs/wireframes/suppliers.png` | Suppliers — search, category and campus-zone filters, supplier detail panel, empty state |
+| `docs/wireframes/profile.png` | Profile — account details, edit flows, delete-account modal |
+| `docs/wireframes/credit-history.png` | Credit history — balances and transaction list |
+| `docs/wireframes/order-history.png` | Order history — past/current orders |
+| `docs/wireframes/create-request.png` | Create request — new errand form |
+| `docs/wireframes/my-requests.png` | My requests — requester's view of own requests |
+| `docs/wireframes/open-requests.png` | Open requests — courier's browse/accept view |
+| `docs/wireframes/active-delivery.png` | Active delivery — courier's in-progress order view |
+| `docs/wireframes/admin-dashboard.png` | Admin dashboard — user/vendor management |
 
-The Figma file also contains further screens not yet snapshotted here
-(profile, create request, my/open requests, active delivery, order and
-credit history, admin dashboard, requester/courier flow diagrams) — use
-the Figma MCP server for those, mindful of the rate limit.
+The Figma file additionally contains requester/courier flow diagrams not
+snapshotted here — use the Figma MCP server for those, mindful of the
+rate limit.
 
 ## Requirements to keep in mind
 
