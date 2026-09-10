@@ -15,6 +15,14 @@ design. Expect it to be revised as the project progresses; treat it as
 directional, and confirm with the team before building anything that
 deviates from it.
 
+Agents can access the Figma file through the **Figma remote MCP server**,
+configured repo-wide in the root `.mcp.json`. Each person authenticates
+once via `/mcp` → figma → Allow Access (OAuth, own Figma account).
+Note: on Figma's free tier the server is rate-limited to roughly 20 tool
+calls per month, so use it sparingly — prefer any exported wireframe
+images in the repo when they exist, and reserve MCP calls for details the
+exports don't show.
+
 Screens covered so far (each in desktop and mobile variants):
 
 - **Sign Up** — account creation with NUS email, username, password
