@@ -1,6 +1,7 @@
-# Friend on Campus (FoC) — Agent Guide
+# Favours on Campus (FoC) — Agent Guide
 
-FoC is a peer-to-peer campus errand platform (CS3219 Team 23): students post
+Favours on Campus (FoC) is a peer-to-peer campus errand platform
+(CS3219 Team 23): students post
 item-delivery requests, other students fulfil them, settled via a closed
 credit economy (credits cannot be bought or cashed out).
 

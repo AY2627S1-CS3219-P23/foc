@@ -1,8 +1,8 @@
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
 
-## Friend on Campus (FoC)
+## Favours on Campus (FoC)
 
-**Friend on Campus (FoC)** is a peer-to-peer campus errand platform where
+**Favours on Campus (FoC)** is a peer-to-peer campus errand platform where
 students can request items to be collected from stores or facilities on
 campus, and other students can fulfil (and deliver) those requests. The
 platform runs on a closed credit economy — credits cannot be bought,
