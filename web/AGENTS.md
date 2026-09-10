@@ -23,14 +23,21 @@ calls per month, so use it sparingly — prefer any exported wireframe
 images in the repo when they exist, and reserve MCP calls for details the
 exports don't show.
 
-Screens covered so far (each in desktop and mobile variants):
+Snapshots of the core screens are committed in `docs/wireframes/` — each
+PNG shows the desktop and mobile variants side by side. **Look at these
+first**; they cost nothing to read, unlike Figma MCP calls:
 
-- **Sign Up** — account creation with NUS email, username, password
-  (live strength checklist), and OTP verification step
-- **Dashboard** — credit balance, requester/courier mode toggle, quick
-  actions, active requests with status chips, recent activity feed
-- **Suppliers** — searchable/filterable supplier listing (category and
-  campus zone filters), supplier detail panel, empty-state message
+| File | Screen |
+| --- | --- |
+| `docs/wireframes/signup.png` | Sign Up — NUS email, username, password (live strength checklist), OTP verification step |
+| `docs/wireframes/login.png` | Login — username/email + password |
+| `docs/wireframes/dashboard.png` | Dashboard — credit balance, requester/courier mode toggle, quick actions, active requests with status chips, recent activity |
+| `docs/wireframes/suppliers.png` | Suppliers — search, category and campus-zone filters, supplier detail panel, empty state |
+
+The Figma file also contains further screens not yet snapshotted here
+(profile, create request, my/open requests, active delivery, order and
+credit history, admin dashboard, requester/courier flow diagrams) — use
+the Figma MCP server for those, mindful of the rate limit.
 
 ## Requirements to keep in mind
 
