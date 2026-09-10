@@ -9,6 +9,10 @@ credit economy (credits cannot be bought or cashed out).
 
 - **Frontend:** TypeScript + React
 - **Backend:** Java + Spring Boot, with Spring Data JPA for database access
+- **Build tool:** each service chooses its own (Maven or Gradle) — check
+  the service folder for `pom.xml` vs `build.gradle` and use that
+  service's wrapper (`./mvnw` / `./gradlew`); there is no shared root
+  build
 - **Deployment:** Docker per service (`Dockerfile` in each service folder),
   orchestrated via root `compose.yaml`
 
