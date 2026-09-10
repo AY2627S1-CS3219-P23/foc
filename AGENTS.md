@@ -7,7 +7,7 @@ credit economy (credits cannot be bought or cashed out).
 
 ## Tech Stack
 
-- **Frontend:** TypeScript + React
+- **Frontend:** TypeScript + React, in `web/`
 - **Backend:** Java + Spring Boot, with Spring Data JPA for database access
 - **Build tool:** each service chooses its own (Maven or Gradle) — check
   the service folder for `pom.xml` vs `build.gradle` and use that
@@ -23,6 +23,7 @@ an independent Spring Boot application:
 
 | Folder | Responsibility |
 | --- | --- |
+| `web/` | TypeScript + React frontend (responsive: desktop and mobile widths) |
 | `user-service/` | Accounts, auth (tokens, OTP), roles (requester/courier/admin), profiles |
 | `supplier-service/` | Vendor/landmark CRUD (admin), browsing, search and filtering |
 | `order-service/` | Request creation, listing, acceptance, courier updates, completion, expiry |

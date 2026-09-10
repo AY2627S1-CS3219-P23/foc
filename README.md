@@ -27,10 +27,11 @@ withdrawn, or exchanged for money, and only circulate within the platform.
 This repository follows a **one-service-per-folder** structure: each
 microservice (`user-service/`, `supplier-service/`, `order-service/`,
 `credit-service/`, `notification-service/`) lives in its own top-level
-folder.
+folder. The frontend lives in `web/`.
 
 ```text
 .
+├── web/
 ├── user-service/
 ├── supplier-service/
 ├── order-service/
