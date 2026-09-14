@@ -65,7 +65,10 @@ tools were used only afterwards.
 
 **Used for:** transcribing the team-written D1 backlog into labelled
 GitHub issues; repository documentation (README, AGENTS.md); project
-scaffolding (service folder skeletons).
+scaffolding (service folder skeletons); drawing the high-level
+architecture diagram (`docs/architecture.md`) from the team-decided
+service boundaries and D1 requirements — open design decisions are
+marked TBD in the diagram and remain with the team.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
