@@ -1,0 +1,47 @@
+%% AI-assisted (CS3219 AI Usage Policy disclosure):
+%% Tool: Claude Code (Fable 5), 2026-09-14.
+%% Scope: transcribed the team-decided architecture (AGENTS.md service
+%% boundaries + D1 requirements) into this diagram. No design decisions
+%% were made by the tool; open decisions are marked "TBD" for the team.
+%% Reviewed by: Leong Wei Zhi (via pull request).
+%% Legend and dependency table: see docs/architecture.md
+---
+title: "Favours on Campus (FoC) — High-Level Service Architecture"
+---
+flowchart TB
+    USERS(["Users: requester / courier / admin<br/>(NUS students and platform admins)"])
+    WEB["<b>Web App</b> (web/)<br/>TypeScript + React single-page app;<br/>responsive desktop + mobile UI (M1)"]
+
+    USERS -->|"uses (browser, HTTPS)"| WEB
+
+    USER_SVC["<b>User Service</b><br/>Java + Spring Boot — accounts, auth<br/>(JWT, OTP), roles, profiles"]
+    SUP_SVC["<b>Supplier Service</b><br/>Java + Spring Boot — vendor/landmark<br/>CRUD, browsing, search and filter"]
+    ORDER_SVC["<b>Order Service</b><br/>Java + Spring Boot — request lifecycle:<br/>create, accept, pickup/dropoff, complete, expire"]
+    CREDIT_SVC["<b>Credit Service</b><br/>Java + Spring Boot — balances, reservation,<br/>atomic transfer, transaction history"]
+    NOTIF_SVC["<b>Notification Service</b><br/>Java + Spring Boot — consumes order events,<br/>notifies users; idempotent, with retries"]
+    BROKER[/"<b>Message Broker</b><br/>technology TBD — team decision pending"/]
+
+    WEB -->|"REST/JSON: sign-up, login, OTP, profiles<br/>(User F1–F8)"| USER_SVC
+    WEB -->|"REST/JSON: browse, search, filter suppliers;<br/>admin vendor CRUD (Supplier F1–F2)"| SUP_SVC
+    WEB -->|"REST/JSON: create / list / accept /<br/>update / complete requests (Order F1–F10)"| ORDER_SVC
+    WEB -->|"REST/JSON: balances and<br/>transaction history (Credit F4)"| CREDIT_SVC
+    NOTIF_SVC ==>|"async: order-status updates to requester and courier —<br/>client transport TBD (Notif F1.1.1, Order NFR1.2)"| WEB
+
+    USER_SVC -->|"REST/JSON: allocate 5 starting credits<br/>on sign-up (Credit F1.1)"| CREDIT_SVC
+    ORDER_SVC -->|"REST/JSON: validate pickup location is a<br/>known supplier/landmark (Order F1.1.1)"| SUP_SVC
+    ORDER_SVC -->|"REST/JSON: reserve / release / transfer credits,<br/>atomically (Order F13, Credit F2, F3, F5)"| CREDIT_SVC
+    ORDER_SVC ==>|"publish order-status events: created, accepted,<br/>collected, completed, cancelled, expired (Notif F1.1) — M6 async workflow"| BROKER
+    BROKER ==>|"deliver events: at-least-once, idempotent consumer,<br/>retries, persisted across restarts (Notif F1.2, F1.3, NFR1)"| NOTIF_SVC
+    NOTIF_SVC -->|"REST/JSON: cancel orders unaccepted<br/>for 1 day (Notif F2.1)"| ORDER_SVC
+
+    USER_DB[("User DB<br/>engine TBD")]
+    SUP_DB[("Supplier DB<br/>engine TBD")]
+    ORDER_DB[("Order DB<br/>engine TBD")]
+    CREDIT_DB[("Credit DB<br/>engine TBD")]
+    NOTIF_DB[("Notification DB<br/>engine TBD")]
+
+    USER_SVC ---|"Spring Data JPA"| USER_DB
+    SUP_SVC ---|"Spring Data JPA"| SUP_DB
+    ORDER_SVC ---|"Spring Data JPA"| ORDER_DB
+    CREDIT_SVC ---|"Spring Data JPA"| CREDIT_DB
+    NOTIF_SVC ---|"Spring Data JPA"| NOTIF_DB
