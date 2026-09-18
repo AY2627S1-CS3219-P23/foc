@@ -25,13 +25,23 @@ Entry template:
   `docs/architecture.mmd`, merged earlier via PR #57).
 - **Prompt(s):** Asked to re-align the architecture diagram and the
   notification-service design with the latest D1 backlog (Template-7).
-- **Author review:** Transcription only — requirement references
-  renumbered (e.g. Order F11.1 → F0.2, Credit NFR3.2.1 → NFR2.2.1),
-  items the backlog reclassified as nice-to-haves (chat, admin credit
-  adjustment) moved out of committed scope, and the courier
-  collection/arrival updates (Order F4.1.1–F4.1.2) traced to the
-  team's existing generic-envelope design. No new design decisions
-  were made by the tool. Reviewed via pull request.
+  Later the same day: asked how the broker pipeline works, how to keep
+  it loosely coupled to RabbitMQ, and how it extends to more
+  producers/consumers; the tool explained the options neutrally, then
+  ran a Q&A in which the author decided: broker isolation via ports and
+  adapters (new decision D11), keep broker-native retry/DLQ (D6/D7
+  unchanged, trade-off noted), record multi-producer/consumer mechanics
+  as extension notes with exchange topology left an open decision, and
+  document it all in `docs/notification-service.md`.
+- **Author review:** Backlog realignment was transcription only —
+  requirement references renumbered (e.g. Order F11.1 → F0.2, Credit
+  NFR3.2.1 → NFR2.2.1), items the backlog reclassified as nice-to-haves
+  (chat, admin credit adjustment) moved out of committed scope, and the
+  courier collection/arrival updates (Order F4.1.1–F4.1.2) traced to
+  the team's existing generic-envelope design. The decoupling/
+  extensibility decisions were made by the author in the Q&A and are
+  recorded in the document's Decisions table and Extensibility section.
+  Reviewed via pull request.
 
 ## 2026-09-15 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)

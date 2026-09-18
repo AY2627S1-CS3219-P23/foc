@@ -9,8 +9,13 @@
   2026-09-18 revision re-aligned requirement references with the latest
   D1 backlog (Template-7): Order F11.1 renumbered to Order F0.2, and the
   courier collection/arrival notifications (Order F4.1.1-F4.1.2) traced
-  to the existing generic-envelope design. No architecture, technology,
-  or trade-off decisions were made by the tool.
+  to the existing generic-envelope design. Also on 2026-09-18: a Q&A in
+  which the author decided broker isolation via ports-and-adapters
+  (D11), keeping broker-native retry/DLQ (D6/D7 unchanged), and
+  recording multi-producer/consumer mechanics as extension notes with
+  exchange topology left open; the tool explained the options neutrally
+  and documented the outcomes. No architecture, technology, or
+  trade-off decisions were made by the tool.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -28,8 +33,9 @@ it in the file view). System-wide context: [`architecture.md`](architecture.md).
 
 ## Design decisions (made by the team)
 
-All decisions below were made by Leong Wei Zhi on 2026-09-15 and count
-as the team's finalized design for this service.
+All decisions below were made by Leong Wei Zhi (D1–D10 on 2026-09-15,
+D11 on 2026-09-18) and count as the team's finalized design for this
+service.
 
 | # | Concern | Decision | Serves |
 | --- | --- | --- | --- |
@@ -43,6 +49,7 @@ as the team's finalized design for this service.
 | D8 | Broker persistence | **Durable exchanges/queues + persistent messages** (must be explicitly configured — durability is opt-in in RabbitMQ) | Notif NFR1.2 |
 | D9 | Retention window | **Configurable via environment variable** `NOTIF_RETENTION_DAYS`, **default 30 days**; scheduled purge job | Notif F3.4 |
 | D10 | Redis / scale-out | **No Redis** in the current single-instance design (see Open items) | — |
+| D11 | Broker isolation | **Ports and adapters**: business logic (event processor, REST API, purge job) has zero broker imports; all RabbitMQ-specific code is confined to a single messaging adapter package behind service-owned interfaces (see "Broker decoupling") | maintainability; broker swap surface |
 
 ## Components
 
@@ -129,10 +136,93 @@ APIs · ack/nack = message (negative) acknowledgement.
 - RabbitMQ runs as its own container in `compose.yaml` with a named
   volume for its data directory (M7).
 
+## Broker decoupling (D11)
+
+Goal: a broker swap (e.g. RabbitMQ → Kafka) touches one adapter package
+and `compose.yaml`, never the business logic.
+
+- **Ports (service-owned interfaces):** inbound, the AMQP listener is a
+  thin adapter that deserializes, calls
+  `eventProcessor.process(EventEnvelope)`, and acks/nacks on the result;
+  outbound (Order Service side), publishing goes through an
+  `EventPublisher.publish(EventEnvelope)` interface with the RabbitMQ
+  implementation as one class. The processor, REST API, and purge job
+  import nothing from `org.springframework.amqp` / `com.rabbitmq`.
+- **Enforcement:** broker code lives in its own package (e.g.
+  `messaging.rabbitmq`); an ArchUnit test can assert no other package
+  imports broker types (not yet written — see Open items).
+- **Envelope stays broker-agnostic:** all business data (event ID,
+  sequence, parties, type, payload) rides in the JSON body — never in
+  AMQP headers or other broker-specific message properties.
+- **Already portable by construction:** duplicate detection (D4) and
+  stale-event discard (D5) are enforced in this service's own database,
+  not by broker features, so the logic satisfying F2.1/F2.4 is unchanged
+  by any broker swap. The design assumes only the weakest common
+  guarantee — events may arrive twice, late, or out of order — which
+  every mainstream broker meets.
+- **Known non-portable surface (accepted trade-off):** the retry and
+  dead-letter topology (D6/D7 — TTL retry queue, dead-letter exchange)
+  and per-message ack/nack are RabbitMQ mechanisms and are treated as
+  part of the adapter. The team considered an application-level
+  alternative (a `failed_events` table plus a retry scheduler, fully
+  broker-portable) and decided to keep the broker-native design: it is
+  battle-tested and requires no custom code, at the cost that a broker
+  swap must re-implement retry/dead-lettering in the new broker's idiom
+  (Kafka, for example, has no per-message acks, TTL requeue, or DLX).
+- **Testing follows the port:** the processor is unit-tested by passing
+  envelopes to the interface directly (no broker); one integration test
+  exercises the RabbitMQ adapter (e.g. via Testcontainers).
+
+## Extensibility: future producers and consumers (extension notes)
+
+Nothing in the committed D1 scope needs more than one producer (Order)
+and one consumer (this service); these notes record how the design
+extends without rework. The most plausible next consumer in the backlog
+is centralized logging (nice-to-have N4).
+
+- **New consumers are free for the publisher.** The exchange is the
+  broadcast point: a new consuming service declares **its own durable
+  queue** and binds it to the existing exchange; RabbitMQ delivers a
+  copy of each event to every bound queue. The producer is untouched —
+  the same decoupling F1.3 gives for new event types.
+- **One queue per consuming service.** Consumers on the same queue
+  *compete* for messages (each event reaches only one of them), so two
+  services must never share a queue. Multiple instances of the *same*
+  service do share that service's queue — that competition is the
+  desired load balancing for scale-out.
+- **Each consumer brings its own reliability machinery:** its own retry
+  queue and DLQ (dead-lettering is configured per queue, so one broken
+  consumer never blocks another), its own processed-event-ID inbox and
+  sequence tracking (redelivery is per queue, so dedupe state cannot be
+  shared), and its own backlog (a slow consumer affects nobody else).
+- **The envelope becomes a public contract** once a second consumer
+  exists: evolve it additively (add fields, never rename or repurpose),
+  require consumers to ignore unknown fields and event types (this
+  service already does, per F1.3), and publish domain facts rather than
+  the producer's internal structures. A platform-wide shape would
+  generalize the order-specific fields to `aggregateType` +
+  `aggregateId` + per-aggregate `sequence` + `parties[]`.
+- **Events are facts, not commands.** Calls whose caller needs the
+  result — e.g. Order → Credit reserve/transfer (Credit F2.1.3, F3.1) —
+  stay synchronous REST; the broker carries only "this happened"
+  notifications. This is the existing system-level boundary in
+  [`architecture.md`](architecture.md).
+- **Exchange topology is deliberately open** until a second producer or
+  consumer actually appears: one exchange per producing domain
+  (`order-events`, `user-events`, …) vs a single topic exchange with
+  routing keys (`order.request.accepted`) and pattern bindings. Both
+  map cleanly onto the current design (and onto Kafka topics, should
+  D11's swap scenario ever happen).
+
 ## Open items (team decisions still pending)
 
 - Exact retry backoff schedule (TTL values) and maximum attempt count.
 - Exchange/queue naming convention.
+- Exchange topology once a second producer or consumer appears:
+  per-domain exchanges vs a single topic exchange with routing keys
+  (see Extensibility notes).
+- ArchUnit test enforcing the D11 package boundary (write alongside the
+  service implementation).
 - Scale-out (team decision 2026-09-15): the current design is
   single-instance and includes **no Redis**. If the service is later
   scaled to multiple instances (nice-to-have N5.4, Kubernetes
