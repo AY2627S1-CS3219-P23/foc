@@ -36,7 +36,11 @@ Entry template:
   fold the decided broker/transport/DB choices into
   `docs/architecture.md` / `.mmd`, replacing the corresponding TBD
   markers (transcription of decisions already recorded in the
-  notification-service Decisions table).
+  notification-service Decisions table). Also documented the
+  connection topology (single Notification→Web WebSocket, all other
+  frontend traffic stateless REST) as rationale following from D2 and
+  the existing architecture edges, with WebSocket handshake/reconnect
+  mechanics and the N6 chat transport recorded as open decisions.
 - **Author review:** Backlog realignment was transcription only —
   requirement references renumbered (e.g. Order F11.1 → F0.2, Credit
   NFR3.2.1 → NFR2.2.1), items the backlog reclassified as nice-to-haves

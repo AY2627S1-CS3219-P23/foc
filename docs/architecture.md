@@ -85,7 +85,7 @@ TBD = to be decided.
 | Web → Order Service | sync REST | create/list/accept/collect–arrive/cancel/complete requests; re-release expired requests | Order F1–F8 (re-release: F6.4) |
 | Web → Credit Service | sync REST | available + reserved balances (shown in the user's profile), filtered transaction history | Credit F4; User F8.1 |
 | Web → Notification Service | sync REST | list recent notifications in-app, mark read/unread, retention window | Notif F3.1, F3.2, F3.4 |
-| Notification Service → Web | async WebSocket (STOMP) push, per-user destinations | request state-change updates to requester and assigned courier within 5 seconds | Notif F1.2; Order NFR1.1–1.2 |
+| Notification Service → Web | async WebSocket (STOMP) push, per-user destinations | request state-change updates to requester and assigned courier within 5 seconds; the system's **only standing connection** — all other Web ↔ service traffic is stateless REST (see [`notification-service.md`](notification-service.md), "Connection topology") | Notif F1.2; Order NFR1.1–1.2 |
 | User Service → Email Provider | async email (provider TBD) | OTP for sign-up verification, email-change confirmation, password reset | User F1.1.3, F2.1.1, F2.1.3, F4.2 |
 | User Service → Credit Service | sync REST | allocate 5 starting credits (reserved balance 0) on sign-up | Credit F1.1 |
 | Order Service → Supplier Service | sync REST | validate pickup location is a known supplier/landmark; fetch supplier locations for the 1 km acceptance-proximity check | Order F1.1.1, F8.1 |

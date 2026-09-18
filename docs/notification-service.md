@@ -14,8 +14,13 @@
   (D11), keeping broker-native retry/DLQ (D6/D7 unchanged), and
   recording multi-producer/consumer mechanics as extension notes with
   exchange topology left open; the tool explained the options neutrally
-  and documented the outcomes. No architecture, technology, or
-  trade-off decisions were made by the tool.
+  and documented the outcomes. The broker-ownership note and the
+  connection-topology section transcribe rationale already implied by
+  decisions D1/D2 and the system diagram's REST edges; their open
+  points (WebSocket handshake auth, reconnect policy, N6 chat
+  transport) are recorded as pending team/implementation decisions.
+  No architecture, technology, or trade-off decisions were made by the
+  tool.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -226,6 +231,39 @@ is centralized logging (nice-to-have N4).
   map cleanly onto the current design (and onto Kafka topics, should
   D11's swap scenario ever happen).
 
+## Connection topology: one WebSocket, everything else REST
+
+There is exactly **one standing connection** in the whole system: the
+browser's WebSocket (STOMP) session to this service's push gateway (D2),
+one per logged-in browser session. Every other frontend–service
+interaction — User, Supplier, Order, Credit, and this service's own
+notification-list API — is stateless request/response REST carrying the
+JWT per call. No other service holds connections to the frontend.
+
+Why the push channel is centralized here rather than per service:
+
+- **Other services get real-time delivery by riding the event
+  pipeline.** A producing service publishes a fact to the broker; this
+  service consumes, stores, and pushes it over the existing STOMP
+  session — meeting the 5 s budget (Order NFR1.1–1.2) while the
+  producer stays a purely REST-facing service with zero connection
+  state.
+- **Connection state is the operationally expensive part** (heartbeats,
+  reconnects, session tracking, cross-instance fan-out — the D10
+  scale-out question). Centralizing it means exactly one service ever
+  has to solve it.
+- **One channel serves any number of event sources.** Because
+  publishing goes through the broker, future producers get browser push
+  without new frontend connection handling (see Extensibility); the
+  browser keeps one STOMP client subscribed to its per-user
+  destination.
+
+Historical note: the earlier backlog's committed requester–courier chat
+implied a second real-time channel (Web ↔ Order Service). The latest
+backlog moved chat to nice-to-have N6; if it is ever built, choosing
+its transport (own socket vs riding this service's channel) is a team
+decision to make then.
+
 ## Open items (team decisions still pending)
 
 - Exact retry backoff schedule (TTL values) and maximum attempt count.
@@ -235,6 +273,9 @@ is centralized logging (nice-to-have N4).
   (see Extensibility notes).
 - ArchUnit test enforcing the D11 package boundary (write alongside the
   service implementation).
+- WebSocket session mechanics: how the JWT authenticates the STOMP
+  handshake/upgrade, and the client reconnect/backoff policy —
+  implementation decisions for when the push gateway is built.
 - Scale-out (team decision 2026-09-15): the current design is
   single-instance and includes **no Redis**. If the service is later
   scaled to multiple instances (nice-to-have N5.4, Kubernetes
