@@ -2,15 +2,18 @@
 title: "FoC Notification Service — Component-Level Architecture"
 ---
 %% AI-assisted (CS3219 AI Usage Policy disclosure):
-%% Tool: Claude Code (Fable 5), 2026-09-15.
+%% Tool: Claude Code (Fable 5), 2026-09-15; revised 2026-09-18.
 %% Scope: transcribed the team-decided notification-service design
 %% (decisions made by Leong Wei Zhi, 2026-09-15 — broker, transport,
 %% storage, dedupe, ordering, retry, dead-letter, retention) into this
-%% diagram. No design decisions were made by the tool.
+%% diagram; 2026-09-18 re-aligned requirement references with the
+%% latest D1 backlog (Order F11.1 -> F0.2; courier collection/arrival
+%% updates, Order F4.1.1-F4.1.2). No design decisions were made by the
+%% tool.
 %% Reviewed by: Leong Wei Zhi (via pull request).
 %% Legend, decisions and traceability: see docs/notification-service.md
 flowchart TB
-    ORDER_SVC["<b>Order Service</b> (order-service/)<br/>publishes an event on every order-status<br/>change, stamped with a per-order<br/>sequence number (Order F11.1)"]
+    ORDER_SVC["<b>Order Service</b> (order-service/)<br/>publishes an event on every request state<br/>transition (Order F0.2) and on courier arrival<br/>at the dropoff (Order F4.1.1), stamped with a<br/>per-order sequence number"]
     WEB["<b>Web App</b> (web/)<br/>subscribes to per-user STOMP destinations;<br/>renders in-app notification list"]
 
     subgraph RABBIT ["RabbitMQ (message broker, Docker container)"]
@@ -30,7 +33,7 @@ flowchart TB
 
     NOTIF_DB[("<b>Notification DB</b><br/>PostgreSQL — notifications (read/unread),<br/>processed event IDs, last-applied<br/>sequence per order, all in one schema")]
 
-    ORDER_SVC ==>|"publish order-status events: created, accepted, collected,<br/>completed, cancelled, expired (Order F11.1); fire-and-forget —<br/>delivery failure never affects the producing operation (Notif F1.4)"| EXCH
+    ORDER_SVC ==>|"publish request-state events: created, accepted, collected,<br/>completed, cancelled, expired (Order F0.2) + courier-arrived<br/>(Order F4.1.1–F4.1.2); fire-and-forget — delivery failure never<br/>affects the producing operation (Notif F1.4)"| EXCH
     EXCH ==>|"route (binding)"| WORKQ
     WORKQ ==>|"deliver: at-least-once<br/>(Notif NFR1.1)"| LISTENER
     LISTENER ==>|"nack on processing failure —<br/>retry with backoff (Notif F2.2)"| RETRYQ

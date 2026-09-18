@@ -1,13 +1,17 @@
 <!--
   AI-assisted (CS3219 AI Usage Policy disclosure):
-  Tool: Claude Code (Fable 5), 2026-09-15.
+  Tool: Claude Code (Fable 5), 2026-09-15; revised 2026-09-18.
   Scope: transcribed the team-decided notification-service design into
   this document and the companion diagram. Every design decision below
   was made by a team member (Leong Wei Zhi, 2026-09-15, recorded in the
   Decisions table); the tool documented the decisions, derived the
-  requirement-traceability mapping, and formatted the result. No
-  architecture, technology, or trade-off decisions were made by the
-  tool. Reviewed by: Leong Wei Zhi (via pull request).
+  requirement-traceability mapping, and formatted the result. The
+  2026-09-18 revision re-aligned requirement references with the latest
+  D1 backlog (Template-7): Order F11.1 renumbered to Order F0.2, and the
+  courier collection/arrival notifications (Order F4.1.1-F4.1.2) traced
+  to the existing generic-envelope design. No architecture, technology,
+  or trade-off decisions were made by the tool.
+  Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
 # FoC Notification Service — Architecture Design
@@ -15,8 +19,10 @@
 **Scope:** component-level design of `notification-service/`, covering
 every D1 Notification requirement (F1 event delivery, F2 delivery
 reliability, F3 notification retrieval, NFR1 reliability) plus the
-order-status latency requirement it serves (Order NFR1.1–1.2) and the
-course's mandatory async workflow (M6). Companion diagram:
+Order-side requirements it serves: events on every request state
+transition (Order F0.2), requester updates on collection and courier
+arrival (Order F4.1.1–F4.1.2), the request state-change latency budget
+(Order NFR1.1–1.2), and the course's mandatory async workflow (M6). Companion diagram:
 [`notification-service.mmd`](notification-service.mmd) (GitHub renders
 it in the file view). System-wide context: [`architecture.md`](architecture.md).
 
@@ -63,7 +69,7 @@ because a decision or requirement demands it:
 | `eventId` (unique) | duplicate detection (D4, F2.1) |
 | `orderId` | groups events per order (F2.4) |
 | `sequence` (per order, incrementing) | stale-event discard (D5, F2.4) |
-| `type` (created / accepted / collected / completed / cancelled / expired) | Order F11.1; new types addable without publisher changes (F1.3) |
+| `type` (the six request states: created / accepted / collected / completed / cancelled / expired — plus `courier-arrived` for the dropoff-arrival update) | Order F0.2 (state transitions), Order F4.1.1–F4.1.2 (arrival); new types addable without publisher changes (F1.3) |
 | `occurredAt` timestamp | notification display and audit |
 | `requesterId`, `courierId` (party user IDs) | notify each party without querying other services (F1.1, F1.2) |
 | `payload` (free-form details) | message text rendering; generic per F1.3 |
@@ -105,8 +111,9 @@ APIs · ack/nack = message (negative) acknowledgement.
 | Notif F3.4 — retention window | purge scheduler, `NOTIF_RETENTION_DAYS` (default 30) |
 | Notif NFR1.1 — at-least-once delivery | durable queue + manual ack after transaction commit; unacked events are redelivered |
 | Notif NFR1.2 — persist undelivered events across restarts | durable exchanges/queues + persistent messages (D8) |
-| Order F11.1 — event on every status change | Order Service publishes all six status events to the exchange |
-| Order NFR1.1–1.2 — receivers updated within 5 s | broker push path end-to-end: consume → process → STOMP push, no polling |
+| Order F0.2 — event on every request state transition | Order Service publishes all six state-transition events to the exchange |
+| Order F4.1.1–F4.1.2 — requester updated on collection and on courier arrival at the dropoff | `collected` state event plus the `courier-arrived` event, delivered through the same pipeline and pushed to the requester |
+| Order NFR1.1–1.2 — requester and assigned courier see every state change within 5 s | broker push path end-to-end: consume → process → STOMP push, no polling |
 | M6 — meaningful async workflow | the entire order-events → broker → notification pipeline |
 
 ## Configuration notes

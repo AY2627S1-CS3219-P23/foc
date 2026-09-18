@@ -17,6 +17,22 @@ Entry template:
 
 ---
 
+## 2026-09-18 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs
+- **Scope:** `docs/notification-service.md` and
+  `docs/notification-service.mmd` (also `docs/architecture.md` /
+  `docs/architecture.mmd`, merged earlier via PR #57).
+- **Prompt(s):** Asked to re-align the architecture diagram and the
+  notification-service design with the latest D1 backlog (Template-7).
+- **Author review:** Transcription only — requirement references
+  renumbered (e.g. Order F11.1 → F0.2, Credit NFR3.2.1 → NFR2.2.1),
+  items the backlog reclassified as nice-to-haves (chat, admin credit
+  adjustment) moved out of committed scope, and the courier
+  collection/arrival updates (Order F4.1.1–F4.1.2) traced to the
+  team's existing generic-envelope design. No new design decisions
+  were made by the tool. Reviewed via pull request.
+
 ## 2026-09-15 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** docs, explain
