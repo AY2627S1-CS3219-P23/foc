@@ -1,0 +1,49 @@
+---
+title: "FoC Notification Service — Component-Level Architecture"
+---
+%% AI-assisted (CS3219 AI Usage Policy disclosure):
+%% Tool: Claude Code (Fable 5), 2026-09-15; revised 2026-09-18.
+%% Scope: transcribed the team-decided notification-service design
+%% (decisions made by Leong Wei Zhi, 2026-09-15 — broker, transport,
+%% storage, dedupe, ordering, retry, dead-letter, retention) into this
+%% diagram; 2026-09-18 re-aligned requirement references with the
+%% latest D1 backlog (Order F11.1 -> F0.2; courier collection/arrival
+%% updates, Order F4.1.1-F4.1.2). No design decisions were made by the
+%% tool.
+%% Reviewed by: Leong Wei Zhi (via pull request).
+%% Legend, decisions and traceability: see docs/notification-service.md
+flowchart TB
+    ORDER_SVC["<b>Order Service</b> (order-service/)<br/>publishes an event on every request state<br/>transition (Order F0.2) and on courier arrival<br/>at the dropoff (Order F4.1.1), stamped with a<br/>per-order sequence number"]
+    WEB["<b>Web App</b> (web/)<br/>subscribes to per-user STOMP destinations;<br/>renders in-app notification list"]
+
+    subgraph RABBIT ["RabbitMQ (message broker — shared platform infrastructure, own Docker container; queues below are dedicated to the Notification Service, their sole consumer)"]
+        EXCH{{"<b>order-events exchange</b><br/>durable; receives persistent messages"}}
+        WORKQ[["<b>work queue</b> (durable)<br/>holds undelivered events across restarts<br/>(Notif NFR1.2)"]]
+        RETRYQ[["<b>retry queue</b> (durable)<br/>TTL/delay queue — parks nacked events,<br/>then re-routes them for redelivery<br/>(backoff; TTL values TBD by team)"]]
+        DLQ[["<b>dead-letter queue</b> (durable)<br/>events that exhausted max attempts,<br/>kept for later inspection / re-publish<br/>(Notif F2.3)"]]
+    end
+
+    subgraph NOTIF ["Notification Service (notification-service/) — Java + Spring Boot"]
+        LISTENER["<b>AMQP listener</b><br/>consumes events, manual ack;<br/>ack only after the processor's<br/>transaction commits (Notif NFR1.1)"]
+        PROCESSOR["<b>Idempotent event processor</b><br/>rejects duplicate event IDs (Notif F2.1);<br/>discards events with a per-order sequence ≤ last<br/>applied (Notif F2.4); handles any event type from<br/>the generic envelope (Notif F1.3);<br/>creates one notification per party (Notif F1.2)"]
+        API["<b>Notification REST API</b><br/>list recent notifications,<br/>mark read/unread (Notif F3.1, F3.2)"]
+        PUSH["<b>STOMP push gateway</b><br/>WebSocket (STOMP) simple broker;<br/>per-user destinations"]
+        PURGE["<b>Retention purge scheduler</b><br/>deletes notifications older than the window<br/>(Notif F3.4) — NOTIF_RETENTION_DAYS,<br/>default 30"]
+    end
+
+    NOTIF_DB[("<b>Notification DB</b><br/>PostgreSQL — notifications (read/unread),<br/>processed event IDs, last-applied<br/>sequence per order, all in one schema")]
+
+    ORDER_SVC ==>|"publish request-state events: created, accepted, collected,<br/>completed, cancelled, expired (Order F0.2) + courier-arrived<br/>(Order F4.1.1–F4.1.2); fire-and-forget — delivery failure never<br/>affects the producing operation (Notif F1.4)"| EXCH
+    EXCH ==>|"route (binding)"| WORKQ
+    WORKQ ==>|"deliver: at-least-once<br/>(Notif NFR1.1)"| LISTENER
+    LISTENER ==>|"nack on processing failure —<br/>retry with backoff (Notif F2.2)"| RETRYQ
+    RETRYQ ==>|"after TTL expires,<br/>re-route for redelivery"| WORKQ
+    WORKQ ==>|"after max attempts, via<br/>dead-letter exchange (Notif F2.3)"| DLQ
+
+    LISTENER -->|"hand event to processor<br/>(in-process call)"| PROCESSOR
+    PROCESSOR ---|"Spring Data JPA: notification insert + processed-event ID +<br/>sequence update in ONE transaction (Notif F2.1, F2.4);<br/>no queries to other services (Notif F1.1)"| NOTIF_DB
+    PROCESSOR -->|"emit stored notification<br/>(in-process call)"| PUSH
+    PUSH ==>|"push to each party's /user destination<br/>within 5 s (Notif F1.2, Order NFR1.1–1.2)"| WEB
+    WEB -->|"REST/JSON: list recent notifications,<br/>mark read/unread (Notif F3.1, F3.2)"| API
+    API ---|"Spring Data JPA"| NOTIF_DB
+    PURGE ---|"Spring Data JPA: delete rows older<br/>than retention window (Notif F3.4)"| NOTIF_DB

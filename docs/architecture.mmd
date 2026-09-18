@@ -2,7 +2,11 @@
 title: "Favours on Campus (FoC) — High-Level Service Architecture"
 ---
 %% AI-assisted (CS3219 AI Usage Policy disclosure):
-%% Tool: Claude Code (Fable 5), 2026-09-14; revised 2026-09-15, 2026-09-18.
+%% Tool: Claude Code (Fable 5), 2026-09-14; revised 2026-09-15, 2026-09-18
+%% (backlog realignment, then folding in the team's notification-design
+%% decisions: RabbitMQ broker, WebSocket/STOMP client push, PostgreSQL
+%% notification DB — decided by Leong Wei Zhi, 2026-09-15/18, per
+%% docs/notification-service.md).
 %% Scope: transcribed the team-decided architecture (AGENTS.md service
 %% boundaries + D1 requirements) into this diagram, and re-aligned edge
 %% labels/relationships with the latest D1 backlog (Template-7): chat and
@@ -23,7 +27,7 @@ flowchart TB
     ORDER_SVC["<b>Order Service</b><br/>Java + Spring Boot — request lifecycle states (Order F0.1):<br/>created, accepted, collected, completed, cancelled, expired;<br/>1 km acceptance-proximity rule (Order F8.1);<br/>schedulers: expire overdue requests (Order F6.1–F6.2),<br/>auto-complete 1 h after courier arrival (Order F7.2)"]
     CREDIT_SVC["<b>Credit Service</b><br/>Java + Spring Boot — balances (available + reserved),<br/>reservation, atomic transfer, transaction history;<br/>scheduler: expire earned credits after 3 months into common<br/>pool + monthly redistribution (Credit F6)"]
     NOTIF_SVC["<b>Notification Service</b><br/>Java + Spring Boot — consumes request events,<br/>notifies each party; idempotent, with retries;<br/>retains notifications for a defined window (Notif F3.4)"]
-    BROKER[/"<b>Message Broker</b><br/>technology TBD — team decision pending"/]
+    BROKER[/"<b>Message Broker</b> — RabbitMQ<br/>shared platform infrastructure, own Docker container;<br/>durable order-events exchange (Order Service's publishing<br/>surface) + durable work/retry/dead-letter queues dedicated<br/>to their sole consumer (docs/notification-service.md)"/]
     EMAIL[["<b>External Email Provider</b><br/>technology TBD — delivers OTP emails<br/>to users' u.nus.edu inboxes"]]
 
     WEB -->|"REST/JSON: sign-up, login/logout, OTP flows, account<br/>update/delete/recover, roles, admin user management,<br/>profiles (User F1–F8)"| USER_SVC
@@ -31,7 +35,7 @@ flowchart TB
     WEB -->|"REST/JSON: create / list / accept / collect–arrive /<br/>cancel / complete / re-release requests (Order F1–F8)"| ORDER_SVC
     WEB -->|"REST/JSON: available + reserved balances shown in profile<br/>(User F8.1), filtered transaction history (Credit F4)"| CREDIT_SVC
     WEB -->|"REST/JSON: list recent notifications,<br/>mark read/unread (Notif F3)"| NOTIF_SVC
-    NOTIF_SVC ==>|"async: request state-change updates to requester and<br/>assigned courier within 5 s — client transport TBD<br/>(Notif F1.2; Order NFR1.1–1.2)"| WEB
+    NOTIF_SVC ==>|"async: WebSocket (STOMP) push to per-user destinations —<br/>request state-change updates to requester and assigned<br/>courier within 5 s (Notif F1.2; Order NFR1.1–1.2)"| WEB
 
     USER_SVC ==>|"send OTP emails: sign-up verification,<br/>email-change confirmation, password reset<br/>(User F1.1.3, F2.1.1, F2.1.3, F4.2)"| EMAIL
     USER_SVC -->|"REST/JSON: allocate 5 starting credits,<br/>reserved balance 0, on sign-up<br/>(Credit F1.1)"| CREDIT_SVC
@@ -44,7 +48,7 @@ flowchart TB
     SUP_DB[("Supplier DB<br/>engine TBD<br/>100 000 suppliers (Supplier NFR2)")]
     ORDER_DB[("Order DB<br/>engine TBD")]
     CREDIT_DB[("Credit DB<br/>engine TBD")]
-    NOTIF_DB[("Notification DB<br/>engine TBD")]
+    NOTIF_DB[("Notification DB<br/>PostgreSQL")]
 
     USER_SVC ---|"Spring Data JPA"| USER_DB
     SUP_SVC ---|"Spring Data JPA"| SUP_DB
