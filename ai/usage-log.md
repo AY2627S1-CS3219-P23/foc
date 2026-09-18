@@ -32,7 +32,11 @@ Entry template:
   adapters (new decision D11), keep broker-native retry/DLQ (D6/D7
   unchanged, trade-off noted), record multi-producer/consumer mechanics
   as extension notes with exchange topology left an open decision, and
-  document it all in `docs/notification-service.md`.
+  document it all in `docs/notification-service.md`. Finally, asked to
+  fold the decided broker/transport/DB choices into
+  `docs/architecture.md` / `.mmd`, replacing the corresponding TBD
+  markers (transcription of decisions already recorded in the
+  notification-service Decisions table).
 - **Author review:** Backlog realignment was transcription only —
   requirement references renumbered (e.g. Order F11.1 → F0.2, Credit
   NFR3.2.1 → NFR2.2.1), items the backlog reclassified as nice-to-haves

@@ -7,8 +7,12 @@
   latest D1 backlog (Template-7): chat and admin credit adjustment moved
   to nice-to-haves (out of the committed scope this diagram covers),
   Order F0/F8 renumbering, Credit F6 redistribution, Supplier caching,
-  capacity/performance targets. No architecture or design decisions were
-  made by the tool; open decisions are marked "TBD" for the team.
+  capacity/performance targets. Also on 2026-09-18: folded in the
+  team's notification-design decisions (RabbitMQ broker, WebSocket/STOMP
+  client push, PostgreSQL notification DB — decided by Leong Wei Zhi,
+  recorded in docs/notification-service.md), replacing the corresponding
+  TBD markers. No architecture or design decisions were made by the
+  tool; remaining open decisions are marked "TBD" for the team.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -50,7 +54,7 @@ below accompany it.
 | --- | --- |
 | Rectangle | A deployable service — its own Spring Boot app in its own Docker container (M7), one per top-level folder |
 | Rounded/stadium shape | People using the system through a browser |
-| Parallelogram | Message broker (infrastructure component, technology TBD) |
+| Parallelogram | Message broker (RabbitMQ) — shared platform infrastructure in its own container; the exchange is the publishing service's surface, queues belong to consuming services (see [`notification-service.md`](notification-service.md)) |
 | Double-bordered rectangle | External system outside the platform (the email provider) |
 | Cylinder | A database owned by **exactly one** service; no service reads another service's database |
 | Thin arrow `-->` | **Synchronous** REST/JSON call over HTTP; the arrow points from caller to callee (request direction; the response returns along the same call) |
@@ -81,12 +85,12 @@ TBD = to be decided.
 | Web → Order Service | sync REST | create/list/accept/collect–arrive/cancel/complete requests; re-release expired requests | Order F1–F8 (re-release: F6.4) |
 | Web → Credit Service | sync REST | available + reserved balances (shown in the user's profile), filtered transaction history | Credit F4; User F8.1 |
 | Web → Notification Service | sync REST | list recent notifications in-app, mark read/unread, retention window | Notif F3.1, F3.2, F3.4 |
-| Notification Service → Web | async (transport TBD) | request state-change updates to requester and assigned courier within 5 seconds | Notif F1.2; Order NFR1.1–1.2 |
+| Notification Service → Web | async WebSocket (STOMP) push, per-user destinations | request state-change updates to requester and assigned courier within 5 seconds | Notif F1.2; Order NFR1.1–1.2 |
 | User Service → Email Provider | async email (provider TBD) | OTP for sign-up verification, email-change confirmation, password reset | User F1.1.3, F2.1.1, F2.1.3, F4.2 |
 | User Service → Credit Service | sync REST | allocate 5 starting credits (reserved balance 0) on sign-up | Credit F1.1 |
 | Order Service → Supplier Service | sync REST | validate pickup location is a known supplier/landmark; fetch supplier locations for the 1 km acceptance-proximity check | Order F1.1.1, F8.1 |
 | Order Service → Credit Service | sync REST | reserve on create, release on cancel/expiry, atomic transfer on completion; identical transfer requests for the same confirmation processed once | Credit F2.1, F2.1.1, F3.1, F5.1, NFR2.2, NFR2.2.1 |
-| Order Service → Broker → Notification Service | **async events** | event on every request state transition (created/accepted/collected/completed/cancelled/expired); at-least-once, persisted across restarts; consumer deduplicates, retries, records exhausted retries, discards stale out-of-order events; delivery failure never affects the producing operation; new event types need no publisher changes | Order F0.2; Notif F1.1, F1.3, F1.4, F2.1–F2.4, NFR1.1–1.2; **M6** |
+| Order Service → Broker (RabbitMQ) → Notification Service | **async events** | event on every request state transition (created/accepted/collected/completed/cancelled/expired); at-least-once, persisted across restarts; consumer deduplicates, retries, records exhausted retries, discards stale out-of-order events; delivery failure never affects the producing operation; new event types need no publisher changes | Order F0.2; Notif F1.1, F1.3, F1.4, F2.1–F2.4, NFR1.1–1.2; **M6** |
 
 Timer-driven behaviors stay **inside** the owning service (no arrow):
 request expiry from the created or accepted state at the deadline, with
@@ -123,10 +127,9 @@ These shape sizing and implementation rather than adding components:
 
 ## Decisions still open (team, not AI)
 
-- **Message broker technology** for the M6 async workflow.
-- **Database engine(s)** — one database per service is decided; engines are not.
-- **Client update transport** for Notification → Web (how request
-  state-change updates reach the browser).
+- **Database engines** for the User, Supplier, Order and Credit
+  services — one database per service is decided; the Notification DB
+  is decided (PostgreSQL), the rest are not.
 - **Email provider** for OTP delivery (User F1.1.3).
 - **Supplier caching mechanism** (Supplier NFR1.1.1) — in-process vs. a
   shared cache; drawn inside the Supplier Service until decided.

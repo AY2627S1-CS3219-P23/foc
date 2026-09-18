@@ -240,6 +240,7 @@ is centralized logging (nice-to-have N4).
   scaled to multiple instances (nice-to-have N5.4, Kubernetes
   autoscaling), the team will then choose between Redis pub/sub and a
   RabbitMQ STOMP broker relay for cross-instance WebSocket fan-out.
-- The system-level diagram ([`architecture.md`](architecture.md)) still
-  marks broker/transport/engine as TBD on `main`; fold these decisions
-  into it once the outstanding docs branches merge.
+- ~~Fold the broker/transport/engine decisions into the system-level
+  diagram~~ — done 2026-09-18: [`architecture.md`](architecture.md) /
+  `architecture.mmd` now show RabbitMQ, WebSocket/STOMP push, and the
+  PostgreSQL notification DB (remaining engines still TBD there).
