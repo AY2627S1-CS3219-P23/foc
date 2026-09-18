@@ -19,6 +19,31 @@ Entry template:
 
 ## 2026-09-18 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (scaffolding)
+- **Scope:** `notification-service/` Spring Boot scaffold (issue #61):
+  Maven project via Spring Initializr (Boot 4.1.1, Java 21), JPA
+  entities + repositories for the three team-decided tables
+  (notifications with read/unread flag, processed event IDs,
+  last-applied sequence per order — D3/D4/D5), Actuator health
+  endpoint, Dockerfile, `compose.yaml` entries (service + PostgreSQL
+  with named volume), `.env.example` variables, context-load test on
+  in-memory H2.
+- **Prompt(s):** Asked to pick one open GitHub issue and resolve it via
+  a PR; the tool selected #61. Build tool (Maven) and Java version (21)
+  were put to the author as explicit choices and decided by the author.
+  Table-level schema comes from the issue text and the design doc's
+  Decisions table; column-level detail was derived from the documented
+  event envelope and is subject to author review.
+- **Author review:** All design decisions (PostgreSQL, JPA, the three
+  tables, envelope fields) were made by the team beforehand
+  (`docs/notification-service.md`); the tool implemented them.
+  Verified locally: `./mvnw test` passes; `docker compose up
+  notification-service` starts against its own PostgreSQL; health
+  endpoint returns UP; the three tables are present. Reviewed via pull
+  request.
+
+## 2026-09-18 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
 - **Mode:** docs
 - **Scope:** `docs/notification-service.md` and
   `docs/notification-service.mmd` (also `docs/architecture.md` /

@@ -68,7 +68,11 @@ GitHub issues; repository documentation (README, AGENTS.md); project
 scaffolding (service folder skeletons); drawing the high-level
 architecture diagram (`docs/architecture.md`) from the team-decided
 service boundaries and D1 requirements — open design decisions are
-marked TBD in the diagram and remain with the team.
+marked TBD in the diagram and remain with the team; implementation
+scaffolding code (Spring Boot service skeletons, Docker/compose
+wiring, JPA entities) written strictly from the team's finalized
+design docs and issue specifications, with per-file attribution
+headers.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
