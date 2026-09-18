@@ -27,7 +27,7 @@ flowchart TB
     ORDER_SVC["<b>Order Service</b><br/>Java + Spring Boot — request lifecycle states (Order F0.1):<br/>created, accepted, collected, completed, cancelled, expired;<br/>1 km acceptance-proximity rule (Order F8.1);<br/>schedulers: expire overdue requests (Order F6.1–F6.2),<br/>auto-complete 1 h after courier arrival (Order F7.2)"]
     CREDIT_SVC["<b>Credit Service</b><br/>Java + Spring Boot — balances (available + reserved),<br/>reservation, atomic transfer, transaction history;<br/>scheduler: expire earned credits after 3 months into common<br/>pool + monthly redistribution (Credit F6)"]
     NOTIF_SVC["<b>Notification Service</b><br/>Java + Spring Boot — consumes request events,<br/>notifies each party; idempotent, with retries;<br/>retains notifications for a defined window (Notif F3.4)"]
-    BROKER[/"<b>Message Broker</b> — RabbitMQ<br/>shared platform infrastructure, own Docker container;<br/>durable order-events exchange (Order Service's publishing<br/>surface) + durable work/retry/dead-letter queues owned by<br/>the consuming service (docs/notification-service.md)"/]
+    BROKER[/"<b>Message Broker</b> — RabbitMQ<br/>shared platform infrastructure, own Docker container;<br/>durable order-events exchange (Order Service's publishing<br/>surface) + durable work/retry/dead-letter queues dedicated<br/>to their sole consumer (docs/notification-service.md)"/]
     EMAIL[["<b>External Email Provider</b><br/>technology TBD — delivers OTP emails<br/>to users' u.nus.edu inboxes"]]
 
     WEB -->|"REST/JSON: sign-up, login/logout, OTP flows, account<br/>update/delete/recover, roles, admin user management,<br/>profiles (User F1–F8)"| USER_SVC

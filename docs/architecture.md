@@ -54,7 +54,7 @@ below accompany it.
 | --- | --- |
 | Rectangle | A deployable service — its own Spring Boot app in its own Docker container (M7), one per top-level folder |
 | Rounded/stadium shape | People using the system through a browser |
-| Parallelogram | Message broker (RabbitMQ) — shared platform infrastructure in its own container; the exchange is the publishing service's surface, queues belong to consuming services (see [`notification-service.md`](notification-service.md)) |
+| Parallelogram | Message broker (RabbitMQ) — shared platform infrastructure in its own container; the exchange is the publishing service's surface; each queue is dedicated to one consuming service (see [`notification-service.md`](notification-service.md)) |
 | Double-bordered rectangle | External system outside the platform (the email provider) |
 | Cylinder | A database owned by **exactly one** service; no service reads another service's database |
 | Thin arrow `-->` | **Synchronous** REST/JSON call over HTTP; the arrow points from caller to callee (request direction; the response returns along the same call) |

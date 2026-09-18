@@ -16,7 +16,7 @@ flowchart TB
     ORDER_SVC["<b>Order Service</b> (order-service/)<br/>publishes an event on every request state<br/>transition (Order F0.2) and on courier arrival<br/>at the dropoff (Order F4.1.1), stamped with a<br/>per-order sequence number"]
     WEB["<b>Web App</b> (web/)<br/>subscribes to per-user STOMP destinations;<br/>renders in-app notification list"]
 
-    subgraph RABBIT ["RabbitMQ (message broker — shared platform infrastructure, own Docker container; queues below are declared/owned by the Notification Service)"]
+    subgraph RABBIT ["RabbitMQ (message broker — shared platform infrastructure, own Docker container; queues below are dedicated to the Notification Service, their sole consumer)"]
         EXCH{{"<b>order-events exchange</b><br/>durable; receives persistent messages"}}
         WORKQ[["<b>work queue</b> (durable)<br/>holds undelivered events across restarts<br/>(Notif NFR1.2)"]]
         RETRYQ[["<b>retry queue</b> (durable)<br/>TTL/delay queue — parks nacked events,<br/>then re-routes them for redelivery<br/>(backoff; TTL values TBD by team)"]]

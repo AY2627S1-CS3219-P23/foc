@@ -64,8 +64,11 @@ infrastructure running as its own container (like the databases), usable
 by any service. Within it, the `order-events` exchange is conceptually
 the *Order Service's* publishing surface (its contract that state-change
 facts appear there), while the work, retry and dead-letter queues are
-declared and owned by *this* service as its consumer of that exchange —
-a future second consumer would add its own queues (see Extensibility).
+**broker-hosted resources dedicated to this service**: it is their sole
+consumer and the party responsible for their configuration, but the
+queues — and the in-flight events they hold — live on the shared
+broker, not inside the service. A future second consumer would get its
+own dedicated queues (see Extensibility).
 The Notification Service's durable state lives only in its PostgreSQL
 database; the broker holds in-flight messages, not service state, so the
 database-per-service rule is untouched.
@@ -198,9 +201,9 @@ extends without rework. The most plausible next consumer in the backlog
 is centralized logging (nice-to-have N4).
 
 - **New consumers are free for the publisher.** The exchange is the
-  broadcast point: a new consuming service declares **its own durable
-  queue** and binds it to the existing exchange; RabbitMQ delivers a
-  copy of each event to every bound queue. The producer is untouched —
+  broadcast point: a new consuming service gets **its own durable
+  queue** bound to the existing exchange; RabbitMQ delivers a copy of
+  each event to every bound queue. The producer is untouched —
   the same decoupling F1.3 gives for new event types.
 - **One queue per consuming service.** Consumers on the same queue
   *compete* for messages (each event reaches only one of them), so two
@@ -267,7 +270,9 @@ decision to make then.
 ## Open items (team decisions still pending)
 
 - Exact retry backoff schedule (TTL values) and maximum attempt count.
-- Exchange/queue naming convention.
+- Exchange/queue naming convention, and how the topology is provisioned
+  (declared by the application at startup via Spring AMQP vs loaded as
+  broker configuration/definitions).
 - Exchange topology once a second producer or consumer appears:
   per-domain exchanges vs a single topic exchange with routing keys
   (see Extensibility notes).
