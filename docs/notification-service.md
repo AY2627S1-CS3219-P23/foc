@@ -53,9 +53,21 @@ service.
 
 ## Components
 
+Ownership note — the first four rows are **broker infrastructure, not
+part of the Notification Service process**: RabbitMQ is shared platform
+infrastructure running as its own container (like the databases), usable
+by any service. Within it, the `order-events` exchange is conceptually
+the *Order Service's* publishing surface (its contract that state-change
+facts appear there), while the work, retry and dead-letter queues are
+declared and owned by *this* service as its consumer of that exchange —
+a future second consumer would add its own queues (see Extensibility).
+The Notification Service's durable state lives only in its PostgreSQL
+database; the broker holds in-flight messages, not service state, so the
+database-per-service rule is untouched.
+
 | Component | Responsibility |
 | --- | --- |
-| **order-events exchange** (RabbitMQ) | Durable exchange the Order Service publishes order-status events to; publishing is fire-and-forget, so a delivery failure never affects the producing operation (F1.4). |
+| **order-events exchange** (RabbitMQ) | Durable exchange the Order Service publishes request-state and courier-arrival events to; publishing is fire-and-forget, so a delivery failure never affects the producing operation (F1.4). |
 | **Work queue** (RabbitMQ) | Durable queue bound to the exchange; holds undelivered events across restarts (NFR1.2) and delivers them at-least-once (NFR1.1). |
 | **Retry queue** (RabbitMQ) | Durable TTL/delay queue; a nacked event parks here and is re-routed to the work queue when its TTL expires, giving backoff between attempts (F2.2). |
 | **Dead-letter queue** (RabbitMQ) | Durable queue fed by the dead-letter exchange after an event exhausts its maximum attempts; retained for later inspection and manual re-publish (F2.3). |
