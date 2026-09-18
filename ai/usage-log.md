@@ -36,6 +36,23 @@ Entry template:
   recorded in the document's Decisions table; document and diagram
   reviewed via pull request.
 
+## 2026-09-14 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs
+- **Scope:** `docs/architecture.md` — high-level service architecture
+  diagram (Mermaid) plus an exported SVG/PNG for the D1 document.
+- **Prompt(s):** Asked to draw the high-level architecture diagram
+  connecting the dependencies between services, based on the team's D1
+  functional/non-functional requirements and following the CS3219 L4
+  diagram guidelines (title, legend, labelled lines, explicit elements).
+- **Author review:** The architecture itself (microservices, service
+  boundaries, REST + async event workflow, JWT auth) was decided by the
+  team beforehand (AGENTS.md, D1 document); the tool transcribed those
+  decisions into a diagram. Open decisions (broker technology, database
+  engines, client update transport) were kept as explicit "TBD" markers
+  for the team — the tool made no design choices. Reviewed via pull
+  request.
+
 ## 2026-09-10 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** docs, boilerplate

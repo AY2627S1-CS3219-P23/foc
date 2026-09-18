@@ -41,10 +41,40 @@ first**; they cost nothing to read, unlike Figma MCP calls:
 | `docs/wireframes/open-requests.png` | Open requests — courier's browse/accept view |
 | `docs/wireframes/active-delivery.png` | Active delivery — courier's in-progress order view |
 | `docs/wireframes/admin-dashboard.png` | Admin dashboard — user/vendor management |
+| `docs/wireframes/forgot-password.png` | Forgot/reset password — email step + reset form |
+| `docs/wireframes/account-recovery.png` | Account recovery — restore a deleted account within 30 days |
+| `docs/wireframes/notification-center.png` | Notification center — bell with unread badge, read/unread list, empty state |
+| `docs/wireframes/add-edit-supplier.png` | Add/edit supplier (admin) — form modal + delete confirmation |
+| `docs/wireframes/public-profile.png` | Public profile — another user's minimal profile view |
+| `docs/wireframes/rating-review.png` | Rating & review — post-completion star rating, write-up, report user |
+| `docs/wireframes/dispute-flow.png` | Dispute flow — dispute form + admin resolution panel |
+| `docs/wireframes/flow-requester.png` | Requester flow diagram — end-to-end journey map |
+| `docs/wireframes/flow-courier.png` | Courier flow diagram — end-to-end journey map |
 
-The Figma file additionally contains requester/courier flow diagrams not
-snapshotted here — use the Figma MCP server for those, mindful of the
-rate limit.
+## Planned Frontend Workflow
+
+The frontend is **one single-page application** (one React SPA, one
+router, one shared app shell — auth/session handling, navigation, and
+common UI primitives live in shared code, not per-feature copies).
+
+Work is divided by **service domain**: each team member develops the UI
+pages that correspond to the backend service they own. Indicative
+mapping of screens to domains:
+
+| Service domain | Screens |
+| --- | --- |
+| User service | Sign Up, Login, Forgot Password, Account Recovery, Profile, Public Profile, Admin Dashboard (user management) |
+| Supplier service | Suppliers, Add/Edit Supplier (admin) |
+| Order service | Create Request, My Requests, Open Requests, Active Delivery, Order History, Dispute Flow, Rating & Review |
+| Credit service | Credit History, credit balance widgets |
+| Notification service | Notification Center, in-app toasts/badges |
+
+**Overlaps are expected** — e.g. the Dashboard composes widgets from
+several domains, and the nav bar shows credits and notifications
+everywhere. For overlapping pieces: whoever needs a shared component
+first builds it in the shared layer, and cross-domain changes should be
+flagged to the affected owner in the PR rather than silently edited.
+Ownership means "primary developer/reviewer", not exclusive access.
 
 ## Requirements to keep in mind
 
