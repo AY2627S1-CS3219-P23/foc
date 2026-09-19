@@ -24,10 +24,13 @@ package foc.contracts.events;
 public final class EventContracts {
 
 	/**
-	 * Durable fanout exchange the Order Service publishes order events
-	 * to (state transitions per Order F0.2, courier arrival per Order
-	 * F4.1.1-F4.1.2); the Notification Service consumes them (D13,
-	 * D14).
+	 * Durable <strong>topic</strong> exchange for the order domain
+	 * (D16; supersedes the D14 fanout): the Order Service publishes
+	 * order events here (state transitions per Order F0.2, courier
+	 * arrival per Order F4.1.1-F4.1.2) and the Notification Service
+	 * consumes them (D13). Routing keys are the canonical event
+	 * identity strings in {@link EventTypeRegistry} (D18); future
+	 * domains get their own exchanges.
 	 */
 	public static final String ORDER_EVENTS_EXCHANGE = "order-events";
 

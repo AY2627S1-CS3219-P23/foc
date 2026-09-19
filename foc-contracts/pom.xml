@@ -4,6 +4,9 @@
   Tool: Claude Code (Fable 5), 2026-09-19.
   Scope: shared cross-service contracts library created for issue #62
   per the team decision D15 (docs/notification-service.md).
+  Same day, Method-B refactor (D16-D19): test-scoped JUnit + surefire
+  pin added for the new registry/record tests — runtime stays
+  dependency-free per the author's amended D15.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -20,4 +23,25 @@
 		<maven.compiler.release>21</maven.compiler.release>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
+
+	<!-- Test scope only: the published jar keeps zero dependencies (D15). -->
+	<dependencies>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<version>5.13.4</version>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<!-- Default surefire predates the JUnit platform; pin one that runs Jupiter. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>3.5.4</version>
+			</plugin>
+		</plugins>
+	</build>
 </project>

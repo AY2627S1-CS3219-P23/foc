@@ -1,0 +1,90 @@
+/*
+ * AI-assisted (CS3219 AI Usage Policy disclosure):
+ * Tool: Claude Code (Fable 5), 2026-09-19.
+ * Scope: event-type registry per the author's Method-B decisions
+ * (docs/notification-service.md D16-D19): plain-Java single source of
+ * truth mapping each event class to its canonical identity string,
+ * which serves as both the body eventType and the RabbitMQ routing
+ * key.
+ * Reviewed by: Leong Wei Zhi (via pull request).
+ */
+package foc.contracts.events;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * The catalog of every broker event: one entry per record class,
+ * pairing it with its canonical identity string, e.g.
+ * {@code order.accepted} (D18). That one string serves as both the
+ * JSON body's {@code eventType} (what consumers dispatch on) and the
+ * RabbitMQ routing key (transport) — publisher and consumer read the
+ * same entry, so the two can never drift.
+ *
+ * <p>Adding a new event = one record class + one entry here + one
+ * {@code contracts/<identity dots&rarr;hyphens>.example.json} fixture;
+ * the registry-driven contract tests pick it up automatically (see
+ * "Event conventions" in this library's README).
+ *
+ * <p>Plain Java on purpose: this library stays free of framework
+ * dependencies (D15).
+ */
+public final class EventTypeRegistry {
+
+	/** One catalog row: the event class and its canonical identity string. */
+	public record Entry(Class<? extends DomainEvent> eventClass, String eventType) {
+	}
+
+	private static final List<Entry> ENTRIES = List.of(
+			new Entry(OrderCreated.class, "order.created"),
+			new Entry(OrderAccepted.class, "order.accepted"),
+			new Entry(OrderCollected.class, "order.collected"),
+			new Entry(OrderCompleted.class, "order.completed"),
+			new Entry(OrderCancelled.class, "order.cancelled"),
+			new Entry(OrderExpired.class, "order.expired"),
+			new Entry(CourierArrived.class, "order.courier-arrived"));
+
+	private static final Map<String, Entry> BY_EVENT_TYPE = new HashMap<>();
+	private static final Map<Class<?>, Entry> BY_CLASS = new HashMap<>();
+
+	static {
+		for (Entry entry : ENTRIES) {
+			if (BY_EVENT_TYPE.put(entry.eventType(), entry) != null) {
+				throw new IllegalStateException("duplicate eventType: " + entry.eventType());
+			}
+			if (BY_CLASS.put(entry.eventClass(), entry) != null) {
+				throw new IllegalStateException("duplicate event class: " + entry.eventClass());
+			}
+		}
+	}
+
+	/** The event class registered for this identity string, if any. */
+	public static Optional<Class<? extends DomainEvent>> classFor(String eventType) {
+		return Optional.ofNullable(BY_EVENT_TYPE.get(eventType)).map(Entry::eventClass);
+	}
+
+	/**
+	 * The routing key (= canonical identity string) for this event
+	 * class.
+	 *
+	 * @throws IllegalArgumentException if the class is not registered
+	 */
+	public static String routingKeyFor(Class<?> eventClass) {
+		Entry entry = BY_CLASS.get(eventClass);
+		if (entry == null) {
+			throw new IllegalArgumentException("unregistered event class: " + eventClass.getName());
+		}
+		return entry.eventType();
+	}
+
+	/** The whole catalog, unmodifiable — contract tests iterate this. */
+	public static List<Entry> entries() {
+		return ENTRIES;
+	}
+
+	private EventTypeRegistry() {
+	}
+
+}

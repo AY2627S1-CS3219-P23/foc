@@ -57,7 +57,8 @@ folder. The frontend lives in `web/`.
   be added as an **additional folder** at the same level, following the
   same per-service structure.
 - `foc-contracts/` is a shared library (not a service) holding
-  cross-service contract constants such as broker exchange names —
+  cross-service contract constants such as broker exchange names and
+  the typed event contracts (event records + registry + fixtures) —
   team decision D15 (`docs/notification-service.md`).
 - Files for agentic coding tools (e.g. agent configs, prompts, skills)
   may be added as needed, but must still **respect the
@@ -86,9 +87,9 @@ service boundaries and D1 requirements — open design decisions are
 marked TBD in the diagram and remain with the team; implementation
 scaffolding code (Spring Boot service skeletons, Docker/compose
 wiring, JPA entities, message-broker topology declarations, the
-shared `foc-contracts` library — contract constants and the
-event-envelope record with its canonical JSON fixture and contract
-test) and the notification event pipeline (AMQP listener, idempotent
+shared `foc-contracts` library — contract constants and the typed
+event records/registry with their canonical JSON fixtures and contract
+tests) and the notification event pipeline (AMQP listener, idempotent
 event processor, STOMP push gateway with JWT-authenticated sessions,
 unit and integration tests) written strictly from the team's
 finalized design docs and issue specifications, with per-file

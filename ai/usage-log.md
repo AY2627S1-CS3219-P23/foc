@@ -19,6 +19,59 @@ Entry template:
 
 ## 2026-09-19 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (+ docs)
+- **Scope:** Method-B event-contract refactor across `foc-contracts`
+  and `notification-service` (decisions D16–D19 in
+  `docs/notification-service.md`): deleted `EventEnvelope` + its
+  fixture; added `DomainEvent`/`OrderEvent` interfaces, the 7 typed
+  order-lifecycle records, `EventTypeRegistry`, 7 per-event fixtures,
+  and registry/record tests (test-scoped JUnit added to the contracts
+  pom; runtime stays dependency-free); consumer reworked —
+  `DomainEventMessageConverter` (dispatch on the body's canonical
+  `eventType` via the registry), topic exchange + `order.#` binding
+  (replacing fanout), `EventProcessor`/`IdempotentEventProcessor` on
+  `DomainEvent`, `EntitySequence(+Id)`/repository deleted,
+  `entity_type`/`entity_id` dropped from `Notification` and
+  `NotificationDto`; all 4 test classes updated + new converter unit
+  test (27 tests green incl. Testcontainers); docs updated
+  (design doc decisions table/sections, both .mmd diagrams, service
+  README with migration steps, foc-contracts README with the new
+  "Event conventions" section, AGENTS.md, root README AI summary).
+  Follow-up cleanup of the `messaging.rabbitmq` package (author
+  decisions from neutral options): `OrderEventsListener` renamed to
+  `DomainEventsListener` (the class was already event-type-agnostic),
+  and the per-domain topology declarations grouped into one
+  `Declarables` bean with the initializer generically declaring all
+  groups (exchanges, then queues, then bindings) — topology additions
+  now touch only `RabbitMqTopology`.
+- **Prompt(s):** Asked to redesign the RabbitMQ architecture from the
+  generic envelope (Method A) to explicit business-specific contracts
+  (Method B). The tool surfaced the AI policy and ran neutral options
+  Q&As (with JSON/code previews); the author made every decision:
+  flat typed records with no envelope wrapper (after the tool
+  explained that the flawed part of Method A was the untyped Map
+  payload, not the envelope concept); the 7-event order-lifecycle
+  catalog; a plain-Java registry in foc-contracts for type
+  resolution; consumer+contracts scope only (no producer service
+  yet); topic exchange with `order.#` binding; dropping the
+  entity-identity/sequence stale-discard mechanism and the `sequence`
+  field; deriving `eventType` instead of storing it per record (the
+  author asked about repetitive validation; the tool laid out
+  field+guard / derived / unguarded options); after consulting an
+  external LLM, keeping `eventType` in the body as the canonical
+  identity with the routing key carrying the same registry string for
+  transport; retry values (3 attempts / 10 s) and unknown-type
+  dead-lettering decided for issue #65 but explicitly kept out of
+  this refactor-only change. The tool implemented the decisions.
+- **Author review:** All design decisions made by the author across
+  the Q&A rounds (2026-09-19) and recorded with attribution in the
+  design doc's Decisions table (D16–D19). Verified by the author via
+  the test suites (`foc-contracts` 9 tests, `notification-service`
+  27 tests incl. the Testcontainers broker path) and pull-request
+  review.
+
+## 2026-09-19 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
 - **Mode:** generate (implementation)
 - **Scope:** STOMP push gateway, backend half (issue #67):
   `messaging.stomp` adapter package — `WebSocketStompConfig` (`/ws`

@@ -8,6 +8,10 @@
  * entity vocabulary (order_id/type -> entity_type/entity_id/
  * event_type) and moved to the entity package — both author
  * decisions.
+ * 2026-09-19, Method-B refactor (D16-D19): entity_type/entity_id
+ * columns removed with the stale-discard mechanism (author decision
+ * D19); the payload now carries the event's business fields (incl.
+ * orderId).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.entity;
@@ -26,9 +30,10 @@ import org.hibernate.type.SqlTypes;
 /**
  * One notification row per associated party of an event (F1.2),
  * listed and marked read/unread via the REST API (F3.1, F3.2).
- * Columns mirror the business-agnostic event envelope (entity
- * vocabulary per the issue #64 author decision); the payload is the
- * envelope's payload serialized to JSON.
+ * {@code event_type} stores the event's canonical identity string
+ * (e.g. {@code order.accepted}, D18); the payload is the event's
+ * business fields serialized to JSON (which is where the order
+ * reference lives, e.g. {@code orderId}).
  */
 @Entity
 @Table(name = "notifications", indexes = @Index(name = "idx_notifications_recipient", columnList = "recipient_id"))
@@ -40,12 +45,6 @@ public class Notification {
 
     @Column(name = "recipient_id", nullable = false)
     private String recipientId;
-
-    @Column(name = "entity_type", nullable = false)
-    private String entityType;
-
-    @Column(name = "entity_id", nullable = false)
-    private String entityId;
 
     @Column(name = "event_id", nullable = false)
     private String eventId;
@@ -69,11 +68,9 @@ public class Notification {
     protected Notification() {
     }
 
-    public Notification(String recipientId, String entityType, String entityId,
-            String eventId, String eventType, String payload, Instant occurredAt) {
+    public Notification(String recipientId, String eventId, String eventType,
+            String payload, Instant occurredAt) {
         this.recipientId = recipientId;
-        this.entityType = entityType;
-        this.entityId = entityId;
         this.eventId = eventId;
         this.eventType = eventType;
         this.payload = payload;
@@ -86,14 +83,6 @@ public class Notification {
 
     public String getRecipientId() {
         return recipientId;
-    }
-
-    public String getEntityType() {
-        return entityType;
-    }
-
-    public String getEntityId() {
-        return entityId;
     }
 
     public String getEventId() {
