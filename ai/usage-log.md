@@ -19,6 +19,30 @@ Entry template:
 
 ## 2026-09-19 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (implementation)
+- **Scope:** RabbitMQ broker infrastructure and core topology (issue
+  #62): `rabbitmq` container + named volume in `compose.yaml`, broker
+  env vars in `.env.example`, `spring-boot-starter-amqp` and
+  `spring.rabbitmq` config in `notification-service`, and the
+  `foc.notification.messaging.rabbitmq` adapter package declaring the
+  durable `order-events` fanout exchange, durable
+  `notification-service.order-events` queue, and binding, provisioned
+  at startup. Decisions D12–D14 recorded in
+  `docs/notification-service.md`.
+- **Prompt(s):** Asked to pick one open GitHub issue and resolve it via
+  a PR; the tool picked #62 and presented the issue's open decisions
+  (topology provisioning, naming convention, exchange type) as neutral
+  options.
+- **Author review:** The three open design decisions were made by the
+  author (D12 app-declared provisioning via Spring AMQP, D13
+  `order-events` / `notification-service.order-events` naming, D14
+  fanout exchange); the tool implemented them per the already-finalized
+  design (D1, D8, D11). Verified with `./mvnw test` and the issue's
+  acceptance test (publish persistent message, restart broker, message
+  survives). Reviewed via pull request.
+
+## 2026-09-19 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor (review fixes)
 - **Scope:** PR #70 follow-up addressing Copilot review comments:
   `NOTIFICATION_DB_HOST`/`NOTIFICATION_DB_PORT` placeholders added to

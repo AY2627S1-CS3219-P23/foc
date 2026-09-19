@@ -5,6 +5,8 @@
   Scope: generated via Spring Initializr and adjusted (H2 moved to test
   scope, H2 console removed) while scaffolding the service for issue #61.
   Build tool (Maven) and Java 21 chosen by Leong Wei Zhi.
+  2026-09-19: spring-boot-starter-amqp added for issue #62 (team
+  decision D12: app-declared broker topology via Spring AMQP).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -41,6 +43,10 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-amqp</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

@@ -2,7 +2,13 @@
 # Tool: Claude Code (Fable 5), 2026-09-18.
 # Scope: test configuration scaffolded for issue #61 (in-memory H2 so
 # `./mvnw test` needs no running PostgreSQL).
+# 2026-09-19: broker provisioning disabled for issue #62 so tests need
+# no running RabbitMQ either.
 # Reviewed by: Leong Wei Zhi (via pull request).
+
+notification:
+  rabbitmq:
+    provision-on-startup: false
 
 spring:
   datasource:
