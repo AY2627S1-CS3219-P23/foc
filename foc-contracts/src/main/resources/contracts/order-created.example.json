@@ -1,7 +1,6 @@
 {
   "eventType": "order.created",
   "eventId": "9b2f6b3c-1e9d-4d55-8f6a-0c2f4a7d9e21",
-  "schemaVersion": 1,
   "occurredAt": "2026-09-19T08:00:00Z",
   "producer": "order-service",
   "correlationId": "corr-7f3a1c9e",

@@ -17,7 +17,6 @@ import java.util.List;
  */
 public record OrderCompleted(
 		String eventId,
-		int schemaVersion,
 		Instant occurredAt,
 		String producer,
 		String correlationId,

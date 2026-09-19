@@ -49,8 +49,7 @@ class DomainEventContractTest {
 	@Test
 	void everyCatalogedEventHasABindingFixture() throws IOException {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
-			String path = "/contracts/" + entry.eventType().replace('.', '-')
-					+ "-v" + entry.schemaVersion() + ".example.json";
+			String path = "/contracts/" + entry.eventType().replace('.', '-') + ".example.json";
 			DomainEvent event;
 			try (InputStream fixture = getClass().getResourceAsStream(path)) {
 				assertThat(fixture).as("fixture %s on classpath via foc-contracts jar", path).isNotNull();
@@ -59,7 +58,6 @@ class DomainEventContractTest {
 
 			assertThat(event.eventType()).isEqualTo(entry.eventType());
 			assertThat(event.eventId()).isNotBlank();
-			assertThat(event.schemaVersion()).isPositive();
 			assertThat(event.occurredAt()).isNotNull();
 			assertThat(event.producer()).isEqualTo("order-service");
 			assertThat(event.correlationId()).isNotBlank();
@@ -75,7 +73,6 @@ class DomainEventContractTest {
 				{
 				  "eventType": "order.accepted",
 				  "eventId": "e-1",
-				  "schemaVersion": 1,
 				  "occurredAt": "2026-09-19T08:30:00Z",
 				  "producer": "order-service",
 				  "correlationId": "c-1",

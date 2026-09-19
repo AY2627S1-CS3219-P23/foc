@@ -47,7 +47,7 @@ class DomainEventMessageConverterTest {
 	@Test
 	void dispatchesFixtureToItsRecordClass() throws IOException {
 		byte[] body;
-		try (InputStream fixture = getClass().getResourceAsStream("/contracts/order-accepted-v1.example.json")) {
+		try (InputStream fixture = getClass().getResourceAsStream("/contracts/order-accepted.example.json")) {
 			assertThat(fixture).as("fixture on classpath via foc-contracts jar").isNotNull();
 			body = fixture.readAllBytes();
 		}
@@ -82,27 +82,11 @@ class DomainEventMessageConverterTest {
 	}
 
 	@Test
-	void unsupportedSchemaVersionIsFatal() {
-		String json = """
-				{"eventType": "order.accepted", "eventId": "e-1", "schemaVersion": 2,
-				 "occurredAt": "2026-09-19T08:30:00Z", "producer": "order-service",
-				 "correlationId": "c-1", "parties": ["usr-req-1001"],
-				 "orderId": "ord-1", "requesterId": "usr-req-1001",
-				 "courierId": "usr-cou-2002", "pickupLocation": "Techno Edge",
-				 "dropoffLocation": "COM3-01-19", "note": "hi"}
-				""";
-
-		assertThatExceptionOfType(MessageConversionException.class)
-				.isThrownBy(() -> converter.fromMessage(message(json.getBytes(StandardCharsets.UTF_8))))
-				.withMessageContaining("schemaVersion");
-	}
-
-	@Test
 	void missingRequiredFieldIsFatal() {
 		// Binds structurally (Jackson supplies nulls) but must be
 		// rejected before it can reach the processor.
 		String json = """
-				{"eventType": "order.accepted", "eventId": "e-1", "schemaVersion": 1}
+				{"eventType": "order.accepted", "eventId": "e-1"}
 				""";
 
 		assertThatExceptionOfType(MessageConversionException.class)
@@ -113,7 +97,7 @@ class DomainEventMessageConverterTest {
 	@Test
 	void nullableCourierIdIsAcceptedOnOrderCancelled() throws IOException {
 		byte[] body;
-		try (InputStream fixture = getClass().getResourceAsStream("/contracts/order-cancelled-v1.example.json")) {
+		try (InputStream fixture = getClass().getResourceAsStream("/contracts/order-cancelled.example.json")) {
 			assertThat(fixture).as("fixture on classpath via foc-contracts jar").isNotNull();
 			body = fixture.readAllBytes();
 		}
@@ -134,7 +118,7 @@ class DomainEventMessageConverterTest {
 
 	@Test
 	void toMessageInjectsEventTypeAndRoundTrips() {
-		OrderAccepted event = new OrderAccepted("e-1", 1, Instant.parse("2026-09-19T08:30:00Z"),
+		OrderAccepted event = new OrderAccepted("e-1", Instant.parse("2026-09-19T08:30:00Z"),
 				"order-service", "c-1", List.of("usr-req-1001", "usr-cou-2002"),
 				"ord-1", "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "hi");
 

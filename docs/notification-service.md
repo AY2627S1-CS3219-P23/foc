@@ -80,6 +80,12 @@
   by the author for issue #65 but deliberately not implemented in this
   refactor-only change. The tool presented options factually, then
   implemented the outcomes and updated this document.
+  2026-09-20: after PR #75 merged, the author reconsidered and decided
+  (from neutral options: remove entirely / keep versioned registry /
+  keep single-version gate) to remove the schemaVersion field and its
+  versioned-registry mechanism as unneeded standing complexity;
+  breaking contract changes now ship as new event types (D18
+  amended). The tool implemented the removal.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -117,11 +123,11 @@ finalized design for this service.
 | D12 | Topology provisioning | **App-declared at startup via Spring AMQP**: the consuming service declares its exchange/queue/binding beans and forces the declaration when it boots (no broker definitions file) | Notif NFR1.2; topology lives beside its owner |
 | D13 | Naming convention | Exchange named after the producing domain (**`order-events`**); queues prefixed with the consuming service (**`notification-service.order-events`**, later `….retry` / `….dlq`) | ownership visible in the management UI; Extensibility |
 | D14 | ~~`order-events` exchange type~~ | ~~Fanout~~ — **superseded by D16** (2026-09-19) | — |
-| D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (top-level Maven module, zero runtime framework dependencies): contract names that producer and consumer must agree on — e.g. the `order-events` exchange — are compile-time constants imported by each backend service. The sole exception to the no-shared-code convention (recorded in `AGENTS.md`). Service-private names (queues) stay in their service. Amended 2026-09-19 (Method-B refactor, superseding the issue #63 envelope scope): the library holds the **typed event contracts** — the `DomainEvent`/`OrderEvent` interfaces, the seven event records, the `EventTypeRegistry`, and one canonical fixture per registry entry on its classpath (`contracts/<identity dots→hyphens>-v<schemaVersion>.example.json`), which both producer and consumer contract-test against. Test-scoped JUnit was added for the registry/record tests; the published jar stays dependency-free. Tolerant reading of unknown *fields* (F1.3) is consumer-side `ObjectMapper` behavior, locked in by the Notification Service's contract test — so the AMQP message converter must use Boot's auto-configured mapper. | one definition per contract name and per event shape; drift caught at compile time or by the contract tests |
+| D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (top-level Maven module, zero runtime framework dependencies): contract names that producer and consumer must agree on — e.g. the `order-events` exchange — are compile-time constants imported by each backend service. The sole exception to the no-shared-code convention (recorded in `AGENTS.md`). Service-private names (queues) stay in their service. Amended 2026-09-19 (Method-B refactor, superseding the issue #63 envelope scope): the library holds the **typed event contracts** — the `DomainEvent`/`OrderEvent` interfaces, the seven event records, the `EventTypeRegistry`, and one canonical fixture per event on its classpath (`contracts/<identity dots→hyphens>.example.json`), which both producer and consumer contract-test against. Test-scoped JUnit was added for the registry/record tests; the published jar stays dependency-free. Tolerant reading of unknown *fields* (F1.3) is consumer-side `ObjectMapper` behavior, locked in by the Notification Service's contract test — so the AMQP message converter must use Boot's auto-configured mapper. | one definition per contract name and per event shape; drift caught at compile time or by the contract tests |
 | D16 | `order-events` exchange type | **Topic exchange** (supersedes D14): producers publish each event under its canonical routing key (`order.created` … `order.courier-arrived`, from the registry); each consuming service gets its own durable queue with its own bindings — this service binds **`order.#`** (it notifies on every order event, and a new event type ships via a contracts release anyway, so the binding never changes). One exchange per producing domain; future domains get their own. | Notif F1.1–F1.3; Extensibility |
-| D17 | Event contract shape | **Flat typed event records, no envelope** (Method B): `EventEnvelope` and its free-form `Map` payload are deleted; each of the seven order-lifecycle facts — `OrderCreated`, `OrderAccepted`, `OrderCollected`, `OrderCompleted`, `OrderCancelled`, `OrderExpired`, `CourierArrived` — is one record implementing the plain-Java `DomainEvent` interface, carrying the wire metadata (`eventId`, `eventType`, `schemaVersion`, `occurredAt`, `producer`, `correlationId`, `parties`) plus its own business fields (full fixture vocabulary: `orderId`, `requesterId`, `courierId` where a courier exists — nullable on `OrderCancelled` — `pickupLocation`, `dropoffLocation`, `note`) at the top level. Events are past-tense facts, never commands. | schema per event; Notif F1.1–F1.2 |
-| D18 | Event identity & dispatch | **One canonical identity string per event** (e.g. `order.accepted`), registered in `EventTypeRegistry` — keyed by *(identity, `schemaVersion`)* with **one record class per version** (versioning model decided on PR #75 review, 2026-09-19), so consumers can support several schema versions of one event concurrently during a migration; a version with no entry is rejected as a conversion failure. The identity travels twice by design: as the body `eventType` — the contract's self-describing identity, which consumers **dispatch on** together with `schemaVersion` (D11's body-only rule stands; no `__TypeId__` headers) — and as the RabbitMQ routing key (transport metadata), shared by all versions. `eventType` is *not* a record component: `DomainEvent.eventType()` derives it from the registry and the message converter injects it on publish, so an instance can never carry a mismatched type. Stored in `notifications.event_type` and pushed in the STOMP frame. Consumers also reject events missing required fields (components not marked `@Nullable`). | Notif F1.3; portability (self-describing bodies) |
-| D19 | Idempotency scope | **Event-ID dedupe only** (supersedes D5): the per-entity sequence mechanism, its `sequence` wire field, the `entity_sequences` table, and the `entity_type`/`entity_id` columns/DTO fields were removed; requirement F2.4 is retired. Accepted consequence: out-of-order deliveries each produce notifications. Re-adding ordering later is an additive `schemaVersion`-bump contract change. | Notif F2.1 |
+| D17 | Event contract shape | **Flat typed event records, no envelope** (Method B): `EventEnvelope` and its free-form `Map` payload are deleted; each of the seven order-lifecycle facts — `OrderCreated`, `OrderAccepted`, `OrderCollected`, `OrderCompleted`, `OrderCancelled`, `OrderExpired`, `CourierArrived` — is one record implementing the plain-Java `DomainEvent` interface, carrying the wire metadata (`eventId`, `eventType`, `occurredAt`, `producer`, `correlationId`, `parties`) plus its own business fields (full fixture vocabulary: `orderId`, `requesterId`, `courierId` where a courier exists — nullable on `OrderCancelled` — `pickupLocation`, `dropoffLocation`, `note`) at the top level. Events are past-tense facts, never commands. | schema per event; Notif F1.1–F1.2 |
+| D18 | Event identity & dispatch | **One canonical identity string per event** (e.g. `order.accepted`), registered once in `EventTypeRegistry` (class ↔ identity). It travels twice by design: as the body `eventType` — the contract's self-describing identity, which consumers **dispatch on** (D11's body-only rule stands; no `__TypeId__` headers) — and as the RabbitMQ routing key (transport metadata). `eventType` is *not* a record component: `DomainEvent.eventType()` derives it from the registry and the message converter injects it on publish, so an instance can never carry a mismatched type. Stored in `notifications.event_type` and pushed in the STOMP frame. Consumers reject unknown types and events missing required fields (components not marked `@Nullable`). A **breaking contract change ships as a new event type** (e.g. `order.accepted.v2`) — decided 2026-09-20, removing the interim `schemaVersion` field and its versioned-registry mechanism (added on PR #75 review the day before) as unneeded standing complexity; the unknown-type rejection already covers the migration window. | Notif F1.3; portability (self-describing bodies) |
+| D19 | Idempotency scope | **Event-ID dedupe only** (supersedes D5): the per-entity sequence mechanism, its `sequence` wire field, the `entity_sequences` table, and the `entity_type`/`entity_id` columns/DTO fields were removed; requirement F2.4 is retired. Accepted consequence: out-of-order deliveries each produce notifications. Re-adding ordering later is an additive contract change (a new `@Nullable` field). | Notif F2.1 |
 
 ## Components
 
@@ -160,12 +166,11 @@ events** — one flat record per fact, no envelope wrapper and no
 free-form payload map (the generic `EventEnvelope` was judged too
 weakly typed and deleted). The contracts are code in `foc-contracts/`:
 the `DomainEvent`/`OrderEvent` interfaces, the seven records, and the
-`EventTypeRegistry` — with one canonical fixture per registry entry
-checked in under
+`EventTypeRegistry` — with one canonical fixture per event checked in
+under
 [`foc-contracts/src/main/resources/contracts/`](../foc-contracts/src/main/resources/contracts/)
-(`<identity dots→hyphens>-v<schemaVersion>.example.json`), the
-contract artifacts both producer and consumer contract-test against
-(D15). The full
+(`<identity dots→hyphens>.example.json`), the contract artifacts both
+producer and consumer contract-test against (D15). The full
 conventions — naming, wire shape, evolution rules, the
 add-a-new-event checklist, and producer conventions — live in the
 ["Event conventions" section of the foc-contracts README](../foc-contracts/README.md#event-conventions).
@@ -177,7 +182,6 @@ event's business fields):
 | --- | --- |
 | `eventId` (unique) | duplicate detection (D4, F2.1) |
 | `eventType` (canonical identity, e.g. `order.accepted` — injected by the converter, derived from the class; same string as the routing key) | consumer dispatch to the record class; self-describing, transport-portable bodies (D18) |
-| `schemaVersion` (int, starts at 1) | contract evolution: additive within a version, breaking changes bump it |
 | `occurredAt` timestamp | notification display and audit |
 | `producer` (e.g. `order-service`) | provenance/audit |
 | `correlationId` | correlates the event with the request/flow that caused it |
@@ -322,11 +326,11 @@ is centralized logging (nice-to-have N4).
   narrower patterns than this service's `order.#`.
 - **The contracts library is already the public contract.** The typed
   records in `foc-contracts` (D17) are what every producer and
-  consumer compiles against; they evolve additively within a
-  `schemaVersion` (add fields, never rename or repurpose; consumers
-  ignore unknown fields), and breaking changes bump the version — see
-  the "Event conventions" section of the foc-contracts README. New
-  consumers reuse the same records and registry unchanged; a new
+  consumer compiles against; they evolve additively only (add
+  `@Nullable` fields, never rename or repurpose; consumers ignore
+  unknown fields), and a breaking change ships as a new event type —
+  see the "Event conventions" section of the foc-contracts README.
+  New consumers reuse the same records and registry unchanged; a new
   producing domain adds its own event records, registry entries and
   exchange.
 - **Events are facts, not commands.** Calls whose caller needs the

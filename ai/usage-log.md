@@ -16,6 +16,32 @@ Entry template:
 ```
 
 ---
+## 2026-09-20 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor
+- **Scope:** removal of the `schemaVersion` mechanism across
+  `foc-contracts` and `notification-service` (amends D18, merged in
+  PR #75 the day before): field dropped from `DomainEvent`, the 7
+  records, all fixtures (renamed back to
+  `<identity>.example.json`) and the wire; `EventTypeRegistry` keyed
+  by identity alone again; the converter's version gate deleted
+  (unknown-type rejection remains); conventions/design docs updated —
+  breaking contract changes now ship as new event types (e.g.
+  `order.accepted.v2`). Required-field validation and `@Nullable`
+  are unchanged.
+- **Prompt(s):** After merging PR #75 the author reconsidered the
+  versioning machinery as overly complex and asked whether it could
+  be removed, also querying whether concurrent v1+v2 acceptance was
+  desirable. The tool explained the current behavior factually (only
+  registered versions are accepted; concurrency exists only during a
+  deliberate migration window) and presented three neutral options
+  (remove entirely / keep versioned registry / keep a single-version
+  gate); the author chose removal, with the new-event-type convention
+  covering future breaking changes via the existing unknown-type
+  rejection.
+- **Author review:** Decision made by the author (2026-09-20) and
+  recorded in D18; verified via both test suites and pull-request
+  review.
 
 ## 2026-09-19 — Ryan Ang
 - **Tool:** Claude Sonnet 5
