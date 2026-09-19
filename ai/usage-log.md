@@ -19,6 +19,53 @@ Entry template:
 
 ## 2026-09-19 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (implementation)
+- **Scope:** RabbitMQ broker infrastructure and core topology (issue
+  #62): `rabbitmq` container + named volume in `compose.yaml`, broker
+  env vars in `.env.example`, `spring-boot-starter-amqp` and
+  `spring.rabbitmq` config in `notification-service`, and the
+  `foc.notification.messaging.rabbitmq` adapter package declaring the
+  durable `order-events` fanout exchange, durable
+  `notification-service.order-events` queue, and binding, provisioned
+  at startup. Same PR, follow-up decision: the shared `foc-contracts/`
+  Maven library (plain contract constants, no framework code) holding
+  the `order-events` exchange name, consumed by the notification
+  service; service Docker build context moved to the repo root (with a
+  root `.dockerignore`) so the library builds inside the image.
+  Decisions D12–D15 recorded in `docs/notification-service.md`; the
+  D15 shared-code exception recorded in `AGENTS.md` and the root
+  README.
+- **Prompt(s):** Asked to pick one open GitHub issue and resolve it via
+  a PR; the tool picked #62 and presented the issue's open decisions
+  (topology provisioning, naming convention, exchange type) as neutral
+  options. Follow-up Q&A: the author asked how the exchange name should
+  be carried (config vs constant — an initial env-overridable config
+  choice was made and then reverted by the author), asked for factual
+  industry conventions, then decided on a shared constants library; the
+  tool presented forms (config file vs Java library vs contract folder
+  + tests) neutrally, including the conflict with the existing
+  no-shared-code convention. Naming rounds (module name kept as
+  foc-contracts; constants class named EventContracts over
+  MessagingContracts to avoid colliding with a possible future N6 chat
+  feature) were likewise author decisions from neutral options.
+- **Author review:** All four open design decisions were made by the
+  author (D12 app-declared provisioning via Spring AMQP, D13
+  `order-events` / `notification-service.order-events` naming, D14
+  fanout exchange, D15 shared contracts library amending the AGENTS.md
+  no-shared-code convention); the tool implemented them per the
+  already-finalized design (D1, D8, D11). Verified with `./mvnw test`
+  and the issue's acceptance test (publish persistent message, restart
+  broker, message survives). Copilot review fixes on the same PR:
+  pinned `hostname: rabbitmq` so the persisted node data survives
+  container recreation, documented broker credential rotation in
+  `.env.example`, `@Qualifier`s in the topology initializer to stay
+  unambiguous when #65 adds retry/DLQ beans, attribution headers added
+  to `AGENTS.md`, the root `README.md`, and `foc-contracts/.gitignore`,
+  and the PR description's stale class name corrected. Reviewed via
+  pull request.
+
+## 2026-09-19 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor (review fixes)
 - **Scope:** PR #70 follow-up addressing Copilot review comments:
   `NOTIFICATION_DB_HOST`/`NOTIFICATION_DB_PORT` placeholders added to

@@ -2,6 +2,8 @@
 # Tool: Claude Code (Fable 5), 2026-09-18.
 # Scope: service configuration scaffolded for issue #61 per the
 # team-decided design (docs/notification-service.md, D3).
+# 2026-09-19: spring.rabbitmq connection settings added for issue #62
+# (team decisions D1, D12).
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -17,6 +19,11 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:foc}
+    password: ${RABBITMQ_PASSWORD:}
 
 management:
   endpoints:

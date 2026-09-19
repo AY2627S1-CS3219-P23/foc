@@ -1,7 +1,9 @@
 # AI-assisted (CS3219 AI Usage Policy disclosure):
-# Tool: Claude Code (Fable 5), 2026-09-18.
+# Tool: Claude Code (Fable 5), 2026-09-18; revised 2026-09-19.
 # Scope: notification-service + notification-db wiring scaffolded for
 # issue #61 per team decisions D3 and M7 (docs/notification-service.md).
+# 2026-09-19: rabbitmq broker container added for issue #62 per team
+# decisions D1, D8, M7 and the provisioning/naming decisions D12-D14.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -9,7 +11,11 @@ name: foc
 
 services:
   notification-service:
-    build: ./notification-service
+    # Context is the repo root so the build can include the shared
+    # foc-contracts library (D15).
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
     ports:
       - "${NOTIFICATION_SERVICE_PORT:-8085}:8080"
     environment:
@@ -18,9 +24,41 @@ services:
       NOTIFICATION_DB_NAME: ${NOTIFICATION_DB_NAME:-notification}
       NOTIFICATION_DB_USER: ${NOTIFICATION_DB_USER:-notification}
       NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?set in .env}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-foc}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set in .env}
     depends_on:
       notification-db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # RabbitMQ broker (D1): shared platform infrastructure, usable by any
+  # service. Runs with a named volume for its data directory (M7) so
+  # durable queues and persistent messages survive broker restarts (D8,
+  # Notif NFR1.2). Management UI included for DLQ inspection (D7).
+  rabbitmq:
+    image: rabbitmq:4-management
+    # Pinned hostname: RabbitMQ derives its node name (and the on-disk
+    # data location inside the volume) from the hostname, so an
+    # unpinned hostname would strand the persisted data when the
+    # container is recreated (docker compose down && up).
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-foc}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set in .env}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
   # Notification DB (D3): PostgreSQL owned exclusively by the
@@ -42,3 +80,4 @@ services:
 
 volumes:
   notification-db-data:
+  rabbitmq-data:

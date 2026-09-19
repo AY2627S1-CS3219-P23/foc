@@ -21,6 +21,12 @@
   transport) are recorded as pending team/implementation decisions.
   No architecture, technology, or trade-off decisions were made by the
   tool.
+  2026-09-19 revision: recorded decisions D12-D15 (topology
+  provisioning, naming convention, exchange type, shared contracts
+  library), made by the author via neutral options Q&As while
+  implementing issue #62; the tool presented the options factually —
+  including the industry conventions the author asked about before
+  D15 — and documented the outcomes.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -39,8 +45,8 @@ it in the file view). System-wide context: [`architecture.md`](architecture.md).
 ## Design decisions (made by the team)
 
 All decisions below were made by Leong Wei Zhi (D1–D10 on 2026-09-15,
-D11 on 2026-09-18) and count as the team's finalized design for this
-service.
+D11 on 2026-09-18, D12–D15 on 2026-09-19) and count as the team's
+finalized design for this service.
 
 | # | Concern | Decision | Serves |
 | --- | --- | --- | --- |
@@ -55,6 +61,10 @@ service.
 | D9 | Retention window | **Configurable via environment variable** `NOTIF_RETENTION_DAYS`, **default 30 days**; scheduled purge job | Notif F3.4 |
 | D10 | Redis / scale-out | **No Redis** in the current single-instance design (see Open items) | — |
 | D11 | Broker isolation | **Ports and adapters**: business logic (event processor, REST API, purge job) has zero broker imports; all RabbitMQ-specific code is confined to a single messaging adapter package behind service-owned interfaces (see "Broker decoupling") | maintainability; broker swap surface |
+| D12 | Topology provisioning | **App-declared at startup via Spring AMQP**: the consuming service declares its exchange/queue/binding beans and forces the declaration when it boots (no broker definitions file) | Notif NFR1.2; topology lives beside its owner |
+| D13 | Naming convention | Exchange named after the producing domain (**`order-events`**); queues prefixed with the consuming service (**`notification-service.order-events`**, later `….retry` / `….dlq`) | ownership visible in the management UI; Extensibility |
+| D14 | `order-events` exchange type | **Fanout** — every bound queue gets a copy of every event; consumers filter by `type` in their own code | Notif F1.3; Extensibility ("the exchange is the broadcast point") |
+| D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (top-level Maven module, plain constants, zero framework dependencies): contract names that producer and consumer must agree on — e.g. the `order-events` exchange — are compile-time constants imported by each backend service. The sole exception to the no-shared-code convention (recorded in `AGENTS.md`). Service-private names (queues) stay in their service. Whether the event-envelope DTO also moves there is decided under issue #63. | one definition per contract name; drift caught at compile time |
 
 ## Components
 
@@ -270,9 +280,10 @@ decision to make then.
 ## Open items (team decisions still pending)
 
 - Exact retry backoff schedule (TTL values) and maximum attempt count.
-- Exchange/queue naming convention, and how the topology is provisioned
+- ~~Exchange/queue naming convention, and how the topology is provisioned
   (declared by the application at startup via Spring AMQP vs loaded as
-  broker configuration/definitions).
+  broker configuration/definitions)~~ — decided 2026-09-19 (D12, D13);
+  the `order-events` exchange type is also settled as fanout (D14).
 - Exchange topology once a second producer or consumer appears:
   per-domain exchanges vs a single topic exchange with routing keys
   (see Extensibility notes).

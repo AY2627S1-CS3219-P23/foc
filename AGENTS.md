@@ -1,3 +1,14 @@
+<!--
+  AI-assisted (CS3219 AI Usage Policy disclosure):
+  Tool: Claude Code (Fable 5), 2026-09-10; revised 2026-09-19.
+  Scope: team-decided tech stack, architecture, conventions, and course
+  constraints transcribed into this guide (2026-09-10). 2026-09-19: the
+  foc-contracts shared-library exception recorded under Architecture
+  and Conventions per team decision D15 (docs/notification-service.md).
+  All decisions documented here were made by the team.
+  Reviewed by: Leong Wei Zhi (via pull request).
+-->
+
 # Favours on Campus (FoC) — Agent Guide
 
 Favours on Campus (FoC) is a peer-to-peer campus errand platform
@@ -35,11 +46,20 @@ top-level folder following the same skeleton. A service folder may contain
 its own `AGENTS.md` with service-specific instructions — read it before
 working in that service.
 
+One top-level folder is **not** a service: `foc-contracts/` is a shared
+Maven library holding cross-service contract constants (e.g. broker
+exchange names) — see the exception under Conventions.
+
 ## Conventions
 
 - Keep changes scoped to the relevant service folder; cross-service
   communication happens via APIs/events, never by importing another
-  service's code.
+  service's code. Sole exception (team decision D15, 2026-09-19,
+  `docs/notification-service.md`): backend services may depend on the
+  shared `foc-contracts/` library, which holds only cross-service
+  contract constants — no framework code, no service logic. Install it
+  locally before building a service that uses it:
+  `cd foc-contracts && ./mvnw install`.
 - Requirements are tracked as GitHub issues labelled by `service:`,
   `priority:`, and `sprint:` — reference the issue when implementing one.
 
