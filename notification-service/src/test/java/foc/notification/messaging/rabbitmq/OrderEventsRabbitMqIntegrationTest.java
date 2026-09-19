@@ -172,7 +172,7 @@ class OrderEventsRabbitMqIntegrationTest {
 
 	private long readyMessageCount() {
 		Integer count = rabbitTemplate.execute(channel ->
-				channel.queueDeclarePassive(RabbitMqTopology.WORK_QUEUE).getMessageCount());
+				channel.queueDeclarePassive(RabbitMqTopology.ORDER_EVENTS_QUEUE).getMessageCount());
 		return count == null ? -1 : count;
 	}
 }

@@ -54,7 +54,7 @@ class DomainEventsListener {
 		this.eventProcessor = eventProcessor;
 	}
 
-	@RabbitListener(queues = RabbitMqTopology.WORK_QUEUE)
+	@RabbitListener(queues = RabbitMqTopology.ORDER_EVENTS_QUEUE)
 	void onDomainEvent(DomainEvent event, Channel channel,
 			@Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) throws IOException {
 		try {

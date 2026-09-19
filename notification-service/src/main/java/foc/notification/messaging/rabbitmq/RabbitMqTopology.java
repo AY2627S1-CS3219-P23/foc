@@ -56,12 +56,13 @@ import org.springframework.context.annotation.Configuration;
 public class RabbitMqTopology {
 
 	/**
-	 * This service's work queue; consumer-prefixed per the team naming
-	 * convention (D13) and service-private, so it lives here rather
-	 * than in foc-contracts (D15). Retry/DLQ counterparts follow under
-	 * issue #65.
+	 * This service's work queue for the order domain; consumer-prefixed
+	 * per the team naming convention (D13) and service-private, so it
+	 * lives here rather than in foc-contracts (D15). Retry/DLQ
+	 * counterparts (ORDER_EVENTS_RETRY_QUEUE,
+	 * ORDER_EVENTS_DEAD_LETTER_QUEUE) follow under issue #65.
 	 */
-	public static final String WORK_QUEUE = "notification-service.order-events";
+	public static final String ORDER_EVENTS_QUEUE = "notification-service.order-events";
 
 	/** All order-domain events, current and future (D16). */
 	static final String ORDER_EVENTS_BINDING_PATTERN = "order.#";
@@ -69,7 +70,7 @@ public class RabbitMqTopology {
 	@Bean
 	Declarables orderEventsTopology() {
 		TopicExchange exchange = new TopicExchange(EventContracts.ORDER_EVENTS_EXCHANGE, true, false);
-		Queue workQueue = QueueBuilder.durable(WORK_QUEUE).build();
+		Queue workQueue = QueueBuilder.durable(ORDER_EVENTS_QUEUE).build();
 		Binding binding = BindingBuilder.bind(workQueue).to(exchange)
 				.with(ORDER_EVENTS_BINDING_PATTERN);
 		return new Declarables(exchange, workQueue, binding);

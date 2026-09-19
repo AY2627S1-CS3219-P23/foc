@@ -47,6 +47,7 @@ class DomainEventMessageConverterTest {
 	void dispatchesFixtureToItsRecordClass() throws IOException {
 		byte[] body;
 		try (InputStream fixture = getClass().getResourceAsStream("/contracts/order-accepted.example.json")) {
+			assertThat(fixture).as("fixture on classpath via foc-contracts jar").isNotNull();
 			body = fixture.readAllBytes();
 		}
 
