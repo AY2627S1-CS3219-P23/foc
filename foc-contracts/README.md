@@ -18,8 +18,10 @@ Only things that are a *contract between services* belong here:
 
 - **Contract names** both producer and consumer must agree on, e.g.
   the broker exchange name (`EventContracts.ORDER_EVENTS_EXCHANGE`).
-- **The event envelope**: the `EventEnvelope` record every order event
-  travels in, plus its canonical example
+- **The event envelope**: the `EventEnvelope` record every broker
+  event travels in — its fields carry only event-handling semantics
+  (dedupe, ordering, fan-out, display); domain data rides in
+  `payload` — plus its canonical example
   [`src/main/resources/contracts/order-event.example.json`](src/main/resources/contracts/order-event.example.json)
   — the contract artifact each side's contract test asserts against
   (loaded from this jar's classpath at `/contracts/order-event.example.json`).

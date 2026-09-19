@@ -27,8 +27,15 @@ Entry template:
   (`EventEnvelopeContractTest`, `@JsonTest` with
   `spring-boot-starter-jackson-test` added to the service pom)
   asserting the fixture deserializes and tolerant-reader rules hold
-  (unknown fields/types ignored, absent `courierId` → null, F1.3).
+  (unknown fields/types ignored, F1.3).
   D15 amendment, the Event envelope section, and READMEs updated.
+  Same-PR revisions: fixture renamed to `order-event.example.json`
+  (author request); envelope fields restricted to event-handling
+  semantics (author decision) — the doc's platform-wide shape
+  `aggregateType` + `aggregateId` + `parties[]` adopted in place of
+  `orderId` / `requesterId` / `courierId`, with domain identity and
+  roles moved into `payload`; record, fixture, contract test, and
+  design doc updated to match.
 - **Prompt(s):** Asked to pick an unblocked notification issue and
   plan it; the tool picked #63 (critical path) and presented the open
   design decisions as options: DTO location (per-service copies +
@@ -40,6 +47,14 @@ Entry template:
   recommendation (rationale: fixture already ships in the jar both
   services depend on; a plain record keeps the library
   framework-free; additive-only evolution is already mandated).
+  Follow-up rounds: the author questioned why the test exists and
+  where it lives (the tool explained: the contract is the JSON wire
+  format, tolerant reading is consumer-side mapper behavior, and
+  foc-contracts is deliberately dependency-free), asked why the
+  fixture lives in foc-contracts, then directed that envelope fields
+  relate only to event handling; the tool presented grouping-key and
+  parties-shape options neutrally and the author chose
+  aggregateType + aggregateId and a plain user-ID list.
 - **Author review:** All three contract decisions confirmed by the
   author before implementation (DTO location explicitly, after
   requesting and weighing the tool's recommendation). Verified with

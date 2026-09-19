@@ -33,6 +33,13 @@
   Java type), that the EventEnvelope record and canonical fixture live
   in foc-contracts; the tool recommended that placement when asked and
   updated this document and the Event envelope section accordingly.
+  Same day, on PR review, the author decided envelope fields must be
+  restricted to event-handling semantics and chose (from neutral
+  options: grouping-key generality, parties element shape) to adopt
+  the Extensibility section's platform-wide shape — aggregateType +
+  aggregateId + parties[] as plain user IDs — replacing orderId /
+  requesterId / courierId; the tool updated the field table and the
+  Extensibility bullet to match.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -105,7 +112,12 @@ database-per-service rule is untouched.
 ## Event envelope (fields required by the decisions above)
 
 The Order Service publishes a generic envelope; each field exists
-because a decision or requirement demands it. The envelope is code:
+because a step of generic event handling — dedupe, ordering, fan-out,
+display — demands it, and **only** such fields belong at envelope
+level (issue #63 decision, 2026-09-19: the platform-wide shape from
+the Extensibility section was adopted from the start, replacing the
+order-named fields `orderId` / `requesterId` / `courierId`; domain
+identity and roles ride in `payload`). The envelope is code:
 `foc.contracts.events.EventEnvelope` in `foc-contracts/`, with the
 canonical example checked in as
 [`foc-contracts/src/main/resources/contracts/order-event.example.json`](../foc-contracts/src/main/resources/contracts/order-event.example.json)
@@ -115,12 +127,13 @@ contract test) assert against (D15).
 | Field | Why it must be present |
 | --- | --- |
 | `eventId` (unique) | duplicate detection (D4, F2.1) |
-| `orderId` | groups events per order (F2.4) |
-| `sequence` (per order, incrementing) | stale-event discard (D5, F2.4) |
-| `type` (the six request states: created / accepted / collected / completed / cancelled / expired — plus `courier-arrived` for the dropoff-arrival update) | Order F0.2 (state transitions), Order F4.1.1–F4.1.2 (arrival); new types addable without publisher changes (F1.3) |
+| `aggregateType` (e.g. `"order"`) | scopes `aggregateId`, so future producers publish through the same envelope unchanged (Extensibility) |
+| `aggregateId` (for order events, the order ID) | groups events per aggregate (F2.4) |
+| `sequence` (per aggregate, incrementing) | stale-event discard (D5, F2.4) |
+| `type` (for orders: the six request states created / accepted / collected / completed / cancelled / expired — plus `courier-arrived` for the dropoff-arrival update) | Order F0.2 (state transitions), Order F4.1.1–F4.1.2 (arrival); new types addable without publisher changes (F1.3) |
 | `occurredAt` timestamp | notification display and audit |
-| `requesterId`, `courierId` (party user IDs) | notify each party without querying other services (F1.1, F1.2) |
-| `payload` (free-form details) | message text rendering; generic per F1.3 |
+| `parties` (user IDs to notify) | one notification per entry, without querying other services (F1.1, F1.2); party roles, if a renderer needs them, live in `payload` |
+| `payload` (free-form domain details) | message text rendering; generic per F1.3 |
 
 ## Diagram legend
 
@@ -240,9 +253,11 @@ is centralized logging (nice-to-have N4).
   exists: evolve it additively (add fields, never rename or repurpose),
   require consumers to ignore unknown fields and event types (this
   service already does, per F1.3), and publish domain facts rather than
-  the producer's internal structures. A platform-wide shape would
-  generalize the order-specific fields to `aggregateType` +
-  `aggregateId` + per-aggregate `sequence` + `parties[]`.
+  the producer's internal structures. The platform-wide shape —
+  `aggregateType` + `aggregateId` + per-aggregate `sequence` +
+  `parties[]` instead of order-named fields — was adopted from the
+  start under issue #63 (see "Event envelope"), so new producers and
+  consumers use the same `EventEnvelope` unchanged.
 - **Events are facts, not commands.** Calls whose caller needs the
   result — e.g. Order → Credit reserve/transfer (Credit F2.1.3, F3.1) —
   stay synchronous REST; the broker carries only "this happened"
