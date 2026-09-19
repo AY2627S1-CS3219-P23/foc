@@ -6,7 +6,9 @@
   scope, H2 console removed) while scaffolding the service for issue #61.
   Build tool (Maven) and Java 21 chosen by Leong Wei Zhi.
   2026-09-19: spring-boot-starter-amqp added for issue #62 (team
-  decision D12: app-declared broker topology via Spring AMQP).
+  decision D12: app-declared broker topology via Spring AMQP), plus
+  the foc-contracts dependency (team decision D15: shared contract
+  constants; run `../foc-contracts/mvnw install` there first).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -40,6 +42,11 @@
 		<java.version>21</java.version>
 	</properties>
 	<dependencies>
+		<dependency>
+			<groupId>foc</groupId>
+			<artifactId>foc-contracts</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>

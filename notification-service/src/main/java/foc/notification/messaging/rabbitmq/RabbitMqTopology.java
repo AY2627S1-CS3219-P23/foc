@@ -2,10 +2,12 @@
  * AI-assisted (CS3219 AI Usage Policy disclosure):
  * Tool: Claude Code (Fable 5), 2026-09-19.
  * Scope: broker topology declaration for issue #62 per team decisions
- * D1, D8, D11-D14 (docs/notification-service.md).
+ * D1, D8, D11-D15 (docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.rabbitmq;
+
+import foc.contracts.messaging.MessagingContracts;
 
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
@@ -32,18 +34,17 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class RabbitMqTopology {
 
-	/** Exchange the Order Service publishes request events to (D13). */
-	public static final String ORDER_EVENTS_EXCHANGE = "order-events";
-
 	/**
 	 * This service's work queue; consumer-prefixed per the team naming
-	 * convention (D13). Retry/DLQ counterparts follow under issue #65.
+	 * convention (D13) and service-private, so it lives here rather
+	 * than in foc-contracts (D15). Retry/DLQ counterparts follow under
+	 * issue #65.
 	 */
 	public static final String WORK_QUEUE = "notification-service.order-events";
 
 	@Bean
 	FanoutExchange orderEventsExchange() {
-		return new FanoutExchange(ORDER_EVENTS_EXCHANGE, true, false);
+		return new FanoutExchange(MessagingContracts.ORDER_EVENTS_EXCHANGE, true, false);
 	}
 
 	@Bean

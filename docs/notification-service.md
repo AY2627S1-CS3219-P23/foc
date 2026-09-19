@@ -21,10 +21,12 @@
   transport) are recorded as pending team/implementation decisions.
   No architecture, technology, or trade-off decisions were made by the
   tool.
-  2026-09-19 revision: recorded decisions D12-D14 (topology
-  provisioning, naming convention, exchange type), made by the author
-  via a neutral options Q&A while implementing issue #62; the tool
-  presented the options factually and documented the outcomes.
+  2026-09-19 revision: recorded decisions D12-D15 (topology
+  provisioning, naming convention, exchange type, shared contracts
+  library), made by the author via neutral options Q&As while
+  implementing issue #62; the tool presented the options factually —
+  including the industry conventions the author asked about before
+  D15 — and documented the outcomes.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -43,7 +45,7 @@ it in the file view). System-wide context: [`architecture.md`](architecture.md).
 ## Design decisions (made by the team)
 
 All decisions below were made by Leong Wei Zhi (D1–D10 on 2026-09-15,
-D11 on 2026-09-18, D12–D14 on 2026-09-19) and count as the team's
+D11 on 2026-09-18, D12–D15 on 2026-09-19) and count as the team's
 finalized design for this service.
 
 | # | Concern | Decision | Serves |
@@ -62,6 +64,7 @@ finalized design for this service.
 | D12 | Topology provisioning | **App-declared at startup via Spring AMQP**: the consuming service declares its exchange/queue/binding beans and forces the declaration when it boots (no broker definitions file) | Notif NFR1.2; topology lives beside its owner |
 | D13 | Naming convention | Exchange named after the producing domain (**`order-events`**); queues prefixed with the consuming service (**`notification-service.order-events`**, later `….retry` / `….dlq`) | ownership visible in the management UI; Extensibility |
 | D14 | `order-events` exchange type | **Fanout** — every bound queue gets a copy of every event; consumers filter by `type` in their own code | Notif F1.3; Extensibility ("the exchange is the broadcast point") |
+| D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (top-level Maven module, plain constants, zero framework dependencies): contract names that producer and consumer must agree on — e.g. the `order-events` exchange — are compile-time constants imported by each backend service. The sole exception to the no-shared-code convention (recorded in `AGENTS.md`). Service-private names (queues) stay in their service. Whether the event-envelope DTO also moves there is decided under issue #63. | one definition per contract name; drift caught at compile time |
 
 ## Components
 

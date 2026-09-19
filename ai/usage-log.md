@@ -27,19 +27,32 @@ Entry template:
   `foc.notification.messaging.rabbitmq` adapter package declaring the
   durable `order-events` fanout exchange, durable
   `notification-service.order-events` queue, and binding, provisioned
-  at startup. Decisions D12–D14 recorded in
-  `docs/notification-service.md`.
+  at startup. Same PR, follow-up decision: the shared `foc-contracts/`
+  Maven library (plain contract constants, no framework code) holding
+  the `order-events` exchange name, consumed by the notification
+  service; service Docker build context moved to the repo root (with a
+  root `.dockerignore`) so the library builds inside the image.
+  Decisions D12–D15 recorded in `docs/notification-service.md`; the
+  D15 shared-code exception recorded in `AGENTS.md` and the root
+  README.
 - **Prompt(s):** Asked to pick one open GitHub issue and resolve it via
   a PR; the tool picked #62 and presented the issue's open decisions
   (topology provisioning, naming convention, exchange type) as neutral
-  options.
-- **Author review:** The three open design decisions were made by the
+  options. Follow-up Q&A: the author asked how the exchange name should
+  be carried (config vs constant — an initial env-overridable config
+  choice was made and then reverted by the author), asked for factual
+  industry conventions, then decided on a shared constants library; the
+  tool presented forms (config file vs Java library vs contract folder
+  + tests) neutrally, including the conflict with the existing
+  no-shared-code convention.
+- **Author review:** All four open design decisions were made by the
   author (D12 app-declared provisioning via Spring AMQP, D13
   `order-events` / `notification-service.order-events` naming, D14
-  fanout exchange); the tool implemented them per the already-finalized
-  design (D1, D8, D11). Verified with `./mvnw test` and the issue's
-  acceptance test (publish persistent message, restart broker, message
-  survives). Reviewed via pull request.
+  fanout exchange, D15 shared contracts library amending the AGENTS.md
+  no-shared-code convention); the tool implemented them per the
+  already-finalized design (D1, D8, D11). Verified with `./mvnw test`
+  and the issue's acceptance test (publish persistent message, restart
+  broker, message survives). Reviewed via pull request.
 
 ## 2026-09-19 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)

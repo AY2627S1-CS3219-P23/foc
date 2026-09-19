@@ -37,6 +37,7 @@ folder. The frontend lives in `web/`.
 ├── order-service/
 ├── credit-service/
 ├── notification-service/
+├── foc-contracts/
 ├── <n2h-service>/
 └── README.md
 ```
@@ -44,6 +45,9 @@ folder. The frontend lives in `web/`.
 - Any **nice-to-have (N2H)** feature that warrants its own service should
   be added as an **additional folder** at the same level, following the
   same per-service structure.
+- `foc-contracts/` is a shared library (not a service) holding
+  cross-service contract constants such as broker exchange names —
+  team decision D15 (`docs/notification-service.md`).
 - Files for agentic coding tools (e.g. agent configs, prompts, skills)
   may be added as needed, but must still **respect the
   one-service-per-folder skeleton** for core implementation.
@@ -70,9 +74,10 @@ architecture diagram (`docs/architecture.md`) from the team-decided
 service boundaries and D1 requirements — open design decisions are
 marked TBD in the diagram and remain with the team; implementation
 scaffolding code (Spring Boot service skeletons, Docker/compose
-wiring, JPA entities, message-broker topology declarations) written
-strictly from the team's finalized design docs and issue
-specifications, with per-file attribution headers.
+wiring, JPA entities, message-broker topology declarations, the
+shared `foc-contracts` constants library) written strictly from the
+team's finalized design docs and issue specifications, with per-file
+attribution headers.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
