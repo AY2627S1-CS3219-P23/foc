@@ -16,7 +16,6 @@ Entry template:
 ```
 
 ---
-
 ## 2026-09-20 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor
@@ -43,6 +42,13 @@ Entry template:
 - **Author review:** Decision made by the author (2026-09-20) and
   recorded in D18; verified via both test suites and pull-request
   review.
+
+## 2026-09-19 — Ryan Ang
+- **Tool:** Claude Sonnet 5
+- **Mode:** docs
+- **Scope:** `docs/credit-service.md` and `docs/credit-service.mmd`
+- **Prompt(s):** Convert the given credit-service.md file into a draft mermaid diagram. Skip heavy implementation details.
+- **Author review:** Architecture was decided beforehand. Mermaid diagram was manually verified to ensure that it represents architectural details.
 
 ## 2026-09-19 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
