@@ -56,7 +56,14 @@ Entry template:
   `./mvnw test`: 12/12 green including the Testcontainers
   integration test against a real RabbitMQ container (fixture
   consumed end-to-end, duplicate absorbed, stale discarded, queue
-  drained). Reviewed via pull request.
+  drained). Reviewed via pull request. Copilot review fixes on the
+  same PR (author-directed): the per-entity sequence read now takes a
+  pessimistic write lock (`findWithLockById`, SELECT ... FOR UPDATE)
+  so concurrent deliveries cannot regress `last_applied_sequence`;
+  the listener's nack-then-rethrow was kept after verifying against
+  the spring-rabbit 4.1.1 sources that MANUAL mode never
+  double-settles a rethrown delivery (documented in the listener
+  Javadoc; explained in the review reply rather than changed).
 
 ## 2026-09-19 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)

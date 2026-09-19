@@ -34,7 +34,12 @@ import tools.jackson.databind.ObjectMapper;
  * (3) an envelope whose sequence is at or below the last applied for
  * its (entityType, entityId) is discarded — with its event ID kept,
  * so redeliveries of the stale event short-circuit at step 1 (D5,
- * F2.4); (4) the payload map is serialized with Boot's
+ * F2.4); the sequence row is read {@code FOR UPDATE}
+ * (pessimistic lock), so concurrent deliveries for the same entity
+ * serialize here and the last-applied value can never regress — two
+ * concurrent first events (no row to lock yet) instead collide on
+ * the insert's primary key and resolve like case 2;
+ * (4) the payload map is serialized with Boot's
  * auto-configured Jackson mapper — the same mapper the AMQP converter
  * uses (D15); (5) one notification row per party (F1.2).
  *
@@ -69,7 +74,7 @@ class IdempotentEventProcessor implements EventProcessor {
 		processedEvents.save(new ProcessedEvent(envelope.eventId()));
 
 		EntitySequenceId key = new EntitySequenceId(envelope.entityType(), envelope.entityId());
-		EntitySequence sequence = entitySequences.findById(key).orElse(null);
+		EntitySequence sequence = entitySequences.findWithLockById(key).orElse(null);
 		if (sequence != null && envelope.sequence() <= sequence.getLastAppliedSequence()) {
 			return;
 		}
