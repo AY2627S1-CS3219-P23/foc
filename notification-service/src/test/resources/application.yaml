@@ -4,6 +4,9 @@
 # `./mvnw test` needs no running PostgreSQL).
 # 2026-09-19: broker provisioning disabled for issue #62 so tests need
 # no running RabbitMQ either.
+# 2026-09-19, issue #64: listener auto-startup off so context tests
+# stay broker-free (the RabbitMQ integration test switches it back on
+# and repeats acknowledge-mode, since this file shadows the main yaml).
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 notification:
@@ -11,6 +14,11 @@ notification:
     provision-on-startup: false
 
 spring:
+  rabbitmq:
+    listener:
+      simple:
+        acknowledge-mode: manual
+        auto-startup: false
   datasource:
     url: jdbc:h2:mem:notification;DB_CLOSE_DELAY=-1
     username: sa

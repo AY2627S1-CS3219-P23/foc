@@ -4,9 +4,13 @@
  * Scope: entity scaffolded for issue #61; columns derive from the
  * team-decided event envelope and requirements in
  * docs/notification-service.md (F1.2, F3.1, F3.2).
+ * 2026-09-19, issue #64: columns renamed to the envelope's
+ * entity vocabulary (order_id/type -> entity_type/entity_id/
+ * event_type) and moved to the entity package — both author
+ * decisions.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
-package foc.notification.persistence;
+package foc.notification.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -20,8 +24,11 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * One notification row per associated party of an order event (F1.2),
+ * One notification row per associated party of an event (F1.2),
  * listed and marked read/unread via the REST API (F3.1, F3.2).
+ * Columns mirror the business-agnostic event envelope (entity
+ * vocabulary per the issue #64 author decision); the payload is the
+ * envelope's payload serialized to JSON.
  */
 @Entity
 @Table(name = "notifications", indexes = @Index(name = "idx_notifications_recipient", columnList = "recipient_id"))
@@ -34,14 +41,17 @@ public class Notification {
     @Column(name = "recipient_id", nullable = false)
     private String recipientId;
 
-    @Column(name = "order_id", nullable = false)
-    private String orderId;
+    @Column(name = "entity_type", nullable = false)
+    private String entityType;
+
+    @Column(name = "entity_id", nullable = false)
+    private String entityId;
 
     @Column(name = "event_id", nullable = false)
     private String eventId;
 
-    @Column(nullable = false)
-    private String type;
+    @Column(name = "event_type", nullable = false)
+    private String eventType;
 
     @JdbcTypeCode(SqlTypes.LONGVARCHAR)
     @Column(nullable = false)
@@ -59,12 +69,13 @@ public class Notification {
     protected Notification() {
     }
 
-    public Notification(String recipientId, String orderId, String eventId,
-            String type, String payload, Instant occurredAt) {
+    public Notification(String recipientId, String entityType, String entityId,
+            String eventId, String eventType, String payload, Instant occurredAt) {
         this.recipientId = recipientId;
-        this.orderId = orderId;
+        this.entityType = entityType;
+        this.entityId = entityId;
         this.eventId = eventId;
-        this.type = type;
+        this.eventType = eventType;
         this.payload = payload;
         this.occurredAt = occurredAt;
     }
@@ -77,16 +88,20 @@ public class Notification {
         return recipientId;
     }
 
-    public String getOrderId() {
-        return orderId;
+    public String getEntityType() {
+        return entityType;
+    }
+
+    public String getEntityId() {
+        return entityId;
     }
 
     public String getEventId() {
         return eventId;
     }
 
-    public String getType() {
-        return type;
+    public String getEventType() {
+        return eventType;
     }
 
     public String getPayload() {
