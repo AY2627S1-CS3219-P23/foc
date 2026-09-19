@@ -34,14 +34,6 @@ import org.springframework.stereotype.Component;
  * default error handler rejects fatal conversion failures without
  * requeue. Backoff schedule and attempt limits are a pending team
  * decision owned by issue #65 — deliberately not implemented here.
- *
- * <p>The rethrow after the nack is for the container's standard
- * failure logging only and cannot double-settle the delivery: in
- * MANUAL mode the container issues its own nack solely for
- * {@code ManualAckListenerExecutionRuntimeException} (spring-rabbit
- * 4.1.1, {@code BlockingQueueConsumer#rollbackOnExceptionIfNecessary}
- * — {@code ackRequired} is false for manual mode otherwise), so this
- * listener remains the delivery's only settler.
  */
 @Component
 class OrderEventsListener {
@@ -59,6 +51,10 @@ class OrderEventsListener {
 			eventProcessor.process(envelope);
 		} catch (RuntimeException ex) {
 			channel.basicNack(deliveryTag, false, true);
+			// Rethrow feeds the container's failure logging only — it cannot
+			// double-settle this delivery: in MANUAL mode the container nacks
+			// solely for ManualAckListenerExecutionRuntimeException (spring-rabbit
+			// 4.1.1, BlockingQueueConsumer#rollbackOnExceptionIfNecessary).
 			throw ex;
 		}
 		channel.basicAck(deliveryTag, false);
