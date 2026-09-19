@@ -86,9 +86,10 @@ service boundaries and D1 requirements — open design decisions are
 marked TBD in the diagram and remain with the team; implementation
 scaffolding code (Spring Boot service skeletons, Docker/compose
 wiring, JPA entities, message-broker topology declarations, the
-shared `foc-contracts` constants library) written strictly from the
-team's finalized design docs and issue specifications, with per-file
-attribution headers.
+shared `foc-contracts` library — contract constants and the
+event-envelope record with its canonical JSON fixture and contract
+test) written strictly from the team's finalized design docs and
+issue specifications, with per-file attribution headers.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

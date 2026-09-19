@@ -27,6 +27,28 @@
   implementing issue #62; the tool presented the options factually —
   including the industry conventions the author asked about before
   D15 — and documented the outcomes.
+  2026-09-19 (issue #63): recorded the D15 amendment — the author
+  decided, from neutral options (per-service DTO copies + shared
+  fixture vs. shared DTO in foc-contracts; fixture location; payload
+  Java type), that the EventEnvelope record and canonical fixture live
+  in foc-contracts; when asked for a view on placement the tool
+  restated constraints already documented in the repo (fixture ships
+  in the shared jar, the library's framework-free rule, additive-only
+  evolution), the author decided, and the tool updated this document
+  and the Event envelope section accordingly.
+  Same day, on PR review, the author decided envelope fields must be
+  restricted to event-handling semantics and chose (from neutral
+  options: grouping-key generality, parties element shape) to adopt
+  the Extensibility section's platform-wide shape — entityType +
+  entityId + parties[] as plain user IDs — replacing orderId /
+  requesterId / courierId; the tool updated the field table and the
+  Extensibility bullet to match. The author also renamed the type
+  field to eventType (symmetry with the entity-type field), and chose
+  entityType/entityId over the DDD-conventional
+  aggregateType/aggregateId (from neutral options: aggregate — the
+  Debezium-outbox/Axon convention this section originally cited —
+  entity, or CloudEvents-style subject), preferring plain English
+  over pattern jargon.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -63,8 +85,8 @@ finalized design for this service.
 | D11 | Broker isolation | **Ports and adapters**: business logic (event processor, REST API, purge job) has zero broker imports; all RabbitMQ-specific code is confined to a single messaging adapter package behind service-owned interfaces (see "Broker decoupling") | maintainability; broker swap surface |
 | D12 | Topology provisioning | **App-declared at startup via Spring AMQP**: the consuming service declares its exchange/queue/binding beans and forces the declaration when it boots (no broker definitions file) | Notif NFR1.2; topology lives beside its owner |
 | D13 | Naming convention | Exchange named after the producing domain (**`order-events`**); queues prefixed with the consuming service (**`notification-service.order-events`**, later `….retry` / `….dlq`) | ownership visible in the management UI; Extensibility |
-| D14 | `order-events` exchange type | **Fanout** — every bound queue gets a copy of every event; consumers filter by `type` in their own code | Notif F1.3; Extensibility ("the exchange is the broadcast point") |
-| D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (top-level Maven module, plain constants, zero framework dependencies): contract names that producer and consumer must agree on — e.g. the `order-events` exchange — are compile-time constants imported by each backend service. The sole exception to the no-shared-code convention (recorded in `AGENTS.md`). Service-private names (queues) stay in their service. Whether the event-envelope DTO also moves there is decided under issue #63. | one definition per contract name; drift caught at compile time |
+| D14 | `order-events` exchange type | **Fanout** — every bound queue gets a copy of every event; consumers filter by `eventType` in their own code | Notif F1.3; Extensibility ("the exchange is the broadcast point") |
+| D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (top-level Maven module, plain constants, zero framework dependencies): contract names that producer and consumer must agree on — e.g. the `order-events` exchange — are compile-time constants imported by each backend service. The sole exception to the no-shared-code convention (recorded in `AGENTS.md`). Service-private names (queues) stay in their service. Issue #63 (2026-09-19) extended the library's scope to the **event-envelope contract**: the `EventEnvelope` record (a plain annotation-free record, keeping the library framework-free) and the canonical fixture `contracts/order-event.example.json` on its classpath, which both producer and consumer contract-test against. Tolerant reading (unknown fields/types ignored, F1.3) is consumer-side `ObjectMapper` behavior, locked in by the Notification Service's contract test — so the AMQP message converter (issue #64) must use Boot's auto-configured mapper. | one definition per contract name and per envelope field; drift caught at compile time or by the contract tests |
 
 ## Components
 
@@ -98,18 +120,34 @@ database-per-service rule is untouched.
 
 ## Event envelope (fields required by the decisions above)
 
-The Order Service publishes a generic envelope; each field exists
-because a decision or requirement demands it:
+The Order Service publishes a generic envelope. **Contract rule: the
+envelope is business-agnostic** (issue #63 decision, 2026-09-19). A
+field may exist at envelope level only because a step of generic
+event handling — dedupe, ordering, fan-out, display — demands it;
+business vocabulary (domain identifiers under their business names,
+party roles, order details) never appears as an envelope field and
+always rides inside `payload`. This is a standing constraint on
+future evolution, not just today's shape: even additive changes may
+add only handling-semantics fields — a domain-named envelope field is
+a contract violation. (The platform-wide shape from the Extensibility
+section was adopted from the start, replacing the order-named fields
+`orderId` / `requesterId` / `courierId`.) The envelope is code:
+`foc.contracts.events.EventEnvelope` in `foc-contracts/`, with the
+canonical example checked in as
+[`foc-contracts/src/main/resources/contracts/order-event.example.json`](../foc-contracts/src/main/resources/contracts/order-event.example.json)
+— the contract artifact both producer (#55) and consumer (issue #63's
+contract test) assert against (D15).
 
 | Field | Why it must be present |
 | --- | --- |
 | `eventId` (unique) | duplicate detection (D4, F2.1) |
-| `orderId` | groups events per order (F2.4) |
-| `sequence` (per order, incrementing) | stale-event discard (D5, F2.4) |
-| `type` (the six request states: created / accepted / collected / completed / cancelled / expired — plus `courier-arrived` for the dropoff-arrival update) | Order F0.2 (state transitions), Order F4.1.1–F4.1.2 (arrival); new types addable without publisher changes (F1.3) |
+| `entityType` (e.g. `"order"`) | scopes `entityId`, so future producers publish through the same envelope unchanged (Extensibility) |
+| `entityId` (for order events, the order ID) | groups events per entity (F2.4) |
+| `sequence` (per entity, incrementing) | stale-event discard (D5, F2.4) |
+| `eventType` (for orders: the six request states created / accepted / collected / completed / cancelled / expired — plus `courier-arrived` for the dropoff-arrival update) | Order F0.2 (state transitions), Order F4.1.1–F4.1.2 (arrival); new types addable without publisher changes (F1.3) |
 | `occurredAt` timestamp | notification display and audit |
-| `requesterId`, `courierId` (party user IDs) | notify each party without querying other services (F1.1, F1.2) |
-| `payload` (free-form details) | message text rendering; generic per F1.3 |
+| `parties` (user IDs to notify) | one notification per entry, without querying other services (F1.1, F1.2); party roles, if a renderer needs them, live in `payload` |
+| `payload` (free-form domain details) | message text rendering; generic per F1.3 |
 
 ## Diagram legend
 
@@ -137,7 +175,7 @@ APIs · ack/nack = message (negative) acknowledgement.
 | --- | --- |
 | Notif F1.1 — notify on events without querying the producing service | envelope carries all needed data (party IDs, type, payload); processor reads only the envelope + own DB |
 | Notif F1.2 — notify each party of an event | processor creates one notification per party ID in the envelope; push gateway targets each party's per-user destination |
-| Notif F1.3 — new event types without publisher changes | generic envelope (`type` + `payload`); processor handles unknown types generically |
+| Notif F1.3 — new event types without publisher changes | generic envelope (`eventType` + `payload`); processor handles unknown types generically |
 | Notif F1.4 — delivery failure never affects the producing operation | fire-and-forget publish to the exchange; all retry/failure handling stays on the consumer side of the broker |
 | Notif F2.1 — no duplicate notification on redelivery | unique event-ID constraint checked in the same DB transaction as the notification insert (D4) |
 | Notif F2.2 — retry failed deliveries | nack → TTL retry queue → redelivery with backoff, up to max attempts (D6) |
@@ -182,8 +220,8 @@ and `compose.yaml`, never the business logic.
   `messaging.rabbitmq`); an ArchUnit test can assert no other package
   imports broker types (not yet written — see Open items).
 - **Envelope stays broker-agnostic:** all business data (event ID,
-  sequence, parties, type, payload) rides in the JSON body — never in
-  AMQP headers or other broker-specific message properties.
+  sequence, parties, event type, payload) rides in the JSON body —
+  never in AMQP headers or other broker-specific message properties.
 - **Already portable by construction:** duplicate detection (D4) and
   stale-event discard (D5) are enforced in this service's own database,
   not by broker features, so the logic satisfying F2.1/F2.4 is unchanged
@@ -229,9 +267,14 @@ is centralized logging (nice-to-have N4).
   exists: evolve it additively (add fields, never rename or repurpose),
   require consumers to ignore unknown fields and event types (this
   service already does, per F1.3), and publish domain facts rather than
-  the producer's internal structures. A platform-wide shape would
-  generalize the order-specific fields to `aggregateType` +
-  `aggregateId` + per-aggregate `sequence` + `parties[]`.
+  the producer's internal structures. The platform-wide shape —
+  `entityType` + `entityId` + per-entity `sequence` +
+  `parties[]` instead of order-named fields — was adopted from the
+  start under issue #63 (see "Event envelope"), so new producers and
+  consumers use the same `EventEnvelope` unchanged. The envelope's
+  business-agnostic rule binds additive evolution too: new fields may
+  carry only event-handling semantics; new domain data goes into
+  `payload`, never into new envelope fields.
 - **Events are facts, not commands.** Calls whose caller needs the
   result — e.g. Order → Credit reserve/transfer (Credit F2.1.3, F3.1) —
   stay synchronous REST; the broker carries only "this happened"

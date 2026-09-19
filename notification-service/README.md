@@ -38,5 +38,11 @@ skeleton, health endpoint, the JPA schema — notification rows
 sequence per order (staleness, D5) — and the RabbitMQ topology: the
 durable `order-events` fanout exchange (name from the shared
 `foc-contracts` library, D15) and this service's durable work queue,
-declared at startup (D12). Listener, retry/DLQ, REST API, push
-gateway, and retention purge land in issues #63–#68.
+declared at startup (D12). The event-envelope contract (issue #63) is
+in place: the `EventEnvelope` record and canonical fixture live in
+`foc-contracts` (D15 amendment), and this service's contract test
+(`EventEnvelopeContractTest`) locks in tolerant-reader deserialization
+(unknown fields/types ignored, F1.3) against Boot's auto-configured
+`ObjectMapper` — which the AMQP message converter must therefore use
+when the listener lands (issue #64). Listener, retry/DLQ, REST API,
+push gateway, and retention purge land in issues #64–#68.

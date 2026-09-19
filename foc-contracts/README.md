@@ -3,21 +3,41 @@
   Tool: Claude Code (Fable 5), 2026-09-19.
   Scope: README written while creating the shared contracts library for
   issue #62 per team decision D15 (docs/notification-service.md).
+  Same day, issue #63: extended for the event-envelope record and
+  canonical fixture, per the author's D15-amendment decision.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
 # foc-contracts
 
-Shared **cross-service contract constants** — the one deliberate
-exception (decision D15, 2026-09-19) to the "services never share code"
-convention in [`AGENTS.md`](../AGENTS.md).
+Shared **cross-service contracts** — the one deliberate exception
+(decision D15, 2026-09-19; extended under issue #63) to the "services
+never share code" convention in [`AGENTS.md`](../AGENTS.md).
 
-Only things that are a *contract between services* belong here, e.g.
-the broker exchange names both producer and consumer must agree on
-(`EventContracts.ORDER_EVENTS_EXCHANGE`). Service-private names
-(queue names, table names, internal config) stay in their service.
-The library has **no framework dependencies** — plain constants only —
-so depending on it never drags Spring or broker types into a service.
+Only things that are a *contract between services* belong here:
+
+- **Contract names** both producer and consumer must agree on, e.g.
+  the broker exchange name (`EventContracts.ORDER_EVENTS_EXCHANGE`).
+- **The event envelope**: the `EventEnvelope` record every broker
+  event travels in. The envelope is **business-agnostic** by contract
+  rule (design doc, "Event envelope"): its fields carry only
+  event-handling semantics (dedupe, ordering, fan-out, display);
+  domain data — business identifiers, party roles, message details —
+  rides in `payload`, and future additive fields must follow the same
+  rule. Its canonical example is
+  [`src/main/resources/contracts/order-event.example.json`](src/main/resources/contracts/order-event.example.json)
+  — the contract artifact each side's contract test asserts against
+  (loaded from this jar's classpath at `/contracts/order-event.example.json`).
+  The envelope evolves additively only: add fields, never rename or
+  repurpose (design doc, "Extensibility").
+
+Service-private names (queue names, table names, internal config) stay
+in their service. The library has **no framework dependencies** —
+plain constants and annotation-free records only — so depending on it
+never drags Spring, Jackson, or broker types into a service. (Jackson
+binds records by component name; tolerant reading of unknown fields is
+each consumer's `ObjectMapper` configuration, e.g. Spring Boot's
+default mapper.)
 
 ## Use
 
