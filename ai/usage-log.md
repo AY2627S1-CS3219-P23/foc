@@ -20,6 +20,48 @@ Entry template:
 ## 2026-09-19 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate (implementation)
+- **Scope:** STOMP push gateway, backend half (issue #67):
+  `messaging.stomp` adapter package — `WebSocketStompConfig` (`/ws`
+  endpoint with SockJS fallback, simple broker on `/queue`, 10 s
+  heartbeats with a dedicated TaskScheduler, Jackson 3 STOMP
+  converter wrapping Boot's mapper per D15), `JwtChannelInterceptor`
+  (Bearer JWT verified at STOMP CONNECT; session principal = token
+  `sub`), `StompPrincipal`, `NotificationPushListener`
+  (`@TransactionalEventListener(AFTER_COMMIT)` →
+  `convertAndSendToUser`, best-effort with the catch documented);
+  `security.JwtVerifier` (jjwt 0.13.0 + jjwt-gson, HS256 shared
+  `JWT_SECRET`, fail-fast on short secret); processor publishes
+  `NotificationStoredEvent` per saved row; `NotificationDto` (payload
+  parsed; shape intended for reuse by #66); yaml/compose/.env.example
+  wiring; docs ("Session mechanics" section, architecture.md sub
+  convention); 6 JwtVerifier unit tests + 7 STOMP integration tests
+  (real sessions on RANDOM_PORT, no Docker).
+- **Prompt(s):** Asked to pick another notification issue and plan
+  it; the tool identified #67 (last piece of the very-high F1
+  umbrella) and surfaced that web/ has no SPA and no JWT
+  code/User Service exists. The author decided, from neutral
+  options: backend-only scope (frontend client deferred); CONNECT
+  frame Bearer auth over query-param/cookie; jjwt over Spring
+  Security resource server and hand-rolled HMAC; `sub` = platform
+  user ID as the provisional cross-service claim convention;
+  recording the provisional client reconnect policy now
+  (exponential 1 s→30 s, resubscribe, 10 s heartbeats); and — on
+  plan review — SockJS fallback enabled rather than plain WebSocket
+  only. The tool implemented those decisions (jjwt-gson serializer
+  chosen because no Jackson 3 jjwt module exists — implementation
+  detail, disclosed in the pom header).
+- **Author review:** All scope/security/interface decisions made by
+  the author before implementation. Verified with `./mvnw test`:
+  25/25 green (JWT unit tests; STOMP integration: push after commit
+  within the 5 s budget, per-user isolation, silence for
+  duplicate/stale events, CONNECT rejection for missing/invalid/
+  expired tokens, SockJS fallback path; existing suites unaffected)
+  and `dependency:tree` confirming no Jackson 2 databind was pulled
+  in. Reviewed via pull request.
+
+## 2026-09-19 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (implementation)
 - **Scope:** AMQP listener and idempotent event processor (issue
   #64): `OrderEventsListener` + `RabbitMqMessageConverterConfig`
   (Jackson 3 `JacksonJsonMessageConverter` wrapping Boot's

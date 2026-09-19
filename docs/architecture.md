@@ -1,6 +1,8 @@
 <!--
   AI-assisted (CS3219 AI Usage Policy disclosure):
-  Tool: Claude Code (Fable 5), 2026-09-14; revised 2026-09-15, 2026-09-18.
+  Tool: Claude Code (Fable 5), 2026-09-14; revised 2026-09-15,
+  2026-09-18, 2026-09-19 (issue #67: recorded the author's provisional
+  sub-claim convention in the Authentication note).
   Scope: transcribed the team-decided architecture (AGENTS.md service
   boundaries + D1 requirements interactions) into this diagram/document,
   and re-aligned relationships and requirement references with the
@@ -70,6 +72,10 @@ logout invalidates the current token (User F7.1.1–F7.1.2). Each service
 rejects requests the caller's role does not permit (User F6.1.5).
 Token-validation mechanics (shared `JWT_SECRET` per `.env.example`) are
 configuration, not a runtime call, so no arrow is drawn for it.
+Provisional convention (decided under Notification issue #67, before
+the User Service exists): the JWT's `sub` claim carries the platform
+user ID — the same ID used in event `parties[]` and notification
+recipients — and the User Service must mint tokens accordingly.
 
 **Abbreviations:** REST = HTTP/JSON web APIs · JWT = JSON Web Token ·
 OTP = one-time password · JPA = Java Persistence API (Spring Data JPA) ·

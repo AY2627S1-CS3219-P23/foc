@@ -15,6 +15,12 @@
   2026-09-19: spring-boot-testcontainers + Testcontainers junit-jupiter
   and rabbitmq modules added for issue #64's broker integration test
   (skips cleanly when Docker is unavailable).
+  2026-09-19, issue #67: spring-boot-starter-websocket (STOMP push
+  gateway, D2) and jjwt for JWT verification at the STOMP CONNECT
+  (author decisions). jjwt-gson chosen over jjwt-jackson because no
+  jjwt module exists for Jackson 3 yet and jjwt-jackson would drag a
+  parallel Jackson 2 stack onto the classpath; gson is BOM-managed
+  and used only inside jjwt.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -46,6 +52,8 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
+		<!-- Not managed by the Boot BOM; pinned explicitly. -->
+		<jjwt.version>0.13.0</jjwt.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -68,6 +76,27 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-websocket</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-api</artifactId>
+			<version>${jjwt.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<version>${jjwt.version}</version>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-gson</artifactId>
+			<version>${jjwt.version}</version>
+			<scope>runtime</scope>
 		</dependency>
 
 		<dependency>
@@ -98,6 +127,11 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-websocket-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
