@@ -49,6 +49,15 @@
   Debezium-outbox/Axon convention this section originally cited —
   entity, or CloudEvents-style subject), preferring plain English
   over pattern jargon.
+  2026-09-19 (issue #64): the author decided, via neutral options
+  Q&As, the listener/processor implementation choices: DB schema
+  renamed to the envelope's entity vocabulary (D5 wording generalized
+  to per-entity below), sequence tracking keyed by the composite
+  (entityType, entityId) pair, literal manual acknowledgement,
+  interim failure handling (conversion failures dropped, processing
+  failures requeued) pending #65's retry/DLQ, and a classic
+  controller-service-repository package layout; the tool implemented
+  those decisions and updated the affected wording here.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -76,7 +85,7 @@ finalized design for this service.
 | D2 | Client push transport | **WebSocket with STOMP** (Spring simple broker, per-user destinations) | Notif F1.2; Order NFR1.1–1.2 |
 | D3 | Notification DB engine | **PostgreSQL**, accessed via Spring Data JPA | Notif F2.1, F2.4, F3 |
 | D4 | Duplicate detection | **Unique event ID** recorded in the DB (unique constraint), written in the *same transaction* as the notification insert | Notif F2.1 |
-| D5 | Stale-event discard | **Per-order sequence number** stamped by the Order Service; the processor stores the last applied sequence per order and discards events with a sequence ≤ it | Notif F2.4 |
+| D5 | Stale-event discard | **Per-entity sequence number** stamped by the producer (per order, in Order Service terms); the processor stores the last applied sequence per `(entityType, entityId)` pair and discards events with a sequence ≤ it (wording generalized under issue #64 to match the business-agnostic envelope) | Notif F2.4 |
 | D6 | Retry policy | **Broker redelivery with TTL/delay-queue backoff**, fixed maximum attempts | Notif F2.2 |
 | D7 | Dead-letter handling | **RabbitMQ dead-letter exchange → durable dead-letter queue**; inspected via the management UI or a consumer, replayable by re-publishing | Notif F2.3 |
 | D8 | Broker persistence | **Durable exchanges/queues + persistent messages** (must be explicitly configured — durability is opt-in in RabbitMQ) | Notif NFR1.2 |
@@ -112,11 +121,11 @@ database-per-service rule is untouched.
 | **Retry queue** (RabbitMQ) | Durable TTL/delay queue; a nacked event parks here and is re-routed to the work queue when its TTL expires, giving backoff between attempts (F2.2). |
 | **Dead-letter queue** (RabbitMQ) | Durable queue fed by the dead-letter exchange after an event exhausts its maximum attempts; retained for later inspection and manual re-publish (F2.3). |
 | **AMQP listener** (Spring Boot) | Consumes events with manual acknowledgement; acks only after the processor's DB transaction commits, so a crash before commit leads to redelivery, never loss (NFR1.1). |
-| **Idempotent event processor** (Spring Boot) | Core logic: rejects already-seen event IDs (F2.1), discards stale per-order sequences (F2.4), accepts any event type carried by the generic envelope without publisher changes (F1.3), and creates one notification row per associated party (F1.2) — all from envelope data alone, never querying another service (F1.1). |
+| **Idempotent event processor** (Spring Boot) | Core logic: rejects already-seen event IDs (F2.1), discards stale per-entity sequences (F2.4), accepts any event type carried by the generic envelope without publisher changes (F1.3), and creates one notification row per associated party (F1.2) — all from envelope data alone, never querying another service (F1.1). |
 | **Notification REST API** (Spring Boot) | Lets the Web App list a user's recent notifications and mark them read/unread (F3.1, F3.2). |
 | **STOMP push gateway** (Spring Boot) | WebSocket endpoint with Spring's STOMP simple broker; pushes each stored notification to the affected users' `/user/...` destinations within the 5-second budget (F1.2; Order NFR1.1–1.2). |
 | **Retention purge scheduler** (Spring Boot) | Scheduled job deleting notifications older than the configured window (F3.4). |
-| **Notification DB** (PostgreSQL) | Owned exclusively by this service (database-per-service): notification rows with read/unread state, processed event IDs, and last-applied sequence per order — one schema so dedupe, sequence update, and notification insert commit atomically. |
+| **Notification DB** (PostgreSQL) | Owned exclusively by this service (database-per-service): notification rows with read/unread state, processed event IDs, and last-applied sequence per `(entityType, entityId)` — one schema so dedupe, sequence update, and notification insert commit atomically. |
 
 ## Event envelope (fields required by the decisions above)
 
@@ -180,7 +189,7 @@ APIs · ack/nack = message (negative) acknowledgement.
 | Notif F2.1 — no duplicate notification on redelivery | unique event-ID constraint checked in the same DB transaction as the notification insert (D4) |
 | Notif F2.2 — retry failed deliveries | nack → TTL retry queue → redelivery with backoff, up to max attempts (D6) |
 | Notif F2.3 — record events that exhaust retries | dead-letter exchange routes them to the durable DLQ for inspection/re-publish (D7) |
-| Notif F2.4 — discard events older than the last applied for the same order | per-order sequence check against the stored last-applied sequence (D5) |
+| Notif F2.4 — discard events older than the last applied for the same order | per-entity sequence check against the stored last-applied sequence (D5) |
 | Notif F3.1 — view recent notifications in-app | Notification REST API + stored rows |
 | Notif F3.2 — mark read/unread | read/unread flag on the notification row, toggled via the REST API |
 | Notif F3.4 — retention window | purge scheduler, `NOTIF_RETENTION_DAYS` (default 30) |

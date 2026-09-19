@@ -4,6 +4,8 @@
 # team-decided design (docs/notification-service.md, D3).
 # 2026-09-19: spring.rabbitmq connection settings added for issue #62
 # (team decisions D1, D12).
+# 2026-09-19: manual acknowledge mode for issue #64 (author decision:
+# ack only after the processor's DB transaction commits, NFR1.1).
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -24,6 +26,11 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:foc}
     password: ${RABBITMQ_PASSWORD:}
+    listener:
+      simple:
+        # The listener acks/nacks explicitly, after the processor's
+        # transaction commits (issue #64, NFR1.1).
+        acknowledge-mode: manual
 
 management:
   endpoints:

@@ -20,6 +20,54 @@ Entry template:
 ## 2026-09-19 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate (implementation)
+- **Scope:** AMQP listener and idempotent event processor (issue
+  #64): `OrderEventsListener` + `RabbitMqMessageConverterConfig`
+  (Jackson 3 `JacksonJsonMessageConverter` wrapping Boot's
+  auto-configured mapper, D15) in the `messaging.rabbitmq` adapter
+  package; `EventProcessor` port + `IdempotentEventProcessor`
+  (@Transactional: event-ID dedupe D4/F2.1, per-entity stale-sequence
+  discard D5/F2.4, one notification row per party F1.2, generic over
+  event/entity types F1.3, envelope-only data F1.1) in a new
+  `service` package; entities/repositories restructured into
+  `entity`/`repository` packages; `Notification` columns renamed to
+  entity vocabulary; `OrderSequence` replaced by `EntitySequence`
+  with composite `(entityType, entityId)` key; manual acknowledge
+  mode in both yamls (test yaml also disables listener auto-startup);
+  Testcontainers test deps; `IdempotentEventProcessorTest` (6 port
+  tests on H2) and `OrderEventsRabbitMqIntegrationTest` (real broker
+  end-to-end, auto-skips without Docker); design doc D5/component
+  wording generalized to per-entity; READMEs updated.
+- **Prompt(s):** Asked to pick another notification issue and plan
+  it; the tool identified #64 as the only unblocked critical-path
+  candidate under the author's earlier criterion and presented the
+  open implementation decisions as neutral options. The author
+  decided: schema renamed to entity vocabulary, composite
+  (entityType, entityId) sequence key, literal manual ack (matching
+  the doc's D11/NFR1.1 wording), interim failure handling as Spring's
+  default split (conversion failures dropped, processing failures
+  requeued; retry limits deliberately left to #65's pending team
+  decision), a classic controller-service-repository package layout
+  (author request during plan review), and the `EventProcessor` name
+  over a Service suffix (after asking the tool's view — the tool
+  noted D11 already prescribes `eventProcessor.process(...)`).
+- **Author review:** All six decisions above made by the author from
+  neutral options before implementation; the tool implemented them
+  per the finalized design (D4, D5, D11, D15). Verified with
+  `./mvnw test`: 12/12 green including the Testcontainers
+  integration test against a real RabbitMQ container (fixture
+  consumed end-to-end, duplicate absorbed, stale discarded, queue
+  drained). Reviewed via pull request. Copilot review fixes on the
+  same PR (author-directed): the per-entity sequence read now takes a
+  pessimistic write lock (`findWithLockById`, SELECT ... FOR UPDATE)
+  so concurrent deliveries cannot regress `last_applied_sequence`;
+  the listener's nack-then-rethrow was kept after verifying against
+  the spring-rabbit 4.1.1 sources that MANUAL mode never
+  double-settles a rethrown delivery (documented in the listener
+  Javadoc; explained in the review reply rather than changed).
+
+## 2026-09-19 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (implementation)
 - **Scope:** Event envelope contract and shared fixture (issue #63):
   `EventEnvelope` record (plain, annotation-free) and the canonical
   contract fixture `contracts/order-event.example.json` added to

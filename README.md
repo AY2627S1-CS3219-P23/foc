@@ -88,8 +88,10 @@ scaffolding code (Spring Boot service skeletons, Docker/compose
 wiring, JPA entities, message-broker topology declarations, the
 shared `foc-contracts` library — contract constants and the
 event-envelope record with its canonical JSON fixture and contract
-test) written strictly from the team's finalized design docs and
-issue specifications, with per-file attribution headers.
+test) and the notification event pipeline (AMQP listener, idempotent
+event processor, unit and Testcontainers integration tests) written
+strictly from the team's finalized design docs and issue
+specifications, with per-file attribution headers.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

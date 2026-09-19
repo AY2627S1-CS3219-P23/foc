@@ -35,14 +35,28 @@ Health check: `GET http://localhost:${NOTIFICATION_SERVICE_PORT}/actuator/health
 Scaffold (issue #61) plus broker infrastructure (issue #62): app
 skeleton, health endpoint, the JPA schema — notification rows
 (read/unread flag), processed event IDs (dedupe, D4), and last-applied
-sequence per order (staleness, D5) — and the RabbitMQ topology: the
-durable `order-events` fanout exchange (name from the shared
-`foc-contracts` library, D15) and this service's durable work queue,
-declared at startup (D12). The event-envelope contract (issue #63) is
-in place: the `EventEnvelope` record and canonical fixture live in
-`foc-contracts` (D15 amendment), and this service's contract test
-(`EventEnvelopeContractTest`) locks in tolerant-reader deserialization
-(unknown fields/types ignored, F1.3) against Boot's auto-configured
-`ObjectMapper` — which the AMQP message converter must therefore use
-when the listener lands (issue #64). Listener, retry/DLQ, REST API,
-push gateway, and retention purge land in issues #64–#68.
+sequence per `(entityType, entityId)` (staleness, D5) — and the
+RabbitMQ topology: the durable `order-events` fanout exchange (name
+from the shared `foc-contracts` library, D15) and this service's
+durable work queue, declared at startup (D12). The event-envelope
+contract (issue #63) is in place: the `EventEnvelope` record and
+canonical fixture live in `foc-contracts` (D15 amendment), and this
+service's contract test (`EventEnvelopeContractTest`) locks in
+tolerant-reader deserialization (unknown fields/types ignored, F1.3)
+against Boot's auto-configured `ObjectMapper`.
+
+The event pipeline (issue #64) is live: `OrderEventsListener` (the
+broker adapter, D11) consumes the work queue with **manual ack after
+the DB commit** (NFR1.1) through the Jackson 3 JSON converter wrapping
+Boot's mapper (D15), and hands each envelope to the `EventProcessor`
+port; `IdempotentEventProcessor` deduplicates by event ID (F2.1),
+discards stale per-entity sequences (F2.4), and stores one
+notification row per party (F1.2) in a single transaction — the code
+follows a controller-service-repository layout (`service/`,
+`repository/`, `entity/`; the REST controller arrives with #66).
+Until #65's retry/DLQ topology, processing failures are requeued and
+malformed messages dropped by the container's default error handler.
+Tests: unit tests drive the port directly on H2; one Testcontainers
+integration test runs the full broker path (auto-skips when Docker is
+unavailable). Retry/DLQ, REST API, push gateway, and retention purge
+land in issues #65–#68.

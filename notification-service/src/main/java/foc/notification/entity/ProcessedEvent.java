@@ -5,9 +5,11 @@
  * (docs/notification-service.md): unique event IDs recorded for
  * duplicate detection, in the same schema as notifications so both
  * writes commit atomically.
+ * 2026-09-19, issue #64: moved to the entity package (author decision:
+ * controller-service-repository layout).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
-package foc.notification.persistence;
+package foc.notification.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
