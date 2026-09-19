@@ -43,7 +43,18 @@ Entry template:
   and the per-domain topology declarations grouped into one
   `Declarables` bean with the initializer generically declaring all
   groups (exchanges, then queues, then bindings) — topology additions
-  now touch only `RabbitMqTopology`.
+  now touch only `RabbitMqTopology`. PR #75 Copilot review addressed:
+  fixture null-check in the converter test; converter now enforces the
+  registry's supported `schemaVersion` and rejects missing required
+  fields (nullability declared via the contracts' new plain-Java
+  `@Nullable` marker — only `OrderCancelled.courierId`, per the
+  author's D17 field decision); producer conventions in the
+  foc-contracts README now spell out the eventType-injecting
+  converter a producer must own. These enforce rules the author had
+  already decided (version-bump-is-breaking, injected eventType,
+  courierId nullability); constant rename WORK_QUEUE →
+  ORDER_EVENTS_QUEUE was an author naming decision from neutral
+  options.
 - **Prompt(s):** Asked to redesign the RabbitMQ architecture from the
   generic envelope (Method A) to explicit business-specific contracts
   (Method B). The tool surfaced the AI policy and ran neutral options

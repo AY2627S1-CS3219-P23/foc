@@ -6,12 +6,19 @@
  * package), D15 (Boot's auto-configured Jackson mapper) and D16-D19
  * (docs/notification-service.md): dispatch on the body's canonical
  * eventType via the shared registry, never on __TypeId__ headers.
+ * Same day, PR #75 review: enforce the registry's supported
+ * schemaVersion and reject events with missing required fields
+ * (per-field nullability from the contracts' @Nullable marker) so
+ * incomplete bodies fail fatally here instead of reaching the
+ * processor.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.rabbitmq;
 
 import foc.contracts.events.DomainEvent;
 import foc.contracts.events.EventTypeRegistry;
+import foc.contracts.events.Nullable;
+import java.lang.reflect.RecordComponent;
 import java.nio.charset.StandardCharsets;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
@@ -32,12 +39,15 @@ import tools.jackson.databind.node.ObjectNode;
  * into the JSON, since the records deliberately don't store it.
  *
  * <p>Every inbound failure — malformed JSON, missing or unknown
- * {@code eventType}, binding errors — surfaces as the AMQP
- * {@link MessageConversionException}, which the listener container's
- * default error handler classifies as fatal and rejects without
- * requeue: until #65's dead-letter topology lands, such messages are
- * dropped (they never had a valid consumer); afterwards the same
- * rejection dead-letters them for replay.
+ * {@code eventType}, an unsupported {@code schemaVersion} (breaking
+ * changes bump it; the registry says which version this consumer
+ * speaks), binding errors, or a missing required field (components
+ * not marked {@code @Nullable} in the contract) — surfaces as the
+ * AMQP {@link MessageConversionException}, which the listener
+ * container's default error handler classifies as fatal and rejects
+ * without requeue: until #65's dead-letter topology lands, such
+ * messages are dropped (they never had a valid consumer); afterwards
+ * the same rejection dead-letters them for replay.
  */
 class DomainEventMessageConverter implements MessageConverter {
 
@@ -83,12 +93,48 @@ class DomainEventMessageConverter implements MessageConverter {
 			throw new MessageConversionException("missing or non-string eventType field");
 		}
 		String eventType = typeNode.stringValue();
-		Class<? extends DomainEvent> eventClass = EventTypeRegistry.classFor(eventType)
+		EventTypeRegistry.Entry entry = EventTypeRegistry.entryFor(eventType)
 				.orElseThrow(() -> new MessageConversionException("unknown eventType: " + eventType));
+		JsonNode versionNode = tree.path("schemaVersion");
+		if (!versionNode.isIntegralNumber() || versionNode.intValue() != entry.schemaVersion()) {
+			throw new MessageConversionException("unsupported schemaVersion " + versionNode
+					+ " for " + eventType + " (supported: " + entry.schemaVersion() + ")");
+		}
+		DomainEvent event;
 		try {
-			return jsonMapper.treeToValue(tree, eventClass);
+			event = jsonMapper.treeToValue(tree, entry.eventClass());
 		} catch (JacksonException ex) {
-			throw new MessageConversionException("body does not bind to " + eventClass.getSimpleName(), ex);
+			throw new MessageConversionException(
+					"body does not bind to " + entry.eventClass().getSimpleName(), ex);
+		}
+		requireCompleteEvent(event);
+		return event;
+	}
+
+	/**
+	 * Binding succeeds even when reference-type components are absent
+	 * (Jackson supplies null), so completeness is enforced here: every
+	 * component not marked {@link Nullable} in the contract must be
+	 * present, or the message is fatally rejected instead of handing
+	 * the processor an event that would fail — and be requeued —
+	 * forever.
+	 */
+	private static void requireCompleteEvent(DomainEvent event) {
+		for (RecordComponent component : event.getClass().getRecordComponents()) {
+			if (component.isAnnotationPresent(Nullable.class)) {
+				continue;
+			}
+			Object value;
+			try {
+				value = component.getAccessor().invoke(event);
+			} catch (ReflectiveOperationException ex) {
+				throw new MessageConversionException(
+						"cannot read component " + component.getName() + " of " + event.eventType(), ex);
+			}
+			if (value == null) {
+				throw new MessageConversionException(
+						"missing required field '" + component.getName() + "' for " + event.eventType());
+			}
 		}
 	}
 

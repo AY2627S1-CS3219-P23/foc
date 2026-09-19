@@ -28,7 +28,7 @@ public record OrderCancelled(
 		List<String> parties,
 		String orderId,
 		String requesterId,
-		String courierId,
+		@Nullable String courierId,
 		String pickupLocation,
 		String dropoffLocation,
 		String note) implements OrderEvent {

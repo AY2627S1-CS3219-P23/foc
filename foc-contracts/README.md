@@ -71,11 +71,17 @@ Leong Wei Zhi, 2026-09-19 — D16–D19 in
    top-level. Instants are ISO-8601 UTC. Everything rides in the body,
    never in AMQP headers (D11).
 
-4. **Evolution.** Within a `schemaVersion`: **additive changes only**
-   — add fields, never rename or repurpose; consumers ignore unknown
-   fields (tolerant readers). A breaking change bumps `schemaVersion`.
-   An unknown event *type* is a conversion failure on the consumer
-   (dead-lettered for replay once the DLQ exists — issue #65).
+4. **Evolution & validation.** Within a `schemaVersion`: **additive
+   changes only** — add fields, never rename or repurpose; consumers
+   ignore unknown fields (tolerant readers). A breaking change bumps
+   `schemaVersion`, and consumers **reject any version other than the
+   one their registry entry supports** as a conversion failure. Every
+   record component is **required on the wire** unless marked with the
+   contracts' `@Nullable` annotation (currently only
+   `OrderCancelled.courierId`); consumers reject events with missing
+   required fields the same way. An unknown event *type* is likewise
+   a conversion failure (all of these dead-letter for replay once the
+   DLQ exists — issue #65).
 
 5. **Topology naming.** One durable **topic exchange per producing
    domain** (`order-events`); consumer queues are
@@ -99,7 +105,15 @@ Leong Wei Zhi, 2026-09-19 — D16–D19 in
    `correlationId` from the triggering request; always take the
    routing key from
    `EventTypeRegistry.routingKeyFor(event.getClass())` — never
-   hand-write it.
+   hand-write it. **The producer must also inject the body
+   `eventType`**: it is not a record component, so a stock Jackson
+   message converter will serialize a body the consumer rejects. Use
+   a producer-owned `MessageConverter` whose `toMessage` serializes
+   the event to a JSON tree, puts `eventType` =
+   `event.eventType()` (the registry string), and writes the bytes —
+   mirroring the consumer-side `DomainEventMessageConverter` in
+   notification-service, which is service-private by D11 and not
+   importable.
 
 ## Use
 

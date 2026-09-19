@@ -44,7 +44,16 @@ class EventTypeRegistryTest {
 	void lookupsRoundTripForEveryEntry() {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
 			assertEquals(entry.eventClass(), EventTypeRegistry.classFor(entry.eventType()).orElseThrow());
+			assertEquals(entry, EventTypeRegistry.entryFor(entry.eventType()).orElseThrow());
 			assertEquals(entry.eventType(), EventTypeRegistry.routingKeyFor(entry.eventClass()));
+		}
+	}
+
+	@Test
+	void everyEntryDeclaresAPositiveSchemaVersion() {
+		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
+			assertTrue(entry.schemaVersion() >= 1,
+					entry.eventType() + " must declare a positive supported schemaVersion");
 		}
 	}
 

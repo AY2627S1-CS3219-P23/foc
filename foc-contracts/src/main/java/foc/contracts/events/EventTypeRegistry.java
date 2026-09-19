@@ -33,18 +33,23 @@ import java.util.Optional;
  */
 public final class EventTypeRegistry {
 
-	/** One catalog row: the event class and its canonical identity string. */
-	public record Entry(Class<? extends DomainEvent> eventClass, String eventType) {
+	/**
+	 * One catalog row: the event class, its canonical identity string,
+	 * and the schema version this catalog supports for it — consumers
+	 * reject any other version as a conversion failure (breaking
+	 * changes bump the version; additive ones don't).
+	 */
+	public record Entry(Class<? extends DomainEvent> eventClass, String eventType, int schemaVersion) {
 	}
 
 	private static final List<Entry> ENTRIES = List.of(
-			new Entry(OrderCreated.class, "order.created"),
-			new Entry(OrderAccepted.class, "order.accepted"),
-			new Entry(OrderCollected.class, "order.collected"),
-			new Entry(OrderCompleted.class, "order.completed"),
-			new Entry(OrderCancelled.class, "order.cancelled"),
-			new Entry(OrderExpired.class, "order.expired"),
-			new Entry(CourierArrived.class, "order.courier-arrived"));
+			new Entry(OrderCreated.class, "order.created", 1),
+			new Entry(OrderAccepted.class, "order.accepted", 1),
+			new Entry(OrderCollected.class, "order.collected", 1),
+			new Entry(OrderCompleted.class, "order.completed", 1),
+			new Entry(OrderCancelled.class, "order.cancelled", 1),
+			new Entry(OrderExpired.class, "order.expired", 1),
+			new Entry(CourierArrived.class, "order.courier-arrived", 1));
 
 	private static final Map<String, Entry> BY_EVENT_TYPE = new HashMap<>();
 	private static final Map<Class<?>, Entry> BY_CLASS = new HashMap<>();
@@ -60,9 +65,14 @@ public final class EventTypeRegistry {
 		}
 	}
 
+	/** The full catalog row registered for this identity string, if any. */
+	public static Optional<Entry> entryFor(String eventType) {
+		return Optional.ofNullable(BY_EVENT_TYPE.get(eventType));
+	}
+
 	/** The event class registered for this identity string, if any. */
 	public static Optional<Class<? extends DomainEvent>> classFor(String eventType) {
-		return Optional.ofNullable(BY_EVENT_TYPE.get(eventType)).map(Entry::eventClass);
+		return entryFor(eventType).map(Entry::eventClass);
 	}
 
 	/**

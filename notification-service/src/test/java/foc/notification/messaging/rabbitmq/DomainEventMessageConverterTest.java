@@ -14,6 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 import foc.contracts.events.EventTypeRegistry;
 import foc.contracts.events.OrderAccepted;
+import foc.contracts.events.OrderCancelled;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -78,6 +79,49 @@ class DomainEventMessageConverterTest {
 
 		assertThatExceptionOfType(MessageConversionException.class)
 				.isThrownBy(() -> converter.fromMessage(message(json.getBytes(StandardCharsets.UTF_8))));
+	}
+
+	@Test
+	void unsupportedSchemaVersionIsFatal() {
+		String json = """
+				{"eventType": "order.accepted", "eventId": "e-1", "schemaVersion": 2,
+				 "occurredAt": "2026-09-19T08:30:00Z", "producer": "order-service",
+				 "correlationId": "c-1", "parties": ["usr-req-1001"],
+				 "orderId": "ord-1", "requesterId": "usr-req-1001",
+				 "courierId": "usr-cou-2002", "pickupLocation": "Techno Edge",
+				 "dropoffLocation": "COM3-01-19", "note": "hi"}
+				""";
+
+		assertThatExceptionOfType(MessageConversionException.class)
+				.isThrownBy(() -> converter.fromMessage(message(json.getBytes(StandardCharsets.UTF_8))))
+				.withMessageContaining("schemaVersion");
+	}
+
+	@Test
+	void missingRequiredFieldIsFatal() {
+		// Binds structurally (Jackson supplies nulls) but must be
+		// rejected before it can reach the processor.
+		String json = """
+				{"eventType": "order.accepted", "eventId": "e-1", "schemaVersion": 1}
+				""";
+
+		assertThatExceptionOfType(MessageConversionException.class)
+				.isThrownBy(() -> converter.fromMessage(message(json.getBytes(StandardCharsets.UTF_8))))
+				.withMessageContaining("missing required field");
+	}
+
+	@Test
+	void nullableCourierIdIsAcceptedOnOrderCancelled() throws IOException {
+		byte[] body;
+		try (InputStream fixture = getClass().getResourceAsStream("/contracts/order-cancelled.example.json")) {
+			assertThat(fixture).as("fixture on classpath via foc-contracts jar").isNotNull();
+			body = fixture.readAllBytes();
+		}
+
+		Object event = converter.fromMessage(message(body));
+
+		assertThat(event).isInstanceOf(OrderCancelled.class);
+		assertThat(((OrderCancelled) event).courierId()).isNull();
 	}
 
 	@Test
