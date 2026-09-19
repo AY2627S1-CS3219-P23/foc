@@ -6,6 +6,9 @@
 # (team decisions D1, D12).
 # 2026-09-19: manual acknowledge mode for issue #64 (author decision:
 # ack only after the processor's DB transaction commits, NFR1.1).
+# 2026-09-19, issue #67: JWT secret binding and WebSocket allowed
+# origins for the STOMP push gateway (author decisions; see
+# docs/notification-service.md "Session mechanics").
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -31,6 +34,17 @@ spring:
         # The listener acks/nacks explicitly, after the processor's
         # transaction commits (issue #64, NFR1.1).
         acknowledge-mode: manual
+
+notification:
+  jwt:
+    # Shared platform secret (HS256). Empty default so the yaml stays
+    # parseable; JwtVerifier turns a missing/short value into a clear
+    # startup failure.
+    secret: ${JWT_SECRET:}
+  websocket:
+    # Comma-separated Origin patterns allowed at the WS handshake.
+    # No API gateway exists, so the browser connects cross-origin.
+    allowed-origins: ${NOTIFICATION_WS_ALLOWED_ORIGINS:http://localhost:*}
 
 management:
   endpoints:

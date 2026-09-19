@@ -4,6 +4,8 @@
 # issue #61 per team decisions D3 and M7 (docs/notification-service.md).
 # 2026-09-19: rabbitmq broker container added for issue #62 per team
 # decisions D1, D8, M7 and the provisioning/naming decisions D12-D14.
+# 2026-09-19, issue #67: JWT secret and WebSocket allowed-origins env
+# passed to the notification service for the STOMP push gateway.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -28,6 +30,8 @@ services:
       RABBITMQ_PORT: "5672"
       RABBITMQ_USER: ${RABBITMQ_USER:-foc}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set in .env}
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
+      NOTIFICATION_WS_ALLOWED_ORIGINS: ${NOTIFICATION_WS_ALLOWED_ORIGINS:-http://localhost:*}
     depends_on:
       notification-db:
         condition: service_healthy

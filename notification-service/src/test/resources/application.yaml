@@ -7,11 +7,21 @@
 # 2026-09-19, issue #64: listener auto-startup off so context tests
 # stay broker-free (the RabbitMQ integration test switches it back on
 # and repeats acknowledge-mode, since this file shadows the main yaml).
+# 2026-09-19, issue #67: fixed JWT test secret for the push-gateway
+# tests.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 notification:
   rabbitmq:
     provision-on-startup: false
+  jwt:
+    # Fixed test secret (>= 32 bytes for HS256); tests mint their own
+    # tokens with it.
+    secret: test-secret-0123456789abcdef0123456789abcdef
+  websocket:
+    # This file shadows the main yaml entirely, so the property must
+    # be repeated for the gateway config to resolve in tests.
+    allowed-origins: http://localhost:*
 
 spring:
   rabbitmq:

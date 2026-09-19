@@ -58,6 +58,14 @@
   failures requeued) pending #65's retry/DLQ, and a classic
   controller-service-repository package layout; the tool implemented
   those decisions and updated the affected wording here.
+  2026-09-19 (issue #67): the author decided, via neutral options
+  Q&As, the push-gateway session mechanics recorded in the new
+  "Session mechanics" subsection: backend-only scope (no SPA exists
+  yet), CONNECT-frame Bearer JWT auth, jjwt/HS256 with the shared
+  secret, sub-claim-as-user-ID provisional platform convention (also
+  noted in docs/architecture.md), SockJS fallback on the /ws
+  endpoint, 10 s heartbeats, and the provisional client reconnect
+  policy; the tool implemented them and struck the settled Open item.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -323,6 +331,35 @@ Why the push channel is centralized here rather than per service:
   browser keeps one STOMP client subscribed to its per-user
   destination.
 
+### Session mechanics (decided under issue #67)
+
+- **Endpoint:** `/ws`, STOMP over WebSocket **with SockJS fallback** —
+  native WebSocket is SockJS's first transport, so capable browsers
+  pay nothing; networks/proxies that block the upgrade degrade to XHR
+  transports instead of failing. Allowed handshake origins come from
+  `NOTIFICATION_WS_ALLOWED_ORIGINS` (no API gateway exists, so the
+  browser connects cross-origin).
+- **Authentication:** the handshake/upgrade is unauthenticated; the
+  STOMP `CONNECT` frame carries `Authorization: Bearer <JWT>` (HS256,
+  shared `JWT_SECRET`, verified with jjwt). A channel interceptor
+  validates it and sets the session principal to the token's `sub` —
+  the platform user ID, the same ID in envelope `parties[]` and
+  notification `recipientId`, which is what `/user/...` routing
+  matches on. Invalid or missing tokens reject the CONNECT with a
+  STOMP ERROR frame and the session closes.
+- **Destination:** clients subscribe to `/user/queue/notifications`;
+  the push listener sends each stored notification there after the
+  processor's transaction commits (`AFTER_COMMIT`), synchronously —
+  well inside the 5 s budget. Push is best-effort: an offline user
+  misses the frame and catches up via the REST list (F3.1).
+- **Heartbeats:** 10 s / 10 s both directions (server side configured
+  on the simple broker).
+- **Provisional client policy** (for the SPA PR — the frontend does
+  not exist yet, so the client half of issue #67 is deferred):
+  a single STOMP client in the shared app shell, auto-reconnect with
+  exponential backoff 1 s doubling to a 30 s cap, resubscribe on
+  reconnect.
+
 Historical note: the earlier backlog's committed requester–courier chat
 implied a second real-time channel (Web ↔ Order Service). The latest
 backlog moved chat to nice-to-have N6; if it is ever built, choosing
@@ -341,9 +378,11 @@ decision to make then.
   (see Extensibility notes).
 - ArchUnit test enforcing the D11 package boundary (write alongside the
   service implementation).
-- WebSocket session mechanics: how the JWT authenticates the STOMP
+- ~~WebSocket session mechanics: how the JWT authenticates the STOMP
   handshake/upgrade, and the client reconnect/backoff policy —
-  implementation decisions for when the push gateway is built.
+  implementation decisions for when the push gateway is built~~ —
+  decided 2026-09-19 (issue #67; see "Session mechanics" under
+  Connection topology).
 - Scale-out (team decision 2026-09-15): the current design is
   single-instance and includes **no Redis**. If the service is later
   scaled to multiple instances (nice-to-have N5.4, Kubernetes

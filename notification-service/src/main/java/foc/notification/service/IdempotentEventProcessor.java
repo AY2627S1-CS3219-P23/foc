@@ -5,6 +5,8 @@
  * team's decisions D4 (event-ID dedupe), D5 (per-entity sequence
  * discard), D11 (no broker imports) and requirements F1.1-F1.3,
  * F2.1, F2.4 per docs/notification-service.md.
+ * 2026-09-19, issue #67: publishes a NotificationStoredEvent per
+ * saved row so the STOMP push gateway can push after commit.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.service;
@@ -17,6 +19,7 @@ import foc.notification.entity.ProcessedEvent;
 import foc.notification.repository.EntitySequenceRepository;
 import foc.notification.repository.NotificationRepository;
 import foc.notification.repository.ProcessedEventRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
@@ -41,7 +44,11 @@ import tools.jackson.databind.ObjectMapper;
  * the insert's primary key and resolve like case 2;
  * (4) the payload map is serialized with Boot's
  * auto-configured Jackson mapper — the same mapper the AMQP converter
- * uses (D15); (5) one notification row per party (F1.2).
+ * uses (D15); (5) one notification row per party (F1.2), each
+ * followed by a {@link NotificationStoredEvent} published inside the
+ * transaction — transaction-bound listeners (the STOMP push gateway)
+ * receive it only after the commit, and discarded events publish
+ * nothing.
  *
  * <p>Everything comes from the envelope alone — no calls to other
  * services (F1.1) — and unknown entity/event types flow through
@@ -54,15 +61,18 @@ class IdempotentEventProcessor implements EventProcessor {
 	private final EntitySequenceRepository entitySequences;
 	private final NotificationRepository notifications;
 	private final ObjectMapper objectMapper;
+	private final ApplicationEventPublisher eventPublisher;
 
 	IdempotentEventProcessor(ProcessedEventRepository processedEvents,
 			EntitySequenceRepository entitySequences,
 			NotificationRepository notifications,
-			ObjectMapper objectMapper) {
+			ObjectMapper objectMapper,
+			ApplicationEventPublisher eventPublisher) {
 		this.processedEvents = processedEvents;
 		this.entitySequences = entitySequences;
 		this.notifications = notifications;
 		this.objectMapper = objectMapper;
+		this.eventPublisher = eventPublisher;
 	}
 
 	@Override
@@ -86,8 +96,10 @@ class IdempotentEventProcessor implements EventProcessor {
 
 		String payloadJson = objectMapper.writeValueAsString(envelope.payload());
 		for (String party : envelope.parties()) {
-			notifications.save(new Notification(party, envelope.entityType(), envelope.entityId(),
-					envelope.eventId(), envelope.eventType(), payloadJson, envelope.occurredAt()));
+			Notification saved = notifications.save(new Notification(party, envelope.entityType(),
+					envelope.entityId(), envelope.eventId(), envelope.eventType(), payloadJson,
+					envelope.occurredAt()));
+			eventPublisher.publishEvent(new NotificationStoredEvent(saved));
 		}
 	}
 }

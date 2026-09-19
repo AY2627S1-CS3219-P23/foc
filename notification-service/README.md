@@ -56,7 +56,18 @@ follows a controller-service-repository layout (`service/`,
 `repository/`, `entity/`; the REST controller arrives with #66).
 Until #65's retry/DLQ topology, processing failures are requeued and
 malformed messages dropped by the container's default error handler.
-Tests: unit tests drive the port directly on H2; one Testcontainers
-integration test runs the full broker path (auto-skips when Docker is
-unavailable). Retry/DLQ, REST API, push gateway, and retention purge
-land in issues #65–#68.
+
+The STOMP push gateway (issue #67, backend half) is live: `/ws`
+endpoint (SockJS fallback), JWT verified at the STOMP CONNECT
+(`Authorization: Bearer`, HS256 against the shared `JWT_SECRET` —
+required at startup; the token's `sub` is the platform user ID), and
+each stored notification is pushed to `/user/queue/notifications`
+after the processor's commit via a transactional event listener
+(`NotificationDto`, payload parsed — the shape #66's REST list will
+reuse). The frontend STOMP client is deferred until the SPA exists;
+the provisional reconnect policy is recorded in the design doc's
+"Session mechanics". Tests: unit tests drive the port directly on H2;
+STOMP integration tests run real sessions on a random port (no
+Docker); one Testcontainers test runs the full broker path
+(auto-skips when Docker is unavailable). Retry/DLQ, REST API, and
+retention purge land in issues #65, #66, #68.
