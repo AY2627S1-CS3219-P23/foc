@@ -17,6 +17,48 @@ Entry template:
 
 ---
 
+## 2026-09-19 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (review fixes)
+- **Scope:** PR #70 follow-up addressing Copilot review comments:
+  `NOTIFICATION_DB_HOST`/`NOTIFICATION_DB_PORT` placeholders added to
+  `.env.example`; `payload` column marked non-null in
+  `Notification.java` (the design doc treats every envelope field as
+  required); per-file attribution headers added to `.env.example` and
+  the five generator-emitted files (`.gitignore`, `.gitattributes`,
+  `maven-wrapper.properties`, `mvnw`, `mvnw.cmd` — Spring
+  Initializr/Apache Maven Wrapper boilerplate, otherwise unmodified).
+- **Prompt(s):** Asked to resolve the Copilot review comments on PR #70.
+- **Author review:** No new design decisions — the non-null constraint
+  enforces the documented envelope contract. `./mvnw test` re-run to
+  confirm the build and the edited wrapper script still work. Reviewed
+  via pull request.
+
+## 2026-09-18 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (scaffolding)
+- **Scope:** `notification-service/` Spring Boot scaffold (issue #61):
+  Maven project via Spring Initializr (Boot 4.1.1, Java 21), JPA
+  entities + repositories for the three team-decided tables
+  (notifications with read/unread flag, processed event IDs,
+  last-applied sequence per order — D3/D4/D5), Actuator health
+  endpoint, Dockerfile, `compose.yaml` entries (service + PostgreSQL
+  with named volume), `.env.example` variables, context-load test on
+  in-memory H2.
+- **Prompt(s):** Asked to pick one open GitHub issue and resolve it via
+  a PR; the tool selected #61. Build tool (Maven) and Java version (21)
+  were put to the author as explicit choices and decided by the author.
+  Table-level schema comes from the issue text and the design doc's
+  Decisions table; column-level detail was derived from the documented
+  event envelope and is subject to author review.
+- **Author review:** All design decisions (PostgreSQL, JPA, the three
+  tables, envelope fields) were made by the team beforehand
+  (`docs/notification-service.md`); the tool implemented them.
+  Verified locally: `./mvnw test` passes; `docker compose up
+  notification-service` starts against its own PostgreSQL; health
+  endpoint returns UP; the three tables are present. Reviewed via pull
+  request.
+
 ## 2026-09-18 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** docs

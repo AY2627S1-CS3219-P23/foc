@@ -1,0 +1,44 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5), 2026-09-18.
+# Scope: notification-service + notification-db wiring scaffolded for
+# issue #61 per team decisions D3 and M7 (docs/notification-service.md).
+# Other services add their own entries in their own PRs.
+# Reviewed by: Leong Wei Zhi (via pull request).
+
+name: foc
+
+services:
+  notification-service:
+    build: ./notification-service
+    ports:
+      - "${NOTIFICATION_SERVICE_PORT:-8085}:8080"
+    environment:
+      NOTIFICATION_DB_HOST: notification-db
+      NOTIFICATION_DB_PORT: "5432"
+      NOTIFICATION_DB_NAME: ${NOTIFICATION_DB_NAME:-notification}
+      NOTIFICATION_DB_USER: ${NOTIFICATION_DB_USER:-notification}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?set in .env}
+    depends_on:
+      notification-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Notification DB (D3): PostgreSQL owned exclusively by the
+  # notification service (database-per-service).
+  notification-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${NOTIFICATION_DB_NAME:-notification}
+      POSTGRES_USER: ${NOTIFICATION_DB_USER:-notification}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?set in .env}
+    volumes:
+      - notification-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER:-notification} -d ${NOTIFICATION_DB_NAME:-notification}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  notification-db-data:

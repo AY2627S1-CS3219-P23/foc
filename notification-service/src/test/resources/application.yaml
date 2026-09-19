@@ -1,0 +1,14 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5), 2026-09-18.
+# Scope: test configuration scaffolded for issue #61 (in-memory H2 so
+# `./mvnw test` needs no running PostgreSQL).
+# Reviewed by: Leong Wei Zhi (via pull request).
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:notification;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop

@@ -1,0 +1,25 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5), 2026-09-18.
+# Scope: service configuration scaffolded for issue #61 per the
+# team-decided design (docs/notification-service.md, D3).
+# Reviewed by: Leong Wei Zhi (via pull request).
+
+spring:
+  application:
+    name: notification-service
+  datasource:
+    url: jdbc:postgresql://${NOTIFICATION_DB_HOST:localhost}:${NOTIFICATION_DB_PORT:5432}/${NOTIFICATION_DB_NAME:notification}
+    username: ${NOTIFICATION_DB_USER:notification}
+    password: ${NOTIFICATION_DB_PASSWORD:}
+  jpa:
+    # Schema is created/evolved from the JPA entities (issue #61:
+    # "Schema present via JPA/DDL").
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
