@@ -9,6 +9,9 @@
   decision D12: app-declared broker topology via Spring AMQP), plus
   the foc-contracts dependency (team decision D15: shared contract
   constants; run `../foc-contracts/mvnw install` there first).
+  2026-09-19: spring-boot-starter-jackson-test added for issue #63
+  (envelope contract test runs against Boot's auto-configured
+  ObjectMapper via @JsonTest).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -82,6 +85,11 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-jackson-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>

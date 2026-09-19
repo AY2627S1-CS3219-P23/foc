@@ -27,6 +27,12 @@
   implementing issue #62; the tool presented the options factually —
   including the industry conventions the author asked about before
   D15 — and documented the outcomes.
+  2026-09-19 (issue #63): recorded the D15 amendment — the author
+  decided, from neutral options (per-service DTO copies + shared
+  fixture vs. shared DTO in foc-contracts; fixture location; payload
+  Java type), that the EventEnvelope record and canonical fixture live
+  in foc-contracts; the tool recommended that placement when asked and
+  updated this document and the Event envelope section accordingly.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -64,7 +70,7 @@ finalized design for this service.
 | D12 | Topology provisioning | **App-declared at startup via Spring AMQP**: the consuming service declares its exchange/queue/binding beans and forces the declaration when it boots (no broker definitions file) | Notif NFR1.2; topology lives beside its owner |
 | D13 | Naming convention | Exchange named after the producing domain (**`order-events`**); queues prefixed with the consuming service (**`notification-service.order-events`**, later `….retry` / `….dlq`) | ownership visible in the management UI; Extensibility |
 | D14 | `order-events` exchange type | **Fanout** — every bound queue gets a copy of every event; consumers filter by `type` in their own code | Notif F1.3; Extensibility ("the exchange is the broadcast point") |
-| D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (top-level Maven module, plain constants, zero framework dependencies): contract names that producer and consumer must agree on — e.g. the `order-events` exchange — are compile-time constants imported by each backend service. The sole exception to the no-shared-code convention (recorded in `AGENTS.md`). Service-private names (queues) stay in their service. Whether the event-envelope DTO also moves there is decided under issue #63. | one definition per contract name; drift caught at compile time |
+| D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (top-level Maven module, plain constants, zero framework dependencies): contract names that producer and consumer must agree on — e.g. the `order-events` exchange — are compile-time constants imported by each backend service. The sole exception to the no-shared-code convention (recorded in `AGENTS.md`). Service-private names (queues) stay in their service. Issue #63 (2026-09-19) extended the library's scope to the **event-envelope contract**: the `EventEnvelope` record (a plain annotation-free record, keeping the library framework-free) and the canonical fixture `contracts/order-event.json` on its classpath, which both producer and consumer contract-test against. Tolerant reading (unknown fields/types ignored, F1.3) is consumer-side `ObjectMapper` behavior, locked in by the Notification Service's contract test — so the AMQP message converter (issue #64) must use Boot's auto-configured mapper. | one definition per contract name and per envelope field; drift caught at compile time or by the contract tests |
 
 ## Components
 
@@ -99,7 +105,12 @@ database-per-service rule is untouched.
 ## Event envelope (fields required by the decisions above)
 
 The Order Service publishes a generic envelope; each field exists
-because a decision or requirement demands it:
+because a decision or requirement demands it. The envelope is code:
+`foc.contracts.events.EventEnvelope` in `foc-contracts/`, with the
+canonical example checked in as
+[`foc-contracts/src/main/resources/contracts/order-event.json`](../foc-contracts/src/main/resources/contracts/order-event.json)
+— the contract artifact both producer (#55) and consumer (issue #63's
+contract test) assert against (D15).
 
 | Field | Why it must be present |
 | --- | --- |

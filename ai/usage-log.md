@@ -20,6 +20,36 @@ Entry template:
 ## 2026-09-19 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate (implementation)
+- **Scope:** Event envelope contract and shared fixture (issue #63):
+  `EventEnvelope` record (plain, annotation-free) and the canonical
+  contract fixture `contracts/order-event.json` added to
+  `foc-contracts/`; consumer-side contract test
+  (`EventEnvelopeContractTest`, `@JsonTest` with
+  `spring-boot-starter-jackson-test` added to the service pom)
+  asserting the fixture deserializes and tolerant-reader rules hold
+  (unknown fields/types ignored, absent `courierId` → null, F1.3).
+  D15 amendment, the Event envelope section, and READMEs updated.
+- **Prompt(s):** Asked to pick an unblocked notification issue and
+  plan it; the tool picked #63 (critical path) and presented the open
+  design decisions as options: DTO location (per-service copies +
+  shared fixture vs. shared record in foc-contracts — the question
+  D15 explicitly deferred to #63), fixture location, and payload Java
+  type. The author chose the fixture-in-foc-contracts and
+  `Map<String, Object>` payload options, asked for the tool's
+  recommendation on DTO location, and approved its foc-contracts
+  recommendation (rationale: fixture already ships in the jar both
+  services depend on; a plain record keeps the library
+  framework-free; additive-only evolution is already mandated).
+- **Author review:** All three contract decisions confirmed by the
+  author before implementation (DTO location explicitly, after
+  requesting and weighing the tool's recommendation). Verified with
+  `./mvnw install` (foc-contracts) and `./mvnw test`
+  (notification-service, 5/5 green including the 4 new contract
+  tests); reviewed via pull request.
+
+## 2026-09-19 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (implementation)
 - **Scope:** RabbitMQ broker infrastructure and core topology (issue
   #62): `rabbitmq` container + named volume in `compose.yaml`, broker
   env vars in `.env.example`, `spring-boot-starter-amqp` and
