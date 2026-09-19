@@ -22,7 +22,7 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * Contract test for the event envelope (issue #63): the canonical
- * fixture at {@code /contracts/order-event.json} (shipped in the
+ * fixture at {@code /contracts/order-event.example.json} (shipped in the
  * foc-contracts jar) must deserialize into {@link EventEnvelope}, and
  * the consumer must be a tolerant reader — unknown fields and unknown
  * event types are ignored, never an error (F1.3; design doc
@@ -42,7 +42,7 @@ class EventEnvelopeContractTest {
 	@Test
 	void deserializesCanonicalFixture() throws IOException {
 		EventEnvelope envelope;
-		try (InputStream fixture = getClass().getResourceAsStream("/contracts/order-event.json")) {
+		try (InputStream fixture = getClass().getResourceAsStream("/contracts/order-event.example.json")) {
 			assertThat(fixture).as("canonical fixture on classpath via foc-contracts jar").isNotNull();
 			envelope = objectMapper.readValue(fixture, EventEnvelope.class);
 		}

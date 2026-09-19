@@ -16,7 +16,7 @@ import java.util.Map;
  * The event envelope every order event travels in — the contract
  * between the Order Service (producer) and the Notification Service
  * (consumer). The canonical example lives at
- * {@code /contracts/order-event.json} on this library's classpath;
+ * {@code /contracts/order-event.example.json} on this library's classpath;
  * both sides' contract tests assert against that fixture (issue #63).
  *
  * <p>All business data rides in this JSON body — never in AMQP headers

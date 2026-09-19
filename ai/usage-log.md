@@ -22,7 +22,7 @@ Entry template:
 - **Mode:** generate (implementation)
 - **Scope:** Event envelope contract and shared fixture (issue #63):
   `EventEnvelope` record (plain, annotation-free) and the canonical
-  contract fixture `contracts/order-event.json` added to
+  contract fixture `contracts/order-event.example.json` added to
   `foc-contracts/`; consumer-side contract test
   (`EventEnvelopeContractTest`, `@JsonTest` with
   `spring-boot-starter-jackson-test` added to the service pom)

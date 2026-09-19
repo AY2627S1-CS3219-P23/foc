@@ -20,9 +20,9 @@ Only things that are a *contract between services* belong here:
   the broker exchange name (`EventContracts.ORDER_EVENTS_EXCHANGE`).
 - **The event envelope**: the `EventEnvelope` record every order event
   travels in, plus its canonical example
-  [`src/main/resources/contracts/order-event.json`](src/main/resources/contracts/order-event.json)
+  [`src/main/resources/contracts/order-event.example.json`](src/main/resources/contracts/order-event.example.json)
   — the contract artifact each side's contract test asserts against
-  (loaded from this jar's classpath at `/contracts/order-event.json`).
+  (loaded from this jar's classpath at `/contracts/order-event.example.json`).
   The envelope evolves additively only: add fields, never rename or
   repurpose (design doc, "Extensibility").
 
