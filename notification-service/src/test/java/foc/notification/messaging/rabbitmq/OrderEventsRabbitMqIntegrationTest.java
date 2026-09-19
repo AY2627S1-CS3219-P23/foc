@@ -122,7 +122,7 @@ class OrderEventsRabbitMqIntegrationTest {
 
 	private static byte[] canonicalFixtureBytes() throws IOException {
 		try (InputStream fixture = OrderEventsRabbitMqIntegrationTest.class
-				.getResourceAsStream("/contracts/order-accepted-v1.example.json")) {
+				.getResourceAsStream("/contracts/order-accepted.example.json")) {
 			assertThat(fixture).isNotNull();
 			return fixture.readAllBytes();
 		}
@@ -142,13 +142,13 @@ class OrderEventsRabbitMqIntegrationTest {
 	}
 
 	private static OrderCollected collected(String eventId) {
-		return new OrderCollected(eventId, 1, Instant.parse("2026-09-19T09:00:00Z"),
+		return new OrderCollected(eventId, Instant.parse("2026-09-19T09:00:00Z"),
 				"order-service", "c-int", List.of("usr-req-1001"), "ord-20260919-0042",
 				"usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "integration");
 	}
 
 	private static OrderCompleted completed(String eventId) {
-		return new OrderCompleted(eventId, 1, Instant.parse("2026-09-19T09:05:00Z"),
+		return new OrderCompleted(eventId, Instant.parse("2026-09-19T09:05:00Z"),
 				"order-service", "c-int", List.of("usr-req-1001"), "ord-20260919-0042",
 				"usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "integration");
 	}
@@ -156,7 +156,7 @@ class OrderEventsRabbitMqIntegrationTest {
 	private static byte[] validBodyWithEventId(String eventId) {
 		return ("""
 				{"eventType": "order.created", "eventId": "%s",
-				 "schemaVersion": 1, "occurredAt": "2026-09-19T09:00:00Z",
+				 "occurredAt": "2026-09-19T09:00:00Z",
 				 "producer": "order-service", "correlationId": "c-int",
 				 "parties": ["usr-req-1001"], "orderId": "ord-20260919-0042",
 				 "requesterId": "usr-req-1001", "pickupLocation": "Techno Edge",

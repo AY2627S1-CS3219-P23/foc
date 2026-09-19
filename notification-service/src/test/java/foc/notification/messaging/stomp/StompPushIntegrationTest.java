@@ -95,12 +95,12 @@ class StompPushIntegrationTest {
 	}
 
 	private static OrderAccepted accepted(String eventId, String orderId, List<String> parties) {
-		return new OrderAccepted(eventId, 1, OCCURRED_AT, "order-service", "c-push", parties,
+		return new OrderAccepted(eventId, OCCURRED_AT, "order-service", "c-push", parties,
 				orderId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "push");
 	}
 
 	private static OrderCollected collected(String eventId, String orderId, List<String> parties) {
-		return new OrderCollected(eventId, 1, OCCURRED_AT, "order-service", "c-push", parties,
+		return new OrderCollected(eventId, OCCURRED_AT, "order-service", "c-push", parties,
 				orderId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "push");
 	}
 

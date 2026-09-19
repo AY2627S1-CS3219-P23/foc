@@ -56,12 +56,12 @@ class IdempotentEventProcessorTest {
 	}
 
 	private static OrderAccepted accepted(String eventId, String orderId, List<String> parties) {
-		return new OrderAccepted(eventId, 1, OCCURRED_AT, "order-service", "c-1", parties,
+		return new OrderAccepted(eventId, OCCURRED_AT, "order-service", "c-1", parties,
 				orderId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "hi");
 	}
 
 	private static OrderCreated created(String eventId, String orderId, List<String> parties) {
-		return new OrderCreated(eventId, 1, OCCURRED_AT, "order-service", "c-1", parties,
+		return new OrderCreated(eventId, OCCURRED_AT, "order-service", "c-1", parties,
 				orderId, "usr-req-1001", "Techno Edge", "COM3-01-19", "hi");
 	}
 
@@ -96,7 +96,7 @@ class IdempotentEventProcessorTest {
 				"note", "hi"));
 		// Transport metadata never leaks into the client-facing payload.
 		assertThat(payload).doesNotContainKeys("eventId", "eventType", "parties",
-				"producer", "correlationId", "schemaVersion", "occurredAt");
+				"producer", "correlationId", "occurredAt");
 	}
 
 	@Test
