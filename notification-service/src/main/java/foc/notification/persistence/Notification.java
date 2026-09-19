@@ -44,6 +44,7 @@ public class Notification {
     private String type;
 
     @JdbcTypeCode(SqlTypes.LONGVARCHAR)
+    @Column(nullable = false)
     private String payload;
 
     @Column(name = "occurred_at", nullable = false)

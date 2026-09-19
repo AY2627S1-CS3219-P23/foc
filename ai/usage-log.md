@@ -17,6 +17,23 @@ Entry template:
 
 ---
 
+## 2026-09-19 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (review fixes)
+- **Scope:** PR #70 follow-up addressing Copilot review comments:
+  `NOTIFICATION_DB_HOST`/`NOTIFICATION_DB_PORT` placeholders added to
+  `.env.example`; `payload` column marked non-null in
+  `Notification.java` (the design doc treats every envelope field as
+  required); per-file attribution headers added to `.env.example` and
+  the five generator-emitted files (`.gitignore`, `.gitattributes`,
+  `maven-wrapper.properties`, `mvnw`, `mvnw.cmd` — Spring
+  Initializr/Apache Maven Wrapper boilerplate, otherwise unmodified).
+- **Prompt(s):** Asked to resolve the Copilot review comments on PR #70.
+- **Author review:** No new design decisions — the non-null constraint
+  enforces the documented envelope contract. `./mvnw test` re-run to
+  confirm the build and the edited wrapper script still work. Reviewed
+  via pull request.
+
 ## 2026-09-18 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate (scaffolding)
