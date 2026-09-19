@@ -35,8 +35,12 @@ Entry template:
   `aggregateType` + `aggregateId` + `parties[]` adopted in place of
   `orderId` / `requesterId` / `courierId`, with domain identity and
   roles moved into `payload`; `type` renamed to `eventType` (author
-  suggestion, symmetry with `aggregateType`); record, fixture,
-  contract test, and design doc updated to match.
+  suggestion, symmetry with the entity-type field); the grouping pair
+  named `entityType`/`entityId` — the author asked for alternatives
+  to "aggregate" and chose entity over the DDD-conventional
+  aggregate* and CloudEvents-style subject*, preferring plain English
+  over pattern jargon; record, fixture, contract test, and design doc
+  updated to match.
 - **Prompt(s):** Asked to pick an unblocked notification issue and
   plan it; the tool picked #63 (critical path) and presented the open
   design decisions as options: DTO location (per-service copies +

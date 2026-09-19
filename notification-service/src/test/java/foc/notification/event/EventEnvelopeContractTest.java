@@ -5,7 +5,7 @@
  * canonical fixture deserializes and the tolerant-reader rules of
  * docs/notification-service.md ("Extensibility") hold (F1.3); revised
  * same day for the author's decision to restrict envelope fields to
- * event-handling semantics (aggregateType/aggregateId/parties).
+ * event-handling semantics (entityType/entityId/parties).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.event;
@@ -50,8 +50,8 @@ class EventEnvelopeContractTest {
 		}
 
 		assertThat(envelope.eventId()).isEqualTo("9b2f6b3c-1e9d-4d55-8f6a-0c2f4a7d9e21");
-		assertThat(envelope.aggregateType()).isEqualTo("order");
-		assertThat(envelope.aggregateId()).isEqualTo("ord-20260919-0042");
+		assertThat(envelope.entityType()).isEqualTo("order");
+		assertThat(envelope.entityId()).isEqualTo("ord-20260919-0042");
 		assertThat(envelope.sequence()).isEqualTo(2L);
 		assertThat(envelope.eventType()).isEqualTo("accepted");
 		assertThat(envelope.occurredAt()).isEqualTo(Instant.parse("2026-09-19T08:30:00Z"));
@@ -69,8 +69,8 @@ class EventEnvelopeContractTest {
 		String json = """
 				{
 				  "eventId": "e-1",
-				  "aggregateType": "order",
-				  "aggregateId": "o-1",
+				  "entityType": "order",
+				  "entityId": "o-1",
 				  "sequence": 1,
 				  "eventType": "created",
 				  "occurredAt": "2026-09-19T08:00:00Z",
@@ -89,12 +89,12 @@ class EventEnvelopeContractTest {
 	}
 
 	@Test
-	void acceptsUnknownEventAndAggregateTypes() {
+	void acceptsUnknownEventAndEntityTypes() {
 		String json = """
 				{
 				  "eventId": "e-2",
-				  "aggregateType": "some-future-aggregate",
-				  "aggregateId": "x-1",
+				  "entityType": "some-future-entity",
+				  "entityId": "x-1",
 				  "sequence": 3,
 				  "eventType": "some-future-type",
 				  "occurredAt": "2026-09-19T09:00:00Z",
@@ -105,7 +105,7 @@ class EventEnvelopeContractTest {
 
 		EventEnvelope envelope = objectMapper.readValue(json, EventEnvelope.class);
 
-		assertThat(envelope.aggregateType()).isEqualTo("some-future-aggregate");
+		assertThat(envelope.entityType()).isEqualTo("some-future-entity");
 		assertThat(envelope.eventType()).isEqualTo("some-future-type");
 	}
 
@@ -114,8 +114,8 @@ class EventEnvelopeContractTest {
 		String json = """
 				{
 				  "eventId": "e-3",
-				  "aggregateType": "order",
-				  "aggregateId": "o-2",
+				  "entityType": "order",
+				  "entityId": "o-2",
 				  "sequence": 1,
 				  "eventType": "created",
 				  "occurredAt": "2026-09-19T07:00:00Z",

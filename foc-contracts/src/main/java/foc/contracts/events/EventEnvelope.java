@@ -6,7 +6,7 @@
  * decisions D4, D5, D11, D15. Placement in foc-contracts (rather than
  * per-service copies), the Map payload type, and the same-day revision
  * restricting envelope fields to event-handling semantics (adopting
- * the doc's platform-wide shape: aggregateType/aggregateId/parties
+ * the doc's platform-wide shape: entityType/entityId/parties
  * instead of orderId/requesterId/courierId) were author decisions.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
@@ -42,14 +42,14 @@ import java.util.Map;
  *
  * @param eventId       unique per event; duplicate detection (D4,
  *                      F2.1)
- * @param aggregateType the kind of entity the event is about (e.g.
- *                      {@code "order"}); scopes {@code aggregateId}
- *                      so future producers publish through the same
+ * @param entityType    the kind of entity the event is about (e.g.
+ *                      {@code "order"}); scopes {@code entityId} so
+ *                      future producers publish through the same
  *                      envelope unchanged (Extensibility)
- * @param aggregateId   identifies the entity instance; groups events
- *                      for per-aggregate ordering (F2.4) — for order
+ * @param entityId      identifies the entity instance; groups events
+ *                      for per-entity ordering (F2.4) — for order
  *                      events, the order ID
- * @param sequence      per-aggregate incrementing, stamped by the
+ * @param sequence      per-entity incrementing, stamped by the
  *                      producer; stale-event discard (D5, F2.4)
  * @param eventType     what happened — for orders, the six request
  *                      states (created / accepted / collected /
@@ -68,8 +68,8 @@ import java.util.Map;
  */
 public record EventEnvelope(
 		String eventId,
-		String aggregateType,
-		String aggregateId,
+		String entityType,
+		String entityId,
 		long sequence,
 		String eventType,
 		Instant occurredAt,
