@@ -1,3 +1,14 @@
+<!--
+  AI-assisted (CS3219 AI Usage Policy disclosure):
+  Tool: Claude Code (Fable 5), 2026-09-10; revised 2026-09-19.
+  Scope: team-decided tech stack, architecture, conventions, and course
+  constraints transcribed into this guide (2026-09-10). 2026-09-19: the
+  foc-contracts shared-library exception recorded under Architecture
+  and Conventions per team decision D15 (docs/notification-service.md).
+  All decisions documented here were made by the team.
+  Reviewed by: Leong Wei Zhi (via pull request).
+-->
+
 # Favours on Campus (FoC) — Agent Guide
 
 Favours on Campus (FoC) is a peer-to-peer campus errand platform

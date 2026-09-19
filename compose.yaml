@@ -41,6 +41,11 @@ services:
   # Notif NFR1.2). Management UI included for DLQ inspection (D7).
   rabbitmq:
     image: rabbitmq:4-management
+    # Pinned hostname: RabbitMQ derives its node name (and the on-disk
+    # data location inside the volume) from the hostname, so an
+    # unpinned hostname would strand the persisted data when the
+    # container is recreated (docker compose down && up).
+    hostname: rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-foc}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set in .env}

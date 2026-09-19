@@ -55,7 +55,14 @@ Entry template:
   no-shared-code convention); the tool implemented them per the
   already-finalized design (D1, D8, D11). Verified with `./mvnw test`
   and the issue's acceptance test (publish persistent message, restart
-  broker, message survives). Reviewed via pull request.
+  broker, message survives). Copilot review fixes on the same PR:
+  pinned `hostname: rabbitmq` so the persisted node data survives
+  container recreation, documented broker credential rotation in
+  `.env.example`, `@Qualifier`s in the topology initializer to stay
+  unambiguous when #65 adds retry/DLQ beans, attribution headers added
+  to `AGENTS.md`, the root `README.md`, and `foc-contracts/.gitignore`,
+  and the PR description's stale class name corrected. Reviewed via
+  pull request.
 
 ## 2026-09-19 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)

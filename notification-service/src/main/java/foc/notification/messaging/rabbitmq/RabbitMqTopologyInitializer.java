@@ -11,6 +11,7 @@ import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.FanoutExchange;
 import org.springframework.amqp.core.Queue;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -36,8 +37,12 @@ class RabbitMqTopologyInitializer implements ApplicationRunner {
 	private final Queue orderEventsWorkQueue;
 	private final Binding orderEventsBinding;
 
-	RabbitMqTopologyInitializer(AmqpAdmin amqpAdmin, FanoutExchange orderEventsExchange,
-			Queue orderEventsWorkQueue, Binding orderEventsBinding) {
+	// Qualified by bean name so the wiring stays unambiguous once the
+	// retry/DLQ queues and bindings arrive (#65).
+	RabbitMqTopologyInitializer(AmqpAdmin amqpAdmin,
+			@Qualifier("orderEventsExchange") FanoutExchange orderEventsExchange,
+			@Qualifier("orderEventsWorkQueue") Queue orderEventsWorkQueue,
+			@Qualifier("orderEventsBinding") Binding orderEventsBinding) {
 		this.amqpAdmin = amqpAdmin;
 		this.orderEventsExchange = orderEventsExchange;
 		this.orderEventsWorkQueue = orderEventsWorkQueue;

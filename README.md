@@ -1,3 +1,14 @@
+<!--
+  AI-assisted (CS3219 AI Usage Policy disclosure):
+  Tool: Claude Code (Fable 5), 2026-09-10; revised 2026-09-19.
+  Scope: team allocation table and repository-structure notes
+  transcribed from team decisions (2026-09-10); the AI Use Summary
+  section is maintained as the policy's consolidated disclosure.
+  2026-09-19: foc-contracts structure note added per team decision D15
+  (docs/notification-service.md).
+  Reviewed by: Leong Wei Zhi (via pull request).
+-->
+
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
 
 ## Favours on Campus (FoC)
