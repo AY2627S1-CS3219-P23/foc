@@ -51,7 +51,7 @@ import java.util.Map;
  *                      events, the order ID
  * @param sequence      per-aggregate incrementing, stamped by the
  *                      producer; stale-event discard (D5, F2.4)
- * @param type          event type — for orders, the six request
+ * @param eventType     what happened — for orders, the six request
  *                      states (created / accepted / collected /
  *                      completed / cancelled / expired) plus
  *                      courier-arrived (Order F0.2, F4.1.1-F4.1.2);
@@ -71,7 +71,7 @@ public record EventEnvelope(
 		String aggregateType,
 		String aggregateId,
 		long sequence,
-		String type,
+		String eventType,
 		Instant occurredAt,
 		List<String> parties,
 		Map<String, Object> payload) {

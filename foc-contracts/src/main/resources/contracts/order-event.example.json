@@ -3,7 +3,7 @@
   "aggregateType": "order",
   "aggregateId": "ord-20260919-0042",
   "sequence": 2,
-  "type": "accepted",
+  "eventType": "accepted",
   "occurredAt": "2026-09-19T08:30:00Z",
   "parties": ["usr-req-1001", "usr-cou-2002"],
   "payload": {

@@ -39,7 +39,8 @@
   the Extensibility section's platform-wide shape — aggregateType +
   aggregateId + parties[] as plain user IDs — replacing orderId /
   requesterId / courierId; the tool updated the field table and the
-  Extensibility bullet to match.
+  Extensibility bullet to match. The author also renamed the type
+  field to eventType (symmetry with aggregateType).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -76,7 +77,7 @@ finalized design for this service.
 | D11 | Broker isolation | **Ports and adapters**: business logic (event processor, REST API, purge job) has zero broker imports; all RabbitMQ-specific code is confined to a single messaging adapter package behind service-owned interfaces (see "Broker decoupling") | maintainability; broker swap surface |
 | D12 | Topology provisioning | **App-declared at startup via Spring AMQP**: the consuming service declares its exchange/queue/binding beans and forces the declaration when it boots (no broker definitions file) | Notif NFR1.2; topology lives beside its owner |
 | D13 | Naming convention | Exchange named after the producing domain (**`order-events`**); queues prefixed with the consuming service (**`notification-service.order-events`**, later `….retry` / `….dlq`) | ownership visible in the management UI; Extensibility |
-| D14 | `order-events` exchange type | **Fanout** — every bound queue gets a copy of every event; consumers filter by `type` in their own code | Notif F1.3; Extensibility ("the exchange is the broadcast point") |
+| D14 | `order-events` exchange type | **Fanout** — every bound queue gets a copy of every event; consumers filter by `eventType` in their own code | Notif F1.3; Extensibility ("the exchange is the broadcast point") |
 | D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (top-level Maven module, plain constants, zero framework dependencies): contract names that producer and consumer must agree on — e.g. the `order-events` exchange — are compile-time constants imported by each backend service. The sole exception to the no-shared-code convention (recorded in `AGENTS.md`). Service-private names (queues) stay in their service. Issue #63 (2026-09-19) extended the library's scope to the **event-envelope contract**: the `EventEnvelope` record (a plain annotation-free record, keeping the library framework-free) and the canonical fixture `contracts/order-event.example.json` on its classpath, which both producer and consumer contract-test against. Tolerant reading (unknown fields/types ignored, F1.3) is consumer-side `ObjectMapper` behavior, locked in by the Notification Service's contract test — so the AMQP message converter (issue #64) must use Boot's auto-configured mapper. | one definition per contract name and per envelope field; drift caught at compile time or by the contract tests |
 
 ## Components
@@ -130,7 +131,7 @@ contract test) assert against (D15).
 | `aggregateType` (e.g. `"order"`) | scopes `aggregateId`, so future producers publish through the same envelope unchanged (Extensibility) |
 | `aggregateId` (for order events, the order ID) | groups events per aggregate (F2.4) |
 | `sequence` (per aggregate, incrementing) | stale-event discard (D5, F2.4) |
-| `type` (for orders: the six request states created / accepted / collected / completed / cancelled / expired — plus `courier-arrived` for the dropoff-arrival update) | Order F0.2 (state transitions), Order F4.1.1–F4.1.2 (arrival); new types addable without publisher changes (F1.3) |
+| `eventType` (for orders: the six request states created / accepted / collected / completed / cancelled / expired — plus `courier-arrived` for the dropoff-arrival update) | Order F0.2 (state transitions), Order F4.1.1–F4.1.2 (arrival); new types addable without publisher changes (F1.3) |
 | `occurredAt` timestamp | notification display and audit |
 | `parties` (user IDs to notify) | one notification per entry, without querying other services (F1.1, F1.2); party roles, if a renderer needs them, live in `payload` |
 | `payload` (free-form domain details) | message text rendering; generic per F1.3 |
@@ -161,7 +162,7 @@ APIs · ack/nack = message (negative) acknowledgement.
 | --- | --- |
 | Notif F1.1 — notify on events without querying the producing service | envelope carries all needed data (party IDs, type, payload); processor reads only the envelope + own DB |
 | Notif F1.2 — notify each party of an event | processor creates one notification per party ID in the envelope; push gateway targets each party's per-user destination |
-| Notif F1.3 — new event types without publisher changes | generic envelope (`type` + `payload`); processor handles unknown types generically |
+| Notif F1.3 — new event types without publisher changes | generic envelope (`eventType` + `payload`); processor handles unknown types generically |
 | Notif F1.4 — delivery failure never affects the producing operation | fire-and-forget publish to the exchange; all retry/failure handling stays on the consumer side of the broker |
 | Notif F2.1 — no duplicate notification on redelivery | unique event-ID constraint checked in the same DB transaction as the notification insert (D4) |
 | Notif F2.2 — retry failed deliveries | nack → TTL retry queue → redelivery with backoff, up to max attempts (D6) |
@@ -206,8 +207,8 @@ and `compose.yaml`, never the business logic.
   `messaging.rabbitmq`); an ArchUnit test can assert no other package
   imports broker types (not yet written — see Open items).
 - **Envelope stays broker-agnostic:** all business data (event ID,
-  sequence, parties, type, payload) rides in the JSON body — never in
-  AMQP headers or other broker-specific message properties.
+  sequence, parties, event type, payload) rides in the JSON body —
+  never in AMQP headers or other broker-specific message properties.
 - **Already portable by construction:** duplicate detection (D4) and
   stale-event discard (D5) are enforced in this service's own database,
   not by broker features, so the logic satisfying F2.1/F2.4 is unchanged

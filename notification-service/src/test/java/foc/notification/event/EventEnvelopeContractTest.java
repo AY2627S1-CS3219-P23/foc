@@ -53,7 +53,7 @@ class EventEnvelopeContractTest {
 		assertThat(envelope.aggregateType()).isEqualTo("order");
 		assertThat(envelope.aggregateId()).isEqualTo("ord-20260919-0042");
 		assertThat(envelope.sequence()).isEqualTo(2L);
-		assertThat(envelope.type()).isEqualTo("accepted");
+		assertThat(envelope.eventType()).isEqualTo("accepted");
 		assertThat(envelope.occurredAt()).isEqualTo(Instant.parse("2026-09-19T08:30:00Z"));
 		assertThat(envelope.parties()).containsExactly("usr-req-1001", "usr-cou-2002");
 		assertThat(envelope.payload()).containsExactlyInAnyOrderEntriesOf(Map.of(
@@ -72,7 +72,7 @@ class EventEnvelopeContractTest {
 				  "aggregateType": "order",
 				  "aggregateId": "o-1",
 				  "sequence": 1,
-				  "type": "created",
+				  "eventType": "created",
 				  "occurredAt": "2026-09-19T08:00:00Z",
 				  "parties": ["usr-req-1001"],
 				  "payload": {"note": "hi"},
@@ -96,7 +96,7 @@ class EventEnvelopeContractTest {
 				  "aggregateType": "some-future-aggregate",
 				  "aggregateId": "x-1",
 				  "sequence": 3,
-				  "type": "some-future-type",
+				  "eventType": "some-future-type",
 				  "occurredAt": "2026-09-19T09:00:00Z",
 				  "parties": ["usr-req-1001", "usr-cou-2002"],
 				  "payload": {}
@@ -106,7 +106,7 @@ class EventEnvelopeContractTest {
 		EventEnvelope envelope = objectMapper.readValue(json, EventEnvelope.class);
 
 		assertThat(envelope.aggregateType()).isEqualTo("some-future-aggregate");
-		assertThat(envelope.type()).isEqualTo("some-future-type");
+		assertThat(envelope.eventType()).isEqualTo("some-future-type");
 	}
 
 	@Test
@@ -117,7 +117,7 @@ class EventEnvelopeContractTest {
 				  "aggregateType": "order",
 				  "aggregateId": "o-2",
 				  "sequence": 1,
-				  "type": "created",
+				  "eventType": "created",
 				  "occurredAt": "2026-09-19T07:00:00Z",
 				  "parties": ["usr-req-1001"],
 				  "payload": {"requesterId": "usr-req-1001", "note": "no courier yet"}
