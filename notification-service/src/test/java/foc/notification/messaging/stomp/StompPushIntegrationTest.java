@@ -5,6 +5,8 @@
  * against a RANDOM_PORT context (no broker, no Docker) — CONNECT
  * auth accept/reject, per-user delivery after commit within the 5 s
  * budget, SockJS fallback path, and silence for discarded events.
+ * 2026-09-19, Method-B refactor (D16-D19): drives the port with typed
+ * events; entity/stale assertions removed with the mechanism (D19).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.stomp;
@@ -13,7 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
-import foc.contracts.events.EventEnvelope;
+import foc.contracts.events.OrderAccepted;
+import foc.contracts.events.OrderCollected;
 import foc.notification.service.EventProcessor;
 import foc.notification.service.NotificationDto;
 import io.jsonwebtoken.Jwts;
@@ -91,10 +94,14 @@ class StompPushIntegrationTest {
 				.compact();
 	}
 
-	private static EventEnvelope envelope(String eventId, String entityId, long sequence,
-			String eventType, List<String> parties) {
-		return new EventEnvelope(eventId, "order", entityId, sequence, eventType,
-				OCCURRED_AT, parties, Map.of("note", "push"));
+	private static OrderAccepted accepted(String eventId, String orderId, List<String> parties) {
+		return new OrderAccepted(eventId, 1, OCCURRED_AT, "order-service", "c-push", parties,
+				orderId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "push");
+	}
+
+	private static OrderCollected collected(String eventId, String orderId, List<String> parties) {
+		return new OrderCollected(eventId, 1, OCCURRED_AT, "order-service", "c-push", parties,
+				orderId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "push");
 	}
 
 	private static WebSocketStompClient rawWebSocketClient() {
@@ -153,16 +160,19 @@ class StompPushIntegrationTest {
 	void pushesStoredNotificationToSubscribedUserAfterCommit() throws Exception {
 		BlockingQueue<NotificationDto> frames = subscribeAsUser("usr-push-1");
 
-		eventProcessor.process(envelope("push-e1", "ord-push-1", 1, "accepted",
-				List.of("usr-push-1")));
+		eventProcessor.process(accepted("push-e1", "ord-push-1", List.of("usr-push-1")));
 
 		NotificationDto frame = frames.poll(5, TimeUnit.SECONDS);
 		assertThat(frame).isNotNull();
 		assertThat(frame.id()).isNotNull();
-		assertThat(frame.entityType()).isEqualTo("order");
-		assertThat(frame.entityId()).isEqualTo("ord-push-1");
-		assertThat(frame.eventType()).isEqualTo("accepted");
-		assertThat(frame.payload()).isEqualTo(Map.of("note", "push"));
+		assertThat(frame.eventType()).isEqualTo("order.accepted");
+		assertThat(frame.payload()).isEqualTo(Map.of(
+				"orderId", "ord-push-1",
+				"requesterId", "usr-req-1001",
+				"courierId", "usr-cou-2002",
+				"pickupLocation", "Techno Edge",
+				"dropoffLocation", "COM3-01-19",
+				"note", "push"));
 		assertThat(frame.occurredAt()).isEqualTo(OCCURRED_AT);
 		assertThat(frame.read()).isFalse();
 		assertThat(frame.createdAt()).isNotNull();
@@ -173,40 +183,33 @@ class StompPushIntegrationTest {
 		BlockingQueue<NotificationDto> userA = subscribeAsUser("usr-iso-a");
 		BlockingQueue<NotificationDto> userB = subscribeAsUser("usr-iso-b");
 
-		eventProcessor.process(envelope("iso-e1", "ord-iso-1", 1, "accepted",
-				List.of("usr-iso-a", "usr-iso-b")));
+		eventProcessor.process(accepted("iso-e1", "ord-iso-1", List.of("usr-iso-a", "usr-iso-b")));
 		assertThat(userA.poll(5, TimeUnit.SECONDS)).isNotNull();
 		assertThat(userB.poll(5, TimeUnit.SECONDS)).isNotNull();
 
 		// Only A is a party; B must stay silent. A's frame is the sentinel
 		// proving the push cycle completed before we assert B's silence.
-		eventProcessor.process(envelope("iso-e2", "ord-iso-1", 2, "collected",
-				List.of("usr-iso-a")));
+		eventProcessor.process(collected("iso-e2", "ord-iso-1", List.of("usr-iso-a")));
 		assertThat(userA.poll(5, TimeUnit.SECONDS)).isNotNull();
 		assertThat(userB.poll(200, TimeUnit.MILLISECONDS)).isNull();
 	}
 
 	@Test
-	void pushesNothingForDuplicateAndStaleEvents() throws Exception {
+	void pushesNothingForDuplicateEvents() throws Exception {
 		BlockingQueue<NotificationDto> frames = subscribeAsUser("usr-dis-1");
 
-		eventProcessor.process(envelope("dis-e1", "ord-dis-1", 2, "accepted",
-				List.of("usr-dis-1")));
+		eventProcessor.process(accepted("dis-e1", "ord-dis-1", List.of("usr-dis-1")));
 		assertThat(frames.poll(5, TimeUnit.SECONDS)).isNotNull();
 
-		// Duplicate event ID and stale sequence: both discarded, no push.
-		eventProcessor.process(envelope("dis-e1", "ord-dis-1", 2, "accepted",
-				List.of("usr-dis-1")));
-		eventProcessor.process(envelope("dis-e2", "ord-dis-1", 1, "created",
-				List.of("usr-dis-1")));
+		// Duplicate event ID: discarded, no push.
+		eventProcessor.process(accepted("dis-e1", "ord-dis-1", List.of("usr-dis-1")));
 
-		// Sentinel: once it arrives, the two discarded events are fully
-		// processed — and must not have produced frames of their own.
-		eventProcessor.process(envelope("dis-e3", "ord-dis-1", 3, "collected",
-				List.of("usr-dis-1")));
+		// Sentinel: once it arrives, the discarded duplicate is fully
+		// processed — and must not have produced a frame of its own.
+		eventProcessor.process(collected("dis-e3", "ord-dis-1", List.of("usr-dis-1")));
 		NotificationDto sentinel = frames.poll(5, TimeUnit.SECONDS);
 		assertThat(sentinel).isNotNull();
-		assertThat(sentinel.eventType()).isEqualTo("collected");
+		assertThat(sentinel.eventType()).isEqualTo("order.collected");
 		assertThat(frames).isEmpty();
 	}
 
@@ -249,8 +252,7 @@ class StompPushIntegrationTest {
 				"Bearer " + token("usr-sockjs-1"));
 		BlockingQueue<NotificationDto> frames = subscribe(session, "usr-sockjs-1");
 
-		eventProcessor.process(envelope("sockjs-e1", "ord-sockjs-1", 1, "accepted",
-				List.of("usr-sockjs-1")));
+		eventProcessor.process(accepted("sockjs-e1", "ord-sockjs-1", List.of("usr-sockjs-1")));
 
 		assertThat(frames.poll(5, TimeUnit.SECONDS)).isNotNull();
 	}

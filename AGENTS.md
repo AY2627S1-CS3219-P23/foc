@@ -48,7 +48,8 @@ working in that service.
 
 One top-level folder is **not** a service: `foc-contracts/` is a shared
 Maven library holding cross-service contract constants (e.g. broker
-exchange names) — see the exception under Conventions.
+exchange names) and the typed event contracts (event records +
+registry) — see the exception under Conventions.
 
 ## Conventions
 
@@ -57,9 +58,9 @@ exchange names) — see the exception under Conventions.
   service's code. Sole exception (team decision D15, 2026-09-19,
   `docs/notification-service.md`): backend services may depend on the
   shared `foc-contracts/` library, which holds only cross-service
-  contract constants — no framework code, no service logic. Install it
-  locally before building a service that uses it:
-  `cd foc-contracts && ./mvnw install`.
+  contract constants and the event contract records/registry — no
+  framework code, no service logic. Install it locally before building
+  a service that uses it: `cd foc-contracts && ./mvnw install`.
 - Requirements are tracked as GitHub issues labelled by `service:`,
   `priority:`, and `sprint:` — reference the issue when implementing one.
 

@@ -4,6 +4,9 @@
  * Scope: client-facing notification shape for issue #67 (STOMP push
  * frame); intended to be reused by issue #66's REST list API so the
  * frontend needs one type for both.
+ * 2026-09-19, Method-B refactor (D16-D19): entityType/entityId
+ * dropped with the entity columns (author decision D19) — clients
+ * find the order via payload.orderId.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.service;
@@ -25,8 +28,6 @@ import tools.jackson.databind.ObjectMapper;
  */
 public record NotificationDto(
 		Long id,
-		String entityType,
-		String entityId,
 		String eventType,
 		Map<String, Object> payload,
 		Instant occurredAt,
@@ -37,8 +38,6 @@ public record NotificationDto(
 	public static NotificationDto from(Notification notification, ObjectMapper objectMapper) {
 		return new NotificationDto(
 				notification.getId(),
-				notification.getEntityType(),
-				notification.getEntityId(),
 				notification.getEventType(),
 				objectMapper.readValue(notification.getPayload(), Map.class),
 				notification.getOccurredAt(),

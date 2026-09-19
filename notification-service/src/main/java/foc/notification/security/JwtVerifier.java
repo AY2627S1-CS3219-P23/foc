@@ -22,7 +22,7 @@ import org.springframework.stereotype.Component;
 /**
  * Verifies platform JWTs (HS256, shared {@code JWT_SECRET}) and
  * extracts the user ID from the {@code sub} claim — the same ID that
- * appears in event envelopes' {@code parties[]} and notification
+ * appears in domain events' {@code parties()} and notification
  * {@code recipientId} (provisional platform convention, issue #67).
  *
  * <p>Public and transport-agnostic: the STOMP CONNECT interceptor

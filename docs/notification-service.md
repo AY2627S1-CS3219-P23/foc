@@ -66,6 +66,20 @@
   noted in docs/architecture.md), SockJS fallback on the /ws
   endpoint, 10 s heartbeats, and the provisional client reconnect
   policy; the tool implemented them and struck the settled Open item.
+  2026-09-19 (Method-B refactor): recorded decisions D16-D19, all made
+  by the author via neutral options Q&As (with previews) after judging
+  the generic envelope too weakly typed: topic exchange with canonical
+  routing keys (D16, supersedes D14), flat typed event records with no
+  envelope (D17, deletes EventEnvelope), the registry as the single
+  class-to-identity source with the one identity string serving as
+  both body eventType and routing key (D18 — the author consulted an
+  external LLM and then chose from neutral options here), and removal
+  of the entity-identity/sequence stale-discard mechanism plus the
+  sequence field (D19, supersedes D5, retires F2.4). Retry values
+  (3 attempts / 10 s TTL) and unknown-type dead-lettering were decided
+  by the author for issue #65 but deliberately not implemented in this
+  refactor-only change. The tool presented options factually, then
+  implemented the outcomes and updated this document.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -84,7 +98,7 @@ it in the file view). System-wide context: [`architecture.md`](architecture.md).
 ## Design decisions (made by the team)
 
 All decisions below were made by Leong Wei Zhi (D1–D10 on 2026-09-15,
-D11 on 2026-09-18, D12–D15 on 2026-09-19) and count as the team's
+D11 on 2026-09-18, D12–D19 on 2026-09-19) and count as the team's
 finalized design for this service.
 
 | # | Concern | Decision | Serves |
@@ -93,17 +107,21 @@ finalized design for this service.
 | D2 | Client push transport | **WebSocket with STOMP** (Spring simple broker, per-user destinations) | Notif F1.2; Order NFR1.1–1.2 |
 | D3 | Notification DB engine | **PostgreSQL**, accessed via Spring Data JPA | Notif F2.1, F2.4, F3 |
 | D4 | Duplicate detection | **Unique event ID** recorded in the DB (unique constraint), written in the *same transaction* as the notification insert | Notif F2.1 |
-| D5 | Stale-event discard | **Per-entity sequence number** stamped by the producer (per order, in Order Service terms); the processor stores the last applied sequence per `(entityType, entityId)` pair and discards events with a sequence ≤ it (wording generalized under issue #64 to match the business-agnostic envelope) | Notif F2.4 |
-| D6 | Retry policy | **Broker redelivery with TTL/delay-queue backoff**, fixed maximum attempts | Notif F2.2 |
-| D7 | Dead-letter handling | **RabbitMQ dead-letter exchange → durable dead-letter queue**; inspected via the management UI or a consumer, replayable by re-publishing | Notif F2.3 |
+| D5 | ~~Stale-event discard~~ | ~~Per-entity sequence number stamped by the producer; discard sequence ≤ last applied~~ — **superseded by D19** (2026-09-19): the mechanism, its `sequence` wire field, and requirement F2.4 were removed | — |
+| D6 | Retry policy | **Broker redelivery with TTL/delay-queue backoff**, fixed maximum attempts. Values decided 2026-09-19: **3 total attempts, 10 s TTL**, env-overridable; implementation owned by issue #65 | Notif F2.2 |
+| D7 | Dead-letter handling | **RabbitMQ dead-letter exchange → durable dead-letter queue**; inspected via the management UI or a consumer, replayable by re-publishing. Decided 2026-09-19: once the DLQ exists, **unknown event types dead-letter** (replayable after a consumer upgrade) rather than being silently dropped; implementation owned by issue #65 | Notif F2.3 |
 | D8 | Broker persistence | **Durable exchanges/queues + persistent messages** (must be explicitly configured — durability is opt-in in RabbitMQ) | Notif NFR1.2 |
 | D9 | Retention window | **Configurable via environment variable** `NOTIF_RETENTION_DAYS`, **default 30 days**; scheduled purge job | Notif F3.4 |
 | D10 | Redis / scale-out | **No Redis** in the current single-instance design (see Open items) | — |
 | D11 | Broker isolation | **Ports and adapters**: business logic (event processor, REST API, purge job) has zero broker imports; all RabbitMQ-specific code is confined to a single messaging adapter package behind service-owned interfaces (see "Broker decoupling") | maintainability; broker swap surface |
 | D12 | Topology provisioning | **App-declared at startup via Spring AMQP**: the consuming service declares its exchange/queue/binding beans and forces the declaration when it boots (no broker definitions file) | Notif NFR1.2; topology lives beside its owner |
 | D13 | Naming convention | Exchange named after the producing domain (**`order-events`**); queues prefixed with the consuming service (**`notification-service.order-events`**, later `….retry` / `….dlq`) | ownership visible in the management UI; Extensibility |
-| D14 | `order-events` exchange type | **Fanout** — every bound queue gets a copy of every event; consumers filter by `eventType` in their own code | Notif F1.3; Extensibility ("the exchange is the broadcast point") |
-| D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (top-level Maven module, plain constants, zero framework dependencies): contract names that producer and consumer must agree on — e.g. the `order-events` exchange — are compile-time constants imported by each backend service. The sole exception to the no-shared-code convention (recorded in `AGENTS.md`). Service-private names (queues) stay in their service. Issue #63 (2026-09-19) extended the library's scope to the **event-envelope contract**: the `EventEnvelope` record (a plain annotation-free record, keeping the library framework-free) and the canonical fixture `contracts/order-event.example.json` on its classpath, which both producer and consumer contract-test against. Tolerant reading (unknown fields/types ignored, F1.3) is consumer-side `ObjectMapper` behavior, locked in by the Notification Service's contract test — so the AMQP message converter (issue #64) must use Boot's auto-configured mapper. | one definition per contract name and per envelope field; drift caught at compile time or by the contract tests |
+| D14 | ~~`order-events` exchange type~~ | ~~Fanout~~ — **superseded by D16** (2026-09-19) | — |
+| D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (top-level Maven module, zero runtime framework dependencies): contract names that producer and consumer must agree on — e.g. the `order-events` exchange — are compile-time constants imported by each backend service. The sole exception to the no-shared-code convention (recorded in `AGENTS.md`). Service-private names (queues) stay in their service. Amended 2026-09-19 (Method-B refactor, superseding the issue #63 envelope scope): the library holds the **typed event contracts** — the `DomainEvent`/`OrderEvent` interfaces, the seven event records, the `EventTypeRegistry`, and one canonical fixture per registry entry on its classpath (`contracts/<identity dots→hyphens>-v<schemaVersion>.example.json`), which both producer and consumer contract-test against. Test-scoped JUnit was added for the registry/record tests; the published jar stays dependency-free. Tolerant reading of unknown *fields* (F1.3) is consumer-side `ObjectMapper` behavior, locked in by the Notification Service's contract test — so the AMQP message converter must use Boot's auto-configured mapper. | one definition per contract name and per event shape; drift caught at compile time or by the contract tests |
+| D16 | `order-events` exchange type | **Topic exchange** (supersedes D14): producers publish each event under its canonical routing key (`order.created` … `order.courier-arrived`, from the registry); each consuming service gets its own durable queue with its own bindings — this service binds **`order.#`** (it notifies on every order event, and a new event type ships via a contracts release anyway, so the binding never changes). One exchange per producing domain; future domains get their own. | Notif F1.1–F1.3; Extensibility |
+| D17 | Event contract shape | **Flat typed event records, no envelope** (Method B): `EventEnvelope` and its free-form `Map` payload are deleted; each of the seven order-lifecycle facts — `OrderCreated`, `OrderAccepted`, `OrderCollected`, `OrderCompleted`, `OrderCancelled`, `OrderExpired`, `CourierArrived` — is one record implementing the plain-Java `DomainEvent` interface, carrying the wire metadata (`eventId`, `eventType`, `schemaVersion`, `occurredAt`, `producer`, `correlationId`, `parties`) plus its own business fields (full fixture vocabulary: `orderId`, `requesterId`, `courierId` where a courier exists — nullable on `OrderCancelled` — `pickupLocation`, `dropoffLocation`, `note`) at the top level. Events are past-tense facts, never commands. | schema per event; Notif F1.1–F1.2 |
+| D18 | Event identity & dispatch | **One canonical identity string per event** (e.g. `order.accepted`), registered in `EventTypeRegistry` — keyed by *(identity, `schemaVersion`)* with **one record class per version** (versioning model decided on PR #75 review, 2026-09-19), so consumers can support several schema versions of one event concurrently during a migration; a version with no entry is rejected as a conversion failure. The identity travels twice by design: as the body `eventType` — the contract's self-describing identity, which consumers **dispatch on** together with `schemaVersion` (D11's body-only rule stands; no `__TypeId__` headers) — and as the RabbitMQ routing key (transport metadata), shared by all versions. `eventType` is *not* a record component: `DomainEvent.eventType()` derives it from the registry and the message converter injects it on publish, so an instance can never carry a mismatched type. Stored in `notifications.event_type` and pushed in the STOMP frame. Consumers also reject events missing required fields (components not marked `@Nullable`). | Notif F1.3; portability (self-describing bodies) |
+| D19 | Idempotency scope | **Event-ID dedupe only** (supersedes D5): the per-entity sequence mechanism, its `sequence` wire field, the `entity_sequences` table, and the `entity_type`/`entity_id` columns/DTO fields were removed; requirement F2.4 is retired. Accepted consequence: out-of-order deliveries each produce notifications. Re-adding ordering later is an additive `schemaVersion`-bump contract change. | Notif F2.1 |
 
 ## Components
 
@@ -124,47 +142,57 @@ database-per-service rule is untouched.
 
 | Component | Responsibility |
 | --- | --- |
-| **order-events exchange** (RabbitMQ) | Durable exchange the Order Service publishes request-state and courier-arrival events to; publishing is fire-and-forget, so a delivery failure never affects the producing operation (F1.4). |
-| **Work queue** (RabbitMQ) | Durable queue bound to the exchange; holds undelivered events across restarts (NFR1.2) and delivers them at-least-once (NFR1.1). |
+| **order-events exchange** (RabbitMQ) | Durable **topic** exchange (D16) the Order Service publishes request-state and courier-arrival events to under their canonical routing keys; publishing is fire-and-forget, so a delivery failure never affects the producing operation (F1.4). |
+| **Work queue** (RabbitMQ) | Durable queue bound to the exchange with `order.#` (D16); holds undelivered events across restarts (NFR1.2) and delivers them at-least-once (NFR1.1). |
 | **Retry queue** (RabbitMQ) | Durable TTL/delay queue; a nacked event parks here and is re-routed to the work queue when its TTL expires, giving backoff between attempts (F2.2). |
 | **Dead-letter queue** (RabbitMQ) | Durable queue fed by the dead-letter exchange after an event exhausts its maximum attempts; retained for later inspection and manual re-publish (F2.3). |
 | **AMQP listener** (Spring Boot) | Consumes events with manual acknowledgement; acks only after the processor's DB transaction commits, so a crash before commit leads to redelivery, never loss (NFR1.1). |
-| **Idempotent event processor** (Spring Boot) | Core logic: rejects already-seen event IDs (F2.1), discards stale per-entity sequences (F2.4), accepts any event type carried by the generic envelope without publisher changes (F1.3), and creates one notification row per associated party (F1.2) — all from envelope data alone, never querying another service (F1.1). |
+| **Idempotent event processor** (Spring Boot) | Core logic: rejects already-seen event IDs (F2.1) and creates one notification row per associated party (F1.2), storing the event's business fields as the payload — all from the typed event alone, never querying another service (F1.1). Works against the `DomainEvent` interface, so every cataloged event type flows through generically. |
 | **Notification REST API** (Spring Boot) | Lets the Web App list a user's recent notifications and mark them read/unread (F3.1, F3.2). |
 | **STOMP push gateway** (Spring Boot) | WebSocket endpoint with Spring's STOMP simple broker; pushes each stored notification to the affected users' `/user/...` destinations within the 5-second budget (F1.2; Order NFR1.1–1.2). |
 | **Retention purge scheduler** (Spring Boot) | Scheduled job deleting notifications older than the configured window (F3.4). |
-| **Notification DB** (PostgreSQL) | Owned exclusively by this service (database-per-service): notification rows with read/unread state, processed event IDs, and last-applied sequence per `(entityType, entityId)` — one schema so dedupe, sequence update, and notification insert commit atomically. |
+| **Notification DB** (PostgreSQL) | Owned exclusively by this service (database-per-service): notification rows with read/unread state and processed event IDs — one schema so dedupe and notification insert commit atomically. |
 
-## Event envelope (fields required by the decisions above)
+## Event contracts (D17/D18, Method-B refactor)
 
-The Order Service publishes a generic envelope. **Contract rule: the
-envelope is business-agnostic** (issue #63 decision, 2026-09-19). A
-field may exist at envelope level only because a step of generic
-event handling — dedupe, ordering, fan-out, display — demands it;
-business vocabulary (domain identifiers under their business names,
-party roles, order details) never appears as an envelope field and
-always rides inside `payload`. This is a standing constraint on
-future evolution, not just today's shape: even additive changes may
-add only handling-semantics fields — a domain-named envelope field is
-a contract violation. (The platform-wide shape from the Extensibility
-section was adopted from the start, replacing the order-named fields
-`orderId` / `requesterId` / `courierId`.) The envelope is code:
-`foc.contracts.events.EventEnvelope` in `foc-contracts/`, with the
-canonical example checked in as
-[`foc-contracts/src/main/resources/contracts/order-event.example.json`](../foc-contracts/src/main/resources/contracts/order-event.example.json)
-— the contract artifact both producer (#55) and consumer (issue #63's
-contract test) assert against (D15).
+The Order Service publishes **explicit, business-specific typed
+events** — one flat record per fact, no envelope wrapper and no
+free-form payload map (the generic `EventEnvelope` was judged too
+weakly typed and deleted). The contracts are code in `foc-contracts/`:
+the `DomainEvent`/`OrderEvent` interfaces, the seven records, and the
+`EventTypeRegistry` — with one canonical fixture per registry entry
+checked in under
+[`foc-contracts/src/main/resources/contracts/`](../foc-contracts/src/main/resources/contracts/)
+(`<identity dots→hyphens>-v<schemaVersion>.example.json`), the
+contract artifacts both producer and consumer contract-test against
+(D15). The full
+conventions — naming, wire shape, evolution rules, the
+add-a-new-event checklist, and producer conventions — live in the
+["Event conventions" section of the foc-contracts README](../foc-contracts/README.md#event-conventions).
+
+Wire metadata carried by every event (top-level, alongside the
+event's business fields):
 
 | Field | Why it must be present |
 | --- | --- |
 | `eventId` (unique) | duplicate detection (D4, F2.1) |
-| `entityType` (e.g. `"order"`) | scopes `entityId`, so future producers publish through the same envelope unchanged (Extensibility) |
-| `entityId` (for order events, the order ID) | groups events per entity (F2.4) |
-| `sequence` (per entity, incrementing) | stale-event discard (D5, F2.4) |
-| `eventType` (for orders: the six request states created / accepted / collected / completed / cancelled / expired — plus `courier-arrived` for the dropoff-arrival update) | Order F0.2 (state transitions), Order F4.1.1–F4.1.2 (arrival); new types addable without publisher changes (F1.3) |
+| `eventType` (canonical identity, e.g. `order.accepted` — injected by the converter, derived from the class; same string as the routing key) | consumer dispatch to the record class; self-describing, transport-portable bodies (D18) |
+| `schemaVersion` (int, starts at 1) | contract evolution: additive within a version, breaking changes bump it |
 | `occurredAt` timestamp | notification display and audit |
-| `parties` (user IDs to notify) | one notification per entry, without querying other services (F1.1, F1.2); party roles, if a renderer needs them, live in `payload` |
-| `payload` (free-form domain details) | message text rendering; generic per F1.3 |
+| `producer` (e.g. `order-service`) | provenance/audit |
+| `correlationId` | correlates the event with the request/flow that caused it |
+| `parties` (user IDs to notify) | one notification per entry, without querying other services (F1.1, F1.2) |
+
+The seven cataloged events (Order F0.2 state transitions plus the
+courier-arrival update, F4.1.1–F4.1.2): `order.created`,
+`order.accepted`, `order.collected`, `order.completed`,
+`order.cancelled`, `order.expired`, `order.courier-arrived`. Business
+fields per event: all carry `orderId`, `requesterId`,
+`pickupLocation`, `dropoffLocation`, `note`; the post-acceptance
+events add `courierId` (nullable on `order.cancelled` — a
+pre-acceptance cancel has no courier). Adding an event type is a
+contracts release (record + registry entry + fixture) plus a consumer
+jar bump — the `order.#` binding never changes (D16).
 
 ## Diagram legend
 
@@ -190,14 +218,14 @@ APIs · ack/nack = message (negative) acknowledgement.
 
 | Requirement | Satisfied by |
 | --- | --- |
-| Notif F1.1 — notify on events without querying the producing service | envelope carries all needed data (party IDs, type, payload); processor reads only the envelope + own DB |
-| Notif F1.2 — notify each party of an event | processor creates one notification per party ID in the envelope; push gateway targets each party's per-user destination |
-| Notif F1.3 — new event types without publisher changes | generic envelope (`eventType` + `payload`); processor handles unknown types generically |
+| Notif F1.1 — notify on events without querying the producing service | each typed event carries all needed data (party IDs, business fields); processor reads only the event + own DB |
+| Notif F1.2 — notify each party of an event | processor creates one notification per entry in the event's `parties`; push gateway targets each party's per-user destination |
+| Notif F1.3 — new event types without publisher changes | reworded under D17/D18: a new event type is a contracts release consumed via a jar bump (no *code* change — registry-driven converter, `DomainEvent`-generic processor, unchanged `order.#` binding). Consumers stay tolerant readers of unknown *fields*; an unknown *type* is a conversion failure — dropped for now, dead-lettered for replay once #65 lands (D7) |
 | Notif F1.4 — delivery failure never affects the producing operation | fire-and-forget publish to the exchange; all retry/failure handling stays on the consumer side of the broker |
 | Notif F2.1 — no duplicate notification on redelivery | unique event-ID constraint checked in the same DB transaction as the notification insert (D4) |
-| Notif F2.2 — retry failed deliveries | nack → TTL retry queue → redelivery with backoff, up to max attempts (D6) |
-| Notif F2.3 — record events that exhaust retries | dead-letter exchange routes them to the durable DLQ for inspection/re-publish (D7) |
-| Notif F2.4 — discard events older than the last applied for the same order | per-entity sequence check against the stored last-applied sequence (D5) |
+| Notif F2.2 — retry failed deliveries | nack → TTL retry queue → redelivery with backoff, up to max attempts (D6; values decided, implementation owned by issue #65) |
+| Notif F2.3 — record events that exhaust retries | dead-letter exchange routes them to the durable DLQ for inspection/re-publish (D7; implementation owned by issue #65) |
+| ~~Notif F2.4 — discard events older than the last applied for the same order~~ | **retired 2026-09-19 (D19)**: the per-entity sequence mechanism was removed; out-of-order deliveries each notify |
 | Notif F3.1 — view recent notifications in-app | Notification REST API + stored rows |
 | Notif F3.2 — mark read/unread | read/unread flag on the notification row, toggled via the REST API |
 | Notif F3.4 — retention window | purge scheduler, `NOTIF_RETENTION_DAYS` (default 30) |
@@ -212,9 +240,15 @@ APIs · ack/nack = message (negative) acknowledgement.
 
 - `NOTIF_RETENTION_DAYS` — retention window for stored notifications;
   default **30** (D9).
-- Retry TTL values (backoff schedule) and the **maximum attempt count**
-  are configuration values; exact numbers are still a team decision
-  (see Open items).
+- Retry TTL and maximum attempts: decided 2026-09-19 — **10 s backoff,
+  3 total attempts**, env-overridable when issue #65 implements the
+  retry/DLQ topology.
+- Migration note (Method-B refactor): a dev broker volume from the
+  fanout era makes the topic-exchange declaration fail
+  (`PRECONDITION_FAILED`), and a dev DB volume still carrying the
+  removed NOT NULL `entity_type`/`entity_id` columns rejects inserts
+  (`ddl-auto: update` never drops columns) — reset both volumes once
+  (see the service README).
 - RabbitMQ durability is **opt-in**: exchanges and queues must be
   declared durable and messages published persistent, or NFR1.2 is
   silently violated.
@@ -227,24 +261,28 @@ Goal: a broker swap (e.g. RabbitMQ → Kafka) touches one adapter package
 and `compose.yaml`, never the business logic.
 
 - **Ports (service-owned interfaces):** inbound, the AMQP listener is a
-  thin adapter that deserializes, calls
-  `eventProcessor.process(EventEnvelope)`, and acks/nacks on the result;
+  thin adapter — the message converter dispatches on the body
+  `eventType` via the registry (D18), the listener calls
+  `eventProcessor.process(DomainEvent)` and acks/nacks on the result;
   outbound (Order Service side), publishing goes through an
-  `EventPublisher.publish(EventEnvelope)` interface with the RabbitMQ
-  implementation as one class. The processor, REST API, and purge job
+  `EventPublisher.publish(DomainEvent)` interface with the RabbitMQ
+  implementation as one class (see the producer conventions in the
+  foc-contracts README). The processor, REST API, and purge job
   import nothing from `org.springframework.amqp` / `com.rabbitmq`.
 - **Enforcement:** broker code lives in its own package (e.g.
   `messaging.rabbitmq`); an ArchUnit test can assert no other package
   imports broker types (not yet written — see Open items).
-- **Envelope stays broker-agnostic:** all business data (event ID,
-  sequence, parties, event type, payload) rides in the JSON body —
-  never in AMQP headers or other broker-specific message properties.
-- **Already portable by construction:** duplicate detection (D4) and
-  stale-event discard (D5) are enforced in this service's own database,
-  not by broker features, so the logic satisfying F2.1/F2.4 is unchanged
-  by any broker swap. The design assumes only the weakest common
-  guarantee — events may arrive twice, late, or out of order — which
-  every mainstream broker meets.
+- **Events stay broker-agnostic:** everything — metadata and business
+  fields, including the canonical `eventType` — rides in the JSON body,
+  never in AMQP headers or other broker-specific message properties
+  (D11/D18). The routing key duplicates the identity for RabbitMQ
+  delivery only; the body alone is self-describing, so bodies stored,
+  logged, or moved to another transport keep their meaning.
+- **Already portable by construction:** duplicate detection (D4) is
+  enforced in this service's own database, not by broker features, so
+  the logic satisfying F2.1 is unchanged by any broker swap. The design
+  assumes only the weakest common guarantee — events may arrive twice
+  or late — which every mainstream broker meets.
 - **Known non-portable surface (accepted trade-off):** the retry and
   dead-letter topology (D6/D7 — TTL retry queue, dead-letter exchange)
   and per-message ack/nack are RabbitMQ mechanisms and are treated as
@@ -277,32 +315,31 @@ is centralized logging (nice-to-have N4).
   desired load balancing for scale-out.
 - **Each consumer brings its own reliability machinery:** its own retry
   queue and DLQ (dead-lettering is configured per queue, so one broken
-  consumer never blocks another), its own processed-event-ID inbox and
-  sequence tracking (redelivery is per queue, so dedupe state cannot be
-  shared), and its own backlog (a slow consumer affects nobody else).
-- **The envelope becomes a public contract** once a second consumer
-  exists: evolve it additively (add fields, never rename or repurpose),
-  require consumers to ignore unknown fields and event types (this
-  service already does, per F1.3), and publish domain facts rather than
-  the producer's internal structures. The platform-wide shape —
-  `entityType` + `entityId` + per-entity `sequence` +
-  `parties[]` instead of order-named fields — was adopted from the
-  start under issue #63 (see "Event envelope"), so new producers and
-  consumers use the same `EventEnvelope` unchanged. The envelope's
-  business-agnostic rule binds additive evolution too: new fields may
-  carry only event-handling semantics; new domain data goes into
-  `payload`, never into new envelope fields.
+  consumer never blocks another), its own processed-event-ID inbox
+  (redelivery is per queue, so dedupe state cannot be shared), and its
+  own backlog (a slow consumer affects nobody else). Bindings are also
+  per queue: a consumer that needs only some order events binds
+  narrower patterns than this service's `order.#`.
+- **The contracts library is already the public contract.** The typed
+  records in `foc-contracts` (D17) are what every producer and
+  consumer compiles against; they evolve additively within a
+  `schemaVersion` (add fields, never rename or repurpose; consumers
+  ignore unknown fields), and breaking changes bump the version — see
+  the "Event conventions" section of the foc-contracts README. New
+  consumers reuse the same records and registry unchanged; a new
+  producing domain adds its own event records, registry entries and
+  exchange.
 - **Events are facts, not commands.** Calls whose caller needs the
   result — e.g. Order → Credit reserve/transfer (Credit F2.1.3, F3.1) —
   stay synchronous REST; the broker carries only "this happened"
   notifications. This is the existing system-level boundary in
   [`architecture.md`](architecture.md).
-- **Exchange topology is deliberately open** until a second producer or
-  consumer actually appears: one exchange per producing domain
-  (`order-events`, `user-events`, …) vs a single topic exchange with
-  routing keys (`order.request.accepted`) and pattern bindings. Both
-  map cleanly onto the current design (and onto Kafka topics, should
-  D11's swap scenario ever happen).
+- **Exchange topology is settled (D16, 2026-09-19):** one **topic
+  exchange per producing domain** (`order-events` today; `user-events`
+  etc. when they appear), routing keys = the registry's canonical
+  identity strings, pattern bindings per consumer (`order.#` here).
+  This also maps cleanly onto Kafka topics, should D11's swap scenario
+  ever happen.
 
 ## Connection topology: one WebSocket, everything else REST
 
@@ -368,14 +405,17 @@ decision to make then.
 
 ## Open items (team decisions still pending)
 
-- Exact retry backoff schedule (TTL values) and maximum attempt count.
+- ~~Exact retry backoff schedule (TTL values) and maximum attempt
+  count~~ — decided 2026-09-19 (10 s / 3 attempts, env-overridable);
+  implementation still owned by issue #65 along with the DLQ.
 - ~~Exchange/queue naming convention, and how the topology is provisioned
   (declared by the application at startup via Spring AMQP vs loaded as
   broker configuration/definitions)~~ — decided 2026-09-19 (D12, D13);
-  the `order-events` exchange type is also settled as fanout (D14).
-- Exchange topology once a second producer or consumer appears:
-  per-domain exchanges vs a single topic exchange with routing keys
-  (see Extensibility notes).
+  the `order-events` exchange type was settled as fanout (D14), then
+  superseded by topic the same day (D16).
+- ~~Exchange topology once a second producer or consumer appears~~ —
+  decided 2026-09-19 (D16): per-domain topic exchanges with pattern
+  bindings.
 - ArchUnit test enforcing the D11 package boundary (write alongside the
   service implementation).
 - ~~WebSocket session mechanics: how the JWT authenticates the STOMP
