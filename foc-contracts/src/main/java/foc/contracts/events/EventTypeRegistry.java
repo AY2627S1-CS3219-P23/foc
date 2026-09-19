@@ -5,96 +5,77 @@
  * (docs/notification-service.md D16-D19): plain-Java single source of
  * truth mapping each event class to its canonical identity string,
  * which serves as both the body eventType and the RabbitMQ routing
- * key. Same day, per the author's versioning decision on PR #75: the
- * catalog is keyed by (eventType, schemaVersion) with one record
- * class per version, so consumers can support several schema
- * versions of one event concurrently.
+ * key.
+ * 2026-09-20: the author decided to remove the schemaVersion
+ * mechanism (added on PR #75 review) as unneeded standing complexity;
+ * the catalog is keyed by identity alone again, and a breaking change
+ * ships as a new event type.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.contracts.events;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 /**
- * The catalog of every broker event: one entry per <em>(canonical
- * identity, schema version)</em> pair, each with its own record class
- * (D18). The identity string (e.g. {@code order.accepted}) serves as
- * both the JSON body's {@code eventType} (what consumers dispatch on,
- * together with {@code schemaVersion}) and the RabbitMQ routing key —
- * publisher and consumer read the same entry, so they can never
- * drift. All versions of an event share one identity/routing key;
- * the version selects the record class.
+ * The catalog of every broker event: one entry per record class,
+ * pairing it with its canonical identity string, e.g.
+ * {@code order.accepted} (D18). That one string serves as both the
+ * JSON body's {@code eventType} (what consumers dispatch on) and the
+ * RabbitMQ routing key — publisher and consumer read the same entry,
+ * so the two can never drift.
  *
  * <p>Adding a new event = one record class + one entry here + one
- * fixture. Adding a new <em>schema version</em> of an existing event
- * (a breaking change) = a new record class (e.g.
- * {@code OrderAcceptedV2}) + an entry with the same identity and the
- * bumped version + its fixture — the old version's entry stays until
- * every producer has migrated and dead-lettered backlog is replayed,
- * letting consumers accept both versions concurrently. Fixtures are
- * named {@code contracts/<identity dots&rarr;hyphens>-v<version>.example.json}
- * (see "Event conventions" in this library's README).
+ * {@code contracts/<identity dots&rarr;hyphens>.example.json} fixture;
+ * the registry-driven contract tests pick it up automatically. A
+ * <em>breaking</em> change to an existing event ships the same way,
+ * as a new event type with its own identity string (e.g.
+ * {@code order.accepted.v2}); consumers reject unknown types, which
+ * covers the migration window (see "Event conventions" in this
+ * library's README).
  *
  * <p>Plain Java on purpose: this library stays free of framework
  * dependencies (D15).
  */
 public final class EventTypeRegistry {
 
-	/**
-	 * One catalog row: the record class for one (identity, schema
-	 * version) pair. Consumers reject a version with no entry as a
-	 * conversion failure (breaking changes bump the version; additive
-	 * ones don't).
-	 */
-	public record Entry(Class<? extends DomainEvent> eventClass, String eventType, int schemaVersion) {
+	/** One catalog row: the event class and its canonical identity string. */
+	public record Entry(Class<? extends DomainEvent> eventClass, String eventType) {
 	}
 
 	private static final List<Entry> ENTRIES = List.of(
-			new Entry(OrderCreated.class, "order.created", 1),
-			new Entry(OrderAccepted.class, "order.accepted", 1),
-			new Entry(OrderCollected.class, "order.collected", 1),
-			new Entry(OrderCompleted.class, "order.completed", 1),
-			new Entry(OrderCancelled.class, "order.cancelled", 1),
-			new Entry(OrderExpired.class, "order.expired", 1),
-			new Entry(CourierArrived.class, "order.courier-arrived", 1));
+			new Entry(OrderCreated.class, "order.created"),
+			new Entry(OrderAccepted.class, "order.accepted"),
+			new Entry(OrderCollected.class, "order.collected"),
+			new Entry(OrderCompleted.class, "order.completed"),
+			new Entry(OrderCancelled.class, "order.cancelled"),
+			new Entry(OrderExpired.class, "order.expired"),
+			new Entry(CourierArrived.class, "order.courier-arrived"));
 
-	private static final Map<String, List<Entry>> BY_EVENT_TYPE = new HashMap<>();
+	private static final Map<String, Entry> BY_EVENT_TYPE = new HashMap<>();
 	private static final Map<Class<?>, Entry> BY_CLASS = new HashMap<>();
 
 	static {
 		for (Entry entry : ENTRIES) {
-			List<Entry> sameType = BY_EVENT_TYPE.computeIfAbsent(entry.eventType(), key -> new ArrayList<>());
-			if (sameType.stream().anyMatch(other -> other.schemaVersion() == entry.schemaVersion())) {
-				throw new IllegalStateException("duplicate (eventType, schemaVersion): "
-						+ entry.eventType() + " v" + entry.schemaVersion());
+			if (BY_EVENT_TYPE.put(entry.eventType(), entry) != null) {
+				throw new IllegalStateException("duplicate eventType: " + entry.eventType());
 			}
-			sameType.add(entry);
 			if (BY_CLASS.put(entry.eventClass(), entry) != null) {
 				throw new IllegalStateException("duplicate event class: " + entry.eventClass());
 			}
 		}
-		BY_EVENT_TYPE.replaceAll((key, sameType) -> List.copyOf(sameType));
 	}
 
-	/** All supported versions of this identity string; empty if unknown. */
-	public static List<Entry> entriesFor(String eventType) {
-		return BY_EVENT_TYPE.getOrDefault(eventType, List.of());
-	}
-
-	/** The catalog row for this (identity, schema version) pair, if supported. */
-	public static Optional<Entry> entryFor(String eventType, int schemaVersion) {
-		return entriesFor(eventType).stream()
-				.filter(entry -> entry.schemaVersion() == schemaVersion)
-				.findFirst();
+	/** The catalog row registered for this identity string, if any. */
+	public static Optional<Entry> entryFor(String eventType) {
+		return Optional.ofNullable(BY_EVENT_TYPE.get(eventType));
 	}
 
 	/**
 	 * The routing key (= canonical identity string) for this event
-	 * class; all schema versions of an event share it.
+	 * class.
 	 *
 	 * @throws IllegalArgumentException if the class is not registered
 	 */

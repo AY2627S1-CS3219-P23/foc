@@ -23,12 +23,11 @@ class EventTypeRegistryTest {
 	}
 
 	@Test
-	void typeVersionPairsAndClassesAreUnique() {
-		Set<String> typeVersions = new HashSet<>();
+	void eventTypesAndClassesAreUnique() {
+		Set<String> types = new HashSet<>();
 		Set<Class<?>> classes = new HashSet<>();
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
-			assertTrue(typeVersions.add(entry.eventType() + " v" + entry.schemaVersion()),
-					"duplicate (eventType, schemaVersion): " + entry.eventType() + " v" + entry.schemaVersion());
+			assertTrue(types.add(entry.eventType()), "duplicate eventType: " + entry.eventType());
 			assertTrue(classes.add(entry.eventClass()), "duplicate class: " + entry.eventClass());
 		}
 	}
@@ -44,30 +43,14 @@ class EventTypeRegistryTest {
 	@Test
 	void lookupsRoundTripForEveryEntry() {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
-			assertEquals(entry,
-					EventTypeRegistry.entryFor(entry.eventType(), entry.schemaVersion()).orElseThrow());
-			assertTrue(EventTypeRegistry.entriesFor(entry.eventType()).contains(entry));
+			assertEquals(entry, EventTypeRegistry.entryFor(entry.eventType()).orElseThrow());
 			assertEquals(entry.eventType(), EventTypeRegistry.routingKeyFor(entry.eventClass()));
 		}
 	}
 
 	@Test
-	void everyEntryDeclaresAPositiveSchemaVersion() {
-		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
-			assertTrue(entry.schemaVersion() >= 1,
-					entry.eventType() + " must declare a positive supported schemaVersion");
-		}
-	}
-
-	@Test
 	void unknownEventTypeResolvesToEmpty() {
-		assertTrue(EventTypeRegistry.entriesFor("order.refunded").isEmpty());
-		assertTrue(EventTypeRegistry.entryFor("order.refunded", 1).isEmpty());
-	}
-
-	@Test
-	void unsupportedVersionOfKnownTypeResolvesToEmpty() {
-		assertTrue(EventTypeRegistry.entryFor("order.accepted", 99).isEmpty());
+		assertTrue(EventTypeRegistry.entryFor("order.refunded").isEmpty());
 	}
 
 	@Test

@@ -32,10 +32,13 @@ import java.util.Set;
  * message converter, so an instance can never carry a mismatched type
  * string and the records need no validation boilerplate.
  *
- * <p>Contracts evolve additively only within a {@code schemaVersion};
- * consumers ignore unknown fields. Breaking changes bump
- * {@code schemaVersion} (see "Event conventions" in this library's
- * README).
+ * <p>Contracts evolve additively only — add fields (marked
+ * {@link Nullable} until every producer stamps them), never rename or
+ * repurpose; consumers ignore unknown fields. A breaking change ships
+ * as a <em>new event type</em> with its own identity string, record
+ * and registry entry (see "Event conventions" in this library's
+ * README) — decided 2026-09-20, removing the earlier schemaVersion
+ * mechanism as unneeded complexity.
  */
 public interface DomainEvent {
 
@@ -45,14 +48,11 @@ public interface DomainEvent {
 	 * is derived ({@link #eventType()}) and injected by the message
 	 * converter — never a record component.
 	 */
-	Set<String> METADATA_FIELDS = Set.of("eventId", "eventType", "schemaVersion",
+	Set<String> METADATA_FIELDS = Set.of("eventId", "eventType",
 			"occurredAt", "producer", "correlationId", "parties");
 
 	/** Unique per event; duplicate detection (D4, F2.1). */
 	String eventId();
-
-	/** Contract version of this event's shape; bumped on breaking changes. */
-	int schemaVersion();
 
 	/** When the fact happened; ISO-8601 UTC on the wire. */
 	Instant occurredAt();
