@@ -10,6 +10,7 @@
  */
 package foc.notification.messaging.stomp;
 
+import java.util.Arrays;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -54,7 +55,12 @@ class WebSocketStompConfig implements WebSocketMessageBrokerConfigurer {
 			@Value("${notification.websocket.allowed-origins}") String allowedOrigins) {
 		this.jwtChannelInterceptor = jwtChannelInterceptor;
 		this.jsonMapper = jsonMapper;
-		this.allowedOriginPatterns = allowedOrigins.split(",");
+		// Trim entries so "http://a, http://b" doesn't yield a pattern
+		// with a leading space that silently never matches.
+		this.allowedOriginPatterns = Arrays.stream(allowedOrigins.split(","))
+				.map(String::trim)
+				.filter(pattern -> !pattern.isEmpty())
+				.toArray(String[]::new);
 	}
 
 	@Bean

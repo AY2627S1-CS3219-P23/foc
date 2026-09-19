@@ -86,4 +86,21 @@ class JwtVerifierTest {
 				.isInstanceOf(IllegalStateException.class)
 				.hasMessageContaining("JWT_SECRET");
 	}
+
+	@Test
+	void rejectsNonHs256Algorithm() {
+		// A 48-byte secret makes jjwt auto-select HS384, producing a
+		// token whose signature verifies but whose algorithm violates
+		// the platform's HS256 convention.
+		String longSecret = SECRET + "-padding-to-48-bytes!";
+		String hs384Token = Jwts.builder()
+				.subject("usr-req-1001")
+				.expiration(new Date(System.currentTimeMillis() + 60_000))
+				.signWith(key(longSecret))
+				.compact();
+
+		assertThatThrownBy(() -> new JwtVerifier(longSecret).verifiedSubject(hs384Token))
+				.isInstanceOf(MalformedJwtException.class)
+				.hasMessageContaining("algorithm");
+	}
 }

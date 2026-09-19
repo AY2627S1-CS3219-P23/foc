@@ -57,7 +57,12 @@ Entry template:
   duplicate/stale events, CONNECT rejection for missing/invalid/
   expired tokens, SockJS fallback path; existing suites unaffected)
   and `dependency:tree` confirming no Jackson 2 databind was pulled
-  in. Reviewed via pull request.
+  in. Reviewed via pull request. Copilot review fixes on the same PR
+  (author-directed): the SockJS test now uses an XHR-only transport
+  list so the fallback path is actually exercised (WebSocket-first
+  always won locally); allowed-origin patterns are trimmed after the
+  comma split; the verifier explicitly rejects non-HS256 algorithms
+  (defense in depth, with a unit test minting an HS384 token).
 
 ## 2026-09-19 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)

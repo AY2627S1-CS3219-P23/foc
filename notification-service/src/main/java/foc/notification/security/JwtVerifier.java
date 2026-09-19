@@ -10,6 +10,7 @@
 package foc.notification.security;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.MalformedJwtException;
@@ -53,8 +54,13 @@ public class JwtVerifier {
 	 *         has an invalid signature, is expired, or has no subject
 	 */
 	public String verifiedSubject(String token) {
-		Claims claims = parser.parseSignedClaims(token).getPayload();
-		String subject = claims.getSubject();
+		Jws<Claims> jws = parser.parseSignedClaims(token);
+		// Defense in depth: the platform convention is HS256 exactly.
+		// (The signature was already verified against the shared key.)
+		if (!"HS256".equals(jws.getHeader().getAlgorithm())) {
+			throw new MalformedJwtException("unexpected signature algorithm");
+		}
+		String subject = jws.getPayload().getSubject();
 		if (subject == null || subject.isBlank()) {
 			throw new MalformedJwtException("token has no subject");
 		}

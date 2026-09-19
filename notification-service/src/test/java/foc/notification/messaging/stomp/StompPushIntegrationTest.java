@@ -43,7 +43,6 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 import org.springframework.web.socket.sockjs.client.RestTemplateXhrTransport;
 import org.springframework.web.socket.sockjs.client.SockJsClient;
-import org.springframework.web.socket.sockjs.client.WebSocketTransport;
 
 /**
  * Drives {@link EventProcessor} directly (real transaction commit →
@@ -239,10 +238,10 @@ class StompPushIntegrationTest {
 	}
 
 	@Test
-	void deliversThroughSockJsFallbackStack() throws Exception {
-		SockJsClient sockJsClient = new SockJsClient(List.of(
-				new WebSocketTransport(new StandardWebSocketClient()),
-				new RestTemplateXhrTransport()));
+	void deliversThroughSockJsXhrFallbackWithoutWebSocket() throws Exception {
+		// XHR-only transport list: forces the SockJS fallback path a
+		// WebSocket-capable local client would otherwise never take.
+		SockJsClient sockJsClient = new SockJsClient(List.of(new RestTemplateXhrTransport()));
 		WebSocketStompClient client = new WebSocketStompClient(sockJsClient);
 		client.setMessageConverter(new JacksonJsonMessageConverter());
 
