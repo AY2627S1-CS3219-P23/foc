@@ -117,13 +117,18 @@ database-per-service rule is untouched.
 
 ## Event envelope (fields required by the decisions above)
 
-The Order Service publishes a generic envelope; each field exists
-because a step of generic event handling — dedupe, ordering, fan-out,
-display — demands it, and **only** such fields belong at envelope
-level (issue #63 decision, 2026-09-19: the platform-wide shape from
-the Extensibility section was adopted from the start, replacing the
-order-named fields `orderId` / `requesterId` / `courierId`; domain
-identity and roles ride in `payload`). The envelope is code:
+The Order Service publishes a generic envelope. **Contract rule: the
+envelope is business-agnostic** (issue #63 decision, 2026-09-19). A
+field may exist at envelope level only because a step of generic
+event handling — dedupe, ordering, fan-out, display — demands it;
+business vocabulary (domain identifiers under their business names,
+party roles, order details) never appears as an envelope field and
+always rides inside `payload`. This is a standing constraint on
+future evolution, not just today's shape: even additive changes may
+add only handling-semantics fields — a domain-named envelope field is
+a contract violation. (The platform-wide shape from the Extensibility
+section was adopted from the start, replacing the order-named fields
+`orderId` / `requesterId` / `courierId`.) The envelope is code:
 `foc.contracts.events.EventEnvelope` in `foc-contracts/`, with the
 canonical example checked in as
 [`foc-contracts/src/main/resources/contracts/order-event.example.json`](../foc-contracts/src/main/resources/contracts/order-event.example.json)
@@ -263,7 +268,10 @@ is centralized logging (nice-to-have N4).
   `entityType` + `entityId` + per-entity `sequence` +
   `parties[]` instead of order-named fields — was adopted from the
   start under issue #63 (see "Event envelope"), so new producers and
-  consumers use the same `EventEnvelope` unchanged.
+  consumers use the same `EventEnvelope` unchanged. The envelope's
+  business-agnostic rule binds additive evolution too: new fields may
+  carry only event-handling semantics; new domain data goes into
+  `payload`, never into new envelope fields.
 - **Events are facts, not commands.** Calls whose caller needs the
   result — e.g. Order → Credit reserve/transfer (Credit F2.1.3, F3.1) —
   stay synchronous REST; the broker carries only "this happened"

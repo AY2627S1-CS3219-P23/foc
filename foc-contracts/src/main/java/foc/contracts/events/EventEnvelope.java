@@ -24,14 +24,16 @@ import java.util.Map;
  * classpath; both sides' contract tests assert against that fixture
  * (issue #63).
  *
- * <p>Every envelope field exists for a step of generic event handling
- * — dedupe, ordering, fan-out, display; nothing here is specific to
- * one business domain. All domain data (order IDs under their business
- * names, party roles, message details) rides in {@code payload}, and
- * everything rides in this JSON body — never in AMQP headers or other
- * broker-specific message properties (D11). The envelope evolves
- * additively only: add fields, never rename or repurpose, and
- * consumers must ignore unknown fields and event types (F1.3).
+ * <p>Contract rule: the envelope is <strong>business-agnostic</strong>
+ * (design doc, "Event envelope"). Every field exists for a step of
+ * generic event handling — dedupe, ordering, fan-out, display; nothing
+ * here is specific to one business domain, and no future field may be.
+ * All domain data (order IDs under their business names, party roles,
+ * message details) rides in {@code payload}, and everything rides in
+ * this JSON body — never in AMQP headers or other broker-specific
+ * message properties (D11). The envelope evolves additively only: add
+ * handling-semantics fields, never rename or repurpose, and consumers
+ * must ignore unknown fields and event types (F1.3).
  *
  * <p>Deliberately a plain record with no Jackson annotations, keeping
  * this library free of framework dependencies (D15): Jackson binds
