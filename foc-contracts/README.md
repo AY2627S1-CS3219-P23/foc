@@ -26,14 +26,16 @@ Only things that are a *contract between services* belong here:
   `OrderEvent` interfaces and one flat record per broker event —
   `OrderCreated`, `OrderAccepted`, `OrderCollected`, `OrderCompleted`,
   `OrderCancelled`, `OrderExpired`, `CourierArrived`.
-- **The `EventTypeRegistry`** (D18): the single source of truth
-  pairing each record class with its canonical identity string
-  (e.g. `order.accepted`), which serves as both the JSON body's
-  `eventType` and the RabbitMQ routing key.
-- **One canonical fixture per event** under
+- **The `EventTypeRegistry`** (D18): the single source of truth,
+  keyed by *(canonical identity, schemaVersion)* with one record
+  class per version. The identity string (e.g. `order.accepted`)
+  serves as both the JSON body's `eventType` and the RabbitMQ
+  routing key; the version selects the record class.
+- **One canonical fixture per registry entry** under
   [`src/main/resources/contracts/`](src/main/resources/contracts/)
-  (shipped on this jar's classpath) — the contract artifacts each
-  side's contract tests assert against.
+  (shipped on this jar's classpath), named
+  `<identity dots→hyphens>-v<schemaVersion>.example.json` — the
+  contract artifacts each side's contract tests assert against.
 
 Service-private names (queue names, table names, internal config) stay
 in their service. The published jar has **no dependencies** — plain
@@ -74,14 +76,15 @@ Leong Wei Zhi, 2026-09-19 — D16–D19 in
 4. **Evolution & validation.** Within a `schemaVersion`: **additive
    changes only** — add fields, never rename or repurpose; consumers
    ignore unknown fields (tolerant readers). A breaking change bumps
-   `schemaVersion`, and consumers **reject any version other than the
-   one their registry entry supports** as a conversion failure. Every
-   record component is **required on the wire** unless marked with the
-   contracts' `@Nullable` annotation (currently only
-   `OrderCancelled.courierId`); consumers reject events with missing
-   required fields the same way. An unknown event *type* is likewise
-   a conversion failure (all of these dead-letter for replay once the
-   DLQ exists — issue #65).
+   `schemaVersion` and gets **its own record class and registry
+   entry**, so consumers can support several versions of one event
+   concurrently; a version with **no registry entry is rejected** as
+   a conversion failure. Every record component is **required on the
+   wire** unless marked with the contracts' `@Nullable` annotation
+   (currently only `OrderCancelled.courierId`); consumers reject
+   events with missing required fields the same way. An unknown event
+   *type* is likewise a conversion failure (all of these dead-letter
+   for replay once the DLQ exists — issue #65).
 
 5. **Topology naming.** One durable **topic exchange per producing
    domain** (`order-events`); consumer queues are
@@ -92,12 +95,28 @@ Leong Wei Zhi, 2026-09-19 — D16–D19 in
 6. **Adding a new event** (checklist):
    1. create the record implementing `OrderEvent` (or `DomainEvent`
       for a new domain);
-   2. add its `EventTypeRegistry` entry;
-   3. add `contracts/<identity dots→hyphens>.example.json`;
+   2. add its `EventTypeRegistry` entry (version 1);
+   3. add `contracts/<identity dots→hyphens>-v1.example.json`;
    4. `./mvnw install` — the registry-driven contract tests pick the
       new event up automatically (and fail loudly if the fixture is
       missing). Consumers need only a jar bump; pattern bindings don't
       change.
+
+6a. **Adding a new schema version** of an existing event (a breaking
+   change):
+   1. create a **new** record class for the new shape (e.g.
+      `OrderAcceptedV2` implementing the same interfaces);
+   2. add its entry — same identity string, bumped version
+      (`("order.accepted", 2)`) — **keeping the old entry** so
+      consumers accept both versions during the migration window;
+   3. add `contracts/order-accepted-v2.example.json`;
+   4. `./mvnw install`; consumers bump the jar. Consumers that read
+      events only through `DomainEvent`/`OrderEvent` (e.g. the
+      notification pipeline) need no code change; per-type logic
+      handles the new class where it differs.
+   5. Once every producer publishes the new version and dead-lettered
+      backlog is replayed, retire the old entry, class, and fixture
+      in a later contracts release.
 
 7. **Producer conventions** (for the future order-service): publish
    **after** the local DB commit; enable **publisher confirms**; send

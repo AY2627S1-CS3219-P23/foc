@@ -49,7 +49,8 @@ class DomainEventContractTest {
 	@Test
 	void everyCatalogedEventHasABindingFixture() throws IOException {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
-			String path = "/contracts/" + entry.eventType().replace('.', '-') + ".example.json";
+			String path = "/contracts/" + entry.eventType().replace('.', '-')
+					+ "-v" + entry.schemaVersion() + ".example.json";
 			DomainEvent event;
 			try (InputStream fixture = getClass().getResourceAsStream(path)) {
 				assertThat(fixture).as("fixture %s on classpath via foc-contracts jar", path).isNotNull();

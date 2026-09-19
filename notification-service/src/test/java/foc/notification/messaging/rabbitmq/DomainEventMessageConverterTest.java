@@ -47,7 +47,7 @@ class DomainEventMessageConverterTest {
 	@Test
 	void dispatchesFixtureToItsRecordClass() throws IOException {
 		byte[] body;
-		try (InputStream fixture = getClass().getResourceAsStream("/contracts/order-accepted.example.json")) {
+		try (InputStream fixture = getClass().getResourceAsStream("/contracts/order-accepted-v1.example.json")) {
 			assertThat(fixture).as("fixture on classpath via foc-contracts jar").isNotNull();
 			body = fixture.readAllBytes();
 		}
@@ -113,7 +113,7 @@ class DomainEventMessageConverterTest {
 	@Test
 	void nullableCourierIdIsAcceptedOnOrderCancelled() throws IOException {
 		byte[] body;
-		try (InputStream fixture = getClass().getResourceAsStream("/contracts/order-cancelled.example.json")) {
+		try (InputStream fixture = getClass().getResourceAsStream("/contracts/order-cancelled-v1.example.json")) {
 			assertThat(fixture).as("fixture on classpath via foc-contracts jar").isNotNull();
 			body = fixture.readAllBytes();
 		}

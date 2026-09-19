@@ -20,6 +20,8 @@ import foc.contracts.events.EventTypeRegistry;
 import foc.contracts.events.Nullable;
 import java.lang.reflect.RecordComponent;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.support.converter.MessageConversionException;
@@ -40,8 +42,9 @@ import tools.jackson.databind.node.ObjectNode;
  *
  * <p>Every inbound failure — malformed JSON, missing or unknown
  * {@code eventType}, an unsupported {@code schemaVersion} (breaking
- * changes bump it; the registry says which version this consumer
- * speaks), binding errors, or a missing required field (components
+ * changes bump it; the registry says which versions this consumer
+ * speaks — several may be supported concurrently, each with its own
+ * record class), binding errors, or a missing required field (components
  * not marked {@code @Nullable} in the contract) — surfaces as the
  * AMQP {@link MessageConversionException}, which the listener
  * container's default error handler classifies as fatal and rejects
@@ -93,13 +96,22 @@ class DomainEventMessageConverter implements MessageConverter {
 			throw new MessageConversionException("missing or non-string eventType field");
 		}
 		String eventType = typeNode.stringValue();
-		EventTypeRegistry.Entry entry = EventTypeRegistry.entryFor(eventType)
-				.orElseThrow(() -> new MessageConversionException("unknown eventType: " + eventType));
-		JsonNode versionNode = tree.path("schemaVersion");
-		if (!versionNode.isIntegralNumber() || versionNode.intValue() != entry.schemaVersion()) {
-			throw new MessageConversionException("unsupported schemaVersion " + versionNode
-					+ " for " + eventType + " (supported: " + entry.schemaVersion() + ")");
+		List<EventTypeRegistry.Entry> candidates = EventTypeRegistry.entriesFor(eventType);
+		if (candidates.isEmpty()) {
+			throw new MessageConversionException("unknown eventType: " + eventType);
 		}
+		JsonNode versionNode = tree.path("schemaVersion");
+		String claimedVersion = versionNode.isMissingNode() ? "missing" : versionNode.toString();
+		String supportedVersions = candidates.stream()
+				.map(candidate -> String.valueOf(candidate.schemaVersion()))
+				.collect(Collectors.joining(", "));
+		if (!versionNode.isIntegralNumber()) {
+			throw new MessageConversionException("unsupported schemaVersion " + claimedVersion
+					+ " for " + eventType + " (supported: " + supportedVersions + ")");
+		}
+		EventTypeRegistry.Entry entry = EventTypeRegistry.entryFor(eventType, versionNode.intValue())
+				.orElseThrow(() -> new MessageConversionException("unsupported schemaVersion "
+						+ claimedVersion + " for " + eventType + " (supported: " + supportedVersions + ")"));
 		DomainEvent event;
 		try {
 			event = jsonMapper.treeToValue(tree, entry.eventClass());

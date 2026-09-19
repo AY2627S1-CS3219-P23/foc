@@ -54,7 +54,16 @@ Entry template:
   already decided (version-bump-is-breaking, injected eventType,
   courierId nullability); constant rename WORK_QUEUE →
   ORDER_EVENTS_QUEUE was an author naming decision from neutral
-  options.
+  options. After the tool explained the single-supported-version
+  limitation of the first schemaVersion gate (a bump would reject all
+  in-flight traffic on the lagging side), the author chose the
+  registry-keyed-by-(eventType, schemaVersion) model — one record
+  class per version, concurrent version support, fixtures renamed
+  `<identity>-v<version>.example.json` — over strict big-bang and
+  upcaster alternatives presented factually; the tool implemented it
+  (registry `entriesFor`/`entryFor(type, version)` API, converter
+  lookup + clearer unsupported-version errors, docs and the
+  add-a-new-schema-version checklist in the conventions).
 - **Prompt(s):** Asked to redesign the RabbitMQ architecture from the
   generic envelope (Method A) to explicit business-specific contracts
   (Method B). The tool surfaced the AI policy and ran neutral options

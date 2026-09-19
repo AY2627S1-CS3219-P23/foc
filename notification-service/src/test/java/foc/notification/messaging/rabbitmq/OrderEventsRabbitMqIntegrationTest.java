@@ -122,7 +122,7 @@ class OrderEventsRabbitMqIntegrationTest {
 
 	private static byte[] canonicalFixtureBytes() throws IOException {
 		try (InputStream fixture = OrderEventsRabbitMqIntegrationTest.class
-				.getResourceAsStream("/contracts/order-accepted.example.json")) {
+				.getResourceAsStream("/contracts/order-accepted-v1.example.json")) {
 			assertThat(fixture).isNotNull();
 			return fixture.readAllBytes();
 		}

@@ -23,11 +23,12 @@ class EventTypeRegistryTest {
 	}
 
 	@Test
-	void eventTypesAndClassesAreUnique() {
-		Set<String> types = new HashSet<>();
+	void typeVersionPairsAndClassesAreUnique() {
+		Set<String> typeVersions = new HashSet<>();
 		Set<Class<?>> classes = new HashSet<>();
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
-			assertTrue(types.add(entry.eventType()), "duplicate eventType: " + entry.eventType());
+			assertTrue(typeVersions.add(entry.eventType() + " v" + entry.schemaVersion()),
+					"duplicate (eventType, schemaVersion): " + entry.eventType() + " v" + entry.schemaVersion());
 			assertTrue(classes.add(entry.eventClass()), "duplicate class: " + entry.eventClass());
 		}
 	}
@@ -43,8 +44,9 @@ class EventTypeRegistryTest {
 	@Test
 	void lookupsRoundTripForEveryEntry() {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
-			assertEquals(entry.eventClass(), EventTypeRegistry.classFor(entry.eventType()).orElseThrow());
-			assertEquals(entry, EventTypeRegistry.entryFor(entry.eventType()).orElseThrow());
+			assertEquals(entry,
+					EventTypeRegistry.entryFor(entry.eventType(), entry.schemaVersion()).orElseThrow());
+			assertTrue(EventTypeRegistry.entriesFor(entry.eventType()).contains(entry));
 			assertEquals(entry.eventType(), EventTypeRegistry.routingKeyFor(entry.eventClass()));
 		}
 	}
@@ -59,7 +61,13 @@ class EventTypeRegistryTest {
 
 	@Test
 	void unknownEventTypeResolvesToEmpty() {
-		assertTrue(EventTypeRegistry.classFor("order.refunded").isEmpty());
+		assertTrue(EventTypeRegistry.entriesFor("order.refunded").isEmpty());
+		assertTrue(EventTypeRegistry.entryFor("order.refunded", 1).isEmpty());
+	}
+
+	@Test
+	void unsupportedVersionOfKnownTypeResolvesToEmpty() {
+		assertTrue(EventTypeRegistry.entryFor("order.accepted", 99).isEmpty());
 	}
 
 	@Test
