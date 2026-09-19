@@ -31,8 +31,11 @@
   decided, from neutral options (per-service DTO copies + shared
   fixture vs. shared DTO in foc-contracts; fixture location; payload
   Java type), that the EventEnvelope record and canonical fixture live
-  in foc-contracts; the tool recommended that placement when asked and
-  updated this document and the Event envelope section accordingly.
+  in foc-contracts; when asked for a view on placement the tool
+  restated constraints already documented in the repo (fixture ships
+  in the shared jar, the library's framework-free rule, additive-only
+  evolution), the author decided, and the tool updated this document
+  and the Event envelope section accordingly.
   Same day, on PR review, the author decided envelope fields must be
   restricted to event-handling semantics and chose (from neutral
   options: grouping-key generality, parties element shape) to adopt

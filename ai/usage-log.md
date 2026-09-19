@@ -31,38 +31,49 @@ Entry template:
   D15 amendment, the Event envelope section, and READMEs updated.
   Same-PR revisions: fixture renamed to `order-event.example.json`
   (author request); envelope fields restricted to event-handling
-  semantics (author decision) — the doc's platform-wide shape
-  `aggregateType` + `aggregateId` + `parties[]` adopted in place of
-  `orderId` / `requesterId` / `courierId`, with domain identity and
-  roles moved into `payload`; `type` renamed to `eventType` (author
-  suggestion, symmetry with the entity-type field); the grouping pair
-  named `entityType`/`entityId` — the author asked for alternatives
-  to "aggregate" and chose entity over the DDD-conventional
-  aggregate* and CloudEvents-style subject*, preferring plain English
-  over pattern jargon; record, fixture, contract test, and design doc
-  updated to match.
-- **Prompt(s):** Asked to pick an unblocked notification issue and
-  plan it; the tool picked #63 (critical path) and presented the open
-  design decisions as options: DTO location (per-service copies +
-  shared fixture vs. shared record in foc-contracts — the question
-  D15 explicitly deferred to #63), fixture location, and payload Java
-  type. The author chose the fixture-in-foc-contracts and
-  `Map<String, Object>` payload options, asked for the tool's
-  recommendation on DTO location, and approved its foc-contracts
-  recommendation (rationale: fixture already ships in the jar both
-  services depend on; a plain record keeps the library
-  framework-free; additive-only evolution is already mandated).
-  Follow-up rounds: the author questioned why the test exists and
-  where it lives (the tool explained: the contract is the JSON wire
-  format, tolerant reading is consumer-side mapper behavior, and
-  foc-contracts is deliberately dependency-free), asked why the
-  fixture lives in foc-contracts, then directed that envelope fields
-  relate only to event handling; the tool presented grouping-key and
-  parties-shape options neutrally and the author chose
-  aggregateType + aggregateId and a plain user-ID list.
-- **Author review:** All three contract decisions confirmed by the
-  author before implementation (DTO location explicitly, after
-  requesting and weighing the tool's recommendation). Verified with
+  semantics (author decision) — the doc's platform-wide shape,
+  finally named `entityType` + `entityId` + `parties[]`, adopted in
+  place of `orderId` / `requesterId` / `courierId`, with domain
+  identity and roles moved into `payload`; `type` renamed to
+  `eventType` (author suggestion, symmetry with the entity-type
+  field); on the grouping pair's name the author asked for
+  alternatives to "aggregate" and chose entity over the
+  DDD-conventional aggregate* and CloudEvents-style subject*,
+  preferring plain English over pattern jargon; record, fixture,
+  contract test, and design doc updated to match.
+- **Prompt(s):** The author directed the tool to pick an open
+  notification issue that is not blocked by other issues and plan it;
+  applying that author-set criterion, the tool identified #63 as the
+  only unblocked critical-path candidate (issue selection followed
+  the team's existing backlog priorities — no requirements or
+  prioritization work was done). The open design decisions were
+  presented as neutral options first: DTO location (per-service
+  copies + shared fixture vs. shared record in foc-contracts — the
+  question team decision D15 had explicitly deferred to #63), fixture
+  location, and payload Java type. The author chose the
+  fixture-in-foc-contracts and `Map<String, Object>` payload options;
+  on DTO location the author asked for the tool's view, and the tool
+  restated constraints already recorded in the repo (the fixture, per
+  the author's own prior choice, ships in the jar both services
+  depend on; the library's documented framework-free rule; the design
+  doc's additive-only evolution rule). The author weighed those and
+  made the placement decision, recorded as the D15 amendment in
+  `docs/notification-service.md`. Follow-up rounds: the author
+  questioned why the test exists and where it lives (the tool
+  explained the existing documented behavior: the contract is the
+  JSON wire format, tolerant reading is consumer-side mapper
+  behavior, and foc-contracts is deliberately dependency-free), asked
+  why the fixture lives in foc-contracts, then directed that envelope
+  fields relate only to event handling; the tool presented
+  grouping-key and parties-shape options neutrally and the author
+  chose the two-field grouping pair (finally named
+  `entityType`/`entityId`) and a plain user-ID list. Per the AI Usage
+  Policy, decision authority remained with the author throughout:
+  every design choice in this entry was made by the author, and the
+  author owns the recorded decisions and their rationale.
+- **Author review:** All three contract decisions made and confirmed
+  by the author before implementation (DTO location after weighing
+  the documented constraints the tool restated). Verified with
   `./mvnw install` (foc-contracts) and `./mvnw test`
   (notification-service, 5/5 green including the 4 new contract
   tests); reviewed via pull request.
