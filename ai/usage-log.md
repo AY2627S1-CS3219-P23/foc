@@ -44,7 +44,10 @@ Entry template:
   industry conventions, then decided on a shared constants library; the
   tool presented forms (config file vs Java library vs contract folder
   + tests) neutrally, including the conflict with the existing
-  no-shared-code convention.
+  no-shared-code convention. Naming rounds (module name kept as
+  foc-contracts; constants class named EventContracts over
+  MessagingContracts to avoid colliding with a possible future N6 chat
+  feature) were likewise author decisions from neutral options.
 - **Author review:** All four open design decisions were made by the
   author (D12 app-declared provisioning via Spring AMQP, D13
   `order-events` / `notification-service.order-events` naming, D14

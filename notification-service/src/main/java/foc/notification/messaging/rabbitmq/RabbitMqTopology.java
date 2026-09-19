@@ -7,7 +7,7 @@
  */
 package foc.notification.messaging.rabbitmq;
 
-import foc.contracts.messaging.MessagingContracts;
+import foc.contracts.events.EventContracts;
 
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
@@ -44,7 +44,7 @@ public class RabbitMqTopology {
 
 	@Bean
 	FanoutExchange orderEventsExchange() {
-		return new FanoutExchange(MessagingContracts.ORDER_EVENTS_EXCHANGE, true, false);
+		return new FanoutExchange(EventContracts.ORDER_EVENTS_EXCHANGE, true, false);
 	}
 
 	@Bean

@@ -14,7 +14,7 @@ convention in [`AGENTS.md`](../AGENTS.md).
 
 Only things that are a *contract between services* belong here, e.g.
 the broker exchange names both producer and consumer must agree on
-(`MessagingContracts.ORDER_EVENTS_EXCHANGE`). Service-private names
+(`EventContracts.ORDER_EVENTS_EXCHANGE`). Service-private names
 (queue names, table names, internal config) stay in their service.
 The library has **no framework dependencies** — plain constants only —
 so depending on it never drags Spring or broker types into a service.
