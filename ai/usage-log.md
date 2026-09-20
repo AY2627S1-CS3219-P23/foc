@@ -59,6 +59,11 @@ Entry template:
   references, sequence-diagram endpoint paths marked illustrative),
   leaving the policy-driven deviation — no AI-drafted trade-off
   matrices for the decisions — documented in the doc itself.
+  A second follow-up judged the document unreadable and over-written;
+  the tool rewrote it for concision — fragment-style table cells, a
+  status block diagram, a timeline, and a dependency flowchart in
+  place of prose — with no change to any decision, status, or open
+  item.
 - **Author review:** Tables checked against the D1/D2 documents and
   the issue tracker; merged via pull request.
 

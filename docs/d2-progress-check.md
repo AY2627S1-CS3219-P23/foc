@@ -1,22 +1,16 @@
 <!--
   AI-assisted (CS3219 AI Usage Policy disclosure):
   Tool: Claude Code (Fable 5), 2026-09-20.
-  Scope: D2 progress-check readiness document. The tool compiled the
-  status inventory, the D1-backlog traceability tables, and the D2
-  rubric gap analysis from the course D2 instructions, the team's D1
-  document, and the repository/issue state as of 2026-09-20; it also
-  transcribed the role-capability matrix from the D1 backlog and drew
-  the target-architecture diagrams strictly from docs/architecture.md
-  plus the decisions below. Every design decision in the Decisions
-  table (D1-D9) was made by Leong Wei Zhi on 2026-09-20 via
-  neutral-options Q&As (logged in ai/usage-log.md); the tool presented
-  the options factually and transcribed the outcomes. Decisions the
-  author deferred are recorded under Open items with no analysis.
-  Same day: style-compliance pass against the team's TRD style guide
-  (Testing section added, companion d2-progress-check.mmd, the
-  existing JwtVerifier excerpt and Spring's default ProblemDetail
-  shape quoted as factual references, caveat marking sequence-diagram
-  endpoint paths as illustrative).
+  Scope: status inventory, D1-backlog traceability, and D2 rubric gap
+  analysis compiled from the course D2 instructions, the team's D1
+  document, and repo/issue state; role matrix transcribed from the
+  backlog; diagrams drawn from docs/architecture.md plus the decisions
+  below. Decisions D1-D9 were made by Leong Wei Zhi (2026-09-20) via
+  neutral-options Q&As (ai/usage-log.md); deferred decisions are Open
+  items, recorded without analysis. Same-day revisions: style-guide
+  compliance pass, then a readability rewrite on author feedback
+  (short points, diagrams over prose; no decision, status, or
+  open-item content changed).
   No requirements, architecture, or trade-off decisions were made by
   the tool.
   Reviewed by: Leong Wei Zhi (via pull request).
@@ -26,138 +20,133 @@
 
 ## Background
 
-- **GitHub issues:** User Service [#1–#9](https://github.com/AY2627S1-CS3219-P23/foc/issues/1) (F1–F8, F6.2) and #32–#35 (NFR1–4) · Supplier Service #10–#11 (F1–F2) and #36–#37 (NFR1–2) · Overall UI #43 (NFR1)
-- **Design doc:** [architecture.md](architecture.md) (system-level; authentication note and open-decision list)
-- **Figma:** [Backlog Mockup](https://www.figma.com/design/HZ25RDhbcsBycXG7K7xrFf/Backlog-Mockup?m=auto&t=jQwFXEoz5ucD66x4-6) · snapshots in [`web/docs/wireframes/`](../web/docs/wireframes/)
-- **Requirements:** D1 backlog — User F1–F8 + NFR1–4, Supplier F1–F2 + NFR1–2, Overall UI NFR1
-- **Decisions:** D1–D9 (this document, per-document series); prior relevant: JWT `sub`-claim convention (issue #67, recorded in [architecture.md](architecture.md)), foc-contracts D15 ([notification-service.md](notification-service.md))
+- **GitHub issues:** User [#1–#9](https://github.com/AY2627S1-CS3219-P23/foc/issues/1) + #32–#35 · Supplier #10–#11 + #36–#37 · UI #43
+- **Design doc:** [architecture.md](architecture.md)
+- **Figma:** [Backlog Mockup](https://www.figma.com/design/HZ25RDhbcsBycXG7K7xrFf/Backlog-Mockup?m=auto&t=jQwFXEoz5ucD66x4-6) · [`web/docs/wireframes/`](../web/docs/wireframes/)
+- **Requirements:** User F1–F8 + NFR1–4 · Supplier F1–F2 + NFR1–2 · UI NFR1 (D1 backlog)
+- **Decisions:** D1–D9 (below) · JWT `sub` convention (issue #67) · D15 contracts ([notification-service.md](notification-service.md))
 - **Participants:**
     - **User Service owner:** Kwey Xiu Xi
     - **Supplier Service owner:** Alastair Tan Choon Wei
-    - **Frontend:** per-domain owners ([`web/AGENTS.md`](../web/AGENTS.md) screen mapping)
+    - **Frontend:** per-domain owners ([`web/AGENTS.md`](../web/AGENTS.md))
     - **Author/scribe:** Leong Wei Zhi
-- **References:** CS3219-Instructions-MilestoneD2.pdf (course material), CS3219 Team 23 D1 document (Template-7), [notification-service.md](notification-service.md) and [credit-service.md](credit-service.md) (house decision-log convention), `AGENTS.md` (course constraints M1–M7, deadlines, AI policy)
+- **References:** CS3219-Instructions-MilestoneD2.pdf · D1 document (Template-7) · [credit-service.md](credit-service.md) · `AGENTS.md` (M1–M7, deadlines, AI policy)
 
 ## Overview
 
-Milestone D2 (Week 7, 20–30 min) is an early progress check: the mentor expects a **near-complete implementation of at least one of User Service or Supplier Service, and significant progress on the other**, demonstrated live with supporting diagrams and reasoned design decisions. The `AGENTS.md` deadline note additionally names a **supplier-listing page demo** for D2.
+D2 (Week 7, 20–30 min): one of User/Supplier Service **near-complete**, the other at **significant progress**, live demo, reasoned decisions. `AGENTS.md` also names a **supplier-listing page** for the demo.
 
-As of 2026-09-20 (recess week), neither graded service has any implementation: `user-service/` and `supplier-service/` are empty scaffolds, and `web/` has no project yet. The team's delivered work so far — `notification-service`, `foc-contracts`, the compose stack, and the JWT verification groundwork — is Recess-week backlog pulled forward. This document is the readiness pack for D2: an honest status baseline against the D1 backlog, a gap analysis against the D2 rubric, the design decisions taken to unblock implementation (D1–D9 below), the open decisions still owned by the team, and an execution/demo plan for the check itself.
+```mermaid
+timeline
+    Week 5–6 : D1 plan — build User + Supplier : nothing shipped for either
+    Recess (now, 2026-09-20) : notification-service + foc-contracts done (pulled forward) : graded services at 0%
+    Week 7 : D2 progress check
+```
 
-## Where we stand — D1 backlog vs actual
+This doc: status → rubric gaps → decisions D1–D9 → architecture → plan → demo script → open items.
 
-> 🔴 **Both graded services are unstarted.** `user-service/` and `supplier-service/` each contain exactly three 0-byte files (`AGENTS.md`, `Dockerfile`, `README.md`) from the 2026-09-10 repo scaffold. Verified 2026-09-20 by repo-wide search: no `pom.xml`, no entities/controllers, no Spring Security dependency, zero hits for `u.nus.edu`, `PasswordEncoder`, or `UserController` outside this document. All 18 D2-relevant issues (#1–#11, #32–#37, #43) are open with no linked PRs.
+## Where we stand
 
-### Assets already in place
+> 🔴 `user-service/` and `supplier-service/`: three 0-byte files each. `web/`: wireframes only, no project. All 18 D2 issues (#1–#11, #32–#37, #43) open, zero linked PRs. Verified 2026-09-20 — commands in [Testing](#testing).
 
-Work that D2 implementation can build on directly:
+```mermaid
+flowchart LR
+    subgraph B["Built"]
+        NS["notification-service"]
+        FC["foc-contracts"]
+        CO["compose: rabbitmq ·<br/>notification-db (postgres:17)"]
+        WF["21 wireframes + Figma"]
+        SD["supplier seed CSV"]
+    end
+    subgraph M["Empty — the D2 scope"]
+        USvc["user-service"]
+        SSvc["supplier-service"]
+        WEB["web/ SPA"]
+    end
+    classDef ok fill:#1a7f37,color:#ffffff
+    classDef gap fill:#cf222e,color:#ffffff
+    class NS,FC,CO,WF,SD ok
+    class USvc,SSvc,WEB gap
+```
 
-| Asset | Where | Relevance to D2 |
+Reusable now:
+
+| Asset | Why it matters |
+| --- | --- |
+| [`JwtVerifier`](../notification-service/src/main/java/foc/notification/security/JwtVerifier.java) + `JwtVerifierTest` | verifier half of the token scheme; User Service mints against it |
+| `.env.example` — `JWT_SECRET`, `JWT_*_TTL` | token config slots reserved |
+| `sub` = platform user ID (issue #67) | minting convention fixed |
+| `compose.yaml` `notification-db` row | copy-pattern for `user-db` / `supplier-db` |
+| [`data/csv/supplier-seed-data.csv`](../data/csv/supplier-seed-data.csv) (21 rows) | course requires seeding from `data/`; mapping → Open item |
+
+### Backlog status
+
+Every row: **Not started**. Weeks 5–6 have passed.
+
+| Service | Groups (issue) | Planned |
 | --- | --- | --- |
-| **JWT verification reference** | [`JwtVerifier.java`](../notification-service/src/main/java/foc/notification/security/JwtVerifier.java) (jjwt, HS256, enforces `sub`, rejects non-HS256, fails fast on short secrets) + `JwtVerifierTest` | The verifier side of the shared-secret scheme every service reuses; the User Service must mint tokens it accepts |
-| **JWT env contract** | `.env.example` — `JWT_SECRET` (≥32 bytes, HS256), `JWT_ACCESS_TOKEN_TTL`, `JWT_REFRESH_TOKEN_TTL` | Token config slots already reserved; comment records "the user service will issue tokens with it" |
-| **`sub`-claim convention** | Issue #67 / [architecture.md](architecture.md) authentication note | JWT `sub` = platform user ID; the User Service must mint accordingly |
-| **Compose stack** | `compose.yaml` — `notification-service`, `rabbitmq`, `notification-db` (postgres:17, loopback-only host port) | Pattern to copy for `user-db` / `supplier-db` (per-service DB rows are added by each owner's PR — `AGENTS.md` port table) |
-| **Wireframes** | 21 PNGs in [`web/docs/wireframes/`](../web/docs/wireframes/) + Figma | D2 screens already designed: `signup.png`, `login.png`, `suppliers.png`, `add-edit-supplier.png`, `admin-dashboard.png`, `profile.png`, `public-profile.png`, `forgot-password.png`, `account-recovery.png` |
-| **Supplier seed data** | [`data/csv/supplier-seed-data.csv`](../data/csv/supplier-seed-data.csv) — 21 rows: `Name, Type, Building, Floor, Location Description, Latitude, Longitude, StartingTime, ClosingTime, ImageURL` (+ images in `data/images/`) | Course requires seeding the Supplier Service from `data/` (M-scope note in `AGENTS.md`); column mapping is an Open item |
-| **Requirement tracker** | Issues #1–#43, labelled `service:` / `priority:` / `sprint:` | The backlog is fully transcribed; implementation PRs reference issues |
-| **Delivered early (Recess items)** | `notification-service` (event pipeline, retry/DLQ, STOMP push, purge), `foc-contracts` (typed request events) — issues #61–#65, #68–#69 closed, PRs #70–#83 merged | Evidence of working conventions (per-service DB, app-declared topology, disclosure practice) but contains **nothing for User/Supplier** |
+| User | F1 signup+OTP (#1) · F2 update (#2) · F3 delete (#3) · F4 recovery (#4) · F5 login+lockout (#5) · F6 roles/admin (#6) · F7 sessions (#8) · F8 profile (#9) · NFR1 hashing (#32) · NFR4 integrity (#35) | Weeks 5–6 |
+| User, later by plan | F6.2 owner (#7) Week 11 · NFR2 60k (#33), NFR3 2 s (#34) Week 12 | Weeks 11–12 |
+| Supplier | F1 CRUD+browse (#10) · F2 search/filter (#11) · NFR1 ≤5 s listings (#36) · NFR2 100k (#37) | Weeks 5–6 |
+| Supplier, later by plan | NFR1.1.1 caching (#36) | Week 11 |
+| UI | NFR1 responsive (#43) | Week 6 |
 
-### User Service traceability
+## D2 rubric gaps
 
-| Req group | Members | Priority | Planned | Status | Evidence |
-| --- | --- | --- | --- | --- | --- |
-| **F1** account creation (unique email/username, `u.nus.edu` only, OTP validation, password policy 10–50 chars upper/lower/digit, hashed storage, exact rejection reasons) | F1.1, F1.1.1–F1.1.7 | Very High / High | Week 5 (OTP: Week 6) | **Not started** | #1 open |
-| **F2** account update (OTP to existing email, uniqueness re-check, new-email OTP, double-entry password, policy re-validation) | F2.1, F2.1.1–F2.1.5 | High / Medium | Week 6 | **Not started** | #2 open |
-| **F3** account deletion (confirmation + 30-day warning, 30-day signup block, purge on day 31) | F3.1, F3.1.1–F3.1.3 | High / Medium | Week 6 | **Not started** | #3 open |
-| **F4** account recovery (restore within 30 days, password reset via email) | F4.1, F4.2 | High / Medium | Week 6 | **Not started** | #4 open |
-| **F5** login (username-or-email, non-revealing failure, 15-min lockout after 5 failures, counter reset) | F5.1, F5.1.1, F5.2, F5.2.1 | Very High / High | Week 5–6 | **Not started** | #5 open |
-| **F6** roles (user/admin; requester+courier without re-login; admin list/remove/promote/demote; reject unpermitted actions) | F6.1, F6.1.1–F6.1.5 | Very High / High | Week 5–6 | **Not started** | #6 open |
-| **F6.2** owner role (first registrant, admin-equivalent, forced ownership transfer, admins cannot edit owner) | F6.2.1–F6.2.4 | Low | Week 11 | **Not started** (by plan) | #7 open |
-| **F7** sessions (token on login, 1-hour expiry, logout invalidates) | F7.1, F7.1.1, F7.1.2 | Very High / High | Week 5–6 | **Not started** | #8 open |
-| **F8** profile (own profile incl. credit balance + role; public profile username-only) | F8.1, F8.1.1 | Very High / High | Week 6 | **Not started** | #9 open |
-| **NFR1** secure storage (SHA256-or-equivalent hashing) | NFR1.1 | Very High | Week 5 | **Not started** (encoder now decided: D4) | #32 open |
-| **NFR2** capacity (60 000 accounts) | NFR2.1 | Medium | Week 12 | Not started | #33 open |
-| **NFR3** performance (2 s operations, OTP delivery excluded) | NFR3.1–3.2.4 | High | Week 12 | Not started | #34 open |
-| **NFR4** integrity (uniqueness checks before async access) | NFR4.1 | High | Week 6 | **Not started** | #35 open |
-
-### Supplier Service traceability
-
-| Req group | Members | Priority | Planned | Status | Evidence |
-| --- | --- | --- | --- | --- | --- |
-| **F1** supplier management (admin CRUD with name/location/categories/opening times/description; browse list name+category; detail view) | F1.1, F1.1.1–F1.1.4, F1.2, F1.2.1 | Very High | Week 5–6 | **Not started** | #10 open |
-| **F2** search & filtering (by name; by category and campus zone; empty-state message) | F2.1, F2.2, F2.2.1 | High / Medium | Week 6 | **Not started** | #11 open |
-| **NFR1** performance (listings ≤5 s; caching on name/location) | NFR1.1, NFR1.1.1 | High / Medium | Week 6 (caching: Week 11) | **Not started** | #36 open |
-| **NFR2** capacity (100 000 suppliers) | NFR2.1 | High | Week 6 | **Not started** | #37 open |
-
-### Overall UI traceability
-
-| Req group | Members | Priority | Planned | Status | Evidence |
-| --- | --- | --- | --- | --- | --- |
-| **NFR1** usability (responsive across mobile and wide-screen widths) | NFR1.1, NFR1.1.1 | Very High | Week 6 | **Not started** — no `web/` project scaffold exists (no `package.json`); wireframes only | #43 open |
-
-> ℹ️ Rows planned for Weeks 5–6 are past their planned sprint entering the recess week. The D1 Gantt chart had M2 (User Service) and M3 (Supplier Service) starting Week 5; D2 falls in Week 7.
-
-## D2 rubric gap analysis
-
-D2 grading cuts, as set by the instructions: **near-complete** User Service = Part 1 points 1–6; **significant progress** = points 1–4. **Near-complete** Supplier Service = Part 2 points 1–5; **significant progress** = points 1–4. Per decision D3 below, the team targets **User Service near-complete + Supplier Service significant progress** (with the supplier-listing page additionally named for the D2 demo in `AGENTS.md`).
+Grading cuts: near-complete = Part 1 pts 1–6 / Part 2 pts 1–5; significant = pts 1–4. Target (D3): **User near-complete, Supplier significant**.
 
 ### Part 1 — User Service
 
-| # | Rubric asks | D1 backlog coverage | Current state | Needed for the demo |
-| --- | --- | --- | --- | --- |
-| 1 | Role design: which roles, why, documented capabilities per role (artifact to keep updated) | F6.1 (user/admin; requester/courier as modes), F6.2 (owner, Week 11), F8 (role visible in profile) | Roles defined in backlog only; no capability artifact existed | The [role capability matrix below](#role-design-artifact-rubric-part-1-point-1) — present and keep updating it |
-| 2 | Database choice + concrete schema + secure credential storage | NFR1.1 (hashing); engine was an open decision in architecture.md | **Now decided:** PostgreSQL (D1), BCrypt (D4); schema itself is owner work, not yet designed | Schema presented from the implemented entities; show hashed rows in `user-db` |
-| 3 | Authentication approach + RBAC enforcement + live demo of both | F5 (login), F7 (tokens, expiry, logout), F6.1.5 (reject unpermitted) | JWT scheme sketched (HS256 shared secret, `sub` claim); **now extended:** `role` claim (D5), Spring Security filter chain (D6); no code | Running service: login issues JWT with `role`; protected endpoint rejects per role |
-| 4 | Integration: Supplier Service enforces access via User Service identity/roles | F6.1.5 across services (architecture.md authentication note) | Verification-side reference exists (`JwtVerifier`); supplier side not started | Cross-service demo: same token accepted by both; non-admin blocked from supplier CRUD |
-| 5 | Profile-update validation; users cannot modify protected fields (role, status, user ID) | F2 (validated update flows); **no explicit backlog item on protected fields** | Gap flagged; enforcement detail is owner work (Open item) | Show an update request attempting a protected field being rejected |
-| 6 | Role lifecycle: first-admin creation, promotion workflow without developer intervention, edge cases (self-revoke; last admin) | F6.1.4 (promote/demote); **first-admin bootstrap and edge-case behaviour absent from backlog** | **Now decided:** one-time setup endpoint/flag for first admin (D7); edge-case behaviours still an Open item | Walk the promotion flow live; state the edge-case answers (team to decide them first) |
+| # | Asks | Have today | Demo needs |
+| --- | --- | --- | --- |
+| 1 | roles + capability artifact | matrix below | keep it updated |
+| 2 | DB, schema, credential storage | PostgreSQL (D1) · BCrypt (D4); schema = owner work | schema walk; hashed row |
+| 3 | authn + RBAC, live | `sub` fixed · `role` claim (D5) · Spring Security (D6); no code | login → JWT; gated endpoint |
+| 4 | Supplier enforces via User identity | verifier exists; supplier side absent | one token, both services; non-admin blocked |
+| 5 | profile updates; protected fields | F2 flows; field rule → Open item | protected-field update rejected |
+| 6 | first admin; promotion; edge cases | bootstrap flag (D7); edge cases → Open item | bootstrap + promote live |
 
 ### Part 2 — Supplier Service
 
-| # | Rubric asks | D1 backlog coverage | Current state | Needed for the demo |
-| --- | --- | --- | --- | --- |
-| 1 | Database choice + schema + supplier metadata (name, type, location) storage/querying | F1.1.1 (fields), NFR2 (100k) | **Now decided:** PostgreSQL (D2); schema/seed mapping is owner work (Open item — CSV columns don't match F1.1.1 one-to-one) | Schema presented from implemented entities; seeded rows from `data/csv/` |
-| 2 | Query patterns + API endpoints + working calls + role-aware access control with denied responses | F1.2 (browse), F2 (search/filter), F6.1.5 | **Now extended:** paged+sorted listing adopted as a requirement (D9); denied responses standardised as RFC 9457 problem+json (D8); no code | Live API calls: by-id, search, filter, paged list; 401/403 problem+json shown |
-| 3 | CRUD backend independent of UI, testable via APIs alone | F1.1.1–F1.1.4 | Not started | curl/HTTP-file demo against the running service, UI stopped |
-| 4 | End-to-end: authenticated user → Supplier API → DB; different roles, different access | Architecture.md dependency table (Web → Supplier) | Not started; depends on User Service token minting (D5) | Full flow demo with an admin and a non-admin account |
-| 5 | Responsive supplier-management UI (create/edit/delete, view, search, filter+sort, paginate, details) on live data | F1.2, F2, UI NFR1; **pagination/sorting had no backlog row — now added (D9)** | `web/` scaffold absent; wireframes done (`suppliers.png`, `add-edit-supplier.png`) | Supplier pages at desktop + mobile widths on live API data (no mocks — rubric requires it) |
+| # | Asks | Have today | Demo needs |
+| --- | --- | --- | --- |
+| 1 | DB, schema, metadata | PostgreSQL (D2); seed mapping → Open item | schema + seeded rows |
+| 2 | query patterns, APIs, denied responses | paging req added (D9) · problem+json (D8); no code | by-id, search, filter, page; 401/403 |
+| 3 | CRUD via API, UI-independent | — | curl demo, UI stopped |
+| 4 | E2E auth flow, roles differ | blocked on D5 minting | admin vs user flow |
+| 5 | responsive UI, live data | wireframes only | desktop + mobile, no mocks |
 
-### Role design artifact (rubric Part 1, point 1)
+### Roles (rubric P1.1 artifact)
 
-Transcribed from the D1 backlog (F6, F8); this table is the artifact the rubric asks the team to keep updated through to the final presentation.
+Transcribed from backlog F6/F8. Keep updated through the final presentation.
 
-| Role | How obtained | Capabilities (backlog refs) |
+| Role | Obtained | Can do |
 | --- | --- | --- |
-| **user** (default) | Sign-up (F1.1) | Acts as **requester and courier without re-login** — these are modes of one role, not separate roles (F6.1, F6.1.1); manages own account (F2–F4), views own profile incl. credit balance and role (F8.1) and others' public profiles (F8.1.1); denied any unpermitted action with an explicit message (F6.1.5) |
-| **admin** | Promotion by an admin (F6.1.4); first admin via one-time bootstrap (D7) | Everything a user can do, plus: view all users (F6.1.2), remove user accounts (F6.1.3), promote user↔admin (F6.1.4), supplier CRUD (Supplier F1.1) |
-| **owner** (Week 11, Low) | First registrant (F6.2.1) | Admin-equivalent permissions (F6.2.2); always exactly one — ownership must transfer before account deletion (F6.2.3); not editable by other admins (F6.2.4) |
+| **user** (default) | sign-up (F1.1) | requester + courier modes, no re-login (F6.1.1) · own account F2–F4 · own profile F8.1 · public profiles F8.1.1 · unpermitted actions rejected with message (F6.1.5) |
+| **admin** | promotion (F6.1.4); first via bootstrap (D7) | user + list all (F6.1.2) · remove accounts (F6.1.3) · promote/demote (F6.1.4) · supplier CRUD (Supplier F1.1) |
+| **owner** (Week 11, Low) | first registrant (F6.2.1) | admin-equivalent (F6.2.2) · exactly one, transfer before delete (F6.2.3) · not editable by admins (F6.2.4) |
 
 ## Design decisions (made by the team)
 
-All decisions below were made by **Leong Wei Zhi on 2026-09-20**, from neutral options presented in a Q&A (logged in `ai/usage-log.md`); they unblock D2 implementation and stand as team decisions subject to the affected service owners' review of this document via pull request. D-numbers are this document's own series (house convention: per-document numbering).
+By **Leong Wei Zhi, 2026-09-20**, from neutral-options Q&As (`ai/usage-log.md`); owners review via this PR. Per-document D-series.
 
 | # | Concern | Decision | Serves |
 | --- | --- | --- | --- |
-| D1 | User Service DB engine | **PostgreSQL** — the engine already operated in this repo (`notification-db`, postgres:17); access via Spring Data JPA per the decided stack (`AGENTS.md`). Resolves the architecture.md open decision for this service | User F1–F8 storage; NFR2, NFR4 |
-| D2 | Supplier Service DB engine | **PostgreSQL** — same grounds; resolves the architecture.md open decision for this service | Supplier F1–F2; NFR2 |
-| D3 | D2 grading target | **User Service near-complete (Part 1 points 1–6); Supplier Service significant progress (Part 2 points 1–4)** — plus the supplier-listing page named in `AGENTS.md` for the demo | D2 scoping |
-| D4 | Password-hashing encoder | **BCrypt** (`BCryptPasswordEncoder`, spring-security-crypto) — adopted under NFR1.1's "SHA256 **or equivalent**" clause | User F1.1.5; NFR1.1 |
-| D5 | Role transport in the token | **Single `role` string claim** in the JWT alongside the established `sub` claim — one role per account matches F6.1's model (requester/courier are modes, not roles); services read the claim locally during verification, no per-request callback | User F6.1.5, F7.1; rubric P1.3–P1.4, P2.2 |
-| D6 | RBAC enforcement mechanism | **Spring Security filter chain** (`spring-boot-starter-security`): JWT validated in the chain, role rules via `SecurityFilterChain` / method security — first use of Spring Security in the repo (notification's STOMP interceptor remains as is) | User F6.1.2–F6.1.5; rubric P1.3 |
-| D7 | First-admin bootstrap | **One-time setup endpoint/flag**: a bootstrap path enabled only while zero admins exist, disabled after first use — promotion thereafter is the in-app admin flow (F6.1.4), no developer intervention per promotion. The Week-11 owner role (F6.2) is unchanged by this | Rubric P1.6 |
-| D8 | Denied-request contract | **RFC 9457 `application/problem+json`** via Spring's `ProblemDetail`: **401** for missing/invalid token, **403** for a role the action does not permit, body carrying the reason — uniform across services | User F6.1.5 ("inform the user that they lack permission"); rubric P2.2 |
-| D9 | Supplier pagination & sorting | **Adopted as a requirement** (was absent from the D1 backlog despite the rubric's UI workflow list): the supplier listing endpoint is paged and sortable, Spring Data `Pageable` being the stack's mechanism. Follow-up: file the issue and label it like the rest of the backlog | Rubric P2.2, P2.5; context: NFR2's 100 000-supplier capacity |
+| D1 | User DB | **PostgreSQL** — engine already in repo (`notification-db`) | F1–F8; NFR2/4 |
+| D2 | Supplier DB | **PostgreSQL** — same grounds | F1–F2; NFR2 |
+| D3 | D2 target | **User near-complete · Supplier significant** | scoping |
+| D4 | Hashing | **BCrypt** — NFR1.1's "or equivalent" clause | F1.1.5; NFR1.1 |
+| D5 | Role in token | **single `role` claim** beside `sub`; read locally, no callback | F6.1.5; P1.3–4 |
+| D6 | RBAC mechanism | **Spring Security filter chain** (`spring-boot-starter-security`) | F6.1.2–5; P1.3 |
+| D7 | First admin | **one-time bootstrap endpoint/flag** — active only while zero admins exist | P1.6 |
+| D8 | Denied requests | **RFC 9457 problem+json** — 401 no/invalid token, 403 wrong role | F6.1.5; P2.2 |
+| D9 | Paging/sorting | **adopted as requirement** (absent from backlog) — Spring Data `Pageable`; issue to file | P2.2/2.5 |
 
-> ✍️ The mentor will probe *why* behind each decision (D2 "General Tips"). The factual grounds recorded above are what was on the table when each choice was made; the deciders present their own reasoning at the check. Deferred concerns are in [Open items](#open-items-team-decisions-still-pending) — decide them before the demo where a rubric point depends on one.
+> ✍️ "Why" answers at the check come from the deciders — the AI policy bars tool-written rationales. Undecided items → [Open items](#open-items).
 
-## Target architecture for D2
+## Target architecture (D2 slice)
 
-Transcribed from [architecture.md](architecture.md) (authentication note, dependency table) narrowed to the D2 slice, with D1–D9 applied. No API gateway exists — each service verifies the shared-secret HS256 JWT locally (`.env.example`), reading `sub` (user ID, issue #67 convention) and `role` (D5).
-
-**Diagram source:** [`d2-progress-check.mmd`](d2-progress-check.mmd) (house convention: `.mmd` beside `.md`; GitHub renders it in the file view). The copy below is inlined for reading in place.
-
-> ✍️ Endpoint paths in the sequence diagrams (`POST /signup`, `POST /login`, `POST /suppliers`) are illustrative stand-ins for the backlog flows, not an API design — the concrete API surface is each service owner's work (the AI policy keeps interface design with the team).
+From [architecture.md](architecture.md) + D1–D9. No gateway — each service verifies the HS256 `JWT_SECRET` locally. **Diagram source:** [`d2-progress-check.mmd`](d2-progress-check.mmd).
 
 ```mermaid
 flowchart LR
@@ -181,11 +170,13 @@ flowchart LR
     USC ==>|"OTP email · F1.1.3, F2.1.x, F4.2"| MAIL
 ```
 
-> ℹ️ Out of frame but adjacent: architecture.md routes sign-up through **User Service → Credit Service** to allocate 5 starting credits (Credit F1.1). `credit-service/` is an empty stub, so how sign-up behaves without it at D2 is an Open item. The existing notification stack (RabbitMQ, STOMP) is unaffected by this slice.
+> ✍️ Paths like `POST /signup` are illustrative — API design stays with the owners (AI policy).
+>
+> ℹ️ Sign-up also calls Credit Service (5 starting credits, Credit F1.1); it is a stub today → Open item.
 
-### The token verifier already in the tree
+### Existing verifier
 
-The one piece of this slice that exists as real code is the verifier half of the shared-secret scheme — [`JwtVerifier`](../notification-service/src/main/java/foc/notification/security/JwtVerifier.java), which tokens minted by the User Service must satisfy and which supplier-side verification can mirror:
+Real code today — [`JwtVerifier`](../notification-service/src/main/java/foc/notification/security/JwtVerifier.java); minted tokens must pass it, supplier-side checks can mirror it:
 
 ```java
 public String verifiedSubject(String token) {
@@ -203,9 +194,9 @@ public String verifiedSubject(String token) {
 }
 ```
 
-The parser is built eagerly, so a missing or short `JWT_SECRET` fails at startup (`MIN_SECRET_BYTES = 32`), and the class Javadoc already anticipates reuse beyond STOMP.
+Built eagerly: missing/short `JWT_SECRET` fails startup (`MIN_SECRET_BYTES = 32`).
 
-### Sign-up with OTP (F1.1, F1.1.2–F1.1.5)
+### Sign-up with OTP (F1.1)
 
 ```mermaid
 sequenceDiagram
@@ -217,19 +208,19 @@ sequenceDiagram
 
     Student->>SPA: email, username, password
     SPA->>US: POST /signup
-    US->>US: validate u.nus.edu domain (F1.1.2), password policy (F1.1.4), uniqueness (F1.1.1)
+    US->>US: u.nus.edu domain (F1.1.2), policy (F1.1.4), uniqueness (F1.1.1)
     alt invalid
         US-->>SPA: 400 + exact reason (F1.1.6–F1.1.7)
     else valid
         US->>Mail: send OTP (F1.1.3)
         Student->>SPA: enter OTP
         SPA->>US: POST /signup/verify
-        US->>DB: insert user, BCrypt-hashed password (D4, F1.1.5)
+        US->>DB: insert user, BCrypt hash (D4, F1.1.5)
         US-->>SPA: account created
     end
 ```
 
-### Login → role-checked supplier CRUD (F5, F6.1.5, Supplier F1.1)
+### Login → role-checked supplier CRUD (F5, F6.1.5)
 
 ```mermaid
 sequenceDiagram
@@ -239,21 +230,21 @@ sequenceDiagram
     participant US as user-service
     participant SS as supplier-service
 
-    A->>SPA: login (username or email + password, F5.1)
+    A->>SPA: login (username or email, F5.1)
     SPA->>US: POST /login
     US-->>SPA: JWT { sub, role: "admin" } · 1 h expiry (F7.1.1)
     SPA->>SS: POST /suppliers (Bearer JWT)
-    SS->>SS: verify HS256 shared secret, read role (D5/D6)
+    SS->>SS: verify secret, read role (D5/D6)
     SS-->>SPA: 201 created
 
     U->>SPA: login
     SPA->>US: POST /login
     US-->>SPA: JWT { sub, role: "user" }
     SPA->>SS: POST /suppliers (Bearer JWT)
-    SS-->>SPA: 403 application/problem+json (D8, F6.1.5)
+    SS-->>SPA: 403 problem+json (D8, F6.1.5)
 ```
 
-**Denied response shape (D8)** — what Spring's `ProblemDetail` emits by default for the 403 leg (RFC 9457); shown as the library's stock output, field population is the owners' implementation work:
+Denied shape (D8) — Spring `ProblemDetail` stock output; field population is owner work:
 
 ```json
 {
@@ -265,91 +256,92 @@ sequenceDiagram
 }
 ```
 
-The `detail` member is where F6.1.5's "inform the user that they lack permission" lands.
+## Plan to Week 7
 
-## Execution plan to Week 7
+```mermaid
+flowchart LR
+    D["decisions D1–D9<br/>applied"] --> UM["user-service mints<br/>sub + role JWT"]
+    D --> SB["supplier-service<br/>schema + seed + CRUD"]
+    UM --> RB["role checks live<br/>in both services"]
+    SB --> RB
+    RB --> E2E["E2E: admin vs user"]
+    WS["web shell +<br/>supplier pages"] --> E2E
+    E2E --> D2C(["D2 check — Week 7"])
+```
 
-Workstreams and their factual dependencies — owners per the README allocation; scheduling within the window stays with the team.
-
-| Workstream | Owner | Issues | Serves rubric | Depends on |
-| --- | --- | --- | --- | --- |
-| User Service: signup/login/tokens (JWT mint with `sub`+`role`), RBAC chain, admin user management, profile | Kwey Xiu Xi | #1, #5, #6, #8, #9, #32 | P1.1–P1.3, P1.5–P1.6, P2.4 | D1/D4–D7 applied; `user-db` compose row + `.env.example` vars + `AGENTS.md` port-table row (owner's PR, house convention) |
-| User Service: update/delete/recovery + OTP flows | Kwey Xiu Xi | #2, #3, #4 | P1.5 (near-complete cut) | **Email provider (Open item)** — OTP-dependent rows blocked until decided |
-| Supplier Service: schema + seed load, CRUD, search/filter, paged listing, role checks, problem+json | Alastair Tan | #10, #11, #37, new pagination issue (D9) | P2.1–P2.4 | D2/D5/D8/D9 applied; seed mapping (Open item); role claim minted by User Service for the E2E demo |
-| Web: SPA scaffold + auth shell + supplier listing page (desktop & mobile) | per-domain owners (`web/AGENTS.md`) | #43 | P2.5; `AGENTS.md` D2 note (supplier-listing page) | Both services' APIs up; live data only (rubric forbids mocks) |
-| Demo assets: seeded demo accounts (admin + user) and suppliers | service owners | — | all live-demo points | Course note: "meaningful users/suppliers for demo data" (`AGENTS.md`) |
-
-> 🔴 **Single hard ordering constraint:** every role-aware demo point (P1.3, P1.4, P2.2, P2.4) needs the User Service to mint `sub`+`role` tokens first. The verifier half already exists as reference code; the supplier side and the web shell can develop against a hand-minted token (same `JWT_SECRET`) until then — that is a stopgap for development, not the demo.
-
-## Demo plan (20–30 min)
-
-| Step | Rubric point | Show | Ready when |
+| Workstream | Owner | Issues | Blocked by |
 | --- | --- | --- | --- |
-| 1 | P1.1 | Role capability matrix (this doc) + roles in the running system | doc merged; roles seeded |
-| 2 | P1.2 | `user-db` schema walk-through; a user row with its BCrypt hash | schema implemented |
-| 3 | P1.3 | Login → decoded JWT (`sub`, `role`, `exp`); protected endpoint with/without token | #5, #8 done |
-| 4 | P1.6 | Bootstrap first admin (one-time flag, D7); promote a user in-app (F6.1.4); state edge-case answers | #6 done; edge cases decided (Open item) |
-| 5 | P1.5 | Profile update accepted; attempt to change `role`/status/ID rejected | protected-field rule decided (Open item) |
-| 6 | P2.1–P2.3 | Supplier CRUD + search/filter + paged list via raw API calls (UI stopped), seeded from `data/csv/` | #10, #11 done; seed mapping decided |
-| 7 | P1.4 + P2.4 | Same admin token accepted by supplier-service; user token gets 403 problem+json | both services integrated |
-| 8 | P2.5 | Supplier pages at desktop and mobile widths, live data | web scaffold + supplier screens |
-| 9 | wrap-up | Architecture + sequence diagrams (this doc); "why" answers from the deciders | — |
+| User core: signup/login/JWT/RBAC/admin/profile | Kwey Xiu Xi | #1 #5 #6 #8 #9 #32 | `user-db` infra (own PR, house convention) |
+| User OTP flows: update/delete/recovery | Kwey Xiu Xi | #2 #3 #4 | email provider → Open item |
+| Supplier backend: schema/seed/CRUD/search/paging | Alastair Tan | #10 #11 #37 + D9 issue | seed mapping → Open item; role claim for E2E |
+| Web: shell + supplier pages (desktop + mobile) | per-domain (`web/AGENTS.md`) | #43 | live APIs — rubric forbids mocks |
+| Demo data: accounts + suppliers | owners | — | — |
+
+> 🔴 Everything role-gated waits on User Service minting `sub`+`role`. Dev stopgap: hand-mint on the shared secret — never in the demo.
+
+## Demo script (20–30 min)
+
+| # | Rubric | Show |
+| --- | --- | --- |
+| 1 | P1.1 | role matrix + live roles |
+| 2 | P1.2 | `user-db` schema; a BCrypt-hashed row |
+| 3 | P1.3 | login → decoded JWT (`sub`, `role`, `exp`); endpoint with/without token |
+| 4 | P1.6 | bootstrap first admin (D7); promote in-app; edge-case answers |
+| 5 | P1.5 | protected-field update rejected |
+| 6 | P2.1–3 | supplier CRUD/search/filter/page via curl, UI stopped |
+| 7 | P1.4 + P2.4 | admin token works on supplier-service; user token → 403 |
+| 8 | P2.5 | supplier pages at desktop + mobile widths, live data |
+| 9 | wrap | diagrams + "why" answers from the deciders |
 
 ## Testing
 
-Nothing D2-specific is testable yet; what is testable today is (a) this document's claims and (b) the stack that already runs. Per-service run/test instructions land with each owner's PR (house pattern: [`notification-service/README.md`](../notification-service/README.md), whose integration tests use Testcontainers and auto-skip when Docker is unavailable).
+Testable today: this doc's claims, and the existing stack. Per-service run-books arrive with owners' PRs (pattern: [`notification-service/README.md`](../notification-service/README.md); Testcontainers, auto-skip without Docker).
 
 ### Reproduce the status audit
 
 ```sh
-# The two graded services are 0-byte scaffolds (6 files, all size 0)
+# graded services: 6 files, all 0 bytes
 git ls-files user-service supplier-service | xargs ls -la
 
-# No signup/domain-validation code exists anywhere
+# no signup/domain code anywhere
 grep -rn "u.nus.edu" --include="*.java" .   # no output
 
-# The D2-relevant issues are all open (#1–#11, #32–#37, #43)
+# D2 issues all open (#1–#11, #32–#37, #43)
 gh issue list --state open --limit 60
 ```
 
-### Run what exists today
-
-Commands from `notification-service/README.md`, adapted to run from the repo root:
+### Run what exists
 
 ```sh
-# One-time: install the shared contracts library (D15)
-(cd foc-contracts && ./mvnw install)
+(cd foc-contracts && ./mvnw install)          # one-time (D15)
+(cd notification-service && ./mvnw test)      # H2, no infra
 
-# Notification tests — in-memory H2, no infrastructure needed
-(cd notification-service && ./mvnw test)
-
-# Full existing stack: cp .env.example .env first and set
-# NOTIFICATION_DB_PASSWORD, RABBITMQ_PASSWORD, and JWT_SECRET
-# (the verifier requires ≥32 bytes at startup)
+# cp .env.example .env; set NOTIFICATION_DB_PASSWORD,
+# RABBITMQ_PASSWORD, JWT_SECRET (≥32 bytes)
 docker compose up --build notification-service
 ```
 
-Health check: `GET http://localhost:${NOTIFICATION_SERVICE_PORT:-8085}/actuator/health`.
+Health: `GET http://localhost:${NOTIFICATION_SERVICE_PORT:-8085}/actuator/health`.
 
-## Open items (team decisions still pending)
+## Open items
 
-Recorded without analysis, per the AI-usage policy; option names shown are the ones tabled when the item was deferred.
+Team decisions, recorded without analysis (AI policy). Options shown = those tabled at deferral (2026-09-20).
 
-| Item | Affects | Decision owner | Options tabled |
-| --- | --- | --- | --- |
-| Logout token invalidation mechanism (F7.1.2 — deferred 2026-09-20) | P1.3 demo answer; User F7 | Kwey Xiu Xi / team | server-side denylist · refresh+access pair · session table |
-| OTP email provider (architecture.md open decision — deferred 2026-09-20) | F1.1.3, F2.1.x, F4.2; blocks User F2–F4 rows | Kwey Xiu Xi / team | Gmail SMTP · transactional API · AWS SES |
-| Supplier seed schema mapping (CSV `Type` single-valued vs F1.1.1 "categories"; `Location Description` vs "description"; no zone column for F2.2's campus-zone filter) | P2.1; Supplier F1.1.1, F2.2; course seeding note | Alastair Tan | recorded as facts; mapping is schema work owned by the service owner |
-| Role-management edge cases: admin self-revocation; last admin deleting/demoting themselves (rubric P1.6 asks directly; no backlog row) | P1.6 demo answer | team | — |
-| Protected profile fields enforcement rule (role, account status, user ID — rubric P1.5; no explicit backlog row) | P1.5 demo answer | Kwey Xiu Xi | — |
-| Sign-up's Credit Service call (Credit F1.1 allocates 5 credits) while `credit-service/` is a stub | sign-up demo behaviour | team (Ryan Ang owns Credit) | — |
-| Supplier caching mechanism (NFR1.1.1, planned Week 11; architecture.md open decision) | post-D2 | Alastair Tan / team | in-process · shared cache |
+| Item | Blocks | Owner |
+| --- | --- | --- |
+| Logout token invalidation (F7.1.2) — tabled: denylist · refresh pair · session table | P1.3 answer | Kwey Xiu Xi / team |
+| OTP email provider — tabled: Gmail SMTP · transactional API · AWS SES | User F2–F4; #2–#4 | Kwey Xiu Xi / team |
+| Seed mapping: CSV `Type` vs "categories" · `Location Description` vs "description" · no zone column (F2.2) | P2.1; seeding | Alastair Tan |
+| Role edge cases: admin self-revoke; last admin delete/demote (P1.6) | P1.6 answer | team |
+| Protected profile fields rule (P1.5) | P1.5 answer | Kwey Xiu Xi |
+| Sign-up's Credit call (F1.1) while `credit-service/` is a stub | sign-up demo | team (Ryan Ang) |
+| Supplier caching (NFR1.1.1, Week 11) — tabled: in-process · shared cache | post-D2 | Alastair Tan / team |
 
 ## Follow Up
 
-- **File the pagination/sorting issue** (D9) with `service: supplier` / `priority:` / `sprint:` labels, matching the backlog convention.
-- **Owners' infrastructure PRs:** `user-db` and `supplier-db` compose services, `.env.example` `*_DB_*` variables, and `AGENTS.md` port-table rows — each in the owning service's PR (house convention).
-- **Per-service design docs:** `docs/user-service.md` and `docs/supplier-service.md` (+ `.mmd`) per repo convention — the long-term home for each service's own decision series; D1–D9 here migrate/expand there as the owners take them over.
-- **architecture.md updates:** strike the two resolved engine TBDs (User, Supplier → PostgreSQL) once this document merges.
-- **No CI exists** (`.github/` absent): automated build/test gating is backlog nice-to-have N5.2 (planned Recess) — the D2 demo runs from local compose either way.
-- **Update this document's status tables after each merged PR** so it stays truthful for the check itself.
+- File the D9 paging/sorting issue (`service:` / `priority:` / `sprint:` labels).
+- `user-db` / `supplier-db`: compose rows, `.env.example` vars, `AGENTS.md` port-table rows — each owner's own PR.
+- `docs/user-service.md` / `docs/supplier-service.md` (+ `.mmd`): long-term homes; D1–D9 migrate there.
+- architecture.md: strike the two resolved engine TBDs after merge.
+- No CI yet (`.github/` absent; N5.2 planned Recess) — demo runs on local compose.
+- Refresh the status tables here after each merged PR.
