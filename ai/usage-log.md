@@ -97,6 +97,18 @@ Entry template:
   updated the schema/diagrams accordingly, and removed the Open-items
   section; no justification text was added since the author supplied
   none.
+  A fifth follow-up asked to strip the requirement/decision reference
+  codes (F*/D* citations) and the decisions table from the document
+  body to minimise clutter, and to drop the disclosure banner from
+  the Lark reading copy since it is an internal-discussion mirror.
+  Applied: the body now carries plain-language wording with choices
+  marked "(chosen)"; decision attribution and the option lists remain
+  in the document's header comment and this log (nothing was
+  re-decided). The Lark copy keeps a single AI-assisted footer line
+  pointing at the in-repo disclosures; all binding disclosures
+  (file header, this log, README summary) are unchanged in the repo.
+  For the record, the 29 decisions and their tabled options are those
+  listed in the three entries above (D1-D29 numbering).
 - **Author review:** Tables checked against the D1/D2 documents and
   the issue tracker; merged via pull request.
 
