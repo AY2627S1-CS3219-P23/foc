@@ -12,9 +12,10 @@
 # notification service for the retry/DLQ topology (D6/D7).
 # 2026-09-20, issue #68: retention window / purge-cron passed to the
 # notification service for the retention purge scheduler (D9).
-# 2026-09-20: notification-db published on a host port so local
-# tooling (psql, DB GUIs, the postgres MCP server) can reach it; the
-# in-network wiring is unchanged.
+# 2026-09-20: notification-db published on a loopback-bound host port
+# so local tooling (psql, DB GUIs, the postgres MCP server) can reach
+# it; the in-network wiring is unchanged. Loopback binding added on
+# PR #83 Copilot review.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -84,9 +85,11 @@ services:
     image: postgres:17
     # Published on the host so local tooling (psql, DB GUIs, the postgres
     # MCP server) can reach the service-owned DB; the service itself talks
-    # to it over the compose network on 5432.
+    # to it over the compose network on 5432. Bound to loopback so the
+    # database is reachable from this machine only — a bare "5433:5432"
+    # would listen on every interface and expose it to the LAN.
     ports:
-      - "${NOTIFICATION_DB_HOST_PORT:-5433}:5432"
+      - "127.0.0.1:${NOTIFICATION_DB_HOST_PORT:-5433}:5432"
     environment:
       POSTGRES_DB: ${NOTIFICATION_DB_NAME:-notification}
       POSTGRES_USER: ${NOTIFICATION_DB_USER:-notification}

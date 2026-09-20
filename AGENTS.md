@@ -124,7 +124,7 @@ alone is only a gate inside the server.
 
 | Service DB | Host port | Status |
 | --- | --- | --- |
-| `notification-db` | `${NOTIFICATION_DB_HOST_PORT:-5433}` | available |
+| `notification-db` | `${NOTIFICATION_DB_HOST_PORT:-5433}` (loopback only) | available |
 | `user-db` | — | not created yet |
 | `supplier-db` | — | not created yet |
 | `order-db` | — | not created yet |
@@ -135,6 +135,12 @@ When a service gains its own database, its owner adds the container to
 header already records), publishes it on a host port no other row has
 claimed, adds the `*_DB_HOST_PORT` variable to `.env.example`, and fills
 in the row above. Take the port from this table when adding a profile.
+
+**Versions are pinned.** Each stdio server in `.mcp.json` names an exact
+version rather than a floating tag, so everyone runs the build these
+instructions were verified against and a demo cannot break because an
+upstream release landed that morning. Bump them deliberately, in a PR
+that says what was re-checked — not by switching back to `@latest`.
 
 Prefer the ordinary tools when they suffice: `gh` for issues and PRs,
 `docker compose` and the service wrappers (`./mvnw`) via the shell. The

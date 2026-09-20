@@ -65,6 +65,18 @@ Entry template:
   maintainer, ~1k weekly downloads), tested the Microsoft server
   against the running notification DB, and switched to it — the
   decision was the author's.
+- **Follow-up (PR #83 Copilot review):** two findings addressed.
+  (1) High — the published database port used the short `5433:5432`
+  form, which binds every host interface and would have exposed the DB
+  to the LAN; it is now `127.0.0.1:${NOTIFICATION_DB_HOST_PORT:-5433}`.
+  Verified behaviourally: loopback and `localhost` connect, the
+  machine's LAN address is refused. (2) Medium — all three stdio
+  servers ran from floating specs, so teammates could get a different
+  build from the one verified here; each is now pinned
+  (`@upstash/context7-mcp@4.1.1`,
+  `@microsoft/postgres-mcp@0.1.0-rc.11`, `@playwright/mcp@0.0.82`) and
+  re-verified at those versions, with the bump policy written into
+  AGENTS.md.
 - **Author review:** Developer tooling only — no product, requirements,
   or architecture decision is involved, and no service code changed.
   Note: this session ran on Opus 5, not the Fable 5 used for the

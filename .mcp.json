@@ -7,17 +7,17 @@
     "context7": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp"]
+      "args": ["-y", "@upstash/context7-mcp@4.1.1"]
     },
     "postgres": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@microsoft/postgres-mcp", "run"]
+      "args": ["-y", "@microsoft/postgres-mcp@0.1.0-rc.11", "run"]
     },
     "playwright": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest", "--isolated"]
+      "args": ["-y", "@playwright/mcp@0.0.82", "--isolated"]
     }
   }
 }
