@@ -63,6 +63,10 @@ Entry template:
   environment variable, set per developer.
 - **Author review:** Developer tooling only — no product, requirements,
   or architecture decision is involved, and no service code changed.
+  Note: this session ran on Opus 5, not the Fable 5 used for the
+  earlier entries; the disclosure headers on `compose.yaml`,
+  `.env.example` and `README.md` were corrected to say so after the
+  author spotted the wrong model in them.
   Verified the `.mcp.json` is valid JSON, that no credentials are
   committed (the connection string lives in the git-ignored `.env`,
   not in `.mcp.json`), and that the compose change adds only a host

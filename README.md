@@ -1,6 +1,8 @@
 <!--
   AI-assisted (CS3219 AI Usage Policy disclosure):
-  Tool: Claude Code (Fable 5), 2026-09-10; revised 2026-09-19.
+  Tool: Claude Code (Fable 5), 2026-09-10; revised 2026-09-19. The
+  2026-09-20 MCP server configuration entry was made with Claude Code
+  (Opus 5); the other 2026-09-20 entries are Fable 5.
   Scope: team allocation table and repository-structure notes
   transcribed from team decisions (2026-09-10); the AI Use Summary
   section is maintained as the policy's consolidated disclosure.
@@ -77,7 +79,7 @@ This section is the consolidated AI-use disclosure required by the CS3219
 AI Usage Policy (project document, Appendix 2). The detailed log with
 prompts and timestamps lives in [`ai/usage-log.md`](ai/usage-log.md).
 
-**Tools:** Claude Code (Fable 5)
+**Tools:** Claude Code (Fable 5, Opus 5)
 
 **Prohibited phases avoided:** requirements elicitation and
 prioritization; architecture and design decisions. Requirements, service

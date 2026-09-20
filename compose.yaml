@@ -1,6 +1,7 @@
 # AI-assisted (CS3219 AI Usage Policy disclosure):
-# Tool: Claude Code (Fable 5), 2026-09-18; revised 2026-09-19,
-# 2026-09-20.
+# Tool: Claude Code (Fable 5), 2026-09-18; revised 2026-09-19 and
+# 2026-09-20. The 2026-09-20 host-port publication noted below was made
+# with Claude Code (Opus 5); the earlier entries are Fable 5.
 # Scope: notification-service + notification-db wiring scaffolded for
 # issue #61 per team decisions D3 and M7 (docs/notification-service.md).
 # 2026-09-19: rabbitmq broker container added for issue #62 per team
