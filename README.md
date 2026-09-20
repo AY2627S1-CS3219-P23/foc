@@ -12,8 +12,9 @@
   retry/DLQ implementation (issue #65), then again for the retention
   purge scheduler (issue #68), the ArchUnit broker-isolation test
   (issue #69), and the project MCP server configuration (developer
-  tooling only); and again for the D2 progress-check readiness
-  document (docs/d2-progress-check.md).
+  tooling only); and again for the D2 design document
+  (docs/d2-design.md, briefly the progress-check readiness doc
+  before a same-day pivot).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -105,12 +106,12 @@ unit and integration tests) written strictly from the team's
 finalized design docs and issue specifications, with per-file
 attribution headers; developer tooling configuration (the
 project-scoped MCP servers declared in `.mcp.json`, documented in
-`AGENTS.md`); and the D2 progress-check readiness document
-(`docs/d2-progress-check.md`) — status inventory, D1-backlog
-traceability, and D2 rubric gap analysis compiled from the
-repository and issue state, with every recorded design decision made
-by the team via neutral-options Q&A and deferred decisions listed as
-Open Items without analysis.
+`AGENTS.md`); and the D2 design document (`docs/d2-design.md`) —
+status inventory and D1-backlog traceability compiled from the
+repository and issue state, schema and endpoint content derived
+mechanically from the requirements plus decisions the team made via
+neutral-options Q&A, and deferred decisions listed as Open Items
+without analysis.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

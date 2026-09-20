@@ -29,8 +29,8 @@ Entry template:
 ## 2026-09-20 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** docs
-- **Scope:** `docs/d2-progress-check.md` (new) — D2 progress-check
-  readiness document, with companion `docs/d2-progress-check.mmd`;
+- **Scope:** `docs/d2-design.md` (new; named `d2-progress-check.md`
+  before the same-day pivot) with companion `docs/d2-design.mmd`;
   README AI Use Summary updated accordingly.
 - **Prompt(s):** Asked for a plan to research and write a technical
   research document for the D2 progress check from the D1 project
@@ -64,6 +64,23 @@ Entry template:
   status block diagram, a timeline, and a dependency flowchart in
   place of prose — with no change to any decision, status, or open
   item.
+  A third follow-up pivoted the document from a readiness report into
+  a design doc answering the eleven D2 questions directly (file
+  renamed to `docs/d2-design.md`, companion `.mmd` renamed too).
+  Five further neutral-options rounds produced author decisions
+  D10–D21 (bigint identity keys; dedicated `otps` table; soft-delete
+  deletion model with the 30-day block; `jti` denylist logout;
+  separate reset/recovery token table; `supplier_categories` join
+  table; `zone` column via a Building→zone map; `opens_at`/`closes_at`
+  columns; `description` seeded empty; unprefixed routes; a single
+  paged `GET /suppliers`; the `/auth` + `/users/me` + `/users/{id}`
+  route grouping). Role storage, lockout representation, OTP email
+  provider, the protected-fields rule, and the role-lifecycle edge
+  cases were deferred by the author and remain Open items. The tool
+  derived the entity diagrams and endpoint tables mechanically from
+  requirements plus those decisions (the credit-service.md pattern)
+  and flagged the signup-OTP timing nuance as an Open item rather
+  than deciding it.
 - **Author review:** Tables checked against the D1/D2 documents and
   the issue tracker; merged via pull request.
 

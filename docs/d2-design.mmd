@@ -1,7 +1,7 @@
 %% AI-assisted (CS3219 AI Usage Policy disclosure):
 %% Tool: Claude Code (Fable 5), 2026-09-20.
 %% Scope: component-level D2 slice transcribed from docs/architecture.md
-%% with the team decisions D1-D9 recorded in docs/d2-progress-check.md
+%% with the team decisions D1-D21 recorded in docs/d2-design.md
 %% applied. No architecture decisions were made by the tool.
 %% Reviewed by: Leong Wei Zhi (via pull request).
 flowchart LR
@@ -11,7 +11,7 @@ flowchart LR
         USC["REST API<br/>Spring Security filter chain (D6)<br/>mints JWT: sub + role (D5)<br/>BCrypt hashing (D4)"]
     end
     subgraph SS["supplier-service (Spring Boot)"]
-        SSC["REST API<br/>verifies JWT locally, checks role claim<br/>paged/sorted listing (D9)<br/>401/403 problem+json (D8)"]
+        SSC["REST API<br/>verifies JWT locally, checks role claim<br/>paged/sorted listing (D9/D20)<br/>401/403 problem+json (D8)"]
     end
 
     UDB[("user-db<br/>PostgreSQL (D1)")]
