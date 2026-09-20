@@ -123,6 +123,18 @@ Entry template:
   denylist out of the user-db schema into the store, added the store
   to the architecture diagrams, and flagged fail-open-vs-fail-closed
   and Redis persistence as undecided owner nuances.
+  The author revised D30 the same day: shared revocation state via a
+  **per-request denylist check against the User Service**, explicitly
+  rejecting a microservices-shared Redis with the stated reason "to
+  minimize coupling between microservices", while noting a Redis or
+  in-memory cache **inside** the User Service may still front the
+  denylist lookup to minimize disk I/O (owner's internal detail).
+  The tool restored the token_denylist table to the user-db schema,
+  replaced the shared-store node with a per-request check edge in
+  the diagrams and the integration sequence, recorded the author's
+  reason verbatim in the comparison, and re-flagged the
+  User-Service-unreachable behaviour (fail-open vs fail-closed) as
+  undecided.
 - **Author review:** Tables checked against the D1/D2 documents and
   the issue tracker; merged via pull request.
 

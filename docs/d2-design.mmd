@@ -18,12 +18,10 @@ flowchart LR
     UDB[("user-db<br/>PostgreSQL")]
     SDB[("supplier-db<br/>PostgreSQL")]
     MAIL[["Email provider (TBD)<br/>OTP delivery"]]
-    RED[/"revocation store (Redis)<br/>shared jti denylist"/]
 
     SPA -->|"REST/JSON · accounts, auth, profiles"| USC
     SPA -->|"REST/JSON · supplier browse + manage"| SSC
     USC --- UDB
     SSC --- SDB
     USC ==>|"OTP email"| MAIL
-    USC -->|"revoke jti at logout"| RED
-    SSC -->|"check jti"| RED
+    SSC -->|"jti revoked? (per request)"| USC

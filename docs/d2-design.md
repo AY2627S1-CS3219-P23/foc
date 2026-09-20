@@ -17,12 +17,15 @@
   readability — attribution and traceability live in this header and
   ai/usage-log.md; the Lark internal-discussion copy carries no
   disclosure banner (all disclosures remain in-repo).
-  Later same day: the author chose the shared revocation store
-  (Redis) for logout scope from four tabled options, after a factual
-  Q&A about cross-service token checks; the tool inserted the
-  comparison, moved the jti denylist out of the user-db schema,
-  updated the diagrams, and flagged the store-unreachable and
-  Redis-persistence nuances as the owner's, undecided.
+  Later same day: the author chose shared revocation state for
+  logout scope from four tabled options, after a factual Q&A about
+  cross-service token checks — first as a shared Redis store, then
+  revised the same day to a per-request denylist check against the
+  User Service, with the author's stated reason (avoid a
+  microservices-shared Redis to minimize coupling between services)
+  and an optional User-Service-internal cache noted as the owner's;
+  the tool updated the comparison, schema and diagrams accordingly
+  and flagged the User-Service-unreachable behaviour as undecided.
   No requirements, architecture, or trade-off decisions were made by
   the tool.
   Reviewed by: Leong Wei Zhi (via pull request).
@@ -91,7 +94,7 @@ Every row: **Not started**. Weeks 5–6 have passed.
 
 ## Architecture (D2 slice)
 
-From [architecture.md](architecture.md) plus the team's choices. No gateway — each service verifies the shared HS256 `JWT_SECRET` locally. **Diagram source:** [`d2-design.mmd`](d2-design.mmd).
+From [architecture.md](architecture.md) plus the team's choices. No gateway — each service verifies the shared HS256 `JWT_SECRET` locally, and checks token revocation with a per-request call to the User Service. **Diagram source:** [`d2-design.mmd`](d2-design.mmd).
 
 ```mermaid
 flowchart LR
@@ -107,15 +110,13 @@ flowchart LR
     UDB[("user-db<br/>PostgreSQL")]
     SDB[("supplier-db<br/>PostgreSQL")]
     MAIL[["Email provider (TBD)<br/>OTP delivery"]]
-    RED[/"revocation store (Redis)<br/>shared jti denylist"/]
 
     SPA -->|"REST/JSON · accounts, auth, profiles"| USC
     SPA -->|"REST/JSON · supplier browse + manage"| SSC
     USC --- UDB
     SSC --- SDB
     USC ==>|"OTP email"| MAIL
-    USC -->|"revoke jti at logout"| RED
-    SSC -->|"check jti"| RED
+    SSC -->|"jti revoked? (per request)"| USC
 ```
 
 > ✍️ Endpoint paths are the agreed grouping; exact verbs/nesting are the owner's to finalize.
@@ -171,13 +172,17 @@ erDiagram
         text kind "PASSWORD_RESET or RECOVERY"
         timestamptz expires_at
     }
+    TOKEN_DENYLIST {
+        text jti PK "revoked at logout"
+        timestamptz expires_at "droppable after token expiry"
+    }
     USERS ||--o{ OTPS : "has"
     USERS ||--o{ ACCOUNT_TOKENS : "has"
 ```
 
 - **Credential storage:** only the BCrypt hash is stored; OTP codes and reset tokens are stored hashed; `JWT_SECRET` lives in env, never the DB.
 - **Soft delete = reuse block:** the deleted row keeps occupying the unique email/username for 30 days; purge on day 31 (scheduler); recovery clears `deleted_at`.
-- **`jti` denylist:** lives in the shared revocation store (Redis — chosen in §3), not in `user-db`.
+- **`jti` denylist:** user-service-private (`token_denylist`); other services check it via a per-request call to the User Service (§3).
 
 **Role storage** (chosen: column + CHECK):
 
@@ -214,19 +219,21 @@ Token-based: user-service mints an HS256 JWT on login with the shared `JWT_SECRE
 | `jti` | token id — denylist key at logout |
 | `exp` | 1 hour after issue |
 
-Enforcement: the Spring Security filter chain validates the JWT and maps `role` to authorities; violations → problem+json 401/403. Login accepts username-or-email; failures are non-revealing; lockout 15 min after 5 consecutive failures, counters cleared on success. Logout revokes the token's `jti` in the **shared revocation store (Redis)**; every service consults the store during validation, so logout takes effect platform-wide at once.
+Enforcement: the Spring Security filter chain validates the JWT and maps `role` to authorities; violations → problem+json 401/403. Login accepts username-or-email; failures are non-revealing; lockout 15 min after 5 consecutive failures, counters cleared on success. Logout denylists the token's `jti` at the User Service; **every other service checks the denylist with a per-request call to the User Service**, so logout takes effect platform-wide at once — a synchronous per-request dependency on the User Service.
 
-**Logout revocation scope** — a JWT stays signature-valid until expiry, so who checks the denylist decides how far logout reaches (chosen: shared store):
+**Logout revocation scope** — a JWT stays signature-valid until expiry, so who checks the denylist decides how far logout reaches (chosen: per-request check with the User Service):
 
-|   | Shared revocation store (chosen) | User-Service-only denylist | Short access + refresh pair | Revocation events over RabbitMQ |
-| --- | --- | --- | --- | --- |
-| Where revocation is enforced | every service | User Service only | User Service (refresh); access dies by its short TTL | every service, eventually |
-| Post-logout validity elsewhere | none | up to 1 h (token `exp`) | up to the access TTL (minutes) | until the event is consumed (seconds) |
-| New state / infrastructure | shared store (Redis container) | none | refresh-token store (`.env` slot exists) | broker consumers + in-memory list per service |
-| Other services' token check stays local | no — store lookup per request | yes | yes | yes — in-memory lookup |
-| Also shortens a demoted admin's stale `role` claim | yes | no | yes — to the access TTL | only if demotion publishes an event too |
+|   | Per-request check with User Service (chosen) | Shared Redis store | User-Service-only denylist | Short access + refresh pair | Revocation events over RabbitMQ |
+| --- | --- | --- | --- | --- | --- |
+| Where revocation is enforced | every service | every service | User Service only | User Service (refresh); access dies by its short TTL | every service, eventually |
+| Post-logout validity elsewhere | none | none | up to 1 h (token `exp`) | up to the access TTL (minutes) | until the event is consumed (seconds) |
+| New state / infrastructure | none shared — denylist stays in `user-db` | Redis container shared by all services | none | refresh-token store (`.env` slot exists) | broker consumers + in-memory list per service |
+| Other services' token check stays local | no — HTTP call to the User Service per request | no — store lookup per request | yes | yes | yes — in-memory lookup |
+| Also shortens a demoted admin's stale `role` claim | if demotion also denylists the user's tokens | if demotion also denylists the user's tokens | no | yes — to the access TTL | only if demotion publishes an event too |
 
-> ✍️ Two implementation nuances flagged for the owner, not decided: behaviour when the store is unreachable (fail-open vs fail-closed), and whether the denylist survives a Redis restart (persistence).
+Chosen with the team's stated reason: **avoid a microservices-shared Redis cache to minimize coupling between microservices.** Within the User Service, a Redis or in-memory cache in front of the denylist lookup may still be used to minimize disk I/O — an internal implementation detail, the owner's call.
+
+> ✍️ Flagged for the owner, not decided: behaviour when the User Service is unreachable mid-request (fail-open vs fail-closed).
 
 ```mermaid
 sequenceDiagram
@@ -315,6 +322,8 @@ sequenceDiagram
     US-->>SPA: JWT { sub, role: "ADMIN", jti } · 1 h expiry
     SPA->>SS: POST /suppliers (Bearer JWT)
     SS->>SS: verify secret, read role
+    SS->>US: jti revoked? (denylist check)
+    US-->>SS: no
     SS-->>SPA: 201 created
 
     U->>SPA: login
@@ -512,7 +521,7 @@ Health: `GET http://localhost:${NOTIFICATION_SERVICE_PORT:-8085}/actuator/health
 - Two open comparisons (**OTP email provider**, **signup-OTP timing** — Part 1 §3): owner picks in the implementation PR.
 - File the supplier paging/sorting issue (labels per the backlog convention).
 - Write the Building→zone mapping used at seed time.
-- `user-db` / `supplier-db`: compose rows, `.env.example` vars, `AGENTS.md` port-table rows — each owner's own PR; the revocation store (Redis) joins compose with the user-service work, and the Week-11 listing cache can share the same container.
+- `user-db` / `supplier-db`: compose rows, `.env.example` vars, `AGENTS.md` port-table rows — each owner's own PR (the Week-11 listing-cache container joins with that work).
 - `docs/user-service.md` / `docs/supplier-service.md` (+ `.mmd`): long-term homes for each service's decision record.
 - architecture.md: strike the two resolved engine TBDs after merge.
 - No CI yet (`.github/` absent) — demo runs on local compose.
