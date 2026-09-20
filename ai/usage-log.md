@@ -27,6 +27,35 @@ Entry template:
 
 ---
 ## 2026-09-20 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** docs, boilerplate (developer tooling)
+- **Scope:** Project-scoped MCP server configuration for agent tooling:
+  `context7` (library documentation lookup), `postgres`
+  (`@henkey/postgres-mcp-server`, for inspecting the service-owned DB),
+  and `playwright` (browser automation for the future `web/` frontend)
+  added to the root `.mcp.json` alongside the existing `figma` entry;
+  `notification-db` published on a host port in `compose.yaml` with a
+  new `NOTIFICATION_DB_HOST_PORT` variable in `.env.example` so the
+  postgres server can reach it; new "MCP Servers" section in
+  `AGENTS.md` documenting each server and its setup.
+- **Prompt(s):** Asked which MCP tools would help productivity on the
+  project, then asked to set up context7, the postgres MCP and the
+  playwright MCP as project MCP servers and raise a pull request. The
+  tool checked the current npm packages (the reference
+  `@modelcontextprotocol/server-postgres` and `server-github` are
+  deprecated) and recommended against a GitHub MCP server since the
+  `gh` CLI already covers that workflow. Whether to publish the
+  database port in `compose.yaml` was put back to the author as an
+  explicit choice and decided by the author.
+- **Author review:** Developer tooling only — no product, requirements,
+  or architecture decision is involved, and no service code changed.
+  Verified the `.mcp.json` is valid JSON, that no credentials are
+  committed (the connection string interpolates variables from the
+  git-ignored `.env`), and that the compose change adds only a host
+  port publication, leaving the in-network wiring untouched. Reviewed
+  via pull request.
+
+## 2026-09-20 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate (implementation)
 - **Scope:** ArchUnit test enforcing the D11 broker-isolation boundary

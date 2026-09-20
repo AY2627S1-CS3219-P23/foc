@@ -1,5 +1,6 @@
 # AI-assisted (CS3219 AI Usage Policy disclosure):
-# Tool: Claude Code (Fable 5), 2026-09-18; revised 2026-09-19.
+# Tool: Claude Code (Fable 5), 2026-09-18; revised 2026-09-19,
+# 2026-09-20.
 # Scope: notification-service + notification-db wiring scaffolded for
 # issue #61 per team decisions D3 and M7 (docs/notification-service.md).
 # 2026-09-19: rabbitmq broker container added for issue #62 per team
@@ -10,6 +11,9 @@
 # notification service for the retry/DLQ topology (D6/D7).
 # 2026-09-20, issue #68: retention window / purge-cron passed to the
 # notification service for the retention purge scheduler (D9).
+# 2026-09-20: notification-db published on a host port so local
+# tooling (psql, DB GUIs, the postgres MCP server) can reach it; the
+# in-network wiring is unchanged.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -77,6 +81,11 @@ services:
   # notification service (database-per-service).
   notification-db:
     image: postgres:17
+    # Published on the host so local tooling (psql, DB GUIs, the postgres
+    # MCP server) can reach the service-owned DB; the service itself talks
+    # to it over the compose network on 5432.
+    ports:
+      - "${NOTIFICATION_DB_HOST_PORT:-5433}:5432"
     environment:
       POSTGRES_DB: ${NOTIFICATION_DB_NAME:-notification}
       POSTGRES_USER: ${NOTIFICATION_DB_USER:-notification}

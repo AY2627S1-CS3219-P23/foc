@@ -8,8 +8,9 @@
   (docs/notification-service.md).
   2026-09-20: AI Use Summary wording extended for the notification
   retry/DLQ implementation (issue #65), then again for the retention
-  purge scheduler (issue #68) and the ArchUnit broker-isolation test
-  (issue #69).
+  purge scheduler (issue #68), the ArchUnit broker-isolation test
+  (issue #69), and the project MCP server configuration (developer
+  tooling only).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -99,7 +100,9 @@ STOMP push gateway with JWT-authenticated sessions, retention purge
 scheduler, an ArchUnit test enforcing the broker-isolation boundary,
 unit and integration tests) written strictly from the team's
 finalized design docs and issue specifications, with per-file
-attribution headers.
+attribution headers; developer tooling configuration (the
+project-scoped MCP servers declared in `.mcp.json`, documented in
+`AGENTS.md`).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

@@ -3,6 +3,24 @@
     "figma": {
       "type": "http",
       "url": "https://mcp.figma.com/mcp"
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "postgres": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@henkey/postgres-mcp-server"],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "postgresql://${NOTIFICATION_DB_USER:-notification}:${NOTIFICATION_DB_PASSWORD}@localhost:${NOTIFICATION_DB_HOST_PORT:-5433}/${NOTIFICATION_DB_NAME:-notification}"
+      }
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest", "--isolated"]
     }
   }
 }
