@@ -12,6 +12,11 @@
   neutral-options Q&As (logged in ai/usage-log.md); the tool presented
   the options factually and transcribed the outcomes. Decisions the
   author deferred are recorded under Open items with no analysis.
+  Same day: style-compliance pass against the team's TRD style guide
+  (Testing section added, companion d2-progress-check.mmd, the
+  existing JwtVerifier excerpt and Spring's default ProblemDetail
+  shape quoted as factual references, caveat marking sequence-diagram
+  endpoint paths as illustrative).
   No requirements, architecture, or trade-off decisions were made by
   the tool.
   Reviewed by: Leong Wei Zhi (via pull request).
@@ -150,6 +155,10 @@ All decisions below were made by **Leong Wei Zhi on 2026-09-20**, from neutral o
 
 Transcribed from [architecture.md](architecture.md) (authentication note, dependency table) narrowed to the D2 slice, with D1–D9 applied. No API gateway exists — each service verifies the shared-secret HS256 JWT locally (`.env.example`), reading `sub` (user ID, issue #67 convention) and `role` (D5).
 
+**Diagram source:** [`d2-progress-check.mmd`](d2-progress-check.mmd) (house convention: `.mmd` beside `.md`; GitHub renders it in the file view). The copy below is inlined for reading in place.
+
+> ✍️ Endpoint paths in the sequence diagrams (`POST /signup`, `POST /login`, `POST /suppliers`) are illustrative stand-ins for the backlog flows, not an API design — the concrete API surface is each service owner's work (the AI policy keeps interface design with the team).
+
 ```mermaid
 flowchart LR
     SPA(["Web SPA (React)<br/>signup / login / profile / admin<br/>supplier browse + manage"])
@@ -173,6 +182,28 @@ flowchart LR
 ```
 
 > ℹ️ Out of frame but adjacent: architecture.md routes sign-up through **User Service → Credit Service** to allocate 5 starting credits (Credit F1.1). `credit-service/` is an empty stub, so how sign-up behaves without it at D2 is an Open item. The existing notification stack (RabbitMQ, STOMP) is unaffected by this slice.
+
+### The token verifier already in the tree
+
+The one piece of this slice that exists as real code is the verifier half of the shared-secret scheme — [`JwtVerifier`](../notification-service/src/main/java/foc/notification/security/JwtVerifier.java), which tokens minted by the User Service must satisfy and which supplier-side verification can mirror:
+
+```java
+public String verifiedSubject(String token) {
+    Jws<Claims> jws = parser.parseSignedClaims(token);
+    // Defense in depth: the platform convention is HS256 exactly.
+    // (The signature was already verified against the shared key.)
+    if (!"HS256".equals(jws.getHeader().getAlgorithm())) {
+        throw new MalformedJwtException("unexpected signature algorithm");
+    }
+    String subject = jws.getPayload().getSubject();
+    if (subject == null || subject.isBlank()) {
+        throw new MalformedJwtException("token has no subject");
+    }
+    return subject;
+}
+```
+
+The parser is built eagerly, so a missing or short `JWT_SECRET` fails at startup (`MIN_SECRET_BYTES = 32`), and the class Javadoc already anticipates reuse beyond STOMP.
 
 ### Sign-up with OTP (F1.1, F1.1.2–F1.1.5)
 
@@ -202,8 +233,8 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor U as User (role: user)
-    actor A as Admin (role: admin)
+    actor U as User account
+    actor A as Admin account
     participant SPA as Web SPA
     participant US as user-service
     participant SS as supplier-service
@@ -221,6 +252,20 @@ sequenceDiagram
     SPA->>SS: POST /suppliers (Bearer JWT)
     SS-->>SPA: 403 application/problem+json (D8, F6.1.5)
 ```
+
+**Denied response shape (D8)** — what Spring's `ProblemDetail` emits by default for the 403 leg (RFC 9457); shown as the library's stock output, field population is the owners' implementation work:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Forbidden",
+  "status": 403,
+  "detail": "...",
+  "instance": "/suppliers"
+}
+```
+
+The `detail` member is where F6.1.5's "inform the user that they lack permission" lands.
 
 ## Execution plan to Week 7
 
@@ -249,6 +294,42 @@ Workstreams and their factual dependencies — owners per the README allocation;
 | 7 | P1.4 + P2.4 | Same admin token accepted by supplier-service; user token gets 403 problem+json | both services integrated |
 | 8 | P2.5 | Supplier pages at desktop and mobile widths, live data | web scaffold + supplier screens |
 | 9 | wrap-up | Architecture + sequence diagrams (this doc); "why" answers from the deciders | — |
+
+## Testing
+
+Nothing D2-specific is testable yet; what is testable today is (a) this document's claims and (b) the stack that already runs. Per-service run/test instructions land with each owner's PR (house pattern: [`notification-service/README.md`](../notification-service/README.md), whose integration tests use Testcontainers and auto-skip when Docker is unavailable).
+
+### Reproduce the status audit
+
+```sh
+# The two graded services are 0-byte scaffolds (6 files, all size 0)
+git ls-files user-service supplier-service | xargs ls -la
+
+# No signup/domain-validation code exists anywhere
+grep -rn "u.nus.edu" --include="*.java" .   # no output
+
+# The D2-relevant issues are all open (#1–#11, #32–#37, #43)
+gh issue list --state open --limit 60
+```
+
+### Run what exists today
+
+Commands from `notification-service/README.md`, adapted to run from the repo root:
+
+```sh
+# One-time: install the shared contracts library (D15)
+(cd foc-contracts && ./mvnw install)
+
+# Notification tests — in-memory H2, no infrastructure needed
+(cd notification-service && ./mvnw test)
+
+# Full existing stack: cp .env.example .env first and set
+# NOTIFICATION_DB_PASSWORD, RABBITMQ_PASSWORD, and JWT_SECRET
+# (the verifier requires ≥32 bytes at startup)
+docker compose up --build notification-service
+```
+
+Health check: `GET http://localhost:${NOTIFICATION_SERVICE_PORT:-8085}/actuator/health`.
 
 ## Open items (team decisions still pending)
 

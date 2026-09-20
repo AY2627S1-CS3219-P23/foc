@@ -30,7 +30,8 @@ Entry template:
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** docs
 - **Scope:** `docs/d2-progress-check.md` (new) — D2 progress-check
-  readiness document; README AI Use Summary updated accordingly.
+  readiness document, with companion `docs/d2-progress-check.mmd`;
+  README AI Use Summary updated accordingly.
 - **Prompt(s):** Asked for a plan to research and write a technical
   research document for the D2 progress check from the D1 project
   backlog, using the Lark docs MCP. The tool read the course D2
@@ -50,6 +51,14 @@ Entry template:
   provider, and the supplier seed schema mapping were deferred by the
   author and recorded as Open Items without analysis. The finished
   markdown was also imported into Lark as the team's reading copy.
+  A follow-up prompt asked the tool to ensure the document respects
+  the team's TRD style guide; the tool audited it against the guide
+  and applied compliance fixes (Testing section with real commands,
+  companion `.mmd` per the docs convention, the existing `JwtVerifier`
+  method and Spring's default `ProblemDetail` shape quoted as factual
+  references, sequence-diagram endpoint paths marked illustrative),
+  leaving the policy-driven deviation — no AI-drafted trade-off
+  matrices for the decisions — documented in the doc itself.
 - **Author review:** Tables checked against the D1/D2 documents and
   the issue tracker; merged via pull request.
 

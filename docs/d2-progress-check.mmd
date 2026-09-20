@@ -1,0 +1,25 @@
+%% AI-assisted (CS3219 AI Usage Policy disclosure):
+%% Tool: Claude Code (Fable 5), 2026-09-20.
+%% Scope: component-level D2 slice transcribed from docs/architecture.md
+%% with the team decisions D1-D9 recorded in docs/d2-progress-check.md
+%% applied. No architecture decisions were made by the tool.
+%% Reviewed by: Leong Wei Zhi (via pull request).
+flowchart LR
+    SPA(["Web SPA (React)<br/>signup / login / profile / admin<br/>supplier browse + manage"])
+
+    subgraph US["user-service (Spring Boot)"]
+        USC["REST API<br/>Spring Security filter chain (D6)<br/>mints JWT: sub + role (D5)<br/>BCrypt hashing (D4)"]
+    end
+    subgraph SS["supplier-service (Spring Boot)"]
+        SSC["REST API<br/>verifies JWT locally, checks role claim<br/>paged/sorted listing (D9)<br/>401/403 problem+json (D8)"]
+    end
+
+    UDB[("user-db<br/>PostgreSQL (D1)")]
+    SDB[("supplier-db<br/>PostgreSQL (D2)")]
+    MAIL[["Email provider (TBD)<br/>OTP delivery"]]
+
+    SPA -->|"REST/JSON · User F1–F8"| USC
+    SPA -->|"REST/JSON · Supplier F1–F2"| SSC
+    USC --- UDB
+    SSC --- SDB
+    USC ==>|"OTP email · F1.1.3, F2.1.x, F4.2"| MAIL
