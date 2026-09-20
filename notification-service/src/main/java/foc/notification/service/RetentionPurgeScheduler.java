@@ -7,6 +7,9 @@
  * Cutoff field (created_at vs occurred_at) and schedule-cadence
  * configurability (a second env var vs a fixed cron) were open
  * implementation details resolved by the author via neutral options.
+ * 2026-09-20, PR #81 Copilot review: the repository's purge query
+ * became an explicit bulk {@code @Modifying @Query} (was a derived
+ * {@code deleteBy...} method), so its return type is {@code int}.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.service;
@@ -48,7 +51,7 @@ class RetentionPurgeScheduler {
 	@Scheduled(cron = "${notification.retention.purge-cron}")
 	void purgeExpiredNotifications() {
 		Instant cutoff = Instant.now().minus(retentionDays, ChronoUnit.DAYS);
-		long deleted = notifications.deleteByCreatedAtBefore(cutoff);
+		int deleted = notifications.deleteByCreatedAtBefore(cutoff);
 		log.info("purged {} notification(s) stored before {}", deleted, cutoff);
 	}
 }

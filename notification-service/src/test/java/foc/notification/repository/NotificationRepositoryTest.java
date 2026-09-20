@@ -41,7 +41,7 @@ class NotificationRepositoryTest {
 		backdate(oldRow.getId(), Instant.now().minus(40, ChronoUnit.DAYS));
 
 		Instant cutoff = Instant.now().minus(30, ChronoUnit.DAYS);
-		long deleted = notifications.deleteByCreatedAtBefore(cutoff);
+		int deleted = notifications.deleteByCreatedAtBefore(cutoff);
 
 		assertThat(deleted).isEqualTo(1);
 		assertThat(notifications.findAll()).extracting(Notification::getId)
@@ -52,7 +52,7 @@ class NotificationRepositoryTest {
 	void leavesEverythingWhenNothingIsOlderThanCutoff() {
 		notifications.save(new Notification("usr-1", "e-1", "request.created", "{}", Instant.now()));
 
-		long deleted = notifications.deleteByCreatedAtBefore(Instant.now().minus(30, ChronoUnit.DAYS));
+		int deleted = notifications.deleteByCreatedAtBefore(Instant.now().minus(30, ChronoUnit.DAYS));
 
 		assertThat(deleted).isZero();
 		assertThat(notifications.count()).isEqualTo(1);
