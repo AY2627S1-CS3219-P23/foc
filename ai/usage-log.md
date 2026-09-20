@@ -27,6 +27,33 @@ Entry template:
 
 ---
 ## 2026-09-20 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs
+- **Scope:** `docs/d2-progress-check.md` (new) — D2 progress-check
+  readiness document; README AI Use Summary updated accordingly.
+- **Prompt(s):** Asked for a plan to research and write a technical
+  research document for the D2 progress check from the D1 project
+  backlog, using the Lark docs MCP. The tool read the course D2
+  instructions and the team's D1 document (PDFs), mapped the
+  repository/issue state (user-service and supplier-service are
+  unstarted scaffolds; all 18 D2-relevant issues open), and compiled
+  the status inventory, D1-backlog traceability tables, D2 rubric gap
+  analysis, role-capability matrix (transcribed from backlog F6/F8),
+  and demo/execution outline. Nine design decisions recorded in the
+  document (PostgreSQL for user-db and supplier-db, User Service as
+  the near-complete D2 target, BCrypt, a single `role` JWT claim,
+  Spring Security filter chain, a one-time first-admin bootstrap
+  endpoint/flag, RFC 9457 problem+json denial responses, supplier
+  pagination/sorting adopted as a requirement) were made by the author
+  from neutral-options Q&As — the tool presented options factually and
+  transcribed the outcomes. Logout token invalidation, the OTP email
+  provider, and the supplier seed schema mapping were deferred by the
+  author and recorded as Open Items without analysis. The finished
+  markdown was also imported into Lark as the team's reading copy.
+- **Author review:** Tables checked against the D1/D2 documents and
+  the issue tracker; merged via pull request.
+
+## 2026-09-20 — Leong Wei Zhi
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** docs, boilerplate (developer tooling)
 - **Scope:** Project-scoped MCP server configuration for agent tooling:
