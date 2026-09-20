@@ -12,7 +12,8 @@
   retry/DLQ implementation (issue #65), then again for the retention
   purge scheduler (issue #68), the ArchUnit broker-isolation test
   (issue #69), and the project MCP server configuration (developer
-  tooling only).
+  tooling only); and again for the user-service Spring Boot scaffold
+  (issue #84).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -104,7 +105,11 @@ unit and integration tests) written strictly from the team's
 finalized design docs and issue specifications, with per-file
 attribution headers; developer tooling configuration (the
 project-scoped MCP servers declared in `.mcp.json`, documented in
-`AGENTS.md`).
+`AGENTS.md`); and the user-service Spring Boot scaffold (issue #84) —
+pom, application config, Dockerfile, and application/test classes
+mirroring the notification-service pattern, with the dependency-set,
+Dockerfile-shape, and config-scope choices made by the author via
+neutral-options Q&A.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

@@ -27,6 +27,27 @@ Entry template:
 
 ---
 ## 2026-09-20 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (scaffolding/boilerplate)
+- **Scope:** `user-service/` Spring Boot scaffold for issue #84: `pom.xml`,
+  `application.yaml`, `Dockerfile`, application + contextLoads test
+  classes (`foc.user`), Maven wrapper and Initializr dotfiles copied
+  from `notification-service/`, and a short service README. No compose
+  row, `.env.example` vars, or port-table entry (issue #85's scope);
+  no datasource, security, or endpoints beyond actuator health
+  (issues #86+).
+- **Prompt(s):** Asked to plan and resolve issue #84. The tool explored
+  the notification-service pattern and put the non-mechanical scaffold
+  choices to the author as neutral options; the author chose a minimal
+  boot-only dependency set (actuator + webmvc, deferring data-jpa and
+  security to their issues), a root-build-context Dockerfile without
+  the foc-contracts stage, and a name-plus-health-only
+  `application.yaml`.
+- **Author review:** `./mvnw test` (contextLoads), local boot with a
+  health-endpoint check, and a Docker image build; reviewed via pull
+  request.
+
+## 2026-09-20 — Leong Wei Zhi
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** docs, boilerplate (developer tooling)
 - **Scope:** Project-scoped MCP server configuration for agent tooling:
