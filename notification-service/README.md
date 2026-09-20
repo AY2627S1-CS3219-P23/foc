@@ -12,6 +12,8 @@
   note updated.
   2026-09-20, issue #68: retention purge scheduler narrative added
   (team decision D9; author decision on the NOTIF_PURGE_CRON env var).
+  2026-09-20, issue #69: ArchUnit broker-isolation enforcement
+  narrative added (team decision D11).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -124,4 +126,12 @@ env-overridable and independent of each other. It runs on the app's
 sole `TaskScheduler` bean (the STOMP heartbeat scheduler in
 `WebSocketStompConfig`; Boot backs off its own default once a
 user-defined one exists), and imports nothing broker-related (D11).
+
+The D11 broker-isolation boundary is now enforced in the build (issue
+#69): `ArchitectureTest` (ArchUnit) asserts that no package outside
+`messaging.rabbitmq` depends on `org.springframework.amqp` or
+`com.rabbitmq` types, and runs with the normal `./mvnw test` suite —
+a future PR that leaks a broker type into business logic fails CI
+instead of just review.
+
 REST API lands in issue #66.

@@ -21,6 +21,10 @@
   jjwt module exists for Jackson 3 yet and jjwt-jackson would drag a
   parallel Jackson 2 stack onto the classpath; gson is BOM-managed
   and used only inside jjwt.
+  2026-09-20, issue #69: archunit-junit5 added (test scope) for the
+  D11 broker-isolation ArchUnit test; latest stable release as of this
+  writing, compatible with the JUnit Jupiter version foc-contracts
+  already pins.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -54,6 +58,7 @@
 		<java.version>21</java.version>
 		<!-- Not managed by the Boot BOM; pinned explicitly. -->
 		<jjwt.version>0.13.0</jjwt.version>
+		<archunit.version>1.4.2</archunit.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -147,6 +152,12 @@
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers-rabbitmq</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.tngtech.archunit</groupId>
+			<artifactId>archunit-junit5</artifactId>
+			<version>${archunit.version}</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
