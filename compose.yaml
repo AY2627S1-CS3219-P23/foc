@@ -16,12 +16,36 @@
 # so local tooling (psql, DB GUIs, the postgres MCP server) can reach
 # it; the in-network wiring is unchanged. Loopback binding added on
 # PR #83 Copilot review.
+# 2026-09-20, issue #108: web frontend container added (Vite static
+# build served by nginx); service URLs passed as build args because
+# Vite inlines VITE_* values at build time.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 name: foc
 
 services:
+  # Web frontend (issue #108): the single React SPA, built with Vite and
+  # served as static files by nginx. No depends_on — the shell makes no
+  # API calls yet, and a static frontend shouldn't gate on backends.
+  # The VITE_* args are browser-visible URLs (host-published ports, never
+  # compose-internal hostnames); changing one requires an image rebuild.
+  web:
+    build:
+      context: web
+      args:
+        # Only the notification service has claimed a host port so far;
+        # the others get values once their owners claim ports (see the
+        # AGENTS.md port table).
+        VITE_USER_SERVICE_URL: ${VITE_USER_SERVICE_URL:-}
+        VITE_SUPPLIER_SERVICE_URL: ${VITE_SUPPLIER_SERVICE_URL:-}
+        VITE_ORDER_SERVICE_URL: ${VITE_ORDER_SERVICE_URL:-}
+        VITE_CREDIT_SERVICE_URL: ${VITE_CREDIT_SERVICE_URL:-}
+        VITE_NOTIFICATION_SERVICE_URL: ${VITE_NOTIFICATION_SERVICE_URL:-http://localhost:8085}
+    ports:
+      - "${WEB_PORT:-5173}:80"
+    restart: unless-stopped
+
   notification-service:
     # Context is the repo root so the build can include the shared
     # foc-contracts library (D15).

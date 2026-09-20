@@ -14,7 +14,8 @@
   (issue #69), and the project MCP server configuration (developer
   tooling only); and again for the D2 design document
   (docs/d2-design.md, briefly the progress-check readiness doc
-  before a same-day pivot).
+  before a same-day pivot); and again for the web/ SPA scaffold
+  (issue #108).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -112,7 +113,12 @@ repository and issue state, schema and endpoint content derived
 mechanically from the requirements plus decisions the team made via
 neutral-options Q&A, and the remaining open choices presented in
 place as factual option comparisons, without tool-authored
-recommendations or justifications.
+recommendations or justifications; and the `web/` SPA scaffold
+(issue #108) — Vite/React/TypeScript project skeleton, file-based
+router with the shared app shell and 404, shared API/query utilities,
+tooling configuration, and Docker/compose wiring, with the stack,
+tooling, scope, and port choices made by the author via
+neutral-options Q&A and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

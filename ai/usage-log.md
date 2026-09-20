@@ -28,6 +28,39 @@ Entry template:
 ---
 ## 2026-09-20 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (scaffolding)
+- **Scope:** `web/` SPA scaffold for issue #108 — Vite/React/TS project
+  (`package.json`, `package-lock.json`, tsconfigs, `vite.config.ts`,
+  `eslint.config.js`, Prettier config, `.nvmrc`), file-based router
+  (`src/routes/`, generated `src/routeTree.gen.ts`), shared app shell
+  (`src/shared/shell/` — responsive nav with placeholder credits and
+  notification slots, 404), shared API/query utilities (`src/lib/`),
+  convention READMEs (`src/features/`, `src/shared/components/`,
+  `src/shared/auth/`), example Vitest tests (`src/test/`),
+  `web/Dockerfile` + `web/nginx.conf` + `web/.dockerignore`, the `web`
+  service in `compose.yaml`, the Web frontend section of
+  `.env.example`, the web row in the AGENTS.md port table, root
+  `.gitignore` (`node_modules/`), `web/README.md`, and this entry +
+  the README AI Use Summary. `package.json`, `package-lock.json`, and
+  `routeTree.gen.ts` cannot carry attribution comments and are covered
+  by this entry; tsconfigs and `web/.gitignore`/`public/` are
+  create-vite generator boilerplate kept mostly unmodified.
+- **Prompt(s):** Asked for a plan to resolve issue #108 (scaffold the
+  React + TypeScript SPA: router, shared app shell). The tool explored
+  the repo/wireframes, then presented the open choices as
+  neutral-options questions; the author decided: Vite + React,
+  TanStack Router, Tailwind CSS, TanStack Query + fetch wrappers,
+  scope limited to shell + 404 (no domain/auth pages), ESLint +
+  Prettier + Vitest/Testing Library, Node 22, and port 5173 with the
+  Dockerfile/compose/port-claim included in this PR. The tool then
+  scaffolded via `npm create vite` and implemented the approved plan.
+- **Author review:** ran `npm run lint`, `format:check`, `test`
+  (2 passing), and `build`; brought the app up via the dev server and
+  `docker compose up --build web`, checking the shell and 404 at
+  desktop and mobile widths; reviewed via pull request.
+
+## 2026-09-20 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
 - **Mode:** docs
 - **Scope:** `docs/d2-design.md` (new; named `d2-progress-check.md`
   before the same-day pivot) with companion `docs/d2-design.mmd`;

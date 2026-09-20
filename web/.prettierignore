@@ -1,0 +1,8 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5), 2026-09-20, issue #108.
+# Reviewed by: Leong Wei Zhi (via pull request).
+dist
+src/routeTree.gen.ts
+package-lock.json
+docs
+AGENTS.md
