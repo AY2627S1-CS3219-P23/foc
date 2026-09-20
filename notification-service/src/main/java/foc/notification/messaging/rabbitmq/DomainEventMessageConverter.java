@@ -14,7 +14,10 @@
  * removed with the field itself (author decision — breaking changes
  * ship as new event types instead).
  * 2026-09-20, issue #65: javadoc only — conversion rejects now
- * dead-letter instead of being dropped.
+ * dead-letter instead of being dropped. Same day, PR #79 Copilot
+ * review: explicit empty-body guard so a null/empty body is a fatal
+ * conversion failure (dead-lettered) rather than a mapper-dependent
+ * error outside the fatal classification.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.rabbitmq;
@@ -88,9 +91,13 @@ class DomainEventMessageConverter implements MessageConverter {
 
 	@Override
 	public Object fromMessage(Message message) throws MessageConversionException {
+		byte[] body = message.getBody();
+		if (body == null || body.length == 0) {
+			throw new MessageConversionException("empty message body");
+		}
 		JsonNode tree;
 		try {
-			tree = jsonMapper.readTree(message.getBody());
+			tree = jsonMapper.readTree(body);
 		} catch (JacksonException ex) {
 			throw new MessageConversionException("malformed JSON body", ex);
 		}

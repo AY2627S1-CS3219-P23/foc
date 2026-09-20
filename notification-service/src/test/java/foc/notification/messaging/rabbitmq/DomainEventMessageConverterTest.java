@@ -5,6 +5,7 @@
  * registry dispatch on the body eventType, eventType injection on
  * serialize, and fatal MessageConversionException on malformed,
  * missing-type, and unknown-type bodies.
+ * 2026-09-20, PR #79 Copilot review: empty-body case added.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.rabbitmq;
@@ -114,6 +115,12 @@ class DomainEventMessageConverterTest {
 
 		assertThatExceptionOfType(MessageConversionException.class)
 				.isThrownBy(() -> converter.fromMessage(message(body)));
+	}
+
+	@Test
+	void emptyBodyIsFatal() {
+		assertThatExceptionOfType(MessageConversionException.class)
+				.isThrownBy(() -> converter.fromMessage(message(new byte[0])));
 	}
 
 	@Test

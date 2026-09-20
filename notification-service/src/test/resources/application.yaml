@@ -11,7 +11,8 @@
 # tests.
 # 2026-09-20, issue #65: retry properties repeated here (this file
 # shadows the main yaml) with a short TTL so the broker integration
-# test observes full retry cycles in well under a second.
+# test observes full retry cycles in well under a second; publisher
+# confirms repeated for the same shadowing reason (PR #79 review).
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 notification:
@@ -35,6 +36,9 @@ spring:
       simple:
         acknowledge-mode: manual
         auto-startup: false
+    # Repeated from the main yaml (shadowed): the listener's retry
+    # republish calls waitForConfirmsOrDie, which needs confirm mode.
+    publisher-confirm-type: simple
   datasource:
     url: jdbc:h2:mem:notification;DB_CLOSE_DELAY=-1
     username: sa

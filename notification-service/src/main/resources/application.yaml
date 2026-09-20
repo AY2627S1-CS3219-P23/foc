@@ -10,7 +10,9 @@
 # origins for the STOMP push gateway (author decisions; see
 # docs/notification-service.md "Session mechanics").
 # 2026-09-20, issue #65: retry TTL and max-attempts bindings (values
-# team-decided 2026-09-19: 10 s / 3 attempts, env-overridable).
+# team-decided 2026-09-19: 10 s / 3 attempts, env-overridable); on PR
+# #79 Copilot review, publisher confirms enabled so the listener's
+# retry republish blocks until the broker accepts the copy.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -36,6 +38,10 @@ spring:
         # The listener acks/nacks explicitly, after the processor's
         # transaction commits (issue #64, NFR1.1).
         acknowledge-mode: manual
+    # Simple (synchronous) publisher confirms: the listener's retry
+    # republish waits for broker acceptance before acking the original
+    # delivery, so a lost publish can never lose the event (issue #65).
+    publisher-confirm-type: simple
 
 notification:
   rabbitmq:

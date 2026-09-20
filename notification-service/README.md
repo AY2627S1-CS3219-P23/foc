@@ -67,8 +67,9 @@ with #66).
 
 Failure handling (issue #65, decisions D6/D7/D20/D21) is live: a
 processing failure is republished to the durable TTL **retry queue**
-(`NOTIFICATION_RETRY_TTL_MS`, default 10 s) and returns to the work
-queue for another attempt; after `NOTIFICATION_RETRY_MAX_ATTEMPTS`
+(`NOTIFICATION_RETRY_TTL_MS`, default 10 s) — a confirmed publish;
+the original delivery is acked only after the broker accepts the
+copy — and returns to the work queue for another attempt; after `NOTIFICATION_RETRY_MAX_ATTEMPTS`
 (default 3) total attempts — counted via a listener-stamped
 `x-retry-attempts` header, because RabbitMQ 4 resets its own `x-death`
 count on client republish — the event is nacked to the durable **DLQ**

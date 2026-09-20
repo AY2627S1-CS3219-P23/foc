@@ -1,3 +1,13 @@
+<!--
+  AI-assisted (CS3219 AI Usage Policy disclosure):
+  Tool: Claude Code (Fable 5), 2026-09-20 (header added on PR #79
+  Copilot review; the file predates it).
+  Scope: this log's entries are appended by whichever tool made the
+  change they describe, following the template below; each entry names
+  its own tool, author, and review.
+  Reviewed by: Leong Wei Zhi (via pull request).
+-->
+
 # AI Usage Log
 
 Shared log of AI tool usage, required by the CS3219 AI Usage Policy
@@ -35,7 +45,15 @@ Entry template:
   transient-recovery and poison-to-DLQ scenarios, unknown-type
   assertions updated from dropped to dead-lettered); design doc
   (D20/D21 recorded, D6/D7/F2.2/F2.3 rows updated), diagram, and
-  service README migration note updated.
+  service README migration note updated. PR #79 Copilot review
+  addressed: the retry republish became a confirmed publish
+  (`publisher-confirm-type: simple` + `waitForConfirmsOrDie` before
+  acking the original, so a lost publish can never lose the event);
+  explicit empty-body guard in the converter (fatal conversion →
+  DLQ) with a unit test; disclosure header added to this log file;
+  root README AI Use Summary wording extended. The review's
+  crash-window duplicate-retry observation is the already-documented
+  at-least-once posture (absorbed by event-ID dedupe) — no change.
 - **Prompt(s):** "Make a plan to resolve issue #65 on github", then
   plan approval. The tool surfaced the two implementation choices the
   D6/D7 design left open as neutral options Q&As; the author decided

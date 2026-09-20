@@ -15,7 +15,9 @@
  * queue while attempts remain (counted via a service-set header;
  * RabbitMQ 4 resets x-death counts on client republish, verified
  * against a real broker), nack without requeue to the DLQ once
- * exhausted.
+ * exhausted. Same day, PR #79 Copilot review: the republish is now a
+ * confirmed publish, so the original is acked only after the broker
+ * accepts the retry copy.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.rabbitmq;
@@ -59,9 +61,16 @@ import org.springframework.stereotype.Component;
  * broker in the integration test). Once
  * {@code notification.rabbitmq.retry.max-attempts} is reached, the
  * event is nacked without requeue and the work queue's dead-letter
- * exchange files it in the DLQ. A crash between republish and ack
- * duplicates at most one retry — absorbed by the processor's event-ID
- * dedupe, the same at-least-once posture as everywhere else.
+ * exchange files it in the DLQ.
+ *
+ * <p>The republish is a <em>confirmed</em> publish (publisher
+ * confirms, {@code waitForConfirmsOrDie}): the original delivery is
+ * acked only after the broker accepts the retry copy, so a lost or
+ * refused publish surfaces as an exception and leaves the original
+ * unacked for redelivery — the failed event can never vanish. A crash
+ * between confirm and ack duplicates at most one retry — absorbed by
+ * the processor's event-ID dedupe, the same at-least-once posture as
+ * everywhere else.
  *
  * <p>Messages the converter rejects (unknown eventType, malformed
  * body) never reach this method: the container rejects them without
@@ -78,6 +87,12 @@ class DomainEventsListener {
 
 	/** Attempts already made, stamped on each republish (see class doc). */
 	static final String RETRY_ATTEMPTS_HEADER = "x-retry-attempts";
+
+	/**
+	 * Ceiling on waiting for the broker to confirm a retry republish;
+	 * on timeout the original stays unacked and is redelivered.
+	 */
+	private static final long RETRY_CONFIRM_TIMEOUT_MS = 5_000;
 
 	private static final Logger log = LoggerFactory.getLogger(DomainEventsListener.class);
 
@@ -126,6 +141,14 @@ class DomainEventsListener {
 	private void scheduleRetry(Message message, long attempts) {
 		message.getMessageProperties().setHeader(RETRY_ATTEMPTS_HEADER, attempts);
 		message.getMessageProperties().setDeliveryMode(MessageDeliveryMode.PERSISTENT);
-		rabbitTemplate.send("", RabbitMqTopology.ORDER_EVENTS_RETRY_QUEUE, message);
+		// Confirmed publish (needs spring.rabbitmq.publisher-confirm-type:
+		// simple): the caller acks the original only after this returns,
+		// so a publish the broker never accepted throws instead of
+		// silently losing the event.
+		rabbitTemplate.invoke(operations -> {
+			operations.send("", RabbitMqTopology.ORDER_EVENTS_RETRY_QUEUE, message);
+			operations.waitForConfirmsOrDie(RETRY_CONFIRM_TIMEOUT_MS);
+			return null;
+		});
 	}
 }

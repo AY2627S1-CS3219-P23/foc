@@ -6,6 +6,8 @@
   section is maintained as the policy's consolidated disclosure.
   2026-09-19: foc-contracts structure note added per team decision D15
   (docs/notification-service.md).
+  2026-09-20: AI Use Summary wording extended for the notification
+  retry/DLQ implementation (issue #65).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -90,10 +92,10 @@ wiring, JPA entities, message-broker topology declarations, the
 shared `foc-contracts` library — contract constants and the typed
 event records/registry with their canonical JSON fixtures and contract
 tests) and the notification event pipeline (AMQP listener, idempotent
-event processor, STOMP push gateway with JWT-authenticated sessions,
-unit and integration tests) written strictly from the team's
-finalized design docs and issue specifications, with per-file
-attribution headers.
+event processor, broker-native retry/dead-letter failure handling,
+STOMP push gateway with JWT-authenticated sessions, unit and
+integration tests) written strictly from the team's finalized design
+docs and issue specifications, with per-file attribution headers.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
