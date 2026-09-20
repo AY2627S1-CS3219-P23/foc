@@ -28,6 +28,46 @@ Entry template:
 ---
 ## 2026-09-20 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (implementation)
+- **Scope:** retention purge scheduler (issue #68, team decision D9,
+  `docs/notification-service.md`): `NotificationRepository.deleteByCreatedAtBefore`
+  (a Spring Data derived bulk-delete query, matching the design
+  diagram's "Spring Data JPA: delete rows..." label); new
+  `RetentionPurgeScheduler` (`service` package, plain business logic
+  per D11 — no broker imports) reading `notification.retention.days`
+  and running on a `notification.retention.purge-cron` schedule;
+  `@EnableScheduling` added to `NotificationServiceApplication` (runs
+  on the sole `TaskScheduler` bean already declared in
+  `WebSocketStompConfig` for the STOMP heartbeat — Boot backs off its
+  own default scheduler once a user-defined one exists, as a comment
+  left on that class during issue #67 anticipated); `NOTIF_RETENTION_DAYS`
+  (default 30, D9) and a new `NOTIF_PURGE_CRON` (default daily at
+  03:00) wired through `application.yaml` (+ test yaml), `.env.example`,
+  `compose.yaml`; new tests — `NotificationRepositoryTest` (`@DataJpaTest`)
+  and `RetentionPurgeSchedulerTest` (`@SpringBootTest`, `@Transactional`),
+  both backdating rows via a JPQL bulk update through the raw
+  `EntityManager` since `created_at` is `updatable = false`; service
+  README and root README AI Use Summary updated.
+- **Prompt(s):** "create a plan to fix issue #68 on github", then plan
+  approval. The design doc left two implementation details open (D9
+  states the env var and default but not the cutoff timestamp field or
+  schedule cadence); the tool surfaced both as neutral options Q&As.
+  The author decided: `created_at` (row storage time) over `occurred_at`
+  (event time) as the purge cutoff, matching D9's "stored notifications"
+  wording; and a second env var (`NOTIF_PURGE_CRON`) controlling how
+  often the sweep runs, kept independent of the retention-window size,
+  over a hardcoded daily cron or a from-startup `fixedDelay`. Batch
+  size and hard-vs-soft delete were not raised as decisions — the
+  design doc's "delete" wording and the entity's lack of a soft-delete
+  column already settle hard delete, and no batching is warranted at
+  this project's scale.
+- **Author review:** Both open decisions above made by the author from
+  neutral options before implementation. Verified via `./mvnw test`:
+  35/35 green (32 pre-existing + 3 new, including the Testcontainers
+  broker path, unaffected) and pull-request review.
+
+## 2026-09-20 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor (+ docs)
 - **Scope:** order→request event-vocabulary rename and foc-contracts
   package split, both author decisions recorded as D22

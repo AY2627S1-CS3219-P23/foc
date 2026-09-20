@@ -13,6 +13,10 @@
 # team-decided 2026-09-19: 10 s / 3 attempts, env-overridable); on PR
 # #79 Copilot review, publisher confirms enabled so the listener's
 # retry republish blocks until the broker accepts the copy.
+# 2026-09-20, issue #68: retention window and purge-cron bindings for
+# the retention purge scheduler (team decision D9: NOTIF_RETENTION_DAYS,
+# default 30 days; author decision: a second env var, NOTIF_PURGE_CRON,
+# controls how often the sweep runs).
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -63,6 +67,14 @@ notification:
     # Comma-separated Origin patterns allowed at the WS handshake.
     # No API gateway exists, so the browser connects cross-origin.
     allowed-origins: ${NOTIFICATION_WS_ALLOWED_ORIGINS:http://localhost:*}
+  retention:
+    # Retention window for stored notifications (D9); the purge
+    # scheduler hard-deletes rows once created_at is older than this
+    # many days.
+    days: ${NOTIF_RETENTION_DAYS:30}
+    # Cron schedule (Spring's 6-field format) controlling how often the
+    # purge sweep runs. Default: daily at 03:00 server time.
+    purge-cron: "${NOTIF_PURGE_CRON:0 0 3 * * *}"
 
 management:
   endpoints:
