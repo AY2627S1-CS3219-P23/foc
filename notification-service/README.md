@@ -15,7 +15,7 @@
 
 # Notification Service
 
-Consumes order events from the broker, stores notifications, and pushes
+Consumes request events from the broker, stores notifications, and pushes
 them to users. Design: [`docs/notification-service.md`](../docs/notification-service.md).
 
 Spring Boot 4 · Java 21 · Maven · PostgreSQL (service-owned, decision D3).

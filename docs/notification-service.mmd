@@ -44,7 +44,7 @@ flowchart TB
 
     NOTIF_DB[("<b>Notification DB</b><br/>PostgreSQL — notifications (read/unread)<br/>and processed event IDs, in one schema")]
 
-    ORDER_SVC ==>|"publish typed order events: request.created, request.accepted,<br/>request.collected, request.completed, request.cancelled, request.expired<br/>(Order F0.2) + request.courier-arrived (Order F4.1.1–F4.1.2);<br/>fire-and-forget — delivery failure never affects the<br/>producing operation (Notif F1.4)"| EXCH
+    ORDER_SVC ==>|"publish typed request events: request.created, request.accepted,<br/>request.collected, request.completed, request.cancelled, request.expired<br/>(Order F0.2) + request.courier-arrived (Order F4.1.1–F4.1.2);<br/>fire-and-forget — delivery failure never affects the<br/>producing operation (Notif F1.4)"| EXCH
     EXCH ==>|"route: binding request.#"| WORKQ
     WORKQ ==>|"deliver: at-least-once<br/>(Notif NFR1.1)"| LISTENER
     LISTENER ==>|"republish on processing failure<br/>while attempts remain (Notif F2.2)"| RETRYQ
