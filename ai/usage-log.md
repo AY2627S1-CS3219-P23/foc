@@ -31,7 +31,7 @@ Entry template:
 - **Mode:** docs, boilerplate (developer tooling)
 - **Scope:** Project-scoped MCP server configuration for agent tooling:
   `context7` (library documentation lookup), `postgres`
-  (`@henkey/postgres-mcp-server`, for inspecting the service-owned DB),
+  (`@microsoft/postgres-mcp`, for inspecting a service-owned DB),
   and `playwright` (browser automation for the future `web/` frontend)
   added to the root `.mcp.json` alongside the existing `figma` entry;
   `notification-db` published on a host port in `compose.yaml` with a
@@ -39,11 +39,9 @@ Entry template:
   postgres server can reach it; new "MCP Servers" section in
   `AGENTS.md` documenting each server and its setup, including a
   per-service database port table — we run database-per-service, so
-  nothing service-specific is committed: the server takes its default
-  from a `POSTGRES_CONNECTION_STRING` variable each teammate sets in
-  their own `.env`, and reaches any other DB via a per-call
-  `connectionString` argument rather than one server entry per
-  service.
+  nothing service-specific is committed: each teammate registers a
+  connection profile per service DB, with the password held in their OS
+  keyring rather than in `.env` or any committed file.
 - **Prompt(s):** Asked which MCP tools would help productivity on the
   project, then asked to set up context7, the postgres MCP and the
   playwright MCP as project MCP servers and raise a pull request. The
@@ -59,8 +57,14 @@ Entry template:
   plus an empty port table rather than reserve host ports for the four
   services owned by other teammates. The author then pointed out that
   the committed connection string was still notification-specific, so
-  it was replaced with the plain `POSTGRES_CONNECTION_STRING`
-  environment variable, set per developer.
+  it was replaced with a per-developer environment variable; the author
+  then asked whether `@microsoft/postgres-mcp` could be used in place
+  of the little-known `@henkey/...` package. The tool compared the two
+  on published facts (Microsoft: MIT, official npm org, ~17k weekly
+  downloads, but Preview 0.1.0-rc.x; henkey: AGPL-3.0, single
+  maintainer, ~1k weekly downloads), tested the Microsoft server
+  against the running notification DB, and switched to it — the
+  decision was the author's.
 - **Author review:** Developer tooling only — no product, requirements,
   or architecture decision is involved, and no service code changed.
   Note: this session ran on Opus 5, not the Fable 5 used for the
@@ -68,8 +72,8 @@ Entry template:
   `.env.example` and `README.md` were corrected to say so after the
   author spotted the wrong model in them.
   Verified the `.mcp.json` is valid JSON, that no credentials are
-  committed (the connection string lives in the git-ignored `.env`,
-  not in `.mcp.json`), and that the compose change adds only a host
+  committed (credentials live in the OS keyring, not in `.mcp.json`
+  or `.env`), and that the compose change adds only a host
   port publication, leaving the in-network wiring untouched. Reviewed
   via pull request.
 
