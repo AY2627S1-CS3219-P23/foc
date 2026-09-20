@@ -37,7 +37,11 @@ Entry template:
   `notification-db` published on a host port in `compose.yaml` with a
   new `NOTIFICATION_DB_HOST_PORT` variable in `.env.example` so the
   postgres server can reach it; new "MCP Servers" section in
-  `AGENTS.md` documenting each server and its setup.
+  `AGENTS.md` documenting each server and its setup, including a
+  per-service database port table — we run database-per-service, and
+  the postgres server reaches a non-default DB via a per-call
+  `connectionString` argument rather than one server entry per
+  service.
 - **Prompt(s):** Asked which MCP tools would help productivity on the
   project, then asked to set up context7, the postgres MCP and the
   playwright MCP as project MCP servers and raise a pull request. The
@@ -46,7 +50,12 @@ Entry template:
   deprecated) and recommended against a GitHub MCP server since the
   `gh` CLI already covers that workflow. Whether to publish the
   database port in `compose.yaml` was put back to the author as an
-  explicit choice and decided by the author.
+  explicit choice and decided by the author. The author then raised
+  that database-per-service means more than one DB; the tool verified
+  against the running server that 17 of its 18 tools accept a per-call
+  `connectionString`, and the author chose to document that override
+  plus an empty port table rather than reserve host ports for the four
+  services owned by other teammates.
 - **Author review:** Developer tooling only — no product, requirements,
   or architecture decision is involved, and no service code changed.
   Verified the `.mcp.json` is valid JSON, that no credentials are
