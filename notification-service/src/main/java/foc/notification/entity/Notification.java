@@ -11,7 +11,9 @@
  * 2026-09-19, Method-B refactor (D16-D19): entity_type/entity_id
  * columns removed with the stale-discard mechanism (author decision
  * D19); the payload now carries the event's business fields (incl.
- * orderId).
+ * requestId).
+ * 2026-09-20: order→request event vocabulary rename applied (author
+ * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.entity;
@@ -31,9 +33,9 @@ import org.hibernate.type.SqlTypes;
  * One notification row per associated party of an event (F1.2),
  * listed and marked read/unread via the REST API (F3.1, F3.2).
  * {@code event_type} stores the event's canonical identity string
- * (e.g. {@code order.accepted}, D18); the payload is the event's
- * business fields serialized to JSON (which is where the order
- * reference lives, e.g. {@code orderId}).
+ * (e.g. {@code request.accepted}, D18); the payload is the event's
+ * business fields serialized to JSON (which is where the request
+ * reference lives, e.g. {@code requestId}).
  */
 @Entity
 @Table(name = "notifications", indexes = @Index(name = "idx_notifications_recipient", columnList = "recipient_id"))

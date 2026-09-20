@@ -10,9 +10,19 @@
  * mechanism (added on PR #75 review) as unneeded standing complexity;
  * the catalog is keyed by identity alone again, and a breaking change
  * ships as a new event type.
+ * 2026-09-20: order→request rename and events.core/.request package
+ * split applied (author decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
-package foc.contracts.events;
+package foc.contracts.events.core;
+
+import foc.contracts.events.request.CourierArrived;
+import foc.contracts.events.request.RequestAccepted;
+import foc.contracts.events.request.RequestCancelled;
+import foc.contracts.events.request.RequestCollected;
+import foc.contracts.events.request.RequestCompleted;
+import foc.contracts.events.request.RequestCreated;
+import foc.contracts.events.request.RequestExpired;
 
 import java.util.HashMap;
 import java.util.List;
@@ -22,7 +32,7 @@ import java.util.Optional;
 /**
  * The catalog of every broker event: one entry per record class,
  * pairing it with its canonical identity string, e.g.
- * {@code order.accepted} (D18). That one string serves as both the
+ * {@code request.accepted} (D18). That one string serves as both the
  * JSON body's {@code eventType} (what consumers dispatch on) and the
  * RabbitMQ routing key — publisher and consumer read the same entry,
  * so the two can never drift.
@@ -32,7 +42,7 @@ import java.util.Optional;
  * the registry-driven contract tests pick it up automatically. A
  * <em>breaking</em> change to an existing event ships the same way,
  * as a new event type with its own identity string (e.g.
- * {@code order.accepted.v2}); consumers reject unknown types, which
+ * {@code request.accepted.v2}); consumers reject unknown types, which
  * covers the migration window (see "Event conventions" in this
  * library's README).
  *
@@ -46,13 +56,13 @@ public final class EventTypeRegistry {
 	}
 
 	private static final List<Entry> ENTRIES = List.of(
-			new Entry(OrderCreated.class, "order.created"),
-			new Entry(OrderAccepted.class, "order.accepted"),
-			new Entry(OrderCollected.class, "order.collected"),
-			new Entry(OrderCompleted.class, "order.completed"),
-			new Entry(OrderCancelled.class, "order.cancelled"),
-			new Entry(OrderExpired.class, "order.expired"),
-			new Entry(CourierArrived.class, "order.courier-arrived"));
+			new Entry(RequestCreated.class, "request.created"),
+			new Entry(RequestAccepted.class, "request.accepted"),
+			new Entry(RequestCollected.class, "request.collected"),
+			new Entry(RequestCompleted.class, "request.completed"),
+			new Entry(RequestCancelled.class, "request.cancelled"),
+			new Entry(RequestExpired.class, "request.expired"),
+			new Entry(CourierArrived.class, "request.courier-arrived"));
 
 	private static final Map<String, Entry> BY_EVENT_TYPE = new HashMap<>();
 	private static final Map<Class<?>, Entry> BY_CLASS = new HashMap<>();

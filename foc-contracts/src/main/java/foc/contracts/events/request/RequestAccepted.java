@@ -4,27 +4,31 @@
  * Scope: typed order-lifecycle event record per the author's Method-B
  * decisions (docs/notification-service.md D16-D19); business fields
  * per the author's full-fixture-vocabulary decision.
+ * 2026-09-20: order→request rename and events.core/.request package
+ * split applied (author decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
-package foc.contracts.events;
+package foc.contracts.events.request;
+
+import foc.contracts.events.core.EventTypeRegistry;
 
 import java.time.Instant;
 import java.util.List;
 
 /**
- * The courier collected the food at the pickup location. Identity
- * {@code order.collected} (see {@link EventTypeRegistry}).
+ * A courier accepted the request. Identity {@code request.accepted}
+ * (see {@link EventTypeRegistry}).
  */
-public record OrderCollected(
+public record RequestAccepted(
 		String eventId,
 		Instant occurredAt,
 		String producer,
 		String correlationId,
 		List<String> parties,
-		String orderId,
+		String requestId,
 		String requesterId,
 		String courierId,
 		String pickupLocation,
 		String dropoffLocation,
-		String note) implements OrderEvent {
+		String note) implements RequestEvent {
 }

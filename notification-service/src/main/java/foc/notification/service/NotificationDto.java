@@ -6,7 +6,9 @@
  * frontend needs one type for both.
  * 2026-09-19, Method-B refactor (D16-D19): entityType/entityId
  * dropped with the entity columns (author decision D19) — clients
- * find the order via payload.orderId.
+ * find the request via payload.requestId.
+ * 2026-09-20: order→request event vocabulary rename applied (author
+ * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.service;

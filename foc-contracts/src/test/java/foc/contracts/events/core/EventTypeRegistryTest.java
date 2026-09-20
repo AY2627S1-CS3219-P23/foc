@@ -3,9 +3,11 @@
  * Tool: Claude Code (Fable 5), 2026-09-19.
  * Scope: registry catalog tests for the Method-B refactor
  * (docs/notification-service.md D16-D19).
+ * 2026-09-20: order→request rename and events.core/.request package
+ * split applied (author decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
-package foc.contracts.events;
+package foc.contracts.events.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -18,7 +20,7 @@ import org.junit.jupiter.api.Test;
 class EventTypeRegistryTest {
 
 	@Test
-	void catalogsExactlySevenOrderEvents() {
+	void catalogsExactlySevenRequestEvents() {
 		assertEquals(7, EventTypeRegistry.entries().size());
 	}
 
@@ -33,10 +35,10 @@ class EventTypeRegistryTest {
 	}
 
 	@Test
-	void allEventTypesBelongToTheOrderDomain() {
+	void allEventTypesBelongToTheRequestDomain() {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
-			assertTrue(entry.eventType().startsWith("order."),
-					entry.eventType() + " must start with \"order.\"");
+			assertTrue(entry.eventType().startsWith("request."),
+					entry.eventType() + " must start with \"request.\"");
 		}
 	}
 
@@ -50,7 +52,7 @@ class EventTypeRegistryTest {
 
 	@Test
 	void unknownEventTypeResolvesToEmpty() {
-		assertTrue(EventTypeRegistry.entryFor("order.refunded").isEmpty());
+		assertTrue(EventTypeRegistry.entryFor("request.refunded").isEmpty());
 	}
 
 	@Test

@@ -4,9 +4,14 @@
  * Scope: event-record shape tests for the Method-B refactor
  * (docs/notification-service.md D16-D19): derived eventType and the
  * metadata-component drift check.
+ * 2026-09-20: order→request rename and events.core/.request package
+ * split applied (author decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
-package foc.contracts.events;
+package foc.contracts.events.request;
+
+import foc.contracts.events.core.DomainEvent;
+import foc.contracts.events.core.EventTypeRegistry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -19,7 +24,7 @@ import java.util.HashSet;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-class OrderEventRecordsTest {
+class RequestEventRecordsTest {
 
 	@Test
 	void everyRecordDerivesItsRegistryEventType() throws Exception {
@@ -30,11 +35,11 @@ class OrderEventRecordsTest {
 	}
 
 	@Test
-	void everyRecordIsAnOrderEventWithAnOrderId() {
+	void everyRecordIsARequestEventWithARequestId() {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
-			assertTrue(OrderEvent.class.isAssignableFrom(entry.eventClass()),
-					entry.eventClass() + " must implement OrderEvent");
-			assertTrue(componentNames(entry.eventClass()).contains("orderId"));
+			assertTrue(RequestEvent.class.isAssignableFrom(entry.eventClass()),
+					entry.eventClass() + " must implement RequestEvent");
+			assertTrue(componentNames(entry.eventClass()).contains("requestId"));
 		}
 	}
 
