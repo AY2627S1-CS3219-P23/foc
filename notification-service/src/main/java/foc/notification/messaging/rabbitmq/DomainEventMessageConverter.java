@@ -18,13 +18,15 @@
  * review: explicit empty-body guard so a null/empty body is a fatal
  * conversion failure (dead-lettered) rather than a mapper-dependent
  * error outside the fatal classification.
+ * 2026-09-20: order→request event vocabulary rename applied (author
+ * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.rabbitmq;
 
-import foc.contracts.events.DomainEvent;
-import foc.contracts.events.EventTypeRegistry;
-import foc.contracts.events.Nullable;
+import foc.contracts.events.core.DomainEvent;
+import foc.contracts.events.core.EventTypeRegistry;
+import foc.contracts.events.core.Nullable;
 import java.lang.reflect.RecordComponent;
 import java.nio.charset.StandardCharsets;
 import org.springframework.amqp.core.Message;

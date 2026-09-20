@@ -11,7 +11,7 @@ title: "FoC Notification Service — Component-Level Architecture"
 %% updates, Order F4.1.1-F4.1.2). No design decisions were made by the
 %% tool.
 %% 2026-09-19 (Method-B refactor): re-drawn for the author's decisions
-%% D16-D19 (topic exchange + order.# binding, flat typed event records,
+%% D16-D19 (topic exchange + request.# binding, flat typed event records,
 %% registry dispatch on the body eventType, stale-discard/sequence
 %% removal); retry/DLQ elements marked as issue #65 (values decided,
 %% implementation pending).
@@ -19,6 +19,8 @@ title: "FoC Notification Service — Component-Level Architecture"
 %% edge labels aligned with the author's D20/D21 decisions (default
 %% exchange as DLX; unconvertible messages dead-letter on first
 %% rejection).
+%% Same day (D22): event vocabulary renamed order→request (exchange,
+%% routing keys) per the author's decision; node/edge labels updated.
 %% Reviewed by: Leong Wei Zhi (via pull request).
 %% Legend, decisions and traceability: see docs/notification-service.md
 flowchart TB
@@ -26,8 +28,8 @@ flowchart TB
     WEB["<b>Web App</b> (web/)<br/>subscribes to per-user STOMP destinations;<br/>renders in-app notification list"]
 
     subgraph RABBIT ["RabbitMQ (message broker — shared platform infrastructure, own Docker container; queues below are dedicated to the Notification Service, their sole consumer)"]
-        EXCH{{"<b>order-events topic exchange</b> (D16)<br/>durable; receives persistent messages under<br/>routing keys order.created … order.courier-arrived"}}
-        WORKQ[["<b>work queue</b> (durable)<br/>bound with order.#; holds undelivered events<br/>across restarts (Notif NFR1.2)"]]
+        EXCH{{"<b>request-events topic exchange</b> (D16)<br/>durable; receives persistent messages under<br/>routing keys request.created … request.courier-arrived"}}
+        WORKQ[["<b>work queue</b> (durable)<br/>bound with request.#; holds undelivered events<br/>across restarts (Notif NFR1.2)"]]
         RETRYQ[["<b>retry queue</b> (durable)<br/>TTL/delay queue — parks failed events,<br/>then re-routes them for redelivery<br/>(backoff: 10 s TTL, 3 attempts, D6)"]]
         DLQ[["<b>dead-letter queue</b> (durable)<br/>events that exhausted max attempts or carry an<br/>unknown eventType (D21: on first rejection), kept<br/>for later inspection / re-publish (Notif F2.3)"]]
     end
@@ -42,8 +44,8 @@ flowchart TB
 
     NOTIF_DB[("<b>Notification DB</b><br/>PostgreSQL — notifications (read/unread)<br/>and processed event IDs, in one schema")]
 
-    ORDER_SVC ==>|"publish typed order events: order.created, order.accepted,<br/>order.collected, order.completed, order.cancelled, order.expired<br/>(Order F0.2) + order.courier-arrived (Order F4.1.1–F4.1.2);<br/>fire-and-forget — delivery failure never affects the<br/>producing operation (Notif F1.4)"| EXCH
-    EXCH ==>|"route: binding order.#"| WORKQ
+    ORDER_SVC ==>|"publish typed request events: request.created, request.accepted,<br/>request.collected, request.completed, request.cancelled, request.expired<br/>(Order F0.2) + request.courier-arrived (Order F4.1.1–F4.1.2);<br/>fire-and-forget — delivery failure never affects the<br/>producing operation (Notif F1.4)"| EXCH
+    EXCH ==>|"route: binding request.#"| WORKQ
     WORKQ ==>|"deliver: at-least-once<br/>(Notif NFR1.1)"| LISTENER
     LISTENER ==>|"republish on processing failure<br/>while attempts remain (Notif F2.2)"| RETRYQ
     RETRYQ ==>|"after TTL expires, re-route<br/>for redelivery (dead-letter leg, D20)"| WORKQ

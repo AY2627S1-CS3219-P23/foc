@@ -10,6 +10,9 @@
   extended with the Event conventions section the author requested.
   2026-09-20: schemaVersion removed by author decision (breaking
   changes ship as new event types); conventions updated accordingly.
+  Same day: order→request event vocabulary rename and the
+  events.core/events.request package split applied (author decision
+  D22); names and layout notes updated throughout.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -23,14 +26,20 @@ D16–D19) to the "services never share code" convention in
 Only things that are a *contract between services* belong here:
 
 - **Contract names** both producer and consumer must agree on, e.g.
-  the broker exchange name (`EventContracts.ORDER_EVENTS_EXCHANGE`).
+  the broker exchange name (`EventContracts.REQUEST_EVENTS_EXCHANGE`).
 - **The typed event contracts** (D17): the `DomainEvent` /
-  `OrderEvent` interfaces and one flat record per broker event —
-  `OrderCreated`, `OrderAccepted`, `OrderCollected`, `OrderCompleted`,
-  `OrderCancelled`, `OrderExpired`, `CourierArrived`.
+  `RequestEvent` interfaces and one flat record per broker event —
+  `RequestCreated`, `RequestAccepted`, `RequestCollected`, `RequestCompleted`,
+  `RequestCancelled`, `RequestExpired`, `CourierArrived`.
+
+Package layout (D22): shared machinery — `DomainEvent`,
+`EventTypeRegistry`, `EventContracts`, `Nullable` — lives in
+`foc.contracts.events.core`; each producing domain's marker interface
+and records live in a sibling package (`foc.contracts.events.request`
+today; a future domain adds its own).
 - **The `EventTypeRegistry`** (D18): the single source of truth
   pairing each record class with its canonical identity string
-  (e.g. `order.accepted`), which serves as both the JSON body's
+  (e.g. `request.accepted`), which serves as both the JSON body's
   `eventType` and the RabbitMQ routing key.
 - **One canonical fixture per event** under
   [`src/main/resources/contracts/`](src/main/resources/contracts/)
@@ -58,8 +67,8 @@ Leong Wei Zhi, 2026-09-19 — D16–D19 in
    synchronous REST. One record per event type.
 
 2. **Naming & identity.** The record class is PascalCase past-tense
-   (`OrderAccepted`). Its **canonical identity** is
-   `<domain>.<event-in-kebab-case>` (`order.accepted`), registered
+   (`RequestAccepted`). Its **canonical identity** is
+   `<domain>.<event-in-kebab-case>` (`request.accepted`), registered
    once in `EventTypeRegistry`. That one string travels twice by
    design: as the body's `eventType` field — the contract's
    self-describing identity, which consumers dispatch on — and as the
@@ -78,27 +87,27 @@ Leong Wei Zhi, 2026-09-19 — D16–D19 in
    fields (marked `@Nullable` until every producer stamps them),
    never rename or repurpose; consumers ignore unknown fields
    (tolerant readers). A **breaking** change ships as a **new event
-   type** with its own identity string (e.g. `order.accepted.v2`),
+   type** with its own identity string (e.g. `request.accepted.v2`),
    record and registry entry — the old type keeps flowing during the
    migration and is retired in a later release (decided 2026-09-20,
    replacing the earlier `schemaVersion` mechanism as unneeded
    standing complexity). Every record component is **required on the
    wire** unless marked with the contracts' `@Nullable` annotation
-   (currently only `OrderCancelled.courierId`); consumers reject
+   (currently only `RequestCancelled.courierId`); consumers reject
    events with missing required fields as conversion failures. An
    unknown event *type* is likewise a conversion failure — which is
    also how a breaking change presents to a not-yet-upgraded
-   consumer (all of these dead-letter for replay once the DLQ
-   exists — issue #65).
+   consumer (all of these dead-letter to the consumer's DLQ for
+   replay — issue #65).
 
 5. **Topology naming.** One durable **topic exchange per producing
-   domain** (`order-events`); consumer queues are
-   `<service>.<domain>-events` (+ `.retry` / `.dlq` per D13, arriving
-   with issue #65); consumers bind patterns (`order.#` for a consumer
-   that wants every order event).
+   domain** (`request-events`); consumer queues are
+   `<service>.<domain>-events` (+ `.retry` / `.dlq` per D13, issue
+   #65); consumers bind patterns (`request.#` for a consumer that
+   wants every request event).
 
 6. **Adding a new event** (checklist):
-   1. create the record implementing `OrderEvent` (or `DomainEvent`
+   1. create the record implementing `RequestEvent` (or `DomainEvent`
       for a new domain);
    2. add its `EventTypeRegistry` entry;
    3. add `contracts/<identity dots→hyphens>.example.json`;
@@ -109,10 +118,10 @@ Leong Wei Zhi, 2026-09-19 — D16–D19 in
 
    A **breaking change** to an existing event follows the same
    checklist, as a new event type with its own identity string (e.g.
-   `order.accepted.v2` — new record + entry + fixture, old type kept
+   `request.accepted.v2` — new record + entry + fixture, old type kept
    until every producer has migrated and dead-lettered backlog is
    replayed, then retired in a later release). Consumers that read
-   events only through `DomainEvent`/`OrderEvent` (e.g. the
+   events only through `DomainEvent`/`RequestEvent` (e.g. the
    notification pipeline) need only the jar bump.
 
 7. **Producer conventions** (for the future order-service): publish

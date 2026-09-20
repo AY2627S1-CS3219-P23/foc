@@ -1,11 +1,11 @@
 {
-  "eventType": "order.expired",
+  "eventType": "request.expired",
   "eventId": "9b2f6b3c-1e9d-4d55-8f6a-0c2f4a7d9e26",
   "occurredAt": "2026-09-19T09:00:00Z",
   "producer": "order-service",
   "correlationId": "corr-7f3a1c9e",
   "parties": ["usr-req-1001"],
-  "orderId": "ord-20260919-0042",
+  "requestId": "req-20260919-0042",
   "requesterId": "usr-req-1001",
   "pickupLocation": "Techno Edge",
   "dropoffLocation": "COM3-01-19",

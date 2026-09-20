@@ -9,11 +9,13 @@
  * 2026-09-19, Method-B refactor (D16-D19): consumes typed DomainEvent
  * records; the D5 per-entity sequence discard and entity identity were
  * removed by author decision (D19 supersedes D5, F2.4 retired).
+ * 2026-09-20: order→request event vocabulary rename applied (author
+ * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.service;
 
-import foc.contracts.events.DomainEvent;
+import foc.contracts.events.core.DomainEvent;
 import foc.notification.entity.Notification;
 import foc.notification.entity.ProcessedEvent;
 import foc.notification.repository.NotificationRepository;

@@ -7,16 +7,18 @@
  * record, and the tolerant-reader rule for unknown *fields* holds
  * (F1.3). Unknown *types* are converter-level failures now — see
  * DomainEventMessageConverterTest.
+ * 2026-09-20: order→request event vocabulary rename applied (author
+ * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.event;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import foc.contracts.events.DomainEvent;
-import foc.contracts.events.EventTypeRegistry;
-import foc.contracts.events.OrderAccepted;
-import foc.contracts.events.OrderEvent;
+import foc.contracts.events.core.DomainEvent;
+import foc.contracts.events.core.EventTypeRegistry;
+import foc.contracts.events.request.RequestAccepted;
+import foc.contracts.events.request.RequestEvent;
 import java.io.IOException;
 import java.io.InputStream;
 import org.junit.jupiter.api.Test;
@@ -62,8 +64,8 @@ class DomainEventContractTest {
 			assertThat(event.producer()).isEqualTo("order-service");
 			assertThat(event.correlationId()).isNotBlank();
 			assertThat(event.parties()).isNotEmpty();
-			assertThat(event).isInstanceOf(OrderEvent.class);
-			assertThat(((OrderEvent) event).orderId()).isEqualTo("ord-20260919-0042");
+			assertThat(event).isInstanceOf(RequestEvent.class);
+			assertThat(((RequestEvent) event).requestId()).isEqualTo("req-20260919-0042");
 		}
 	}
 
@@ -71,13 +73,13 @@ class DomainEventContractTest {
 	void ignoresUnknownFields() {
 		String json = """
 				{
-				  "eventType": "order.accepted",
+				  "eventType": "request.accepted",
 				  "eventId": "e-1",
 				  "occurredAt": "2026-09-19T08:30:00Z",
 				  "producer": "order-service",
 				  "correlationId": "c-1",
 				  "parties": ["usr-req-1001", "usr-cou-2002"],
-				  "orderId": "ord-1",
+				  "requestId": "req-1",
 				  "requesterId": "usr-req-1001",
 				  "courierId": "usr-cou-2002",
 				  "pickupLocation": "Techno Edge",
@@ -88,10 +90,10 @@ class DomainEventContractTest {
 				}
 				""";
 
-		OrderAccepted event = objectMapper.readValue(json, OrderAccepted.class);
+		RequestAccepted event = objectMapper.readValue(json, RequestAccepted.class);
 
 		assertThat(event.eventId()).isEqualTo("e-1");
-		assertThat(event.orderId()).isEqualTo("ord-1");
+		assertThat(event.requestId()).isEqualTo("req-1");
 		assertThat(event.parties()).containsExactly("usr-req-1001", "usr-cou-2002");
 	}
 }

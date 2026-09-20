@@ -6,11 +6,13 @@
  * decoupling": the listener calls eventProcessor.process(...)).
  * Same day, Method-B refactor (D16-D19): signature moves from the
  * deleted EventEnvelope to the typed DomainEvent contract.
+ * 2026-09-20: order→request event vocabulary rename applied (author
+ * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.service;
 
-import foc.contracts.events.DomainEvent;
+import foc.contracts.events.core.DomainEvent;
 
 /**
  * Inbound port of the notification pipeline (D11): broker adapters

@@ -93,6 +93,13 @@
   dead-letter on first rejection, skipping the retry queue); the tool
   implemented the team-decided topology with those choices and
   updated the affected wording here.
+  2026-09-20 (order→request rename): recorded D22 — the author's
+  decisions, from neutral options Q&As, to rename the event
+  vocabulary from order to request across the wire contract and to
+  split foc-contracts into events.core / events.request packages;
+  the tool applied the mechanical rename here and in both modules,
+  leaving historical notes (D14, struck Open items, this header)
+  under the old names.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -111,7 +118,7 @@ it in the file view). System-wide context: [`architecture.md`](architecture.md).
 ## Design decisions (made by the team)
 
 All decisions below were made by Leong Wei Zhi (D1–D10 on 2026-09-15,
-D11 on 2026-09-18, D12–D19 on 2026-09-19, D20–D21 on 2026-09-20) and
+D11 on 2026-09-18, D12–D19 on 2026-09-19, D20–D22 on 2026-09-20) and
 count as the team's finalized design for this service.
 
 | # | Concern | Decision | Serves |
@@ -128,22 +135,23 @@ count as the team's finalized design for this service.
 | D10 | Redis / scale-out | **No Redis** in the current single-instance design (see Open items) | — |
 | D11 | Broker isolation | **Ports and adapters**: business logic (event processor, REST API, purge job) has zero broker imports; all RabbitMQ-specific code is confined to a single messaging adapter package behind service-owned interfaces (see "Broker decoupling") | maintainability; broker swap surface |
 | D12 | Topology provisioning | **App-declared at startup via Spring AMQP**: the consuming service declares its exchange/queue/binding beans and forces the declaration when it boots (no broker definitions file) | Notif NFR1.2; topology lives beside its owner |
-| D13 | Naming convention | Exchange named after the producing domain (**`order-events`**); queues prefixed with the consuming service (**`notification-service.order-events`**, later `….retry` / `….dlq`) | ownership visible in the management UI; Extensibility |
+| D13 | Naming convention | Exchange named after the producing domain (**`request-events`**); queues prefixed with the consuming service (**`notification-service.request-events`**, later `….retry` / `….dlq`) | ownership visible in the management UI; Extensibility |
 | D14 | ~~`order-events` exchange type~~ | ~~Fanout~~ — **superseded by D16** (2026-09-19) | — |
-| D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (top-level Maven module, zero runtime framework dependencies): contract names that producer and consumer must agree on — e.g. the `order-events` exchange — are compile-time constants imported by each backend service. The sole exception to the no-shared-code convention (recorded in `AGENTS.md`). Service-private names (queues) stay in their service. Amended 2026-09-19 (Method-B refactor, superseding the issue #63 envelope scope): the library holds the **typed event contracts** — the `DomainEvent`/`OrderEvent` interfaces, the seven event records, the `EventTypeRegistry`, and one canonical fixture per event on its classpath (`contracts/<identity dots→hyphens>.example.json`), which both producer and consumer contract-test against. Test-scoped JUnit was added for the registry/record tests; the published jar stays dependency-free. Tolerant reading of unknown *fields* (F1.3) is consumer-side `ObjectMapper` behavior, locked in by the Notification Service's contract test — so the AMQP message converter must use Boot's auto-configured mapper. | one definition per contract name and per event shape; drift caught at compile time or by the contract tests |
-| D16 | `order-events` exchange type | **Topic exchange** (supersedes D14): producers publish each event under its canonical routing key (`order.created` … `order.courier-arrived`, from the registry); each consuming service gets its own durable queue with its own bindings — this service binds **`order.#`** (it notifies on every order event, and a new event type ships via a contracts release anyway, so the binding never changes). One exchange per producing domain; future domains get their own. | Notif F1.1–F1.3; Extensibility |
-| D17 | Event contract shape | **Flat typed event records, no envelope** (Method B): `EventEnvelope` and its free-form `Map` payload are deleted; each of the seven order-lifecycle facts — `OrderCreated`, `OrderAccepted`, `OrderCollected`, `OrderCompleted`, `OrderCancelled`, `OrderExpired`, `CourierArrived` — is one record implementing the plain-Java `DomainEvent` interface, carrying the wire metadata (`eventId`, `eventType`, `occurredAt`, `producer`, `correlationId`, `parties`) plus its own business fields (full fixture vocabulary: `orderId`, `requesterId`, `courierId` where a courier exists — nullable on `OrderCancelled` — `pickupLocation`, `dropoffLocation`, `note`) at the top level. Events are past-tense facts, never commands. | schema per event; Notif F1.1–F1.2 |
-| D18 | Event identity & dispatch | **One canonical identity string per event** (e.g. `order.accepted`), registered once in `EventTypeRegistry` (class ↔ identity). It travels twice by design: as the body `eventType` — the contract's self-describing identity, which consumers **dispatch on** (D11's body-only rule stands; no `__TypeId__` headers) — and as the RabbitMQ routing key (transport metadata). `eventType` is *not* a record component: `DomainEvent.eventType()` derives it from the registry and the message converter injects it on publish, so an instance can never carry a mismatched type. Stored in `notifications.event_type` and pushed in the STOMP frame. Consumers reject unknown types and events missing required fields (components not marked `@Nullable`). A **breaking contract change ships as a new event type** (e.g. `order.accepted.v2`) — decided 2026-09-20, removing the interim `schemaVersion` field and its versioned-registry mechanism (added on PR #75 review the day before) as unneeded standing complexity; the unknown-type rejection already covers the migration window. | Notif F1.3; portability (self-describing bodies) |
+| D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (top-level Maven module, zero runtime framework dependencies): contract names that producer and consumer must agree on — e.g. the `request-events` exchange — are compile-time constants imported by each backend service. The sole exception to the no-shared-code convention (recorded in `AGENTS.md`). Service-private names (queues) stay in their service. Amended 2026-09-19 (Method-B refactor, superseding the issue #63 envelope scope): the library holds the **typed event contracts** — the `DomainEvent`/`RequestEvent` interfaces, the seven event records, the `EventTypeRegistry`, and one canonical fixture per event on its classpath (`contracts/<identity dots→hyphens>.example.json`), which both producer and consumer contract-test against. Test-scoped JUnit was added for the registry/record tests; the published jar stays dependency-free. Tolerant reading of unknown *fields* (F1.3) is consumer-side `ObjectMapper` behavior, locked in by the Notification Service's contract test — so the AMQP message converter must use Boot's auto-configured mapper. | one definition per contract name and per event shape; drift caught at compile time or by the contract tests |
+| D16 | `request-events` exchange type | **Topic exchange** (supersedes D14): producers publish each event under its canonical routing key (`request.created` … `request.courier-arrived`, from the registry); each consuming service gets its own durable queue with its own bindings — this service binds **`request.#`** (it notifies on every request event, and a new event type ships via a contracts release anyway, so the binding never changes). One exchange per producing domain; future domains get their own. | Notif F1.1–F1.3; Extensibility |
+| D17 | Event contract shape | **Flat typed event records, no envelope** (Method B): `EventEnvelope` and its free-form `Map` payload are deleted; each of the seven request-lifecycle facts — `RequestCreated`, `RequestAccepted`, `RequestCollected`, `RequestCompleted`, `RequestCancelled`, `RequestExpired`, `CourierArrived` — is one record implementing the plain-Java `DomainEvent` interface, carrying the wire metadata (`eventId`, `eventType`, `occurredAt`, `producer`, `correlationId`, `parties`) plus its own business fields (full fixture vocabulary: `requestId`, `requesterId`, `courierId` where a courier exists — nullable on `RequestCancelled` — `pickupLocation`, `dropoffLocation`, `note`) at the top level. Events are past-tense facts, never commands. | schema per event; Notif F1.1–F1.2 |
+| D18 | Event identity & dispatch | **One canonical identity string per event** (e.g. `request.accepted`), registered once in `EventTypeRegistry` (class ↔ identity). It travels twice by design: as the body `eventType` — the contract's self-describing identity, which consumers **dispatch on** (D11's body-only rule stands; no `__TypeId__` headers) — and as the RabbitMQ routing key (transport metadata). `eventType` is *not* a record component: `DomainEvent.eventType()` derives it from the registry and the message converter injects it on publish, so an instance can never carry a mismatched type. Stored in `notifications.event_type` and pushed in the STOMP frame. Consumers reject unknown types and events missing required fields (components not marked `@Nullable`). A **breaking contract change ships as a new event type** (e.g. `request.accepted.v2`) — decided 2026-09-20, removing the interim `schemaVersion` field and its versioned-registry mechanism (added on PR #75 review the day before) as unneeded standing complexity; the unknown-type rejection already covers the migration window. | Notif F1.3; portability (self-describing bodies) |
 | D19 | Idempotency scope | **Event-ID dedupe only** (supersedes D5): the per-entity sequence mechanism, its `sequence` wire field, the `entity_sequences` table, and the `entity_type`/`entity_id` columns/DTO fields were removed; requirement F2.4 is retired. Accepted consequence: out-of-order deliveries each produce notifications. Re-adding ordering later is an additive contract change (a new `@Nullable` field). | Notif F2.1 |
 | D20 | Dead-letter exchange form | **The default exchange (`""`)** serves as the dead-letter exchange on both legs (work queue → DLQ, retry queue → work queue), with `x-dead-letter-routing-key` = the target queue name — zero extra exchanges/bindings to declare or migrate. Accepted consequence: the routing key is rewritten to the queue name in transit; nothing is lost, since the body `eventType` **is** the original key (D18) and the broker's `x-death` header records the original keys. Decided 2026-09-20 | Notif F2.2, F2.3; minimal topology |
 | D21 | Unconvertible-message path | **Dead-letter on first rejection**: a message the converter rejects (unknown `eventType`, malformed body, missing required field) is rejected by the listener container before the listener runs and dead-letters straight to the DLQ, skipping the retry queue — retrying a message that cannot convert could never succeed; replay happens from the DLQ after a consumer upgrade (D7). Falls out of the container's existing rejection plus the work queue's dead-letter leg, with no custom error-handler code. Decided 2026-09-20 | Notif F2.3; D7 addendum |
+| D22 | Event vocabulary & contracts layout | **`request` replaces `order`** across the event contracts, matching the D1 backlog's request vocabulary (decided 2026-09-20): classes (`RequestEvent`, `RequestCreated`, …), identities/routing keys (`request.created` … `request.courier-arrived`), the exchange (`request-events`), this service's queues (`notification-service.request-events` + `.retry`/`.dlq`), the `requestId` body field, and the fixtures. Also decided: `foc-contracts` splits into `events.core` (`DomainEvent`, `EventTypeRegistry`, `EventContracts`, `Nullable`) and `events.request` (the domain marker + records); future domains get sibling packages. Applied as a wholesale rename rather than as new event types (the D18 evolution rule) — a one-time pre-production break, acceptable because no producer exists yet (order-service is an empty stub, issue #55 open) and the notification service migrates in the same PR. Old broker entities linger on dev volumes; see the migration note. | vocabulary consistency with the D1 backlog; Extensibility |
 
 ## Components
 
 Ownership note — the first four rows are **broker infrastructure, not
 part of the Notification Service process**: RabbitMQ is shared platform
 infrastructure running as its own container (like the databases), usable
-by any service. Within it, the `order-events` exchange is conceptually
+by any service. Within it, the `request-events` exchange is conceptually
 the *Order Service's* publishing surface (its contract that state-change
 facts appear there), while the work, retry and dead-letter queues are
 **broker-hosted resources dedicated to this service**: it is their sole
@@ -157,8 +165,8 @@ database-per-service rule is untouched.
 
 | Component | Responsibility |
 | --- | --- |
-| **order-events exchange** (RabbitMQ) | Durable **topic** exchange (D16) the Order Service publishes request-state and courier-arrival events to under their canonical routing keys; publishing is fire-and-forget, so a delivery failure never affects the producing operation (F1.4). |
-| **Work queue** (RabbitMQ) | Durable queue bound to the exchange with `order.#` (D16); holds undelivered events across restarts (NFR1.2) and delivers them at-least-once (NFR1.1). |
+| **request-events exchange** (RabbitMQ) | Durable **topic** exchange (D16) the Order Service publishes request-state and courier-arrival events to under their canonical routing keys; publishing is fire-and-forget, so a delivery failure never affects the producing operation (F1.4). |
+| **Work queue** (RabbitMQ) | Durable queue bound to the exchange with `request.#` (D16); holds undelivered events across restarts (NFR1.2) and delivers them at-least-once (NFR1.1). |
 | **Retry queue** (RabbitMQ) | Durable TTL/delay queue; the listener parks a failed event here while attempts remain, and the queue's dead-letter leg (D20) re-routes it to the work queue when its TTL expires, giving backoff between attempts (F2.2). |
 | **Dead-letter queue** (RabbitMQ) | Durable queue fed by the work queue's dead-letter leg (D20) after an event exhausts its maximum attempts — or immediately, for a message that cannot convert (D21); retained for later inspection and manual re-publish (F2.3). |
 | **AMQP listener** (Spring Boot) | Consumes events with manual acknowledgement; acks only after the processor's DB transaction commits, so a crash before commit leads to redelivery, never loss (NFR1.1). |
@@ -174,7 +182,7 @@ The Order Service publishes **explicit, business-specific typed
 events** — one flat record per fact, no envelope wrapper and no
 free-form payload map (the generic `EventEnvelope` was judged too
 weakly typed and deleted). The contracts are code in `foc-contracts/`:
-the `DomainEvent`/`OrderEvent` interfaces, the seven records, and the
+the `DomainEvent`/`RequestEvent` interfaces, the seven records, and the
 `EventTypeRegistry` — with one canonical fixture per event checked in
 under
 [`foc-contracts/src/main/resources/contracts/`](../foc-contracts/src/main/resources/contracts/)
@@ -190,22 +198,22 @@ event's business fields):
 | Field | Why it must be present |
 | --- | --- |
 | `eventId` (unique) | duplicate detection (D4, F2.1) |
-| `eventType` (canonical identity, e.g. `order.accepted` — injected by the converter, derived from the class; same string as the routing key) | consumer dispatch to the record class; self-describing, transport-portable bodies (D18) |
+| `eventType` (canonical identity, e.g. `request.accepted` — injected by the converter, derived from the class; same string as the routing key) | consumer dispatch to the record class; self-describing, transport-portable bodies (D18) |
 | `occurredAt` timestamp | notification display and audit |
 | `producer` (e.g. `order-service`) | provenance/audit |
 | `correlationId` | correlates the event with the request/flow that caused it |
 | `parties` (user IDs to notify) | one notification per entry, without querying other services (F1.1, F1.2) |
 
 The seven cataloged events (Order F0.2 state transitions plus the
-courier-arrival update, F4.1.1–F4.1.2): `order.created`,
-`order.accepted`, `order.collected`, `order.completed`,
-`order.cancelled`, `order.expired`, `order.courier-arrived`. Business
-fields per event: all carry `orderId`, `requesterId`,
+courier-arrival update, F4.1.1–F4.1.2): `request.created`,
+`request.accepted`, `request.collected`, `request.completed`,
+`request.cancelled`, `request.expired`, `request.courier-arrived`. Business
+fields per event: all carry `requestId`, `requesterId`,
 `pickupLocation`, `dropoffLocation`, `note`; the post-acceptance
-events add `courierId` (nullable on `order.cancelled` — a
+events add `courierId` (nullable on `request.cancelled` — a
 pre-acceptance cancel has no courier). Adding an event type is a
 contracts release (record + registry entry + fixture) plus a consumer
-jar bump — the `order.#` binding never changes (D16).
+jar bump — the `request.#` binding never changes (D16).
 
 ## Diagram legend
 
@@ -233,7 +241,7 @@ APIs · ack/nack = message (negative) acknowledgement.
 | --- | --- |
 | Notif F1.1 — notify on events without querying the producing service | each typed event carries all needed data (party IDs, business fields); processor reads only the event + own DB |
 | Notif F1.2 — notify each party of an event | processor creates one notification per entry in the event's `parties`; push gateway targets each party's per-user destination |
-| Notif F1.3 — new event types without publisher changes | reworded under D17/D18: a new event type is a contracts release consumed via a jar bump (no *code* change — registry-driven converter, `DomainEvent`-generic processor, unchanged `order.#` binding). Consumers stay tolerant readers of unknown *fields*; an unknown *type* is a conversion failure — dead-lettered intact on first rejection for replay after a consumer upgrade (D7/D21) |
+| Notif F1.3 — new event types without publisher changes | reworded under D17/D18: a new event type is a contracts release consumed via a jar bump (no *code* change — registry-driven converter, `DomainEvent`-generic processor, unchanged `request.#` binding). Consumers stay tolerant readers of unknown *fields*; an unknown *type* is a conversion failure — dead-lettered intact on first rejection for replay after a consumer upgrade (D7/D21) |
 | Notif F1.4 — delivery failure never affects the producing operation | fire-and-forget publish to the exchange; all retry/failure handling stays on the consumer side of the broker |
 | Notif F2.1 — no duplicate notification on redelivery | unique event-ID constraint checked in the same DB transaction as the notification insert (D4) |
 | Notif F2.2 — retry failed deliveries | listener republish → TTL retry queue → redelivery with backoff, up to max attempts counted via the listener-stamped `x-retry-attempts` header (D6/D20) |
@@ -247,7 +255,7 @@ APIs · ack/nack = message (negative) acknowledgement.
 | Order F0.2 — event on every request state transition | Order Service publishes all six state-transition events to the exchange |
 | Order F4.1.1–F4.1.2 — requester updated on collection and on courier arrival at the dropoff | `collected` state event plus the `courier-arrived` event, delivered through the same pipeline and pushed to the requester |
 | Order NFR1.1–1.2 — requester and assigned courier see every state change within 5 s | broker push path end-to-end: consume → process → STOMP push, no polling |
-| M6 — meaningful async workflow | the entire order-events → broker → notification pipeline |
+| M6 — meaningful async workflow | the entire request-events → broker → notification pipeline |
 
 ## Configuration notes
 
@@ -260,13 +268,16 @@ APIs · ack/nack = message (negative) acknowledgement.
   that already holds the queue fails (`PRECONDITION_FAILED`) until the
   queue is deleted or the volume reset; max attempts is read by the
   listener and only needs a service restart.
-- Migration note (Method-B refactor / issue #65): a dev broker volume
-  from the fanout era makes the topic-exchange declaration fail
-  (`PRECONDITION_FAILED`), as does one holding the pre-#65 work queue
-  (no dead-letter arguments); a dev DB volume still carrying the
-  removed NOT NULL `entity_type`/`entity_id` columns rejects inserts
-  (`ddl-auto: update` never drops columns) — reset the volumes once
-  (see the service README).
+- Migration note (Method-B refactor / issue #65 / D22 rename): a dev
+  broker volume from the fanout era makes the topic-exchange
+  declaration fail (`PRECONDITION_FAILED`), as does one holding the
+  pre-#65 work queue (no dead-letter arguments); after the D22 rename
+  the old `order-events` exchange and `notification-service.order-events*`
+  queues simply linger as orphans (the new names declare cleanly)
+  and any messages still parked in them are stranded; a dev DB volume
+  still carrying the removed NOT NULL `entity_type`/`entity_id`
+  columns rejects inserts (`ddl-auto: update` never drops columns) —
+  reset the volumes once (see the service README).
 - RabbitMQ durability is **opt-in**: exchanges and queues must be
   declared durable and messages published persistent, or NFR1.2 is
   silently violated.
@@ -336,8 +347,8 @@ is centralized logging (nice-to-have N4).
   consumer never blocks another), its own processed-event-ID inbox
   (redelivery is per queue, so dedupe state cannot be shared), and its
   own backlog (a slow consumer affects nobody else). Bindings are also
-  per queue: a consumer that needs only some order events binds
-  narrower patterns than this service's `order.#`.
+  per queue: a consumer that needs only some request events binds
+  narrower patterns than this service's `request.#`.
 - **The contracts library is already the public contract.** The typed
   records in `foc-contracts` (D17) are what every producer and
   consumer compiles against; they evolve additively only (add
@@ -353,9 +364,9 @@ is centralized logging (nice-to-have N4).
   notifications. This is the existing system-level boundary in
   [`architecture.md`](architecture.md).
 - **Exchange topology is settled (D16, 2026-09-19):** one **topic
-  exchange per producing domain** (`order-events` today; `user-events`
+  exchange per producing domain** (`request-events` today; `user-events`
   etc. when they appear), routing keys = the registry's canonical
-  identity strings, pattern bindings per consumer (`order.#` here).
+  identity strings, pattern bindings per consumer (`request.#` here).
   This also maps cleanly onto Kafka topics, should D11's swap scenario
   ever happen.
 

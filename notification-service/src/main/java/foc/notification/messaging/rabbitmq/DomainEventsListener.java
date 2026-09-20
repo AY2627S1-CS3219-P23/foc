@@ -18,12 +18,14 @@
  * exhausted. Same day, PR #79 Copilot review: the republish is now a
  * confirmed publish, so the original is acked only after the broker
  * accepts the retry copy.
+ * 2026-09-20: order→request event vocabulary rename applied (author
+ * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.rabbitmq;
 
 import com.rabbitmq.client.Channel;
-import foc.contracts.events.DomainEvent;
+import foc.contracts.events.core.DomainEvent;
 import foc.notification.service.EventProcessor;
 import java.io.IOException;
 import org.springframework.amqp.core.Message;
@@ -107,7 +109,7 @@ class DomainEventsListener {
 		this.maxAttempts = maxAttempts;
 	}
 
-	@RabbitListener(queues = RabbitMqTopology.ORDER_EVENTS_QUEUE)
+	@RabbitListener(queues = RabbitMqTopology.REQUEST_EVENTS_QUEUE)
 	void onDomainEvent(@Payload DomainEvent event, Message amqpMessage, Channel channel,
 			@Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) throws IOException {
 		try {
@@ -146,7 +148,7 @@ class DomainEventsListener {
 		// so a publish the broker never accepted throws instead of
 		// silently losing the event.
 		rabbitTemplate.invoke(operations -> {
-			operations.send("", RabbitMqTopology.ORDER_EVENTS_RETRY_QUEUE, message);
+			operations.send("", RabbitMqTopology.REQUEST_EVENTS_RETRY_QUEUE, message);
 			operations.waitForConfirmsOrDie(RETRY_CONFIRM_TIMEOUT_MS);
 			return null;
 		});

@@ -6,6 +6,8 @@
  * serialize, and fatal MessageConversionException on malformed,
  * missing-type, and unknown-type bodies.
  * 2026-09-20, PR #79 Copilot review: empty-body case added.
+ * 2026-09-20: order→request event vocabulary rename applied (author
+ * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.rabbitmq;
@@ -13,9 +15,9 @@ package foc.notification.messaging.rabbitmq;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
-import foc.contracts.events.EventTypeRegistry;
-import foc.contracts.events.OrderAccepted;
-import foc.contracts.events.OrderCancelled;
+import foc.contracts.events.core.EventTypeRegistry;
+import foc.contracts.events.request.RequestAccepted;
+import foc.contracts.events.request.RequestCancelled;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -48,34 +50,34 @@ class DomainEventMessageConverterTest {
 	@Test
 	void dispatchesFixtureToItsRecordClass() throws IOException {
 		byte[] body;
-		try (InputStream fixture = getClass().getResourceAsStream("/contracts/order-accepted.example.json")) {
+		try (InputStream fixture = getClass().getResourceAsStream("/contracts/request-accepted.example.json")) {
 			assertThat(fixture).as("fixture on classpath via foc-contracts jar").isNotNull();
 			body = fixture.readAllBytes();
 		}
 
 		Object event = converter.fromMessage(message(body));
 
-		assertThat(event).isInstanceOf(OrderAccepted.class);
-		OrderAccepted accepted = (OrderAccepted) event;
-		assertThat(accepted.orderId()).isEqualTo("ord-20260919-0042");
-		assertThat(accepted.eventType()).isEqualTo("order.accepted");
+		assertThat(event).isInstanceOf(RequestAccepted.class);
+		RequestAccepted accepted = (RequestAccepted) event;
+		assertThat(accepted.requestId()).isEqualTo("req-20260919-0042");
+		assertThat(accepted.eventType()).isEqualTo("request.accepted");
 	}
 
 	@Test
 	void unknownEventTypeIsFatal() {
 		String json = """
-				{"eventType": "order.refunded", "eventId": "e-1"}
+				{"eventType": "request.refunded", "eventId": "e-1"}
 				""";
 
 		assertThatExceptionOfType(MessageConversionException.class)
 				.isThrownBy(() -> converter.fromMessage(message(json.getBytes(StandardCharsets.UTF_8))))
-				.withMessageContaining("order.refunded");
+				.withMessageContaining("request.refunded");
 	}
 
 	@Test
 	void missingEventTypeIsFatal() {
 		String json = """
-				{"eventId": "e-1", "orderId": "ord-1"}
+				{"eventId": "e-1", "requestId": "req-1"}
 				""";
 
 		assertThatExceptionOfType(MessageConversionException.class)
@@ -87,7 +89,7 @@ class DomainEventMessageConverterTest {
 		// Binds structurally (Jackson supplies nulls) but must be
 		// rejected before it can reach the processor.
 		String json = """
-				{"eventType": "order.accepted", "eventId": "e-1"}
+				{"eventType": "request.accepted", "eventId": "e-1"}
 				""";
 
 		assertThatExceptionOfType(MessageConversionException.class)
@@ -96,17 +98,17 @@ class DomainEventMessageConverterTest {
 	}
 
 	@Test
-	void nullableCourierIdIsAcceptedOnOrderCancelled() throws IOException {
+	void nullableCourierIdIsAcceptedOnRequestCancelled() throws IOException {
 		byte[] body;
-		try (InputStream fixture = getClass().getResourceAsStream("/contracts/order-cancelled.example.json")) {
+		try (InputStream fixture = getClass().getResourceAsStream("/contracts/request-cancelled.example.json")) {
 			assertThat(fixture).as("fixture on classpath via foc-contracts jar").isNotNull();
 			body = fixture.readAllBytes();
 		}
 
 		Object event = converter.fromMessage(message(body));
 
-		assertThat(event).isInstanceOf(OrderCancelled.class);
-		assertThat(((OrderCancelled) event).courierId()).isNull();
+		assertThat(event).isInstanceOf(RequestCancelled.class);
+		assertThat(((RequestCancelled) event).courierId()).isNull();
 	}
 
 	@Test
@@ -125,9 +127,9 @@ class DomainEventMessageConverterTest {
 
 	@Test
 	void toMessageInjectsEventTypeAndRoundTrips() {
-		OrderAccepted event = new OrderAccepted("e-1", Instant.parse("2026-09-19T08:30:00Z"),
+		RequestAccepted event = new RequestAccepted("e-1", Instant.parse("2026-09-19T08:30:00Z"),
 				"order-service", "c-1", List.of("usr-req-1001", "usr-cou-2002"),
-				"ord-1", "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "hi");
+				"req-1", "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "hi");
 
 		Message message = converter.toMessage(event, new MessageProperties());
 
@@ -136,7 +138,7 @@ class DomainEventMessageConverterTest {
 		Map<String, Object> wire = jsonMapper.readValue(message.getBody(), Map.class);
 		// The derived identity is injected; records deliberately don't store it (D18).
 		assertThat(wire).containsEntry(DomainEventMessageConverter.EVENT_TYPE_FIELD,
-				EventTypeRegistry.routingKeyFor(OrderAccepted.class));
+				EventTypeRegistry.routingKeyFor(RequestAccepted.class));
 
 		Object roundTripped = converter.fromMessage(message);
 		assertThat(roundTripped).isEqualTo(event);

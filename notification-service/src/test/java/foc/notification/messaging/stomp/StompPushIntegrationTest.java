@@ -7,6 +7,8 @@
  * budget, SockJS fallback path, and silence for discarded events.
  * 2026-09-19, Method-B refactor (D16-D19): drives the port with typed
  * events; entity/stale assertions removed with the mechanism (D19).
+ * 2026-09-20: order→request event vocabulary rename applied (author
+ * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.stomp;
@@ -15,8 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
-import foc.contracts.events.OrderAccepted;
-import foc.contracts.events.OrderCollected;
+import foc.contracts.events.request.RequestAccepted;
+import foc.contracts.events.request.RequestCollected;
 import foc.notification.service.EventProcessor;
 import foc.notification.service.NotificationDto;
 import io.jsonwebtoken.Jwts;
@@ -94,14 +96,14 @@ class StompPushIntegrationTest {
 				.compact();
 	}
 
-	private static OrderAccepted accepted(String eventId, String orderId, List<String> parties) {
-		return new OrderAccepted(eventId, OCCURRED_AT, "order-service", "c-push", parties,
-				orderId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "push");
+	private static RequestAccepted accepted(String eventId, String requestId, List<String> parties) {
+		return new RequestAccepted(eventId, OCCURRED_AT, "order-service", "c-push", parties,
+				requestId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "push");
 	}
 
-	private static OrderCollected collected(String eventId, String orderId, List<String> parties) {
-		return new OrderCollected(eventId, OCCURRED_AT, "order-service", "c-push", parties,
-				orderId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "push");
+	private static RequestCollected collected(String eventId, String requestId, List<String> parties) {
+		return new RequestCollected(eventId, OCCURRED_AT, "order-service", "c-push", parties,
+				requestId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "push");
 	}
 
 	private static WebSocketStompClient rawWebSocketClient() {
@@ -165,9 +167,9 @@ class StompPushIntegrationTest {
 		NotificationDto frame = frames.poll(5, TimeUnit.SECONDS);
 		assertThat(frame).isNotNull();
 		assertThat(frame.id()).isNotNull();
-		assertThat(frame.eventType()).isEqualTo("order.accepted");
+		assertThat(frame.eventType()).isEqualTo("request.accepted");
 		assertThat(frame.payload()).isEqualTo(Map.of(
-				"orderId", "ord-push-1",
+				"requestId", "ord-push-1",
 				"requesterId", "usr-req-1001",
 				"courierId", "usr-cou-2002",
 				"pickupLocation", "Techno Edge",
@@ -209,7 +211,7 @@ class StompPushIntegrationTest {
 		eventProcessor.process(collected("dis-e3", "ord-dis-1", List.of("usr-dis-1")));
 		NotificationDto sentinel = frames.poll(5, TimeUnit.SECONDS);
 		assertThat(sentinel).isNotNull();
-		assertThat(sentinel.eventType()).isEqualTo("order.collected");
+		assertThat(sentinel.eventType()).isEqualTo("request.collected");
 		assertThat(frames).isEmpty();
 	}
 

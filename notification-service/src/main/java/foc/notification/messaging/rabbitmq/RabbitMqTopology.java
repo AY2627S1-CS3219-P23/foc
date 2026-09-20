@@ -13,11 +13,13 @@
  * author's decisions of 2026-09-20: the default exchange serves as
  * the dead-letter exchange on both legs, and unconvertible messages
  * dead-letter on first rejection.
+ * 2026-09-20: order→request event vocabulary rename applied (author
+ * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.rabbitmq;
 
-import foc.contracts.events.EventContracts;
+import foc.contracts.events.core.EventContracts;
 
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
@@ -30,12 +32,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Order-domain topology (D12, D13, D16): the durable
- * {@code order-events} <strong>topic</strong> exchange the Order
+ * Request-domain topology (D12, D13, D16): the durable
+ * {@code request-events} <strong>topic</strong> exchange the Order
  * Service publishes to with routing keys from the shared
  * {@code EventTypeRegistry} (D18), and this service's durable work
- * queue bound with {@value #ORDER_EVENTS_BINDING_PATTERN} — this
- * service notifies on <em>every</em> order event (F1.1, F1.2), and a
+ * queue bound with {@value #REQUEST_EVENTS_BINDING_PATTERN} — this
+ * service notifies on <em>every</em> request event (F1.1, F1.2), and a
  * new event type ships via a contracts release anyway, so the binding
  * never changes.
  *
@@ -80,26 +82,26 @@ import org.springframework.context.annotation.Configuration;
 public class RabbitMqTopology {
 
 	/**
-	 * This service's work queue for the order domain; consumer-prefixed
+	 * This service's work queue for the request domain; consumer-prefixed
 	 * per the team naming convention (D13) and service-private, so it
 	 * lives here rather than in foc-contracts (D15).
 	 */
-	public static final String ORDER_EVENTS_QUEUE = "notification-service.order-events";
+	public static final String REQUEST_EVENTS_QUEUE = "notification-service.request-events";
 
 	/**
 	 * TTL/delay queue (D6, F2.2): the listener parks a failed event
 	 * here; on TTL expiry the broker returns it to the work queue.
 	 */
-	public static final String ORDER_EVENTS_RETRY_QUEUE = ORDER_EVENTS_QUEUE + ".retry";
+	public static final String REQUEST_EVENTS_RETRY_QUEUE = REQUEST_EVENTS_QUEUE + ".retry";
 
 	/**
 	 * Terminal queue (D7, F2.3): events that exhausted their attempts
 	 * or never converted, kept for inspection and manual re-publish.
 	 */
-	public static final String ORDER_EVENTS_DEAD_LETTER_QUEUE = ORDER_EVENTS_QUEUE + ".dlq";
+	public static final String REQUEST_EVENTS_DEAD_LETTER_QUEUE = REQUEST_EVENTS_QUEUE + ".dlq";
 
-	/** All order-domain events, current and future (D16). */
-	static final String ORDER_EVENTS_BINDING_PATTERN = "order.#";
+	/** All request-domain events, current and future (D16). */
+	static final String REQUEST_EVENTS_BINDING_PATTERN = "request.#";
 
 	/**
 	 * The broker's built-in default exchange: routes by queue name, so
@@ -108,21 +110,21 @@ public class RabbitMqTopology {
 	private static final String DEFAULT_EXCHANGE = "";
 
 	@Bean
-	Declarables orderEventsTopology(
+	Declarables requestEventsTopology(
 			@Value("${notification.rabbitmq.retry.ttl-ms}") int retryTtlMs) {
-		TopicExchange exchange = new TopicExchange(EventContracts.ORDER_EVENTS_EXCHANGE, true, false);
-		Queue workQueue = QueueBuilder.durable(ORDER_EVENTS_QUEUE)
+		TopicExchange exchange = new TopicExchange(EventContracts.REQUEST_EVENTS_EXCHANGE, true, false);
+		Queue workQueue = QueueBuilder.durable(REQUEST_EVENTS_QUEUE)
 				.deadLetterExchange(DEFAULT_EXCHANGE)
-				.deadLetterRoutingKey(ORDER_EVENTS_DEAD_LETTER_QUEUE)
+				.deadLetterRoutingKey(REQUEST_EVENTS_DEAD_LETTER_QUEUE)
 				.build();
-		Queue retryQueue = QueueBuilder.durable(ORDER_EVENTS_RETRY_QUEUE)
+		Queue retryQueue = QueueBuilder.durable(REQUEST_EVENTS_RETRY_QUEUE)
 				.ttl(retryTtlMs)
 				.deadLetterExchange(DEFAULT_EXCHANGE)
-				.deadLetterRoutingKey(ORDER_EVENTS_QUEUE)
+				.deadLetterRoutingKey(REQUEST_EVENTS_QUEUE)
 				.build();
-		Queue deadLetterQueue = QueueBuilder.durable(ORDER_EVENTS_DEAD_LETTER_QUEUE).build();
+		Queue deadLetterQueue = QueueBuilder.durable(REQUEST_EVENTS_DEAD_LETTER_QUEUE).build();
 		Binding binding = BindingBuilder.bind(workQueue).to(exchange)
-				.with(ORDER_EVENTS_BINDING_PATTERN);
+				.with(REQUEST_EVENTS_BINDING_PATTERN);
 		return new Declarables(exchange, workQueue, retryQueue, deadLetterQueue, binding);
 	}
 

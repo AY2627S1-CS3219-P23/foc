@@ -28,6 +28,38 @@ Entry template:
 ---
 ## 2026-09-20 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (+ docs)
+- **Scope:** order→request event-vocabulary rename and foc-contracts
+  package split, both author decisions recorded as D22
+  (`docs/notification-service.md`): Java types (`RequestEvent` + the
+  seven records), identities/routing keys (`request.created` …
+  `request.courier-arrived`), the exchange (`request-events`,
+  constant `REQUEST_EVENTS_EXCHANGE`), the notification queues
+  (`notification-service.request-events` + `.retry`/`.dlq`), the
+  `requestId` body field, and the fixtures; `foc.contracts.events`
+  split into `events.core` (DomainEvent, EventTypeRegistry,
+  EventContracts, Nullable) and `events.request` (marker + records),
+  tests mirrored; notification-service imports, topology, converter,
+  and all tests updated; docs (design doc D22 row + current-name
+  updates, diagram, foc-contracts and service READMEs, migration
+  notes for orphaned old broker entities). Historical notes (D14,
+  struck Open items, past header/scope lines) deliberately keep the
+  old names.
+- **Prompt(s):** "Can you rename order to request in events defined
+  in foc-contracts, also make sure the files in
+  foc-contracts/src/main/java/foc/contracts/events are neatly
+  arranged in their folders. make a new pr for this." The tool asked
+  two neutral options Q&As; the author chose the full wire rename
+  (over full-wire-keeping-orderId and Java-names-only) and the
+  core+domain folder split (over a single domain subfolder).
+- **Author review:** decisions made by the author (2026-09-20);
+  verified via both module test suites (foc-contracts install +
+  notification-service `./mvnw test`, 32 tests incl. the
+  Testcontainers broker path against the renamed topology) and
+  pull-request review.
+
+## 2026-09-20 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
 - **Mode:** generate (+ docs)
 - **Scope:** issue #65 retry/dead-letter topology in
   `notification-service` per team decisions D6/D7 (10 s TTL, 3

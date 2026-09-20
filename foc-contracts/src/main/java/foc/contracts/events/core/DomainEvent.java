@@ -5,9 +5,11 @@
  * EventEnvelope, per the author's Method-B decisions (flat events, no
  * envelope; derived canonical eventType; entity/sequence fields
  * dropped) recorded in docs/notification-service.md D16-D19.
+ * 2026-09-20: order→request rename and events.core/.request package
+ * split applied (author decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
-package foc.contracts.events;
+package foc.contracts.events.core;
 
 import java.time.Instant;
 import java.util.List;
@@ -21,7 +23,7 @@ import java.util.Set;
  * already happened, never commands.
  *
  * <p>The canonical event identity is the registry string (e.g.
- * {@code "order.accepted"}). It travels twice by design: as the body's
+ * {@code "request.accepted"}). It travels twice by design: as the body's
  * {@code eventType} field (the contract's self-describing identity,
  * which consumers dispatch on — D11's body-only rule) and as the
  * RabbitMQ routing key (transport metadata). Both come from the same
@@ -68,7 +70,7 @@ public interface DomainEvent {
 
 	/**
 	 * Canonical event identity — the registry's routing-key string
-	 * (e.g. {@code "order.accepted"}). Derived from the class, so an
+	 * (e.g. {@code "request.accepted"}). Derived from the class, so an
 	 * instance can never carry a mismatched type (D18).
 	 */
 	default String eventType() {

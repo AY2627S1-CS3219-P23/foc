@@ -7,12 +7,15 @@
   the Method-B refactor (author decisions D16-D19).
   2026-09-20, issue #65: retry/DLQ narrative and migration note added
   (author decisions D20-D21; values per team decisions D6/D7).
+  Same day: order→request event vocabulary rename applied (author
+  decision D22) — exchange/queue/routing-key names and the migration
+  note updated.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
 # Notification Service
 
-Consumes order events from the broker, stores notifications, and pushes
+Consumes request events from the broker, stores notifications, and pushes
 them to users. Design: [`docs/notification-service.md`](../docs/notification-service.md).
 
 Spring Boot 4 · Java 21 · Maven · PostgreSQL (service-owned, decision D3).
@@ -40,11 +43,11 @@ Scaffold (issue #61) plus broker infrastructure (issue #62), reworked
 2026-09-19 by the **Method-B refactor** (typed event contracts,
 decisions D16–D19): app skeleton, health endpoint, the JPA schema —
 notification rows (read/unread flag) and processed event IDs (dedupe,
-D4) — and the RabbitMQ topology: the durable `order-events`
+D4) — and the RabbitMQ topology: the durable `request-events`
 **topic** exchange (name from the shared `foc-contracts` library,
-D15/D16) and this service's durable work queue bound with `order.#`,
+D15/D16) and this service's durable work queue bound with `request.#`,
 declared at startup (D12). The event contracts are typed: one flat
-record per order-lifecycle fact plus the `EventTypeRegistry` live in
+record per request-lifecycle fact plus the `EventTypeRegistry` live in
 `foc-contracts` (see its README's **Event conventions** section), each
 with a canonical fixture; this service's contract test
 (`DomainEventContractTest`) binds every cataloged fixture and locks in
@@ -79,12 +82,15 @@ replayable after a consumer upgrade. Both legs use the default
 exchange as their dead-letter exchange (D20). Inspect and re-publish
 via the RabbitMQ management UI (`RABBITMQ_MANAGEMENT_PORT`).
 
-**Migration (dev volumes from before the refactor or before #65):**
-the old fanout exchange makes the topic declaration fail
+**Migration (dev volumes from before the refactor, #65, or the D22
+rename):** the old fanout exchange makes the topic declaration fail
 (`PRECONDITION_FAILED`); so does a work queue declared before #65,
 since its new dead-letter arguments cannot be added to an existing
-queue (deleting just that queue in the management UI also works); and
-the old NOT NULL `entity_type`/`entity_id` columns reject inserts
+queue; after the D22 order→request rename, the old `order-events`
+exchange and `notification-service.order-events*` queues declare
+nothing anew — they just linger as orphans, stranding any messages
+still parked in them (deleting them in the management UI also works);
+and the old NOT NULL `entity_type`/`entity_id` columns reject inserts
 (`ddl-auto: update` never drops columns). Reset both volumes once:
 
 ```sh
