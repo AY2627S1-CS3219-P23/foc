@@ -6,6 +6,8 @@
 # decisions D1, D8, M7 and the provisioning/naming decisions D12-D14.
 # 2026-09-19, issue #67: JWT secret and WebSocket allowed-origins env
 # passed to the notification service for the STOMP push gateway.
+# 2026-09-20, issue #65: retry TTL / max-attempts passed to the
+# notification service for the retry/DLQ topology (D6/D7).
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -30,6 +32,8 @@ services:
       RABBITMQ_PORT: "5672"
       RABBITMQ_USER: ${RABBITMQ_USER:-foc}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set in .env}
+      NOTIFICATION_RETRY_TTL_MS: ${NOTIFICATION_RETRY_TTL_MS:-10000}
+      NOTIFICATION_RETRY_MAX_ATTEMPTS: ${NOTIFICATION_RETRY_MAX_ATTEMPTS:-3}
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       NOTIFICATION_WS_ALLOWED_ORIGINS: ${NOTIFICATION_WS_ALLOWED_ORIGINS:-http://localhost:*}
     depends_on:

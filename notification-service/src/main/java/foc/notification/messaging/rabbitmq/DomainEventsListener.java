@@ -10,6 +10,12 @@
  * the deleted EventEnvelope to the typed DomainEvent contract; same
  * day, renamed OrderEventsListener -> DomainEventsListener (author's
  * naming decision — the class was already event-type-agnostic).
+ * 2026-09-20, issue #65: failure handling per team decisions D6/D7
+ * (10 s TTL, 3 attempts, decided 2026-09-19) — republish to the retry
+ * queue while attempts remain (counted via a service-set header;
+ * RabbitMQ 4 resets x-death counts on client republish, verified
+ * against a real broker), nack without requeue to the DLQ once
+ * exhausted.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.rabbitmq;
@@ -18,49 +24,90 @@ import com.rabbitmq.client.Channel;
 import foc.contracts.events.DomainEvent;
 import foc.notification.service.EventProcessor;
 import java.io.IOException;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.support.AmqpHeaders;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
 /**
  * Thin inbound adapter (D11): deserialization to the concrete event
  * record happens in the message converter before this method runs
  * (dispatch on the body's eventType, D18); this class only hands the
- * event to the {@link EventProcessor} port and acks/nacks on the
- * result. Manual ack after the processor returns means the DB commit
- * strictly precedes the ack — a crash in between causes redelivery,
- * never loss, and the processor's dedupe absorbs the redelivered copy
- * (NFR1.1).
+ * event to the {@link EventProcessor} port and settles the delivery on
+ * the result. Manual ack after the processor returns means the DB
+ * commit strictly precedes the ack — a crash in between causes
+ * redelivery, never loss, and the processor's dedupe absorbs the
+ * redelivered copy (NFR1.1).
+ *
+ * <p>Failure handling (D6/D7, F2.2/F2.3): while attempts remain, a
+ * failed event is republished to the retry queue — forced PERSISTENT,
+ * since a received message carries only {@code receivedDeliveryMode}
+ * and a naive republish would be transient, violating NFR1.2 — and the
+ * original delivery is acked; the broker returns it to the work queue
+ * when the retry TTL expires. Attempts are counted via the
+ * {@value #RETRY_ATTEMPTS_HEADER} header this listener stamps on each
+ * republish, so the count rides with the message across restarts; the
+ * broker's own {@code x-death} count cannot serve here — RabbitMQ 4
+ * resets it to 1 on every client republish (observed against a real
+ * broker in the integration test). Once
+ * {@code notification.rabbitmq.retry.max-attempts} is reached, the
+ * event is nacked without requeue and the work queue's dead-letter
+ * exchange files it in the DLQ. A crash between republish and ack
+ * duplicates at most one retry — absorbed by the processor's event-ID
+ * dedupe, the same at-least-once posture as everywhere else.
+ *
+ * <p>Messages the converter rejects (unknown eventType, malformed
+ * body) never reach this method: the container rejects them without
+ * requeue on first delivery and they dead-letter straight to the DLQ —
+ * retrying them could never succeed (author decision, 2026-09-20).
  *
  * <p>Event-type-agnostic by construction: any event the registry
  * catalogs flows through unchanged, so a future second domain queue
  * is one more entry in the {@code queues} list below — the class
- * never changes. Only the queue reference is domain-specific.
- *
- * <p>Failure handling until #65's retry/DLQ topology: processing
- * failures are nacked with requeue (immediate redelivery, nothing
- * lost); malformed messages never reach this method — the container's
- * default error handler rejects fatal conversion failures without
- * requeue. Backoff schedule and attempt limits are a pending team
- * decision owned by issue #65 — deliberately not implemented here.
+ * never changes. Only the queue references are domain-specific.
  */
 @Component
 class DomainEventsListener {
 
-	private final EventProcessor eventProcessor;
+	/** Attempts already made, stamped on each republish (see class doc). */
+	static final String RETRY_ATTEMPTS_HEADER = "x-retry-attempts";
 
-	DomainEventsListener(EventProcessor eventProcessor) {
+	private static final Logger log = LoggerFactory.getLogger(DomainEventsListener.class);
+
+	private final EventProcessor eventProcessor;
+	private final RabbitTemplate rabbitTemplate;
+	private final int maxAttempts;
+
+	DomainEventsListener(EventProcessor eventProcessor, RabbitTemplate rabbitTemplate,
+			@Value("${notification.rabbitmq.retry.max-attempts}") int maxAttempts) {
 		this.eventProcessor = eventProcessor;
+		this.rabbitTemplate = rabbitTemplate;
+		this.maxAttempts = maxAttempts;
 	}
 
 	@RabbitListener(queues = RabbitMqTopology.ORDER_EVENTS_QUEUE)
-	void onDomainEvent(DomainEvent event, Channel channel,
+	void onDomainEvent(@Payload DomainEvent event, Message amqpMessage, Channel channel,
 			@Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) throws IOException {
 		try {
 			eventProcessor.process(event);
 		} catch (RuntimeException ex) {
-			channel.basicNack(deliveryTag, false, true);
+			long attempts = attemptsSoFar(amqpMessage);
+			log.warn("event {} failed on attempt {}/{}", event.eventId(), attempts, maxAttempts);
+			if (attempts >= maxAttempts) {
+				// Exhausted: the work queue's dead-letter leg files it
+				// in the DLQ (F2.3).
+				channel.basicNack(deliveryTag, false, false);
+			} else {
+				scheduleRetry(amqpMessage, attempts);
+				channel.basicAck(deliveryTag, false);
+			}
 			// Rethrow feeds the container's failure logging only — it cannot
 			// double-settle this delivery: in MANUAL mode the container nacks
 			// solely for ManualAckListenerExecutionRuntimeException (spring-rabbit
@@ -68,5 +115,17 @@ class DomainEventsListener {
 			throw ex;
 		}
 		channel.basicAck(deliveryTag, false);
+	}
+
+	/** 1 for the delivery in hand, plus the attempts already stamped. */
+	private long attemptsSoFar(Message message) {
+		Object priorAttempts = message.getMessageProperties().getHeader(RETRY_ATTEMPTS_HEADER);
+		return priorAttempts instanceof Number prior ? 1 + prior.longValue() : 1;
+	}
+
+	private void scheduleRetry(Message message, long attempts) {
+		message.getMessageProperties().setHeader(RETRY_ATTEMPTS_HEADER, attempts);
+		message.getMessageProperties().setDeliveryMode(MessageDeliveryMode.PERSISTENT);
+		rabbitTemplate.send("", RabbitMqTopology.ORDER_EVENTS_RETRY_QUEUE, message);
 	}
 }

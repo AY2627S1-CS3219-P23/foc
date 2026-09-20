@@ -5,6 +5,8 @@
   broker/foc-contracts notes added for issue #62 (2026-09-19).
   2026-09-19: current-state narrative and migration notes updated for
   the Method-B refactor (author decisions D16-D19).
+  2026-09-20, issue #65: retry/DLQ narrative and migration note added
+  (author decisions D20-D21; values per team decisions D6/D7).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -61,12 +63,26 @@ business fields — in a single transaction. The former per-entity
 sequence stale-discard was removed by author decision (D19; F2.4
 retired). The code follows a controller-service-repository layout
 (`service/`, `repository/`, `entity/`; the REST controller arrives
-with #66). Until #65's retry/DLQ topology, processing failures are
-requeued and malformed or unknown-type messages are dropped by the
-container's default error handler.
+with #66).
 
-**Migration (dev volumes from before the refactor):** the old fanout
-exchange makes the topic declaration fail (`PRECONDITION_FAILED`), and
+Failure handling (issue #65, decisions D6/D7/D20/D21) is live: a
+processing failure is republished to the durable TTL **retry queue**
+(`NOTIFICATION_RETRY_TTL_MS`, default 10 s) and returns to the work
+queue for another attempt; after `NOTIFICATION_RETRY_MAX_ATTEMPTS`
+(default 3) total attempts — counted via a listener-stamped
+`x-retry-attempts` header, because RabbitMQ 4 resets its own `x-death`
+count on client republish — the event is nacked to the durable **DLQ**
+via the work queue's dead-letter leg. Malformed or unknown-type messages skip the
+retry queue and dead-letter intact on first rejection (D21),
+replayable after a consumer upgrade. Both legs use the default
+exchange as their dead-letter exchange (D20). Inspect and re-publish
+via the RabbitMQ management UI (`RABBITMQ_MANAGEMENT_PORT`).
+
+**Migration (dev volumes from before the refactor or before #65):**
+the old fanout exchange makes the topic declaration fail
+(`PRECONDITION_FAILED`); so does a work queue declared before #65,
+since its new dead-letter arguments cannot be added to an existing
+queue (deleting just that queue in the management UI also works); and
 the old NOT NULL `entity_type`/`entity_id` columns reject inserts
 (`ddl-auto: update` never drops columns). Reset both volumes once:
 
@@ -87,6 +103,6 @@ reuse). The frontend STOMP client is deferred until the SPA exists;
 the provisional reconnect policy is recorded in the design doc's
 "Session mechanics". Tests: unit tests drive the port directly on H2;
 STOMP integration tests run real sessions on a random port (no
-Docker); one Testcontainers test runs the full broker path
-(auto-skips when Docker is unavailable). Retry/DLQ, REST API, and
-retention purge land in issues #65, #66, #68.
+Docker); one Testcontainers test runs the full broker path including
+retry recovery and dead-lettering (auto-skips when Docker is
+unavailable). REST API and retention purge land in issues #66, #68.

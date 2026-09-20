@@ -9,11 +9,17 @@
 # and repeats acknowledge-mode, since this file shadows the main yaml).
 # 2026-09-19, issue #67: fixed JWT test secret for the push-gateway
 # tests.
+# 2026-09-20, issue #65: retry properties repeated here (this file
+# shadows the main yaml) with a short TTL so the broker integration
+# test observes full retry cycles in well under a second.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 notification:
   rabbitmq:
     provision-on-startup: false
+    retry:
+      ttl-ms: 500
+      max-attempts: 3
   jwt:
     # Fixed test secret (>= 32 bytes for HS256); tests mint their own
     # tokens with it.

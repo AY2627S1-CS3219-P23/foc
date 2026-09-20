@@ -15,6 +15,10 @@ title: "FoC Notification Service — Component-Level Architecture"
 %% registry dispatch on the body eventType, stale-discard/sequence
 %% removal); retry/DLQ elements marked as issue #65 (values decided,
 %% implementation pending).
+%% 2026-09-20 (issue #65): retry/DLQ implemented — markers removed,
+%% edge labels aligned with the author's D20/D21 decisions (default
+%% exchange as DLX; unconvertible messages dead-letter on first
+%% rejection).
 %% Reviewed by: Leong Wei Zhi (via pull request).
 %% Legend, decisions and traceability: see docs/notification-service.md
 flowchart TB
@@ -24,8 +28,8 @@ flowchart TB
     subgraph RABBIT ["RabbitMQ (message broker — shared platform infrastructure, own Docker container; queues below are dedicated to the Notification Service, their sole consumer)"]
         EXCH{{"<b>order-events topic exchange</b> (D16)<br/>durable; receives persistent messages under<br/>routing keys order.created … order.courier-arrived"}}
         WORKQ[["<b>work queue</b> (durable)<br/>bound with order.#; holds undelivered events<br/>across restarts (Notif NFR1.2)"]]
-        RETRYQ[["<b>retry queue</b> (durable) — issue #65<br/>TTL/delay queue — parks nacked events,<br/>then re-routes them for redelivery<br/>(backoff decided: 10 s, 3 attempts)"]]
-        DLQ[["<b>dead-letter queue</b> (durable) — issue #65<br/>events that exhausted max attempts or carry an<br/>unknown eventType, kept for later inspection /<br/>re-publish (Notif F2.3)"]]
+        RETRYQ[["<b>retry queue</b> (durable)<br/>TTL/delay queue — parks failed events,<br/>then re-routes them for redelivery<br/>(backoff: 10 s TTL, 3 attempts, D6)"]]
+        DLQ[["<b>dead-letter queue</b> (durable)<br/>events that exhausted max attempts or carry an<br/>unknown eventType (D21: on first rejection), kept<br/>for later inspection / re-publish (Notif F2.3)"]]
     end
 
     subgraph NOTIF ["Notification Service (notification-service/) — Java + Spring Boot"]
@@ -41,9 +45,9 @@ flowchart TB
     ORDER_SVC ==>|"publish typed order events: order.created, order.accepted,<br/>order.collected, order.completed, order.cancelled, order.expired<br/>(Order F0.2) + order.courier-arrived (Order F4.1.1–F4.1.2);<br/>fire-and-forget — delivery failure never affects the<br/>producing operation (Notif F1.4)"| EXCH
     EXCH ==>|"route: binding order.#"| WORKQ
     WORKQ ==>|"deliver: at-least-once<br/>(Notif NFR1.1)"| LISTENER
-    LISTENER ==>|"nack on processing failure —<br/>retry with backoff (Notif F2.2, issue #65)"| RETRYQ
-    RETRYQ ==>|"after TTL expires,<br/>re-route for redelivery (issue #65)"| WORKQ
-    WORKQ ==>|"after max attempts, via<br/>dead-letter exchange (Notif F2.3, issue #65)"| DLQ
+    LISTENER ==>|"republish on processing failure<br/>while attempts remain (Notif F2.2)"| RETRYQ
+    RETRYQ ==>|"after TTL expires, re-route<br/>for redelivery (dead-letter leg, D20)"| WORKQ
+    WORKQ ==>|"after max attempts — or on first rejection for<br/>unconvertible messages (D21) — via the<br/>dead-letter leg (Notif F2.3, D20)"| DLQ
 
     LISTENER -->|"hand typed event to processor<br/>(in-process call)"| PROCESSOR
     PROCESSOR ---|"Spring Data JPA: notification insert + processed-event ID<br/>in ONE transaction (Notif F2.1);<br/>no queries to other services (Notif F1.1)"| NOTIF_DB

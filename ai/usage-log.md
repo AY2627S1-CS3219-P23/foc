@@ -18,6 +18,41 @@ Entry template:
 ---
 ## 2026-09-20 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (+ docs)
+- **Scope:** issue #65 retry/dead-letter topology in
+  `notification-service` per team decisions D6/D7 (10 s TTL, 3
+  attempts, env-overridable; unknown types dead-letter): retry queue
+  and DLQ added to `RabbitMqTopology` (work queue gains dead-letter
+  arguments), `DomainEventsListener` reworked — republish-to-retry
+  while attempts remain (counted via a listener-stamped
+  `x-retry-attempts` header after the integration test surfaced that
+  RabbitMQ 4 resets `x-death` counts on client republish; forced
+  PERSISTENT on republish), nack-without-requeue to the DLQ once
+  exhausted; new `notification.rabbitmq.retry.*` properties
+  (`NOTIFICATION_RETRY_TTL_MS`, `NOTIFICATION_RETRY_MAX_ATTEMPTS`)
+  wired through `application.yaml`, `.env.example`, `compose.yaml`;
+  integration test extended (failure-injecting processor decorator,
+  transient-recovery and poison-to-DLQ scenarios, unknown-type
+  assertions updated from dropped to dead-lettered); design doc
+  (D20/D21 recorded, D6/D7/F2.2/F2.3 rows updated), diagram, and
+  service README migration note updated.
+- **Prompt(s):** "Make a plan to resolve issue #65 on github", then
+  plan approval. The tool surfaced the two implementation choices the
+  D6/D7 design left open as neutral options Q&As; the author decided
+  (2026-09-20): the default exchange serves as the dead-letter
+  exchange on both legs (vs a named DLX), and unconvertible messages
+  dead-letter on first rejection without retry cycles (vs custom
+  error-handler machinery to retry them). The listener-republish
+  mechanics follow from the team's diagrammed topology (a queue has
+  one dead-letter target), not a tool decision.
+- **Author review:** decisions made by the author and recorded as
+  D20/D21 in the design doc; verified via `./mvnw test` including the
+  Testcontainers broker path (retry recovery, DLQ after max attempts
+  with attempt-header + `x-death` evidence, unknown-type
+  dead-lettering) and pull-request review.
+
+## 2026-09-20 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor
 - **Scope:** removal of the `schemaVersion` mechanism across
   `foc-contracts` and `notification-service` (amends D18, merged in
