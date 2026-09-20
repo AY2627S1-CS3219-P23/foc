@@ -1,6 +1,8 @@
 <!--
   AI-assisted (CS3219 AI Usage Policy disclosure):
-  Tool: Claude Code (Fable 5), 2026-09-10; revised 2026-09-19.
+  Tool: Claude Code (Fable 5), 2026-09-10; revised 2026-09-19. The
+  2026-09-20 MCP server configuration entry was made with Claude Code
+  (Opus 5); the other 2026-09-20 entries are Fable 5.
   Scope: team allocation table and repository-structure notes
   transcribed from team decisions (2026-09-10); the AI Use Summary
   section is maintained as the policy's consolidated disclosure.
@@ -8,8 +10,9 @@
   (docs/notification-service.md).
   2026-09-20: AI Use Summary wording extended for the notification
   retry/DLQ implementation (issue #65), then again for the retention
-  purge scheduler (issue #68) and the ArchUnit broker-isolation test
-  (issue #69).
+  purge scheduler (issue #68), the ArchUnit broker-isolation test
+  (issue #69), and the project MCP server configuration (developer
+  tooling only).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -76,7 +79,7 @@ This section is the consolidated AI-use disclosure required by the CS3219
 AI Usage Policy (project document, Appendix 2). The detailed log with
 prompts and timestamps lives in [`ai/usage-log.md`](ai/usage-log.md).
 
-**Tools:** Claude Code (Fable 5)
+**Tools:** Claude Code (Fable 5, Opus 5)
 
 **Prohibited phases avoided:** requirements elicitation and
 prioritization; architecture and design decisions. Requirements, service
@@ -99,7 +102,9 @@ STOMP push gateway with JWT-authenticated sessions, retention purge
 scheduler, an ArchUnit test enforcing the broker-isolation boundary,
 unit and integration tests) written strictly from the team's
 finalized design docs and issue specifications, with per-file
-attribution headers.
+attribution headers; developer tooling configuration (the
+project-scoped MCP servers declared in `.mcp.json`, documented in
+`AGENTS.md`).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
