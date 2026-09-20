@@ -64,7 +64,19 @@ Entry template:
 - **Author review:** Both open decisions above made by the author from
   neutral options before implementation. Verified via `./mvnw test`:
   35/35 green (32 pre-existing + 3 new, including the Testcontainers
-  broker path, unaffected) and pull-request review.
+  broker path, unaffected) and pull-request review. PR #81 Copilot
+  review addressed (same day): `deleteByCreatedAtBefore` changed from
+  a derived `deleteBy...` method (loads and removes matching rows one
+  at a time, not a bulk SQL DELETE) to an explicit
+  `@Modifying @Query("delete from Notification n where n.createdAt <
+  :cutoff")`, with `@Transactional` added directly on it since a
+  custom `@Modifying` query is not transactional by default and the
+  scheduled caller provides no surrounding transaction; return type
+  changed `long` → `int` to match `Query.executeUpdate()`. No new
+  design decision — both fixes are Spring Data JPA correctness/
+  efficiency requirements the author had not weighed in on. Re-verified
+  with `./mvnw test` (still 35/35) and replied inline to both review
+  comments with the fix commit.
 
 ## 2026-09-20 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
