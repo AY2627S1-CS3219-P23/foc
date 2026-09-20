@@ -29,6 +29,41 @@ Entry template:
 ## 2026-09-20 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate (implementation)
+- **Scope:** ArchUnit test enforcing the D11 broker-isolation boundary
+  (issue #69, the last "Open items" entry in
+  `docs/notification-service.md`): `archunit-junit5` added as a
+  test-scope dependency (`notification-service/pom.xml`, version
+  pinned via a new `archunit.version` property, matching the existing
+  `jjwt.version` pattern for deps outside the Boot BOM); new
+  `foc.notification.ArchitectureTest` (plain JUnit 5, no Spring
+  context, matching the `DomainEventMessageConverterTest`/
+  `JwtVerifierTest` precedent) asserting no package outside
+  `messaging.rabbitmq` depends on `org.springframework.amqp` or
+  `com.rabbitmq` types — exactly the rule the design doc's "Broker
+  decoupling" section already prescribed. No production code changed:
+  a repo-wide grep confirmed only the four existing
+  `messaging.rabbitmq` classes import broker types today, so the rule
+  is green from the moment it's added. Design doc's Open items list
+  and "Broker decoupling" enforcement bullet updated to mark this
+  done; service and root READMEs updated.
+- **Prompt(s):** "create a new plan to fix issue #69" (following the
+  same plan-then-approve flow as issue #68), then plan approval. No
+  open design decisions to raise — the design doc already specifies
+  the exact rule and package boundary; the only implementation detail
+  (which `archunit-junit5` version to pin) is a routine dependency
+  pick, not a design trade-off, so it wasn't raised as a Q&A.
+- **Author review:** No design decisions made in this change beyond
+  the already-recorded D11. Verified via `./mvnw test` (36/36 green:
+  35 pre-existing + 1 new) and a manual sanity check — a throwaway
+  `org.springframework.amqp.core.Message`-typed field added to
+  `IdempotentEventProcessor` made the new test fail with a clear
+  ArchUnit violation message, then was reverted — confirming the rule
+  actually catches a real bytecode-level violation, not just imports.
+  Reviewed via pull request.
+
+## 2026-09-20 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (implementation)
 - **Scope:** retention purge scheduler (issue #68, team decision D9,
   `docs/notification-service.md`): `NotificationRepository.deleteByCreatedAtBefore`
   (a Spring Data derived bulk-delete query, matching the design

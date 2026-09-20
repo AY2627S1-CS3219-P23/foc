@@ -8,7 +8,8 @@
   (docs/notification-service.md).
   2026-09-20: AI Use Summary wording extended for the notification
   retry/DLQ implementation (issue #65), then again for the retention
-  purge scheduler (issue #68).
+  purge scheduler (issue #68) and the ArchUnit broker-isolation test
+  (issue #69).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -95,8 +96,9 @@ event records/registry with their canonical JSON fixtures and contract
 tests) and the notification event pipeline (AMQP listener, idempotent
 event processor, broker-native retry/dead-letter failure handling,
 STOMP push gateway with JWT-authenticated sessions, retention purge
-scheduler, unit and integration tests) written strictly from the
-team's finalized design docs and issue specifications, with per-file
+scheduler, an ArchUnit test enforcing the broker-isolation boundary,
+unit and integration tests) written strictly from the team's
+finalized design docs and issue specifications, with per-file
 attribution headers.
 
 **Verification:** all AI-assisted output is reviewed by the team through

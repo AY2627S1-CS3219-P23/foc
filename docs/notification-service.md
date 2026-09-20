@@ -100,6 +100,9 @@
   the tool applied the mechanical rename here and in both modules,
   leaving historical notes (D14, struck Open items, this header)
   under the old names.
+  2026-09-20, issue #69: struck the ArchUnit Open item now that the
+  D11 boundary test is implemented; "Broker decoupling"'s enforcement
+  bullet updated to say so.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -299,8 +302,9 @@ and `compose.yaml`, never the business logic.
   foc-contracts README). The processor, REST API, and purge job
   import nothing from `org.springframework.amqp` / `com.rabbitmq`.
 - **Enforcement:** broker code lives in its own package (e.g.
-  `messaging.rabbitmq`); an ArchUnit test can assert no other package
-  imports broker types (not yet written — see Open items).
+  `messaging.rabbitmq`); an ArchUnit test (`ArchitectureTest`, issue
+  #69) asserts no other package depends on `org.springframework.amqp`
+  or `com.rabbitmq` types, and runs with the normal test suite.
 - **Events stay broker-agnostic:** everything — metadata and business
   fields, including the canonical `eventType` — rides in the JSON body,
   never in AMQP headers or other broker-specific message properties
@@ -446,8 +450,10 @@ decision to make then.
 - ~~Exchange topology once a second producer or consumer appears~~ —
   decided 2026-09-19 (D16): per-domain topic exchanges with pattern
   bindings.
-- ArchUnit test enforcing the D11 package boundary (write alongside the
-  service implementation).
+- ~~ArchUnit test enforcing the D11 package boundary (write alongside
+  the service implementation)~~ — implemented under issue #69
+  (2026-09-20): `ArchitectureTest` asserts no package outside
+  `messaging.rabbitmq` depends on broker types.
 - ~~WebSocket session mechanics: how the JWT authenticates the STOMP
   handshake/upgrade, and the client reconnect/backoff policy —
   implementation decisions for when the push gateway is built~~ —
