@@ -12,10 +12,7 @@
     "postgres": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@henkey/postgres-mcp-server"],
-      "env": {
-        "POSTGRES_CONNECTION_STRING": "postgresql://${NOTIFICATION_DB_USER:-notification}:${NOTIFICATION_DB_PASSWORD}@localhost:${NOTIFICATION_DB_HOST_PORT:-5433}/${NOTIFICATION_DB_NAME:-notification}"
-      }
+      "args": ["-y", "@henkey/postgres-mcp-server"]
     },
     "playwright": {
       "type": "stdio",

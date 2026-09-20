@@ -38,8 +38,10 @@ Entry template:
   new `NOTIFICATION_DB_HOST_PORT` variable in `.env.example` so the
   postgres server can reach it; new "MCP Servers" section in
   `AGENTS.md` documenting each server and its setup, including a
-  per-service database port table — we run database-per-service, and
-  the postgres server reaches a non-default DB via a per-call
+  per-service database port table — we run database-per-service, so
+  nothing service-specific is committed: the server takes its default
+  from a `POSTGRES_CONNECTION_STRING` variable each teammate sets in
+  their own `.env`, and reaches any other DB via a per-call
   `connectionString` argument rather than one server entry per
   service.
 - **Prompt(s):** Asked which MCP tools would help productivity on the
@@ -55,12 +57,15 @@ Entry template:
   against the running server that 17 of its 18 tools accept a per-call
   `connectionString`, and the author chose to document that override
   plus an empty port table rather than reserve host ports for the four
-  services owned by other teammates.
+  services owned by other teammates. The author then pointed out that
+  the committed connection string was still notification-specific, so
+  it was replaced with the plain `POSTGRES_CONNECTION_STRING`
+  environment variable, set per developer.
 - **Author review:** Developer tooling only — no product, requirements,
   or architecture decision is involved, and no service code changed.
   Verified the `.mcp.json` is valid JSON, that no credentials are
-  committed (the connection string interpolates variables from the
-  git-ignored `.env`), and that the compose change adds only a host
+  committed (the connection string lives in the git-ignored `.env`,
+  not in `.mcp.json`), and that the compose change adds only a host
   port publication, leaving the in-network wiring untouched. Reviewed
   via pull request.
 
