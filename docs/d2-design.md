@@ -17,6 +17,12 @@
   readability — attribution and traceability live in this header and
   ai/usage-log.md; the Lark internal-discussion copy carries no
   disclosure banner (all disclosures remain in-repo).
+  Later same day: the author chose the shared revocation store
+  (Redis) for logout scope from four tabled options, after a factual
+  Q&A about cross-service token checks; the tool inserted the
+  comparison, moved the jti denylist out of the user-db schema,
+  updated the diagrams, and flagged the store-unreachable and
+  Redis-persistence nuances as the owner's, undecided.
   No requirements, architecture, or trade-off decisions were made by
   the tool.
   Reviewed by: Leong Wei Zhi (via pull request).
@@ -101,12 +107,15 @@ flowchart LR
     UDB[("user-db<br/>PostgreSQL")]
     SDB[("supplier-db<br/>PostgreSQL")]
     MAIL[["Email provider (TBD)<br/>OTP delivery"]]
+    RED[/"revocation store (Redis)<br/>shared jti denylist"/]
 
     SPA -->|"REST/JSON · accounts, auth, profiles"| USC
     SPA -->|"REST/JSON · supplier browse + manage"| SSC
     USC --- UDB
     SSC --- SDB
     USC ==>|"OTP email"| MAIL
+    USC -->|"revoke jti at logout"| RED
+    SSC -->|"check jti"| RED
 ```
 
 > ✍️ Endpoint paths are the agreed grouping; exact verbs/nesting are the owner's to finalize.
@@ -162,16 +171,13 @@ erDiagram
         text kind "PASSWORD_RESET or RECOVERY"
         timestamptz expires_at
     }
-    TOKEN_DENYLIST {
-        text jti PK "revoked at logout"
-        timestamptz expires_at "droppable after token expiry"
-    }
     USERS ||--o{ OTPS : "has"
     USERS ||--o{ ACCOUNT_TOKENS : "has"
 ```
 
 - **Credential storage:** only the BCrypt hash is stored; OTP codes and reset tokens are stored hashed; `JWT_SECRET` lives in env, never the DB.
 - **Soft delete = reuse block:** the deleted row keeps occupying the unique email/username for 30 days; purge on day 31 (scheduler); recovery clears `deleted_at`.
+- **`jti` denylist:** lives in the shared revocation store (Redis — chosen in §3), not in `user-db`.
 
 **Role storage** (chosen: column + CHECK):
 
@@ -208,7 +214,19 @@ Token-based: user-service mints an HS256 JWT on login with the shared `JWT_SECRE
 | `jti` | token id — denylist key at logout |
 | `exp` | 1 hour after issue |
 
-Enforcement: the Spring Security filter chain validates the JWT and maps `role` to authorities; violations → problem+json 401/403. Login accepts username-or-email; failures are non-revealing; lockout 15 min after 5 consecutive failures, counters cleared on success. Logout denylists the token's `jti` until expiry.
+Enforcement: the Spring Security filter chain validates the JWT and maps `role` to authorities; violations → problem+json 401/403. Login accepts username-or-email; failures are non-revealing; lockout 15 min after 5 consecutive failures, counters cleared on success. Logout revokes the token's `jti` in the **shared revocation store (Redis)**; every service consults the store during validation, so logout takes effect platform-wide at once.
+
+**Logout revocation scope** — a JWT stays signature-valid until expiry, so who checks the denylist decides how far logout reaches (chosen: shared store):
+
+|   | Shared revocation store (chosen) | User-Service-only denylist | Short access + refresh pair | Revocation events over RabbitMQ |
+| --- | --- | --- | --- | --- |
+| Where revocation is enforced | every service | User Service only | User Service (refresh); access dies by its short TTL | every service, eventually |
+| Post-logout validity elsewhere | none | up to 1 h (token `exp`) | up to the access TTL (minutes) | until the event is consumed (seconds) |
+| New state / infrastructure | shared store (Redis container) | none | refresh-token store (`.env` slot exists) | broker consumers + in-memory list per service |
+| Other services' token check stays local | no — store lookup per request | yes | yes | yes — in-memory lookup |
+| Also shortens a demoted admin's stale `role` claim | yes | no | yes — to the access TTL | only if demotion publishes an event too |
+
+> ✍️ Two implementation nuances flagged for the owner, not decided: behaviour when the store is unreachable (fail-open vs fail-closed), and whether the denylist survives a Redis restart (persistence).
 
 ```mermaid
 sequenceDiagram
@@ -451,7 +469,7 @@ Covered by the [Part 1 §4 sequence](#4-integration-with-the-supplier-service): 
 | --- | --- | --- |
 | 1 | P1.1 | role matrix + live roles |
 | 2 | P1.2 | `user-db` schema; a BCrypt-hashed row |
-| 3 | P1.3 | login → decoded JWT (`sub`, `role`, `jti`, `exp`); endpoint with/without token; logout kills the token |
+| 3 | P1.3 | login → decoded JWT (`sub`, `role`, `jti`, `exp`); endpoint with/without token; logout kills the token on both services |
 | 4 | P1.6 | bootstrap first admin; promote in-app; edge-case answers |
 | 5 | P1.5 | update carrying `role` has no effect — allow-list DTO |
 | 6 | P2.1–3 | supplier CRUD/search/filter/page via curl, UI stopped; rows seeded per the mapping table |
@@ -494,7 +512,7 @@ Health: `GET http://localhost:${NOTIFICATION_SERVICE_PORT:-8085}/actuator/health
 - Two open comparisons (**OTP email provider**, **signup-OTP timing** — Part 1 §3): owner picks in the implementation PR.
 - File the supplier paging/sorting issue (labels per the backlog convention).
 - Write the Building→zone mapping used at seed time.
-- `user-db` / `supplier-db`: compose rows, `.env.example` vars, `AGENTS.md` port-table rows — each owner's own PR (the cache container joins with the Week-11 work).
+- `user-db` / `supplier-db`: compose rows, `.env.example` vars, `AGENTS.md` port-table rows — each owner's own PR; the revocation store (Redis) joins compose with the user-service work, and the Week-11 listing cache can share the same container.
 - `docs/user-service.md` / `docs/supplier-service.md` (+ `.mmd`): long-term homes for each service's decision record.
 - architecture.md: strike the two resolved engine TBDs after merge.
 - No CI yet (`.github/` absent) — demo runs on local compose.

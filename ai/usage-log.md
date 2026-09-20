@@ -109,6 +109,20 @@ Entry template:
   (file header, this log, README summary) are unchanged in the repo.
   For the record, the 29 decisions and their tabled options are those
   listed in the three entries above (D1-D29 numbering).
+  Follow-on Q&A: the author asked whether a logged-out token would
+  still work at other services; the tool confirmed the gap factually
+  and tabled four scope options (accept the window / shared
+  revocation store / short access + refresh pair / revocation events
+  over RabbitMQ), first as a separate Lark comparison doc at the
+  author's request. Asked directly whether Redis would be "best",
+  the tool declined to recommend and supplied repo facts (the
+  notification doc's no-Redis note, the Week-11 shared-cache
+  decision, load-vs-visibility, the failure-mode follow-on). The
+  author then chose the **shared revocation store (Redis)** (D30);
+  the tool marked it chosen in the design doc, moved the jti
+  denylist out of the user-db schema into the store, added the store
+  to the architecture diagrams, and flagged fail-open-vs-fail-closed
+  and Redis persistence as undecided owner nuances.
 - **Author review:** Tables checked against the D1/D2 documents and
   the issue tracker; merged via pull request.
 
