@@ -10,6 +10,8 @@
   Same day: order→request event vocabulary rename applied (author
   decision D22) — exchange/queue/routing-key names and the migration
   note updated.
+  2026-09-20, issue #68: retention purge scheduler narrative added
+  (team decision D9; author decision on the NOTIF_PURGE_CRON env var).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -112,4 +114,14 @@ the provisional reconnect policy is recorded in the design doc's
 STOMP integration tests run real sessions on a random port (no
 Docker); one Testcontainers test runs the full broker path including
 retry recovery and dead-lettering (auto-skips when Docker is
-unavailable). REST API and retention purge land in issues #66, #68.
+unavailable).
+
+The retention purge scheduler (issue #68, decision D9) is live:
+`RetentionPurgeScheduler` hard-deletes notification rows once
+`created_at` is older than `NOTIF_RETENTION_DAYS` (default 30), on a
+cron schedule (`NOTIF_PURGE_CRON`, default daily at 03:00) — both
+env-overridable and independent of each other. It runs on the app's
+sole `TaskScheduler` bean (the STOMP heartbeat scheduler in
+`WebSocketStompConfig`; Boot backs off its own default once a
+user-defined one exists), and imports nothing broker-related (D11).
+REST API lands in issue #66.

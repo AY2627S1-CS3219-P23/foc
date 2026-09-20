@@ -13,6 +13,9 @@
 # shadows the main yaml) with a short TTL so the broker integration
 # test observes full retry cycles in well under a second; publisher
 # confirms repeated for the same shadowing reason (PR #79 review).
+# 2026-09-20, issue #68: retention properties repeated here for the
+# same shadowing reason; tests call the purge method directly rather
+# than waiting on the cron trigger, so the cron value itself is inert.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 notification:
@@ -29,6 +32,9 @@ notification:
     # This file shadows the main yaml entirely, so the property must
     # be repeated for the gateway config to resolve in tests.
     allowed-origins: http://localhost:*
+  retention:
+    days: 30
+    purge-cron: "0 0 3 * * *"
 
 spring:
   rabbitmq:
