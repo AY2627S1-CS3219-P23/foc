@@ -110,8 +110,9 @@ project-scoped MCP servers declared in `.mcp.json`, documented in
 status inventory and D1-backlog traceability compiled from the
 repository and issue state, schema and endpoint content derived
 mechanically from the requirements plus decisions the team made via
-neutral-options Q&A, and deferred decisions listed as Open Items
-without analysis.
+neutral-options Q&A, and the remaining open choices presented in
+place as factual option comparisons, without tool-authored
+recommendations or justifications.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

@@ -81,6 +81,22 @@ Entry template:
   requirements plus those decisions (the credit-service.md pattern)
   and flagged the signup-OTP timing nuance as an Open item rather
   than deciding it.
+  A fourth follow-up asked for the Open-items section to be replaced
+  by per-section option-A/B/C discussions, each with a recommendation
+  and justification; the tool declined to author recommendations or
+  justifications (prohibited phase under the AI policy) and ran
+  further neutral-options rounds instead. The author decided D22–D29
+  (`role` column + CHECK; lockout counters on `users`; allow-list
+  DTOs for protected fields; self-demotion allowed unless last admin;
+  promote-replacement-first sole-admin guard; admin removal via the
+  F3 soft-delete path; sign-up credit call not wired until
+  credit-service exists; shared cache for the Week-11 caching work)
+  and left the OTP email provider and signup-OTP timing comparisons
+  unchosen. The tool moved every comparison into its section as a
+  factual-property matrix with the author's pick marked "(chosen)",
+  updated the schema/diagrams accordingly, and removed the Open-items
+  section; no justification text was added since the author supplied
+  none.
 - **Author review:** Tables checked against the D1/D2 documents and
   the issue tracker; merged via pull request.
 

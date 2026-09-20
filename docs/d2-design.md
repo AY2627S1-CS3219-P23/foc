@@ -1,20 +1,21 @@
 <!--
   AI-assisted (CS3219 AI Usage Policy disclosure):
   Tool: Claude Code (Fable 5), 2026-09-20.
-  Scope: D2 design document (formerly the readiness doc, pivoted on
-  author request to answer the D2 questions directly). The tool
-  compiled status/traceability from repo/issue state, transcribed the
-  role matrix and schema/endpoint content from the D1 backlog plus the
-  decisions below, and drew the diagrams from docs/architecture.md
-  plus those decisions. Every design decision (D1-D21) was made by
-  Leong Wei Zhi on 2026-09-20 via neutral-options Q&As (logged in
-  ai/usage-log.md); the tool presented options factually and
-  transcribed the outcomes. Deferred decisions are Open items,
-  recorded as option names only. Entity fields and endpoints are
-  mechanical derivations from requirements + decisions
-  (docs/credit-service.md pattern); sequencing details the derivation
-  surfaced but could not settle are flagged as Open items, not
-  decided.
+  Scope: D2 design document. The tool compiled status/traceability
+  from repo/issue state, transcribed the role matrix and
+  schema/endpoint content from the D1 backlog plus the decisions
+  below, and drew the diagrams from docs/architecture.md plus those
+  decisions. Every design decision (D1-D29) was made by Leong Wei
+  Zhi on 2026-09-20 via neutral-options Q&As (logged in
+  ai/usage-log.md). Per author request the Open-items section was
+  replaced by per-section option comparisons; the comparison tables
+  list factual properties only — the author's request for
+  tool-authored recommendations/justifications was declined under
+  this policy, and the author chose instead. Two comparisons (OTP
+  email provider, signup-OTP timing) were left unchosen by the
+  author and appear without a chosen column. Entity fields and
+  endpoints are mechanical derivations from requirements + decisions
+  (docs/credit-service.md pattern).
   No requirements, architecture, or trade-off decisions were made by
   the tool.
   Reviewed by: Leong Wei Zhi (via pull request).
@@ -28,7 +29,7 @@
 - **Design doc:** [architecture.md](architecture.md)
 - **Figma:** [Backlog Mockup](https://www.figma.com/design/HZ25RDhbcsBycXG7K7xrFf/Backlog-Mockup?m=auto&t=jQwFXEoz5ucD66x4-6) · [`web/docs/wireframes/`](../web/docs/wireframes/)
 - **Requirements:** User F1–F8 + NFR1–4 · Supplier F1–F2 + NFR1–2 · UI NFR1 (D1 backlog)
-- **Decisions:** D1–D21 (below) · JWT `sub` convention (issue #67) · foc-contracts D15 ([notification-service.md](notification-service.md))
+- **Decisions:** D1–D29 (below) · JWT `sub` convention (issue #67) · foc-contracts D15 ([notification-service.md](notification-service.md))
 - **Participants:**
     - **User Service owner:** Kwey Xiu Xi
     - **Supplier Service owner:** Alastair Tan Choon Wei
@@ -83,7 +84,7 @@ Every row: **Not started**. Weeks 5–6 have passed.
 
 ## Design decisions (made by the team)
 
-All by **Leong Wei Zhi, 2026-09-20**, from neutral-options Q&As (`ai/usage-log.md`); owners review via this PR. Per-document D-series.
+All by **Leong Wei Zhi, 2026-09-20**, from neutral-options Q&As (`ai/usage-log.md`); owners review via this PR. Per-document D-series. Option comparisons sit beside each decision in Parts 1–2.
 
 | # | Concern | Decision | Serves |
 | --- | --- | --- | --- |
@@ -97,19 +98,27 @@ All by **Leong Wei Zhi, 2026-09-20**, from neutral-options Q&As (`ai/usage-log.m
 | D8 | Denied requests | **RFC 9457 problem+json** — 401 no/invalid token, 403 wrong role | F6.1.5; P2.2 |
 | D9 | Paging/sorting | **adopted as requirement** (absent from backlog) — Spring Data `Pageable`; issue to file | P2.2/2.5 |
 | D10 | Primary keys | **DB identity (bigint)** for both services' tables | schema |
-| D11 | OTP storage | **dedicated `otps` table** — user ref, hashed code, purpose, expiry, attempts; one mechanism for all OTP flows | F1.1.3, F2.1.1, F2.1.3 |
-| D12 | Deletion + 30-day block | **soft delete on `users`** (`deleted_at`); row keeps the unique email/username for 30 days = the block; purge scheduler hard-deletes day 31; recovery clears the flag | F3.1.1–F3.1.3, F4.1 |
-| D13 | Logout invalidation | **server-side denylist** — revoked `jti` kept until natural expiry, consulted at token check | F7.1.2 |
+| D11 | OTP storage | **dedicated `otps` table** — user ref, hashed code, purpose, expiry, attempts | F1.1.3, F2.1.1, F2.1.3 |
+| D12 | Deletion + 30-day block | **soft delete on `users`** (`deleted_at`); row keeps the unique email/username for 30 days = the block; purge day 31; recovery clears the flag | F3.1.1–F3.1.3, F4.1 |
+| D13 | Logout invalidation | **server-side denylist** — revoked `jti` kept until natural expiry | F7.1.2 |
 | D14 | Reset/recovery tokens | **separate token table** — longer-lived link tokens, distinct from OTP codes | F4.1, F4.2 |
-| D15 | Supplier categories | **join table `supplier_categories`** — multi-category; CSV `Type` seeds rows, slash values (Food/Coffee) split | Supplier F1.1.1, F2.2 |
-| D16 | Campus zone | **`zone` column**, seeded via a team-written Building→zone mapping | Supplier F2.2; wireframe filter |
+| D15 | Supplier categories | **join table `supplier_categories`** — CSV `Type` seeds rows, slash values split | Supplier F1.1.1, F2.2 |
+| D16 | Campus zone | **`zone` column**, seeded via a team-written Building→zone mapping | Supplier F2.2 |
 | D17 | Opening times | **`opens_at` / `closes_at` TIME columns** — single daily window, matches CSV | Supplier F1.1.1 |
-| D18 | Description | **column seeded empty; admins fill in-app**; CSV `Location Description` stays its own field | Supplier F1.1.1; seed mapping |
+| D18 | Description | **column seeded empty; admins fill in-app**; CSV `Location Description` stays its own field | Supplier F1.1.1 |
 | D19 | URL style | **unprefixed resource roots** (`/suppliers`, `/auth/…`, `/users/…`) | P1.3, P2.2 |
-| D20 | Supplier querying | **one `GET /suppliers`** with optional `name`, `category`, `zone` + `Pageable` params — one path serves browse/search/filter/page | F1.2, F2.1, F2.2, D9 |
+| D20 | Supplier querying | **one `GET /suppliers`** with optional `name`, `category`, `zone` + `Pageable` params | F1.2, F2.1, F2.2, D9 |
 | D21 | User route grouping | **`/auth/*` flows · `/users/me` own account · `GET /users/{id}` public · admin ops on `/users/*` role-gated** | F1–F8 surface |
+| D22 | Role storage | **`role` column + CHECK** (USER/ADMIN/OWNER) on `users` | F6.1; P1 §2 |
+| D23 | Lockout fields | **counters on `users`** — `failed_login_attempts`, `locked_until` | F5.2–F5.2.1 |
+| D24 | Protected fields | **allow-list DTOs** — update endpoints accept only editable fields | F2; P1 §5 |
+| D25 | Admin self-revocation | **allowed unless last admin** | P1 §6 |
+| D26 | Last-admin guard | **promote a replacement first** before the sole admin can delete/demote themselves | P1 §6 |
+| D27 | Admin account removal | **same soft-delete path as F3** (D12: 30-day block, recovery, day-31 purge) | F6.1.3 |
+| D28 | Sign-up credit call | **not wired yet** — Credit F1.1 provisioning added when credit-service exists | sign-up scope |
+| D29 | Supplier caching | **shared cache** (external store, e.g. a Redis container) — Week 11 work | NFR1.1.1 |
 
-> ✍️ "Why" answers at the check come from the deciders — the AI policy bars tool-written rationales. Undecided items → [Open items](#open-items).
+> ✍️ "Why" answers at the check come from the deciders — the AI policy bars tool-written rationales, so the comparisons below list factual properties only. Two comparisons were left unchosen by the team (OTP email provider, signup-OTP timing — both in Part 1 §3).
 
 ## Architecture (D2 slice)
 
@@ -138,8 +147,13 @@ flowchart LR
 ```
 
 > ✍️ Endpoint paths below are the D19/D21-decided grouping; exact verbs/nesting are the owner's to finalize.
->
-> ℹ️ Sign-up also calls Credit Service (5 starting credits, Credit F1.1); it is a stub today → Open item.
+
+**Sign-up × Credit Service** — architecture.md routes sign-up through Credit F1.1 (5 starting credits); `credit-service/` is a stub today. Behaviour until it exists (chosen: D28):
+
+|   | Don't call yet (chosen — D28) | Call, tolerate failure | Call, fail sign-up |
+| --- | --- | --- | --- |
+| Sign-up works with the stub | yes | yes | no |
+| Credit F1.1 at D2 | deferred with credit-service | attempted; provision later | blocked |
 
 ## Part 1 — User Service
 
@@ -164,7 +178,9 @@ erDiagram
         text email UK "u.nus.edu only (F1.1.1-F1.1.2)"
         text username UK "unique (F1.1.1)"
         text password_hash "BCrypt (D4, F1.1.5)"
-        text role "USER or ADMIN (F6.1) - storage repr. open"
+        text role "USER or ADMIN - CHECK constraint (D22, F6.1)"
+        int failed_login_attempts "D23 (F5.2)"
+        timestamptz locked_until "D23; null = unlocked (F5.2)"
         timestamptz created_at
         timestamptz deleted_at "null = active; soft delete (D12, F3)"
     }
@@ -193,12 +209,27 @@ erDiagram
 
 - **Credential storage:** only the BCrypt hash is stored (D4, F1.1.5, NFR1.1); OTP codes and reset tokens stored hashed (D11/D14); `JWT_SECRET` lives in env, never the DB.
 - **Soft delete = reuse block:** the deleted row keeps occupying the unique email/username for 30 days (F3.1.2); purge on day 31 (F3.1.3, scheduler); recovery clears `deleted_at` (F4.1).
-- Open representation details → [Open items](#open-items): role storage shape, lockout fields (F5.2), signup OTP timing (row-before-verify vs email-keyed code).
+
+**Role storage** (chosen: D22):
+
+|   | `role` column + CHECK (chosen — D22) | PostgreSQL enum type | `roles` join table |
+| --- | --- | --- | --- |
+| Extra table | no | no | yes |
+| Multi-role capable | no | no | yes |
+| Add a role value | CHECK migration | ALTER TYPE migration | insert a row |
+
+**Lockout representation** (chosen: D23):
+
+|   | Counters on `users` (chosen — D23) | `login_attempts` table |
+| --- | --- | --- |
+| Extra table | no | yes |
+| Per-attempt audit trail | no | yes |
+| Reset on success (F5.2.1) | clear two columns | nothing — computed from rows |
 
 ```mermaid
 stateDiagram-v2
     [*] --> Active: signup verified (F1.1.3)
-    Active --> Deleted: self-delete (F3.1) / admin remove (F6.1.3)
+    Active --> Deleted: self-delete (F3.1) / admin remove (F6.1.3, D27)
     Deleted --> Active: recover within 30 d (F4.1, D14)
     Deleted --> [*]: purge on day 31 (F3.1.3, D12)
 ```
@@ -214,7 +245,7 @@ Token-based: user-service mints an HS256 JWT on login with the shared `JWT_SECRE
 | `jti` | token id — denylist key at logout | D13 |
 | `exp` | 1 hour after issue | F7.1.1 |
 
-Enforcement: Spring Security filter chain (D6) validates the JWT and maps `role` to authorities; rules per route (`SecurityFilterChain` / method security); violations → problem+json 401/403 (D8). Login accepts username-or-email (F5.1), failures are non-revealing (F5.1.1); **lockout 15 min after 5 consecutive failures** (F5.2, reset on success F5.2.1 — representation → Open items). Logout denylists the token's `jti` until expiry (D13, F7.1.2).
+Enforcement: Spring Security filter chain (D6) validates the JWT and maps `role` to authorities; rules per route; violations → problem+json 401/403 (D8). Login accepts username-or-email (F5.1), failures non-revealing (F5.1.1); lockout 15 min after 5 consecutive failures via the `users` counters (F5.2, D23), cleared on success (F5.2.1). Logout denylists the token's `jti` until expiry (D13, F7.1.2).
 
 ```mermaid
 sequenceDiagram
@@ -237,6 +268,22 @@ sequenceDiagram
         US-->>SPA: account created
     end
 ```
+
+**Signup-OTP timing** — when does the user row exist? (unchosen; the sequence above draws the insert-after shape; owner picks in the implementation PR):
+
+|   | Row before verify | Insert after verify |
+| --- | --- | --- |
+| `users` needs a verified flag | yes | no |
+| Signup OTP row references | user id | email |
+| Unverified signups hold the unique email/username | yes | no |
+
+**OTP email provider** (unchosen; blocks the #1–#4 email flows; owner picks — the MAIL node stays TBD until then):
+
+|   | Gmail SMTP | Transactional email API | AWS SES |
+| --- | --- | --- | --- |
+| Account needed | Google + app password | provider + API key | AWS |
+| Integration | spring-boot-starter-mail | provider SDK / HTTP | SES SDK or SMTP |
+| Sending constraints | Gmail daily limits | free-tier quotas | sandbox until prod access |
 
 Route surface (D19/D21):
 
@@ -298,8 +345,17 @@ sequenceDiagram
 
 ### §5 User profile management
 
-- Updates validated like signup: uniqueness re-check (F2.1.2), OTP to the existing email before change (F2.1.1), new email confirmed by OTP (F2.1.3), double-entry + policy re-check for passwords (F2.1.4–F2.1.5) — all via the `otps` table (D11).
-- Protected fields (role, account status, user id): **enforcement rule still a team decision** → [Open items](#open-items) (tabled: allow-list DTOs · reject-on-present · ignore). The demo needs it decided.
+Updates validated like signup: uniqueness re-check (F2.1.2), OTP to the existing email before change (F2.1.1), new email confirmed by OTP (F2.1.3), double-entry + policy re-check for passwords (F2.1.4–F2.1.5) — all via the `otps` table (D11).
+
+**Protected fields** — role, account status, user id (chosen: D24):
+
+|   | Allow-list DTOs (chosen — D24) | Reject if present | Ignore silently |
+| --- | --- | --- | --- |
+| Protected fields in the request shape | absent | possible | possible |
+| Tampering surfaced to caller | n/a — not expressible | 400 problem+json | no |
+| Binding behaviour | only editable fields bound | request rejected | fields dropped |
+
+With D24, `PATCH /users/me` accepts only email/username/password — a request carrying `role` has no field to land in.
 
 ### §6 Role lifecycle & administration
 
@@ -307,13 +363,35 @@ sequenceDiagram
 flowchart LR
     Z["zero admins"] -->|"one-time bootstrap (D7)<br/>disabled after first use"| FA["first admin"]
     FA -->|"role change on /users/{id} (F6.1.4)"| PR["user → admin"]
-    PR -->|"same route, demote"| DM["admin → user"]
-    DM -.->|"self-demote / last-admin rules<br/>→ Open items"| OI["pending team decisions"]
+    PR -->|"demote — incl. self-demote (D25)"| DM["admin → user"]
+    G["sole-admin guard (D26):<br/>promote a replacement before<br/>self delete/demote"] -.- PR
 ```
 
 - First admin: bootstrap path active **only while zero admins exist**, disabled after first use (D7) — controlled, no developer intervention afterwards.
 - Promotion/demotion: in-app admin action (F6.1.4) — repeatable without developer involvement.
-- Edge cases the rubric asks about (**open**, options tabled 2026-09-20): admin self-revocation (allow-unless-last · block · always) · last admin delete/demote (block · promote-replacement-first · allow, bootstrap re-arms) · admin-removal semantics (soft-delete like F3 · hard delete · soft without recovery).
+
+**Admin self-revocation** (chosen: D25):
+
+|   | Allow unless last (chosen — D25) | Block entirely | Always allow |
+| --- | --- | --- | --- |
+| Self-demotion possible | yes, unless sole admin | no | yes |
+| Zero-admin state reachable | no | no | yes (bootstrap re-arms) |
+
+**Sole admin deletes/demotes themselves** (chosen: D26):
+
+|   | Promote replacement first (chosen — D26) | Block with error | Allow; bootstrap re-arms |
+| --- | --- | --- | --- |
+| Response while sole admin | requires another admin promoted first | 409/422 problem+json | succeeds |
+| Zero-admin window | never | never | until re-bootstrap |
+| Parallel in backlog | owner rule F6.2.3 | — | D7 re-arm |
+
+**Admin removes an account (F6.1.3)** (chosen: D27):
+
+|   | Soft-delete like F3 (chosen — D27) | Immediate hard delete | Soft-delete, no recovery |
+| --- | --- | --- | --- |
+| 30-day identifier block (F3.1.2) | yes | no | yes |
+| User-initiated recovery (F4.1) | yes | no | no |
+| Purge | day 31 (D12) | immediate | day 31 |
 
 ## Part 2 — Supplier Service
 
@@ -384,13 +462,20 @@ Key queries: browse all, fetch by id, search by name, filter by category and zon
 
 401 for missing/invalid token; the `detail` member carries F6.1.5's "you lack permission" message.
 
+**Listing cache** — NFR1.1.1, scheduled Week 11 (chosen: D29):
+
+|   | Shared cache (chosen — D29) | In-process cache |
+| --- | --- | --- |
+| Extra infrastructure | yes — cache container in compose | no |
+| Survives service restart | yes | no |
+
 ### §3 CRUD independent of the UI
 
 Backend-only service: all functionality above is exposed via the REST API and demoable with curl/HTTP files while the UI is stopped (demo step 6).
 
 ### §4 End-to-end integration
 
-Covered by the [§1.4 sequence](#4-integration-with-the-supplier-service): authenticated login → Bearer call → role check → DB, with admin and non-admin outcomes diverging (201 vs 403).
+Covered by the [§4 sequence](#4-integration-with-the-supplier-service): authenticated login → Bearer call → role check → DB, with admin and non-admin outcomes diverging (201 vs 403).
 
 ### §5 Responsive supplier-management UI
 
@@ -405,8 +490,8 @@ Covered by the [§1.4 sequence](#4-integration-with-the-supplier-service): authe
 | 1 | P1.1 | role matrix + live roles |
 | 2 | P1.2 | `user-db` schema; a BCrypt-hashed row |
 | 3 | P1.3 | login → decoded JWT (`sub`, `role`, `jti`, `exp`); endpoint with/without token; logout kills the token (D13) |
-| 4 | P1.6 | bootstrap first admin (D7); promote in-app; edge-case answers (decide Open items first) |
-| 5 | P1.5 | protected-field update rejected (decide rule first) |
+| 4 | P1.6 | bootstrap first admin (D7); promote in-app; edge-case answers (D25–D27) |
+| 5 | P1.5 | update carrying `role` has no effect — allow-list DTO (D24) |
 | 6 | P2.1–3 | supplier CRUD/search/filter/page via curl, UI stopped; rows seeded per the mapping table |
 | 7 | P1.4 + P2.4 | admin token works on supplier-service; user token → 403 problem+json |
 | 8 | P2.5 | supplier pages at desktop + mobile widths, live data |
@@ -442,28 +527,12 @@ docker compose up --build notification-service
 
 Health: `GET http://localhost:${NOTIFICATION_SERVICE_PORT:-8085}/actuator/health`.
 
-## Open items
-
-Team decisions, recorded without analysis (AI policy). Options = those tabled at deferral (2026-09-20).
-
-| Item | Blocks | Owner |
-| --- | --- | --- |
-| Role storage representation — tabled: `role` column + CHECK · enum type · roles table (claim shape D5 unaffected) | P1 §2 schema | Kwey Xiu Xi / team |
-| Lockout representation (F5.2) — tabled: counters on `users` · `login_attempts` table | P1 §2–§3 | Kwey Xiu Xi |
-| OTP email provider — tabled: Gmail SMTP · transactional API · AWS SES | P1 §3 flows; #1–#4 | Kwey Xiu Xi / team |
-| Signup OTP timing — flagged during transcription: user row before verify (verified flag) · email-keyed code, insert after | P1 §2–§3 sequencing | Kwey Xiu Xi |
-| Protected-fields rule (P1 §5) — tabled: allow-list DTOs · reject-on-present · ignore | P1 §5 demo | Kwey Xiu Xi |
-| Admin self-revocation — tabled: allow-unless-last · block · always | P1 §6 demo | team |
-| Last-admin delete/demote — tabled: block · promote-first · allow + bootstrap re-arms | P1 §6 demo | team |
-| Admin account-removal semantics — tabled: soft-delete like F3 · hard delete · soft, no recovery | P1 §6; `DELETE /users/{id}` | team |
-| Sign-up's Credit call (F1.1) while `credit-service/` is a stub | sign-up demo | team (Ryan Ang) |
-| Supplier caching (NFR1.1.1, Week 11) — tabled: in-process · shared cache | post-D2 | Alastair Tan / team |
-
 ## Follow Up
 
+- Two comparisons left unchosen (**OTP email provider**, **signup-OTP timing** — Part 1 §3): owner picks in the implementation PR; the doc's chosen markers get added then.
 - File the D9 paging/sorting issue (`service:` / `priority:` / `sprint:` labels).
 - Write the Building→zone mapping used at seed time (D16).
-- `user-db` / `supplier-db`: compose rows, `.env.example` vars, `AGENTS.md` port-table rows — each owner's own PR.
+- `user-db` / `supplier-db`: compose rows, `.env.example` vars, `AGENTS.md` port-table rows — each owner's own PR (the D29 cache container joins compose with the Week-11 work).
 - `docs/user-service.md` / `docs/supplier-service.md` (+ `.mmd`): long-term homes; the D-series here migrates there.
 - architecture.md: strike the two resolved engine TBDs after merge.
 - No CI yet (`.github/` absent; N5.2 planned Recess) — demo runs on local compose.
