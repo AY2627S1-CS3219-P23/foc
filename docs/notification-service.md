@@ -86,6 +86,13 @@
   versioned-registry mechanism as unneeded standing complexity;
   breaking contract changes now ship as new event types (D18
   amended). The tool implemented the removal.
+  2026-09-20 (issue #65): the author decided, via neutral options
+  Q&As, the two implementation choices left open by the D6/D7
+  retry/DLQ design, recorded as D20-D21 (default exchange as the
+  dead-letter exchange on both legs; unconvertible messages
+  dead-letter on first rejection, skipping the retry queue); the tool
+  implemented the team-decided topology with those choices and
+  updated the affected wording here.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -104,8 +111,8 @@ it in the file view). System-wide context: [`architecture.md`](architecture.md).
 ## Design decisions (made by the team)
 
 All decisions below were made by Leong Wei Zhi (D1–D10 on 2026-09-15,
-D11 on 2026-09-18, D12–D19 on 2026-09-19) and count as the team's
-finalized design for this service.
+D11 on 2026-09-18, D12–D19 on 2026-09-19, D20–D21 on 2026-09-20) and
+count as the team's finalized design for this service.
 
 | # | Concern | Decision | Serves |
 | --- | --- | --- | --- |
@@ -114,8 +121,8 @@ finalized design for this service.
 | D3 | Notification DB engine | **PostgreSQL**, accessed via Spring Data JPA | Notif F2.1, F2.4, F3 |
 | D4 | Duplicate detection | **Unique event ID** recorded in the DB (unique constraint), written in the *same transaction* as the notification insert | Notif F2.1 |
 | D5 | ~~Stale-event discard~~ | ~~Per-entity sequence number stamped by the producer; discard sequence ≤ last applied~~ — **superseded by D19** (2026-09-19): the mechanism, its `sequence` wire field, and requirement F2.4 were removed | — |
-| D6 | Retry policy | **Broker redelivery with TTL/delay-queue backoff**, fixed maximum attempts. Values decided 2026-09-19: **3 total attempts, 10 s TTL**, env-overridable; implementation owned by issue #65 | Notif F2.2 |
-| D7 | Dead-letter handling | **RabbitMQ dead-letter exchange → durable dead-letter queue**; inspected via the management UI or a consumer, replayable by re-publishing. Decided 2026-09-19: once the DLQ exists, **unknown event types dead-letter** (replayable after a consumer upgrade) rather than being silently dropped; implementation owned by issue #65 | Notif F2.3 |
+| D6 | Retry policy | **Broker redelivery with TTL/delay-queue backoff**, fixed maximum attempts. Values decided 2026-09-19: **3 total attempts, 10 s TTL**, env-overridable (`NOTIFICATION_RETRY_TTL_MS`, `NOTIFICATION_RETRY_MAX_ATTEMPTS`). Implemented under issue #65 (2026-09-20): the listener republishes a failed event to the retry queue while attempts remain and the queue's TTL leg returns it to the work queue; attempts ride in a listener-stamped `x-retry-attempts` header, since RabbitMQ 4 resets its own `x-death` count on client republish (verified against a real broker) | Notif F2.2 |
+| D7 | Dead-letter handling | **RabbitMQ dead-letter exchange → durable dead-letter queue**; inspected via the management UI or a consumer, replayable by re-publishing. Decided 2026-09-19: once the DLQ exists, **unknown event types dead-letter** (replayable after a consumer upgrade) rather than being silently dropped. Implemented under issue #65 (2026-09-20) with the D20/D21 choices | Notif F2.3 |
 | D8 | Broker persistence | **Durable exchanges/queues + persistent messages** (must be explicitly configured — durability is opt-in in RabbitMQ) | Notif NFR1.2 |
 | D9 | Retention window | **Configurable via environment variable** `NOTIF_RETENTION_DAYS`, **default 30 days**; scheduled purge job | Notif F3.4 |
 | D10 | Redis / scale-out | **No Redis** in the current single-instance design (see Open items) | — |
@@ -128,6 +135,8 @@ finalized design for this service.
 | D17 | Event contract shape | **Flat typed event records, no envelope** (Method B): `EventEnvelope` and its free-form `Map` payload are deleted; each of the seven order-lifecycle facts — `OrderCreated`, `OrderAccepted`, `OrderCollected`, `OrderCompleted`, `OrderCancelled`, `OrderExpired`, `CourierArrived` — is one record implementing the plain-Java `DomainEvent` interface, carrying the wire metadata (`eventId`, `eventType`, `occurredAt`, `producer`, `correlationId`, `parties`) plus its own business fields (full fixture vocabulary: `orderId`, `requesterId`, `courierId` where a courier exists — nullable on `OrderCancelled` — `pickupLocation`, `dropoffLocation`, `note`) at the top level. Events are past-tense facts, never commands. | schema per event; Notif F1.1–F1.2 |
 | D18 | Event identity & dispatch | **One canonical identity string per event** (e.g. `order.accepted`), registered once in `EventTypeRegistry` (class ↔ identity). It travels twice by design: as the body `eventType` — the contract's self-describing identity, which consumers **dispatch on** (D11's body-only rule stands; no `__TypeId__` headers) — and as the RabbitMQ routing key (transport metadata). `eventType` is *not* a record component: `DomainEvent.eventType()` derives it from the registry and the message converter injects it on publish, so an instance can never carry a mismatched type. Stored in `notifications.event_type` and pushed in the STOMP frame. Consumers reject unknown types and events missing required fields (components not marked `@Nullable`). A **breaking contract change ships as a new event type** (e.g. `order.accepted.v2`) — decided 2026-09-20, removing the interim `schemaVersion` field and its versioned-registry mechanism (added on PR #75 review the day before) as unneeded standing complexity; the unknown-type rejection already covers the migration window. | Notif F1.3; portability (self-describing bodies) |
 | D19 | Idempotency scope | **Event-ID dedupe only** (supersedes D5): the per-entity sequence mechanism, its `sequence` wire field, the `entity_sequences` table, and the `entity_type`/`entity_id` columns/DTO fields were removed; requirement F2.4 is retired. Accepted consequence: out-of-order deliveries each produce notifications. Re-adding ordering later is an additive contract change (a new `@Nullable` field). | Notif F2.1 |
+| D20 | Dead-letter exchange form | **The default exchange (`""`)** serves as the dead-letter exchange on both legs (work queue → DLQ, retry queue → work queue), with `x-dead-letter-routing-key` = the target queue name — zero extra exchanges/bindings to declare or migrate. Accepted consequence: the routing key is rewritten to the queue name in transit; nothing is lost, since the body `eventType` **is** the original key (D18) and the broker's `x-death` header records the original keys. Decided 2026-09-20 | Notif F2.2, F2.3; minimal topology |
+| D21 | Unconvertible-message path | **Dead-letter on first rejection**: a message the converter rejects (unknown `eventType`, malformed body, missing required field) is rejected by the listener container before the listener runs and dead-letters straight to the DLQ, skipping the retry queue — retrying a message that cannot convert could never succeed; replay happens from the DLQ after a consumer upgrade (D7). Falls out of the container's existing rejection plus the work queue's dead-letter leg, with no custom error-handler code. Decided 2026-09-20 | Notif F2.3; D7 addendum |
 
 ## Components
 
@@ -150,8 +159,8 @@ database-per-service rule is untouched.
 | --- | --- |
 | **order-events exchange** (RabbitMQ) | Durable **topic** exchange (D16) the Order Service publishes request-state and courier-arrival events to under their canonical routing keys; publishing is fire-and-forget, so a delivery failure never affects the producing operation (F1.4). |
 | **Work queue** (RabbitMQ) | Durable queue bound to the exchange with `order.#` (D16); holds undelivered events across restarts (NFR1.2) and delivers them at-least-once (NFR1.1). |
-| **Retry queue** (RabbitMQ) | Durable TTL/delay queue; a nacked event parks here and is re-routed to the work queue when its TTL expires, giving backoff between attempts (F2.2). |
-| **Dead-letter queue** (RabbitMQ) | Durable queue fed by the dead-letter exchange after an event exhausts its maximum attempts; retained for later inspection and manual re-publish (F2.3). |
+| **Retry queue** (RabbitMQ) | Durable TTL/delay queue; the listener parks a failed event here while attempts remain, and the queue's dead-letter leg (D20) re-routes it to the work queue when its TTL expires, giving backoff between attempts (F2.2). |
+| **Dead-letter queue** (RabbitMQ) | Durable queue fed by the work queue's dead-letter leg (D20) after an event exhausts its maximum attempts — or immediately, for a message that cannot convert (D21); retained for later inspection and manual re-publish (F2.3). |
 | **AMQP listener** (Spring Boot) | Consumes events with manual acknowledgement; acks only after the processor's DB transaction commits, so a crash before commit leads to redelivery, never loss (NFR1.1). |
 | **Idempotent event processor** (Spring Boot) | Core logic: rejects already-seen event IDs (F2.1) and creates one notification row per associated party (F1.2), storing the event's business fields as the payload — all from the typed event alone, never querying another service (F1.1). Works against the `DomainEvent` interface, so every cataloged event type flows through generically. |
 | **Notification REST API** (Spring Boot) | Lets the Web App list a user's recent notifications and mark them read/unread (F3.1, F3.2). |
@@ -224,11 +233,11 @@ APIs · ack/nack = message (negative) acknowledgement.
 | --- | --- |
 | Notif F1.1 — notify on events without querying the producing service | each typed event carries all needed data (party IDs, business fields); processor reads only the event + own DB |
 | Notif F1.2 — notify each party of an event | processor creates one notification per entry in the event's `parties`; push gateway targets each party's per-user destination |
-| Notif F1.3 — new event types without publisher changes | reworded under D17/D18: a new event type is a contracts release consumed via a jar bump (no *code* change — registry-driven converter, `DomainEvent`-generic processor, unchanged `order.#` binding). Consumers stay tolerant readers of unknown *fields*; an unknown *type* is a conversion failure — dropped for now, dead-lettered for replay once #65 lands (D7) |
+| Notif F1.3 — new event types without publisher changes | reworded under D17/D18: a new event type is a contracts release consumed via a jar bump (no *code* change — registry-driven converter, `DomainEvent`-generic processor, unchanged `order.#` binding). Consumers stay tolerant readers of unknown *fields*; an unknown *type* is a conversion failure — dead-lettered intact on first rejection for replay after a consumer upgrade (D7/D21) |
 | Notif F1.4 — delivery failure never affects the producing operation | fire-and-forget publish to the exchange; all retry/failure handling stays on the consumer side of the broker |
 | Notif F2.1 — no duplicate notification on redelivery | unique event-ID constraint checked in the same DB transaction as the notification insert (D4) |
-| Notif F2.2 — retry failed deliveries | nack → TTL retry queue → redelivery with backoff, up to max attempts (D6; values decided, implementation owned by issue #65) |
-| Notif F2.3 — record events that exhaust retries | dead-letter exchange routes them to the durable DLQ for inspection/re-publish (D7; implementation owned by issue #65) |
+| Notif F2.2 — retry failed deliveries | listener republish → TTL retry queue → redelivery with backoff, up to max attempts counted via the listener-stamped `x-retry-attempts` header (D6/D20) |
+| Notif F2.3 — record events that exhaust retries | the work queue's dead-letter leg routes them to the durable DLQ for inspection/re-publish (D7/D20); unconvertible messages arrive on first rejection (D21) |
 | ~~Notif F2.4 — discard events older than the last applied for the same order~~ | **retired 2026-09-19 (D19)**: the per-entity sequence mechanism was removed; out-of-order deliveries each notify |
 | Notif F3.1 — view recent notifications in-app | Notification REST API + stored rows |
 | Notif F3.2 — mark read/unread | read/unread flag on the notification row, toggled via the REST API |
@@ -244,14 +253,19 @@ APIs · ack/nack = message (negative) acknowledgement.
 
 - `NOTIF_RETENTION_DAYS` — retention window for stored notifications;
   default **30** (D9).
-- Retry TTL and maximum attempts: decided 2026-09-19 — **10 s backoff,
-  3 total attempts**, env-overridable when issue #65 implements the
-  retry/DLQ topology.
-- Migration note (Method-B refactor): a dev broker volume from the
-  fanout era makes the topic-exchange declaration fail
-  (`PRECONDITION_FAILED`), and a dev DB volume still carrying the
+- Retry TTL and maximum attempts (D6): **10 s backoff, 3 total
+  attempts**, overridable via `NOTIFICATION_RETRY_TTL_MS` /
+  `NOTIFICATION_RETRY_MAX_ATTEMPTS`. The TTL is baked into the retry
+  queue's arguments at declaration, so changing it against a broker
+  that already holds the queue fails (`PRECONDITION_FAILED`) until the
+  queue is deleted or the volume reset; max attempts is read by the
+  listener and only needs a service restart.
+- Migration note (Method-B refactor / issue #65): a dev broker volume
+  from the fanout era makes the topic-exchange declaration fail
+  (`PRECONDITION_FAILED`), as does one holding the pre-#65 work queue
+  (no dead-letter arguments); a dev DB volume still carrying the
   removed NOT NULL `entity_type`/`entity_id` columns rejects inserts
-  (`ddl-auto: update` never drops columns) — reset both volumes once
+  (`ddl-auto: update` never drops columns) — reset the volumes once
   (see the service README).
 - RabbitMQ durability is **opt-in**: exchanges and queues must be
   declared durable and messages published persistent, or NFR1.2 is
@@ -411,7 +425,8 @@ decision to make then.
 
 - ~~Exact retry backoff schedule (TTL values) and maximum attempt
   count~~ — decided 2026-09-19 (10 s / 3 attempts, env-overridable);
-  implementation still owned by issue #65 along with the DLQ.
+  implemented with the DLQ under issue #65 (2026-09-20, with the
+  D20/D21 implementation choices).
 - ~~Exchange/queue naming convention, and how the topology is provisioned
   (declared by the application at startup via Spring AMQP vs loaded as
   broker configuration/definitions)~~ — decided 2026-09-19 (D12, D13);

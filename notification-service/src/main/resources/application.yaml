@@ -9,6 +9,10 @@
 # 2026-09-19, issue #67: JWT secret binding and WebSocket allowed
 # origins for the STOMP push gateway (author decisions; see
 # docs/notification-service.md "Session mechanics").
+# 2026-09-20, issue #65: retry TTL and max-attempts bindings (values
+# team-decided 2026-09-19: 10 s / 3 attempts, env-overridable); on PR
+# #79 Copilot review, publisher confirms enabled so the listener's
+# retry republish blocks until the broker accepts the copy.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -34,8 +38,22 @@ spring:
         # The listener acks/nacks explicitly, after the processor's
         # transaction commits (issue #64, NFR1.1).
         acknowledge-mode: manual
+    # Simple (synchronous) publisher confirms: the listener's retry
+    # republish waits for broker acceptance before acking the original
+    # delivery, so a lost publish can never lose the event (issue #65).
+    publisher-confirm-type: simple
 
 notification:
+  rabbitmq:
+    retry:
+      # Backoff between attempts (D6). Baked into the retry queue's
+      # x-message-ttl argument at declaration — changing it against a
+      # broker that already holds the queue fails PRECONDITION_FAILED
+      # until the queue is deleted or the volume reset (see README).
+      ttl-ms: ${NOTIFICATION_RETRY_TTL_MS:10000}
+      # Total attempts before an event dead-letters (D6/D7); read by
+      # the listener, so a change only needs a service restart.
+      max-attempts: ${NOTIFICATION_RETRY_MAX_ATTEMPTS:3}
   jwt:
     # Shared platform secret (HS256). Empty default so the yaml stays
     # parseable; JwtVerifier turns a missing/short value into a clear

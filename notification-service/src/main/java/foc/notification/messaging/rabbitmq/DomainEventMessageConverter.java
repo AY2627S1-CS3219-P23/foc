@@ -13,6 +13,11 @@
  * 2026-09-20: the schemaVersion gate added on that review was
  * removed with the field itself (author decision — breaking changes
  * ship as new event types instead).
+ * 2026-09-20, issue #65: javadoc only — conversion rejects now
+ * dead-letter instead of being dropped. Same day, PR #79 Copilot
+ * review: explicit empty-body guard so a null/empty body is a fatal
+ * conversion failure (dead-lettered) rather than a mapper-dependent
+ * error outside the fatal classification.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.rabbitmq;
@@ -47,9 +52,11 @@ import tools.jackson.databind.node.ObjectNode;
  * not marked {@code @Nullable} in the contract) — surfaces as the
  * AMQP {@link MessageConversionException}, which the listener
  * container's default error handler classifies as fatal and rejects
- * without requeue: until #65's dead-letter topology lands, such
- * messages are dropped (they never had a valid consumer); afterwards
- * the same rejection dead-letters them for replay.
+ * without requeue: the work queue's dead-letter leg files the message
+ * in the DLQ on first delivery, intact and replayable after a
+ * consumer upgrade (D7) — it skips the retry queue, since retrying a
+ * message that cannot convert could never succeed (author decision,
+ * 2026-09-20).
  */
 class DomainEventMessageConverter implements MessageConverter {
 
@@ -84,9 +91,13 @@ class DomainEventMessageConverter implements MessageConverter {
 
 	@Override
 	public Object fromMessage(Message message) throws MessageConversionException {
+		byte[] body = message.getBody();
+		if (body == null || body.length == 0) {
+			throw new MessageConversionException("empty message body");
+		}
 		JsonNode tree;
 		try {
-			tree = jsonMapper.readTree(message.getBody());
+			tree = jsonMapper.readTree(body);
 		} catch (JacksonException ex) {
 			throw new MessageConversionException("malformed JSON body", ex);
 		}
