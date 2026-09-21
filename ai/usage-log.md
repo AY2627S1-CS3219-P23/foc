@@ -32,7 +32,10 @@ Entry template:
 - **Scope:** Notification docs cleanup — `docs/notification-service.md`
   / `.mmd`, `docs/architecture.md` / `.mmd` (notification-related
   parts), `notification-service/README.md`, `notification-service/AGENTS.md`
-  (previously empty). No code changes.
+  (previously empty). Same treatment for `foc-contracts/README.md` and
+  the new `foc-contracts/AGENTS.md` (checklists and producer
+  conventions moved there from the README, per the author's choice
+  from neutral options). No code changes.
 - **Prompt(s):** Asked to make the notification docs human-readable:
   restructure the README from an issue-by-issue changelog into topic
   sections, split human-facing (README) from agent-facing (AGENTS.md)

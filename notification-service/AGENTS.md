@@ -47,8 +47,9 @@ No `controller/` package yet — the REST API is issue #66.
   `sub` = platform user ID = `parties[]` entry = `recipientId`.
 - **No shared code across services except `foc-contracts`** (D15).
   Event contracts evolve additively; follow the
-  [foc-contracts README's Event conventions](../foc-contracts/README.md#event-conventions),
-  including its add-a-new-event checklist.
+  [foc-contracts README's Event conventions](../foc-contracts/README.md#event-conventions)
+  and the add-a-new-event checklist in
+  [`foc-contracts/AGENTS.md`](../foc-contracts/AGENTS.md).
 - Retry attempts are counted in the listener-stamped `x-retry-attempts`
   header — RabbitMQ 4 resets `x-death` on client republish; don't
   "simplify" back to `x-death`.
