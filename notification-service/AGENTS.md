@@ -1,3 +1,12 @@
+<!--
+  AI-assisted (CS3219 AI Usage Policy disclosure):
+  Tool: Claude Code (Fable 5), 2026-09-21.
+  Scope: wrote this agent guide from the existing code and design doc
+  (docs/notification-service.md); it records team-made decisions and
+  invariants, and makes no design decisions of its own.
+  Reviewed by: Leong Wei Zhi (via pull request).
+-->
+
 # notification-service/ — Agent Guide
 
 Java 21 + Spring Boot 4 service that consumes request events from

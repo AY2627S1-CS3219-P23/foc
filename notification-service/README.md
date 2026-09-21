@@ -55,16 +55,24 @@ via the RabbitMQ management UI (`RABBITMQ_MANAGEMENT_PORT`).
 
 ## Troubleshooting
 
-Dev broker/DB volumes created before the typed-contracts refactor, the
-retry/DLQ topology (#65), or the order→request rename carry
-incompatible declarations (`PRECONDITION_FAILED` on startup) or
-removed NOT NULL columns that reject inserts. Reset both volumes once:
+Dev volumes created before the typed-contracts refactor or the
+retry/DLQ topology (#65) fail at startup: the old fanout exchange and
+the pre-#65 work queue carry incompatible declarations
+(`PRECONDITION_FAILED`), and a DB schema with the removed NOT NULL
+`entity_type`/`entity_id` columns rejects inserts (`ddl-auto: update`
+never drops columns). Reset both volumes once:
 
 ```sh
 docker compose down rabbitmq notification-db
 docker volume rm foc_rabbitmq-data foc_notification-db-data
 docker compose up -d rabbitmq notification-db
 ```
+
+Separately, after the order→request rename the old `order-events`
+exchange and `notification-service.order-events*` queues are harmless
+orphans — the new names declare cleanly, so no reset is needed; delete
+the orphans in the management UI (any messages still parked in them
+are stranded).
 
 ## Status
 

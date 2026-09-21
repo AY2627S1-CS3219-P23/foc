@@ -204,8 +204,9 @@ not drawn on the diagram — the traceability table below maps them.
   silently violated.
 - RabbitMQ runs as its own container in `compose.yaml` with a named
   volume (M7).
-- Dev volumes created before the Method-B refactor, issue #65, or the
-  D22 rename need a one-time reset — see the
+- Dev volumes created before the Method-B refactor or issue #65 need a
+  one-time reset; the pre-D22 `order-events` broker entities are merely
+  orphans to delete — see the
   [service README's Troubleshooting section](../notification-service/README.md#troubleshooting).
 
 ## Broker decoupling (D11)
@@ -225,11 +226,14 @@ and `compose.yaml`, never the business logic.
 - **Enforcement:** broker code lives in `messaging.rabbitmq`; the
   ArchUnit test `ArchitectureTest` (issue #69) asserts no other package
   depends on broker types, and runs with the normal test suite.
-- **Events stay broker-agnostic:** everything — metadata and business
-  fields, including the canonical `eventType` — rides in the JSON body,
-  never in AMQP headers (D11/D18). The routing key duplicates the
-  identity for RabbitMQ delivery only; the body alone is
-  self-describing.
+- **Events stay broker-agnostic:** every domain-event field — metadata
+  and business fields, including the canonical `eventType` — rides in
+  the JSON body, never in AMQP headers (D11/D18). The routing key
+  duplicates the identity for RabbitMQ delivery only; the body alone is
+  self-describing. The one deliberate AMQP header, `x-retry-attempts`
+  (see Failure handling), is transport-side retry accounting stamped by
+  the adapter, not event data — it belongs to the RabbitMQ retry
+  mechanism and would be re-implemented along with it in a broker swap.
 - **Already portable by construction:** duplicate detection (D4) lives
   in this service's own database, not in broker features. The design
   assumes only the weakest common guarantee — events may arrive twice
