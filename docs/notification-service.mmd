@@ -2,59 +2,47 @@
 title: "FoC Notification Service — Component-Level Architecture"
 ---
 %% AI-assisted (CS3219 AI Usage Policy disclosure):
-%% Tool: Claude Code (Fable 5), 2026-09-15; revised 2026-09-18.
-%% Scope: transcribed the team-decided notification-service design
-%% (decisions made by Leong Wei Zhi, 2026-09-15 — broker, transport,
-%% storage, dedupe, ordering, retry, dead-letter, retention) into this
-%% diagram; 2026-09-18 re-aligned requirement references with the
-%% latest D1 backlog (Order F11.1 -> F0.2; courier collection/arrival
-%% updates, Order F4.1.1-F4.1.2). No design decisions were made by the
-%% tool.
-%% 2026-09-19 (Method-B refactor): re-drawn for the author's decisions
-%% D16-D19 (topic exchange + request.# binding, flat typed event records,
-%% registry dispatch on the body eventType, stale-discard/sequence
-%% removal); retry/DLQ elements marked as issue #65 (values decided,
-%% implementation pending).
-%% 2026-09-20 (issue #65): retry/DLQ implemented — markers removed,
-%% edge labels aligned with the author's D20/D21 decisions (default
-%% exchange as DLX; unconvertible messages dead-letter on first
-%% rejection).
-%% Same day (D22): event vocabulary renamed order→request (exchange,
-%% routing keys) per the author's decision; node/edge labels updated.
+%% Tool: Claude Code (Fable 5), 2026-09-15 – 2026-09-21.
+%% Scope: drew the team-decided design (decisions D1-D22, made by
+%% Leong Wei Zhi, recorded in docs/notification-service.md); the tool
+%% made no design decisions.
 %% Reviewed by: Leong Wei Zhi (via pull request).
 %% Legend, decisions and traceability: see docs/notification-service.md
 flowchart TB
-    ORDER_SVC["<b>Order Service</b> (order-service/)<br/>publishes a typed event record on every request state<br/>transition (Order F0.2) and on courier arrival<br/>at the dropoff (Order F4.1.1), under its canonical<br/>routing key from the foc-contracts EventTypeRegistry"]
-    WEB["<b>Web App</b> (web/)<br/>subscribes to per-user STOMP destinations;<br/>renders in-app notification list"]
+    ORDER_SVC["<b>Order Service</b> (order-service/)<br/>publishes a typed event on every<br/>request state transition"]
+    WEB["<b>Web App</b> (web/)<br/>in-app notification list + toasts"]
 
-    subgraph RABBIT ["RabbitMQ (message broker — shared platform infrastructure, own Docker container; queues below are dedicated to the Notification Service, their sole consumer)"]
-        EXCH{{"<b>request-events topic exchange</b> (D16)<br/>durable; receives persistent messages under<br/>routing keys request.created … request.courier-arrived"}}
-        WORKQ[["<b>work queue</b> (durable)<br/>bound with request.#; holds undelivered events<br/>across restarts (Notif NFR1.2)"]]
-        RETRYQ[["<b>retry queue</b> (durable)<br/>TTL/delay queue — parks failed events,<br/>then re-routes them for redelivery<br/>(backoff: 10 s TTL, 3 attempts, D6)"]]
-        DLQ[["<b>dead-letter queue</b> (durable)<br/>events that exhausted max attempts or carry an<br/>unknown eventType (D21: on first rejection), kept<br/>for later inspection / re-publish (Notif F2.3)"]]
+    subgraph RABBIT ["RabbitMQ (shared broker — queues below are dedicated to the Notification Service)"]
+        EXCH{{"<b>request-events</b><br/>topic exchange, durable"}}
+        WORKQ[["<b>work queue</b><br/>durable, bound with request.#"]]
+        RETRYQ[["<b>retry queue</b><br/>durable, TTL backoff"]]
+        DLQ[["<b>dead-letter queue</b><br/>durable, kept for replay"]]
     end
 
     subgraph NOTIF ["Notification Service (notification-service/) — Java + Spring Boot"]
-        LISTENER["<b>AMQP listener</b><br/>message converter dispatches on the body<br/>eventType via the registry (D18); manual ack<br/>only after the processor's transaction<br/>commits (Notif NFR1.1)"]
-        PROCESSOR["<b>Idempotent event processor</b><br/>rejects duplicate event IDs (Notif F2.1);<br/>handles every cataloged event via the DomainEvent<br/>interface (Notif F1.3); creates one notification<br/>per party with the event's business fields<br/>as payload (Notif F1.2)"]
-        API["<b>Notification REST API</b><br/>list recent notifications,<br/>mark read/unread (Notif F3.1, F3.2)"]
-        PUSH["<b>STOMP push gateway</b><br/>WebSocket (STOMP) simple broker;<br/>per-user destinations"]
-        PURGE["<b>Retention purge scheduler</b><br/>deletes notifications older than the window<br/>(Notif F3.4) — NOTIF_RETENTION_DAYS,<br/>default 30"]
+        LISTENER["<b>AMQP listener</b><br/>dispatch on body eventType;<br/>manual ack after DB commit"]
+        PROCESSOR["<b>Idempotent event processor</b><br/>dedupe by event ID;<br/>one notification per party"]
+        API["<b>Notification REST API</b><br/>(planned, issue #66)"]
+        PUSH["<b>STOMP push gateway</b><br/>per-user destinations"]
+        PURGE["<b>Retention purge scheduler</b>"]
     end
 
-    NOTIF_DB[("<b>Notification DB</b><br/>PostgreSQL — notifications (read/unread)<br/>and processed event IDs, in one schema")]
+    NOTIF_DB[("<b>Notification DB</b><br/>PostgreSQL — notifications<br/>+ processed event IDs")]
 
-    ORDER_SVC ==>|"publish typed request events: request.created, request.accepted,<br/>request.collected, request.completed, request.cancelled, request.expired<br/>(Order F0.2) + request.courier-arrived (Order F4.1.1–F4.1.2);<br/>fire-and-forget — delivery failure never affects the<br/>producing operation (Notif F1.4)"| EXCH
-    EXCH ==>|"route: binding request.#"| WORKQ
-    WORKQ ==>|"deliver: at-least-once<br/>(Notif NFR1.1)"| LISTENER
-    LISTENER ==>|"republish on processing failure<br/>while attempts remain (Notif F2.2)"| RETRYQ
-    RETRYQ ==>|"after TTL expires, re-route<br/>for redelivery (dead-letter leg, D20)"| WORKQ
-    WORKQ ==>|"after max attempts — or on first rejection for<br/>unconvertible messages (D21) — via the<br/>dead-letter leg (Notif F2.3, D20)"| DLQ
+    ORDER_SVC ==>|"publish request events<br/>(fire-and-forget)"| EXCH
+    EXCH ==>|"route: request.#"| WORKQ
+    WORKQ ==>|"deliver at-least-once"| LISTENER
+    LISTENER ==>|"republish on failure<br/>while attempts remain"| RETRYQ
+    RETRYQ ==>|"re-route after TTL"| WORKQ
+    WORKQ ==>|"after max attempts, or<br/>unconvertible on first rejection"| DLQ
 
-    LISTENER -->|"hand typed event to processor<br/>(in-process call)"| PROCESSOR
-    PROCESSOR ---|"Spring Data JPA: notification insert + processed-event ID<br/>in ONE transaction (Notif F2.1);<br/>no queries to other services (Notif F1.1)"| NOTIF_DB
-    PROCESSOR -->|"emit stored notification<br/>(in-process call)"| PUSH
-    PUSH ==>|"push to each party's /user destination<br/>within 5 s (Notif F1.2, Order NFR1.1–1.2)"| WEB
-    WEB -->|"REST/JSON: list recent notifications,<br/>mark read/unread (Notif F3.1, F3.2)"| API
-    API ---|"Spring Data JPA"| NOTIF_DB
-    PURGE ---|"Spring Data JPA: delete rows older<br/>than retention window (Notif F3.4)"| NOTIF_DB
+    LISTENER -->|"typed event"| PROCESSOR
+    PROCESSOR ---|"insert notification + event ID<br/>in one transaction"| NOTIF_DB
+    PROCESSOR -->|"stored notification"| PUSH
+    PUSH ==>|"STOMP push to each<br/>party's /user destination"| WEB
+    WEB -->|"REST: list, mark read/unread"| API
+    API ---|"read/update rows"| NOTIF_DB
+    PURGE ---|"delete rows older<br/>than retention window"| NOTIF_DB
+
+    classDef planned stroke-dasharray: 6 4
+    class API planned

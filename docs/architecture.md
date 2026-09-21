@@ -1,20 +1,13 @@
 <!--
   AI-assisted (CS3219 AI Usage Policy disclosure):
-  Tool: Claude Code (Fable 5), 2026-09-14; revised 2026-09-15,
-  2026-09-18, 2026-09-19 (issue #67: recorded the author's provisional
-  sub-claim convention in the Authentication note).
+  Tool: Claude Code (Fable 5), 2026-09-14 – 2026-09-21.
   Scope: transcribed the team-decided architecture (AGENTS.md service
-  boundaries + D1 requirements interactions) into this diagram/document,
-  and re-aligned relationships and requirement references with the
-  latest D1 backlog (Template-7): chat and admin credit adjustment moved
-  to nice-to-haves (out of the committed scope this diagram covers),
-  Order F0/F8 renumbering, Credit F6 redistribution, Supplier caching,
-  capacity/performance targets. Also on 2026-09-18: folded in the
-  team's notification-design decisions (RabbitMQ broker, WebSocket/STOMP
-  client push, PostgreSQL notification DB — decided by Leong Wei Zhi,
-  recorded in docs/notification-service.md), replacing the corresponding
-  TBD markers. No architecture or design decisions were made by the
-  tool; remaining open decisions are marked "TBD" for the team.
+  boundaries + D1 requirements interactions) into this document and the
+  companion diagram, and kept both aligned with the backlog and the
+  team's design decisions (each recorded here or in
+  docs/notification-service.md with its decision-maker). No architecture
+  or design decisions were made by the tool; remaining open decisions
+  are marked "TBD" for the team.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -96,7 +89,7 @@ TBD = to be decided.
 | User Service → Credit Service | sync REST | allocate 5 starting credits (reserved balance 0) on sign-up | Credit F1.1 |
 | Order Service → Supplier Service | sync REST | validate pickup location is a known supplier/landmark; fetch supplier locations for the 1 km acceptance-proximity check | Order F1.1.1, F8.1 |
 | Order Service → Credit Service | sync REST | reserve on create, release on cancel/expiry, atomic transfer on completion; identical transfer requests for the same confirmation processed once | Credit F2.1, F2.1.1, F3.1, F5.1, NFR2.2, NFR2.2.1 |
-| Order Service → Broker (RabbitMQ) → Notification Service | **async events** | event on every request state transition (created/accepted/collected/completed/cancelled/expired); at-least-once, persisted across restarts; consumer deduplicates, retries, records exhausted retries, discards stale out-of-order events; delivery failure never affects the producing operation; new event types need no publisher changes | Order F0.2; Notif F1.1, F1.3, F1.4, F2.1–F2.4, NFR1.1–1.2; **M6** |
+| Order Service → Broker (RabbitMQ) → Notification Service | **async events** | event on every request state transition (created/accepted/collected/completed/cancelled/expired); at-least-once, persisted across restarts; consumer deduplicates, retries, dead-letters exhausted retries; delivery failure never affects the producing operation; new event types need no publisher changes | Order F0.2; Notif F1.1, F1.3, F1.4, F2.1–F2.3, NFR1.1–1.2; **M6** |
 
 Timer-driven behaviors stay **inside** the owning service (no arrow):
 request expiry from the created or accepted state at the deadline, with

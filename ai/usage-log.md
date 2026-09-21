@@ -26,6 +26,28 @@ Entry template:
 ```
 
 ---
+## 2026-09-21 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs
+- **Scope:** Notification docs cleanup — `docs/notification-service.md`
+  / `.mmd`, `docs/architecture.md` / `.mmd` (notification-related
+  parts), `notification-service/README.md`, `notification-service/AGENTS.md`
+  (previously empty). No code changes.
+- **Prompt(s):** Asked to make the notification docs human-readable:
+  restructure the README from an issue-by-issue changelog into topic
+  sections, split human-facing (README) from agent-facing (AGENTS.md)
+  documentation, and clean up the Mermaid diagrams. Cleanup choices
+  (compress disclosure changelogs to static summaries, delete
+  superseded decision rows and closed open-items, delete the README
+  state narrative, strip requirement IDs from diagram labels) were made
+  by the author via neutral options Q&As.
+- **Author review:** No design decisions were made or changed — content
+  was reorganized, condensed, or deleted, and stale facts corrected
+  against the code (REST API marked planned per issue #66; the D19
+  stale-discard removal and the D22 order→request rename propagated to
+  `docs/architecture.md`/`.mmd`; leftover pre-D17 "envelope" wording
+  replaced). Reviewed via pull request.
+
 ## 2026-09-20 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate (scaffolding/boilerplate)
