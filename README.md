@@ -14,6 +14,8 @@
   (issue #69), and the project MCP server configuration (developer
   tooling only); and again for the user-service Spring Boot scaffold
   (issue #84).
+  2026-09-21: AI Use Summary wording extended for the web/ SPA
+  scaffold (issue #108).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -109,7 +111,13 @@ project-scoped MCP servers declared in `.mcp.json`, documented in
 pom, application config, Dockerfile, and application/test classes
 mirroring the notification-service pattern, with the dependency-set,
 Dockerfile-shape, and config-scope choices made by the author via
-neutral-options Q&A.
+neutral-options Q&A; and the `web/` SPA scaffold (issue #108) —
+Vite/React/TypeScript project skeleton, react-router route table with
+the shared app shell (wireframe top bar and mobile tab bar) and 404,
+shared API fetch wrapper, tooling configuration, and Docker/compose
+wiring, deliberately without a data-fetching library, with the stack,
+tooling, scope, and port choices made by the author via
+neutral-options Q&A and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

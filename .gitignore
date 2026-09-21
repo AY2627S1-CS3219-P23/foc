@@ -1,3 +1,6 @@
+# Dependencies
+node_modules/
+
 # Build output
 dist/
 build/
@@ -13,3 +16,6 @@ out/
 # OS
 .DS_Store
 Thumbs.db
+
+# Agent tooling scratch (playwright MCP snapshots/screenshots)
+.playwright-mcp/
