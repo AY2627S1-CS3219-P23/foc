@@ -31,8 +31,11 @@ design authority is
 ## Invariants — do not break
 
 - **The published jar stays dependency-free**: plain constants,
-  interfaces, and annotation-free records only — never add Spring,
-  Jackson, or broker types. JUnit is allowed at *test* scope only.
+  interfaces, and records only — never add Spring, Jackson, or broker
+  types, including their annotations. The module's own annotations
+  (currently just `Nullable` in `events.core`) are fine and
+  load-bearing — do not remove them from records. JUnit is allowed at
+  *test* scope only.
 - **Additive evolution only** (D18): add fields marked `@Nullable`
   until every producer stamps them; never rename or repurpose a field.
   A breaking change ships as a **new event type** with its own

@@ -41,8 +41,9 @@ today; a future domain adds its own).
 
 Service-private names (queue names, table names, internal config) stay
 in their service. The published jar has **no dependencies** — plain
-constants, interfaces, and annotation-free records only — so depending
-on it never drags Spring, Jackson, or broker types into a service.
+constants, interfaces, and records carrying only the module's own
+annotations (`Nullable`) — so depending on it never drags Spring,
+Jackson, or broker types into a service.
 (JUnit is present at *test* scope only, for the registry/record
 tests.) Jackson binds records by component name; tolerant reading of
 unknown fields is each consumer's `ObjectMapper` configuration, e.g.
