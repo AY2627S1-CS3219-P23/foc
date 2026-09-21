@@ -9,8 +9,10 @@
 
 Auth/session code lives here in the shared layer (one copy for the
 whole SPA), owned by the user-service domain: login state, the JWT
-(HS256; claims `sub`, `role` = `USER`/`ADMIN`, `jti`; 1 h expiry),
-and route guards.
+session token, and route guards. Token and claim shapes (roles,
+expiry, algorithm) are the User Service's contract — nothing is fixed
+here until that service defines them (the repo's role model is
+requester/courier/admin; see root `AGENTS.md`).
 
 `src/lib/api/http.ts` already exposes the hook point: call
 `setTokenSource(...)` from here once session handling exists, and every

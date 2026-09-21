@@ -33,7 +33,7 @@ Entry template:
   closed unmerged (issue #108): Vite/React/TS project skeleton
   (`package.json`, `vite.config.ts`, tsconfigs, `index.html`,
   `src/index.css`, `.nvmrc`, `.prettierrc`/`.prettierignore`,
-  `eslint.config.js`, `.gitignore`/`.dockerignore`); react-router v7
+  `eslint.config.js`, `.gitignore`/`.dockerignore`); react-router (v8)
   route table (`src/routes/index.tsx`, `src/routes/home.tsx`,
   `src/main.tsx`); shared app shell rebuilt to the committed wireframes
   (`src/shared/shell/` — top bar, mobile bottom tab bar, credits +

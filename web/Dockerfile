@@ -3,7 +3,9 @@
 # Scope: multi-stage build — Vite static build served by nginx.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
-FROM node:22-alpine AS build
+# 22.22 is the minimum required by react-router v8 (engines field);
+# keep in sync with package.json engines and .nvmrc.
+FROM node:22.22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
