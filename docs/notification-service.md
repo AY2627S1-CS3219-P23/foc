@@ -89,9 +89,10 @@ interfaces, the seven records, the `EventTypeRegistry`, and one
 canonical fixture per event under
 [`foc-contracts/src/main/resources/contracts/`](../foc-contracts/src/main/resources/contracts/),
 which both producer and consumer contract-test against (D15). The full
-conventions — naming, wire shape, evolution rules, the add-a-new-event
-checklist — live in the
-["Event conventions" section of the foc-contracts README](../foc-contracts/README.md#event-conventions).
+conventions — naming, wire shape, evolution rules — live in the
+["Event conventions" section of the foc-contracts README](../foc-contracts/README.md#event-conventions);
+the add-a-new-event checklist and producer conventions are in
+[`foc-contracts/AGENTS.md`](../foc-contracts/AGENTS.md).
 
 Wire metadata carried by every event (top-level, alongside the event's
 business fields):
@@ -220,8 +221,8 @@ and `compose.yaml`, never the business logic.
   `eventProcessor.process(DomainEvent)` and acks/nacks on the result;
   outbound (Order Service side), publishing goes through an
   `EventPublisher.publish(DomainEvent)` interface with the RabbitMQ
-  implementation as one class (see the producer conventions in the
-  foc-contracts README). The processor, REST API, and purge job import
+  implementation as one class (see the producer conventions in
+  `foc-contracts/AGENTS.md`). The processor, REST API, and purge job import
   nothing from `org.springframework.amqp` / `com.rabbitmq`.
 - **Enforcement:** broker code lives in `messaging.rabbitmq`; the
   ArchUnit test `ArchitectureTest` (issue #69) asserts no other package
