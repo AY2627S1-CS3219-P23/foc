@@ -1,0 +1,16 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5), 2026-09-20.
+# Scope: scaffolded for issue #84. Application name and health endpoint
+# only (scope chosen by Leong Wei Zhi via options Q&A); datasource
+# config arrives with issue #86.
+# Reviewed by: Leong Wei Zhi (via pull request).
+
+spring:
+  application:
+    name: user-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

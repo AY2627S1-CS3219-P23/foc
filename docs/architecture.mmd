@@ -1,0 +1,51 @@
+---
+title: "Favours on Campus (FoC) — High-Level Service Architecture"
+---
+%% AI-assisted (CS3219 AI Usage Policy disclosure):
+%% Tool: Claude Code (Fable 5), 2026-09-14 – 2026-09-21.
+%% Scope: transcribed the team-decided architecture (AGENTS.md service
+%% boundaries + D1 requirements) into this diagram and kept it aligned
+%% with the backlog and the team's design decisions (recorded in
+%% docs/architecture.md and docs/notification-service.md). No design
+%% decisions were made by the tool; open decisions are marked "TBD".
+%% Reviewed by: Leong Wei Zhi (via pull request).
+%% Legend and dependency table: see docs/architecture.md
+flowchart TB
+    USERS(["Users: requester / courier / admin<br/>(NUS students and platform admins)"])
+    WEB["<b>Web App</b> (web/)<br/>TypeScript + React single-page app;<br/>responsive desktop + mobile UI (UI NFR1);<br/>renders in-app notifications"]
+
+    USERS -->|"uses (browser, HTTPS)"| WEB
+
+    USER_SVC["<b>User Service</b><br/>Java + Spring Boot — accounts, auth (JWT, OTP),<br/>roles incl. owner (User F6), profiles; hashed passwords<br/>(User F1.1.5, NFR1.1); login lockout (User F5.2);<br/>scheduler: purge deleted accounts on the 31st day (User F3.1.3)"]
+    SUP_SVC["<b>Supplier Service</b><br/>Java + Spring Boot — vendor/landmark CRUD,<br/>browsing, search and filter;<br/>caching on frequently queried fields (Supplier NFR1.1.1)"]
+    ORDER_SVC["<b>Order Service</b><br/>Java + Spring Boot — request lifecycle states (Order F0.1):<br/>created, accepted, collected, completed, cancelled, expired;<br/>1 km acceptance-proximity rule (Order F8.1);<br/>schedulers: expire overdue requests (Order F6.1–F6.2),<br/>auto-complete 1 h after courier arrival (Order F7.2)"]
+    CREDIT_SVC["<b>Credit Service</b><br/>Java + Spring Boot — balances (available + reserved),<br/>reservation, atomic transfer, transaction history;<br/>scheduler: expire earned credits after 3 months into common<br/>pool + monthly redistribution (Credit F6)"]
+    NOTIF_SVC["<b>Notification Service</b><br/>Java + Spring Boot — consumes request events,<br/>notifies each party; idempotent, with retries;<br/>retains notifications for a defined window"]
+    BROKER[/"<b>Message Broker</b> — RabbitMQ<br/>shared platform infrastructure, own Docker container;<br/>durable request-events exchange + durable work/retry/<br/>dead-letter queues (docs/notification-service.md)"/]
+    EMAIL[["<b>External Email Provider</b><br/>technology TBD — delivers OTP emails<br/>to users' u.nus.edu inboxes"]]
+
+    WEB -->|"REST/JSON: sign-up, login/logout, OTP flows, account<br/>update/delete/recover, roles, admin user management,<br/>profiles (User F1–F8)"| USER_SVC
+    WEB -->|"REST/JSON: browse, search, filter suppliers;<br/>admin vendor CRUD (Supplier F1–F2)"| SUP_SVC
+    WEB -->|"REST/JSON: create / list / accept / collect–arrive /<br/>cancel / complete / re-release requests (Order F1–F8)"| ORDER_SVC
+    WEB -->|"REST/JSON: available + reserved balances shown in profile<br/>(User F8.1), filtered transaction history (Credit F4)"| CREDIT_SVC
+    WEB -->|"REST/JSON: list recent notifications,<br/>mark read/unread"| NOTIF_SVC
+    NOTIF_SVC ==>|"async: WebSocket (STOMP) push to per-user<br/>destinations — state-change updates within 5 s"| WEB
+
+    USER_SVC ==>|"send OTP emails: sign-up verification,<br/>email-change confirmation, password reset<br/>(User F1.1.3, F2.1.1, F2.1.3, F4.2)"| EMAIL
+    USER_SVC -->|"REST/JSON: allocate 5 starting credits,<br/>reserved balance 0, on sign-up<br/>(Credit F1.1)"| CREDIT_SVC
+    ORDER_SVC -->|"REST/JSON: validate pickup location is a known<br/>supplier/landmark (Order F1.1.1); supplier locations for the<br/>1 km acceptance-proximity check (Order F8.1)"| SUP_SVC
+    ORDER_SVC -->|"REST/JSON: reserve on create (Credit F2.1), release on<br/>cancel/expiry (Credit F2.1.1), atomic transfer on completion<br/>(Credit F3.1, F5.1); identical transfer requests for the same<br/>confirmation processed once (Credit NFR2.2.1)"| CREDIT_SVC
+    ORDER_SVC ==>|"publish typed event on every request state<br/>transition, fire-and-forget — M6 async workflow"| BROKER
+    BROKER ==>|"deliver events: at-least-once, persisted across<br/>restarts; consumer deduplicates, retries,<br/>dead-letters exhausted retries"| NOTIF_SVC
+
+    USER_DB[("User DB<br/>engine TBD<br/>60 000 accounts (User NFR2)")]
+    SUP_DB[("Supplier DB<br/>engine TBD<br/>100 000 suppliers (Supplier NFR2)")]
+    ORDER_DB[("Order DB<br/>engine TBD")]
+    CREDIT_DB[("Credit DB<br/>engine TBD")]
+    NOTIF_DB[("Notification DB<br/>PostgreSQL")]
+
+    USER_SVC ---|"Spring Data JPA"| USER_DB
+    SUP_SVC ---|"Spring Data JPA"| SUP_DB
+    ORDER_SVC ---|"Spring Data JPA"| ORDER_DB
+    CREDIT_SVC ---|"Spring Data JPA"| CREDIT_DB
+    NOTIF_SVC ---|"Spring Data JPA"| NOTIF_DB

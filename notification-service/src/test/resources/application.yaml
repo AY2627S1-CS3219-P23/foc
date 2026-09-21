@@ -1,0 +1,54 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5), 2026-09-18.
+# Scope: test configuration scaffolded for issue #61 (in-memory H2 so
+# `./mvnw test` needs no running PostgreSQL).
+# 2026-09-19: broker provisioning disabled for issue #62 so tests need
+# no running RabbitMQ either.
+# 2026-09-19, issue #64: listener auto-startup off so context tests
+# stay broker-free (the RabbitMQ integration test switches it back on
+# and repeats acknowledge-mode, since this file shadows the main yaml).
+# 2026-09-19, issue #67: fixed JWT test secret for the push-gateway
+# tests.
+# 2026-09-20, issue #65: retry properties repeated here (this file
+# shadows the main yaml) with a short TTL so the broker integration
+# test observes full retry cycles in well under a second; publisher
+# confirms repeated for the same shadowing reason (PR #79 review).
+# 2026-09-20, issue #68: retention properties repeated here for the
+# same shadowing reason; tests call the purge method directly rather
+# than waiting on the cron trigger, so the cron value itself is inert.
+# Reviewed by: Leong Wei Zhi (via pull request).
+
+notification:
+  rabbitmq:
+    provision-on-startup: false
+    retry:
+      ttl-ms: 500
+      max-attempts: 3
+  jwt:
+    # Fixed test secret (>= 32 bytes for HS256); tests mint their own
+    # tokens with it.
+    secret: test-secret-0123456789abcdef0123456789abcdef
+  websocket:
+    # This file shadows the main yaml entirely, so the property must
+    # be repeated for the gateway config to resolve in tests.
+    allowed-origins: http://localhost:*
+  retention:
+    days: 30
+    purge-cron: "0 0 3 * * *"
+
+spring:
+  rabbitmq:
+    listener:
+      simple:
+        acknowledge-mode: manual
+        auto-startup: false
+    # Repeated from the main yaml (shadowed): the listener's retry
+    # republish calls waitForConfirmsOrDie, which needs confirm mode.
+    publisher-confirm-type: simple
+  datasource:
+    url: jdbc:h2:mem:notification;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop

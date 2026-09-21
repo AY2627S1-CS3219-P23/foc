@@ -1,0 +1,14 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5), 2026-09-19.
+# Scope: added for issue #62 when service build contexts moved to the
+# repo root (so the shared foc-contracts library is reachable); keeps
+# heavy/irrelevant paths out of every service's build context.
+# Reviewed by: Leong Wei Zhi (via pull request).
+
+.git
+.env
+**/target
+web/node_modules
+data
+docs
+ai

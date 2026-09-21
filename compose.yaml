@@ -1,116 +1,108 @@
-services:
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5), 2026-09-18; revised 2026-09-19 and
+# 2026-09-20. The 2026-09-20 host-port publication noted below was made
+# with Claude Code (Opus 5); the earlier entries are Fable 5.
+# Scope: notification-service + notification-db wiring scaffolded for
+# issue #61 per team decisions D3 and M7 (docs/notification-service.md).
+# 2026-09-19: rabbitmq broker container added for issue #62 per team
+# decisions D1, D8, M7 and the provisioning/naming decisions D12-D14.
+# 2026-09-19, issue #67: JWT secret and WebSocket allowed-origins env
+# passed to the notification service for the STOMP push gateway.
+# 2026-09-20, issue #65: retry TTL / max-attempts passed to the
+# notification service for the retry/DLQ topology (D6/D7).
+# 2026-09-20, issue #68: retention window / purge-cron passed to the
+# notification service for the retention purge scheduler (D9).
+# 2026-09-20: notification-db published on a loopback-bound host port
+# so local tooling (psql, DB GUIs, the postgres MCP server) can reach
+# it; the in-network wiring is unchanged. Loopback binding added on
+# PR #83 Copilot review.
+# Other services add their own entries in their own PRs.
+# Reviewed by: Leong Wei Zhi (via pull request).
 
-  # =========================
-  # PostgreSQL
-  # =========================
-  postgres:
-    image: postgres:17
-    container_name: postgres
-    environment:
-      POSTGRES_DB: foc
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+name: foc
+
+services:
+  notification-service:
+    # Context is the repo root so the build can include the shared
+    # foc-contracts library (D15).
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
     ports:
-      - "5432:5432"
+      - "${NOTIFICATION_SERVICE_PORT:-8085}:8080"
+    environment:
+      NOTIFICATION_DB_HOST: notification-db
+      NOTIFICATION_DB_PORT: "5432"
+      NOTIFICATION_DB_NAME: ${NOTIFICATION_DB_NAME:-notification}
+      NOTIFICATION_DB_USER: ${NOTIFICATION_DB_USER:-notification}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?set in .env}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-foc}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set in .env}
+      NOTIFICATION_RETRY_TTL_MS: ${NOTIFICATION_RETRY_TTL_MS:-10000}
+      NOTIFICATION_RETRY_MAX_ATTEMPTS: ${NOTIFICATION_RETRY_MAX_ATTEMPTS:-3}
+      NOTIF_RETENTION_DAYS: ${NOTIF_RETENTION_DAYS:-30}
+      NOTIF_PURGE_CRON: "${NOTIF_PURGE_CRON:-0 0 3 * * *}"
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
+      NOTIFICATION_WS_ALLOWED_ORIGINS: ${NOTIFICATION_WS_ALLOWED_ORIGINS:-http://localhost:*}
+    depends_on:
+      notification-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # RabbitMQ broker (D1): shared platform infrastructure, usable by any
+  # service. Runs with a named volume for its data directory (M7) so
+  # durable queues and persistent messages survive broker restarts (D8,
+  # Notif NFR1.2). Management UI included for DLQ inspection (D7).
+  rabbitmq:
+    image: rabbitmq:4-management
+    # Pinned hostname: RabbitMQ derives its node name (and the on-disk
+    # data location inside the volume) from the hostname, so an
+    # unpinned hostname would strand the persisted data when the
+    # container is recreated (docker compose down && up).
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-foc}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set in .env}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - foc-network
+      - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+    restart: unless-stopped
 
-
-  # =========================
-  # User Service
-  # =========================
-  user-service:
-    build:
-      context: ./user-service
-      dockerfile: Dockerfile
-    container_name: user-service
+  # Notification DB (D3): PostgreSQL owned exclusively by the
+  # notification service (database-per-service).
+  notification-db:
+    image: postgres:17
+    # Published on the host so local tooling (psql, DB GUIs, the postgres
+    # MCP server) can reach the service-owned DB; the service itself talks
+    # to it over the compose network on 5432. Bound to loopback so the
+    # database is reachable from this machine only — a bare "5433:5432"
+    # would listen on every interface and expose it to the LAN.
     ports:
-      - "8081:8080"
+      - "127.0.0.1:${NOTIFICATION_DB_HOST_PORT:-5433}:5432"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/foc
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - foc-network
-
-
-  # =========================
-  # Supplier Service
-  # =========================
-  supplier-service:
-    build:
-      context: ./supplier-service
-      dockerfile: Dockerfile
-    container_name: supplier-service
-    ports:
-      - "8082:8080"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/foc
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - foc-network
-
-
-  # =========================
-  # Order Service
-  # =========================
-  order-service:
-    build:
-      context: ./order-service
-      dockerfile: Dockerfile
-    container_name: order-service
-    ports:
-      - "8083:8080"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/foc
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - foc-network
-
-
-  # =========================
-  # Credit Service
-  # =========================
-  credit-service:
-    build:
-      context: ./credit-service
-      dockerfile: Dockerfile
-    container_name: credit-service
-    ports:
-      - "8084:8080"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/foc
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - foc-network
-
-
-networks:
-  foc-network:
-    driver: bridge
-
+      POSTGRES_DB: ${NOTIFICATION_DB_NAME:-notification}
+      POSTGRES_USER: ${NOTIFICATION_DB_USER:-notification}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?set in .env}
+    volumes:
+      - notification-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER:-notification} -d ${NOTIFICATION_DB_NAME:-notification}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
 
 volumes:
-  postgres_data:
+  notification-db-data:
+  rabbitmq-data:

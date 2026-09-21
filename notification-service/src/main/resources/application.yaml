@@ -1,0 +1,83 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5), 2026-09-18.
+# Scope: service configuration scaffolded for issue #61 per the
+# team-decided design (docs/notification-service.md, D3).
+# 2026-09-19: spring.rabbitmq connection settings added for issue #62
+# (team decisions D1, D12).
+# 2026-09-19: manual acknowledge mode for issue #64 (author decision:
+# ack only after the processor's DB transaction commits, NFR1.1).
+# 2026-09-19, issue #67: JWT secret binding and WebSocket allowed
+# origins for the STOMP push gateway (author decisions; see
+# docs/notification-service.md "Session mechanics").
+# 2026-09-20, issue #65: retry TTL and max-attempts bindings (values
+# team-decided 2026-09-19: 10 s / 3 attempts, env-overridable); on PR
+# #79 Copilot review, publisher confirms enabled so the listener's
+# retry republish blocks until the broker accepts the copy.
+# 2026-09-20, issue #68: retention window and purge-cron bindings for
+# the retention purge scheduler (team decision D9: NOTIF_RETENTION_DAYS,
+# default 30 days; author decision: a second env var, NOTIF_PURGE_CRON,
+# controls how often the sweep runs).
+# Reviewed by: Leong Wei Zhi (via pull request).
+
+spring:
+  application:
+    name: notification-service
+  datasource:
+    url: jdbc:postgresql://${NOTIFICATION_DB_HOST:localhost}:${NOTIFICATION_DB_PORT:5432}/${NOTIFICATION_DB_NAME:notification}
+    username: ${NOTIFICATION_DB_USER:notification}
+    password: ${NOTIFICATION_DB_PASSWORD:}
+  jpa:
+    # Schema is created/evolved from the JPA entities (issue #61:
+    # "Schema present via JPA/DDL").
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:foc}
+    password: ${RABBITMQ_PASSWORD:}
+    listener:
+      simple:
+        # The listener acks/nacks explicitly, after the processor's
+        # transaction commits (issue #64, NFR1.1).
+        acknowledge-mode: manual
+    # Simple (synchronous) publisher confirms: the listener's retry
+    # republish waits for broker acceptance before acking the original
+    # delivery, so a lost publish can never lose the event (issue #65).
+    publisher-confirm-type: simple
+
+notification:
+  rabbitmq:
+    retry:
+      # Backoff between attempts (D6). Baked into the retry queue's
+      # x-message-ttl argument at declaration — changing it against a
+      # broker that already holds the queue fails PRECONDITION_FAILED
+      # until the queue is deleted or the volume reset (see README).
+      ttl-ms: ${NOTIFICATION_RETRY_TTL_MS:10000}
+      # Total attempts before an event dead-letters (D6/D7); read by
+      # the listener, so a change only needs a service restart.
+      max-attempts: ${NOTIFICATION_RETRY_MAX_ATTEMPTS:3}
+  jwt:
+    # Shared platform secret (HS256). Empty default so the yaml stays
+    # parseable; JwtVerifier turns a missing/short value into a clear
+    # startup failure.
+    secret: ${JWT_SECRET:}
+  websocket:
+    # Comma-separated Origin patterns allowed at the WS handshake.
+    # No API gateway exists, so the browser connects cross-origin.
+    allowed-origins: ${NOTIFICATION_WS_ALLOWED_ORIGINS:http://localhost:*}
+  retention:
+    # Retention window for stored notifications (D9); the purge
+    # scheduler hard-deletes rows once created_at is older than this
+    # many days.
+    days: ${NOTIF_RETENTION_DAYS:30}
+    # Cron schedule (Spring's 6-field format) controlling how often the
+    # purge sweep runs. Default: daily at 03:00 server time.
+    purge-cron: "${NOTIF_PURGE_CRON:0 0 3 * * *}"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

@@ -1,0 +1,81 @@
+%% AI Assistance Disclosure:
+%% Tool: Claude Sonnet 5, date: 2026-09-19, 11:38pm
+%% Prompts: Convert the given credit-service.md file into a draft mermaid diagram. Skip heavy implementation details.
+%% Scope: Converted my finalized architecture design and component decisions into a formatted C4 Mermaid diagram. Assisted with resolving Mermaid layout overlaps and improving diagram caption readability.
+%% Author review: I provided the complete architectural design, components, and constraints. I validated the generated Mermaid syntax to ensure it strictly represents my own architectural decisions.
+
+%% AI generated (edited by Ryan Ang)
+
+%% Title: Credit Service Component Diagram
+flowchart TD
+    %% Styling Classes
+    classDef container fill:#438dd5,stroke:#2e6295,stroke-width:2px,color:#ffffff;
+    classDef component fill:#85bbf0,stroke:#5d82a8,stroke-width:2px,color:#000000;
+    classDef database fill:#438dd5,stroke:#2e6295,stroke-width:2px,color:#ffffff;
+    classDef legend fill:#f8f9fa,stroke:#cccccc,stroke-width:1px,color:#333333;
+
+    %% External Containers
+    SPA["<b>Web App</b><br/>[Container: TypeScript and React]<br/>Shows user balances (User F8.1) and<br/>filterable transaction history (Credit F4)."]:::container
+    OS["<b>Order Service</b><br/>[Container: Java and Spring Boot]<br/>Calls to reserve rewards (F2.1), release on cancellation<br/>(F2.1.1), and transfer on completion (F3.1)."]:::container
+    US["<b>User Service</b><br/>[Container: Java and Spring Boot]<br/>Provisions a new credit account synchronously<br/>when a user registers (F1.1)."]:::container
+
+    %% Credit Service Container Boundary
+    subgraph CSA ["<b>Credit Service</b><br/>[Container: Java 17 and Spring Boot]"]
+        direction TB
+
+        subgraph Controllers
+            CAC["<b>Credit Account Controller</b><br/>[Component: Spring MVC RestController]<br/>Exposes the caller's available/reserved balances (F4.1)<br/>and date/amount filtered history (F4.1.2, F4.1.3)."]:::component
+            IOC["<b>Internal Operations Controller</b><br/>[Component: Spring MVC RestController]<br/>Internal APIs for sign-up provision (F1.1), reservations,<br/>releases, and transfers (F2.1, F3.1)."]:::component
+            CVH["<b>Validation & Error Handler</b><br/>[Component: Spring @RestControllerAdvice]<br/>Validates integer/positive amounts (F1.2, F1.2.1)<br/>and maps domain errors to HTTP responses."]:::component
+        end
+
+        subgraph Services
+            OPS["<b>Credit Operations Service</b><br/>[Component: Spring @Service]<br/>Idempotent core logic: enforces balance checks (F2.1.2),<br/>spends oldest lots first, and commits account balance +<br/>held state atomically via @Transactional (F5.1, NFR2.1)."]:::component
+            HIS["<b>Credit History Service</b><br/>[Component: Spring @Service]<br/>Appends immutable history rows per transaction (F4.1.1)<br/>and serves paginated/filtered queries."]:::component
+            SCH["<b>Expiry & Redistribution Scheduler</b><br/>[Component: Spring @Scheduled]<br/>Moves lots >3 months to common pool (F6.1).<br/>Monthly: shares pool equally (F6.1.1), rest random (F6.1.2)."]:::component
+        end
+
+        subgraph Persistence
+            REPO["<b>Credit Data Repositories</b><br/>[Component: Spring Data JPA]<br/>Handles database read/writes, enforces concurrent update protection with @Version,<br/>and builds JPA Specifications for history filters."]:::component
+        end
+    end
+
+    %% Database Container
+    DB[("<b>Credit Database</b><br/>[Container: PostgreSQL Schema]<br/>Stores CreditAccount, Reserved state, CreditLots, CommonPool,<br/>History, and unique keys to prevent duplicates (NFR2.2).")]:::database
+
+    %% Inter-Container Connections
+    SPA -->|"Uses<br/>[JSON/HTTPS + JWT]"| CAC
+    OS -->|"Uses<br/>[JSON/HTTP]"| IOC
+    US -->|"Uses<br/>[JSON/HTTP]"| IOC
+
+    %% Presentation -> Validation
+    CAC -.->|"Caught by"| CVH
+    IOC -.->|"Caught by"| CVH
+
+    %% Presentation -> Service
+    CAC -->|"Reads balance from"| OPS
+    CAC -->|"Reads history from"| HIS
+    IOC -->|"Dispatches commands to"| OPS
+
+    %% Service -> Service
+    OPS -->|"Appends entries via<br/>[In-transaction]"| HIS
+    SCH -->|"Triggers logic in"| OPS
+
+    %% Service -> Persistence
+    OPS -->|"Reads/Writes"| REPO
+    HIS -->|"Reads/Writes"| REPO
+
+    %% Persistence -> DB
+    REPO -->|"Persists to<br/>[JDBC / Port 5432]"| DB
+
+    %% Legend Subgraph
+    subgraph Legend [Diagram Legend]
+        direction TB
+        L_Cont["Container (External App/Service)"]:::container
+        L_Comp["Component (Spring Boot Class/Module)"]:::component
+        L_DB[("Database (Relational Store)")]:::database
+        
+        %% Invisible links to force vertical spacing and prevent overlap
+        L_Cont ~~~ L_Comp
+        L_Comp ~~~ L_DB
+    end

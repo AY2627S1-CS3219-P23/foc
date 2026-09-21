@@ -1,0 +1,48 @@
+---
+title: "FoC Notification Service — Component-Level Architecture"
+---
+%% AI-assisted (CS3219 AI Usage Policy disclosure):
+%% Tool: Claude Code (Fable 5), 2026-09-15 – 2026-09-21.
+%% Scope: drew the team-decided design (decisions D1-D22, made by
+%% Leong Wei Zhi, recorded in docs/notification-service.md); the tool
+%% made no design decisions.
+%% Reviewed by: Leong Wei Zhi (via pull request).
+%% Legend, decisions and traceability: see docs/notification-service.md
+flowchart TB
+    ORDER_SVC["<b>Order Service</b> (order-service/)<br/>publishes a typed event on every<br/>request state transition"]
+    WEB["<b>Web App</b> (web/)<br/>in-app notification list + toasts"]
+
+    subgraph RABBIT ["RabbitMQ (shared broker — queues below are dedicated to the Notification Service)"]
+        EXCH{{"<b>request-events</b><br/>topic exchange, durable"}}
+        WORKQ[["<b>work queue</b><br/>durable, bound with request.#"]]
+        RETRYQ[["<b>retry queue</b><br/>durable, TTL backoff"]]
+        DLQ[["<b>dead-letter queue</b><br/>durable, kept for replay"]]
+    end
+
+    subgraph NOTIF ["Notification Service (notification-service/) — Java + Spring Boot"]
+        LISTENER["<b>AMQP listener</b><br/>dispatch on body eventType;<br/>manual ack after DB commit"]
+        PROCESSOR["<b>Idempotent event processor</b><br/>dedupe by event ID;<br/>one notification per party"]
+        API["<b>Notification REST API</b><br/>(planned, issue #66)"]
+        PUSH["<b>STOMP push gateway</b><br/>per-user destinations"]
+        PURGE["<b>Retention purge scheduler</b>"]
+    end
+
+    NOTIF_DB[("<b>Notification DB</b><br/>PostgreSQL — notifications<br/>+ processed event IDs")]
+
+    ORDER_SVC ==>|"publish request events<br/>(fire-and-forget)"| EXCH
+    EXCH ==>|"route: request.#"| WORKQ
+    WORKQ ==>|"deliver at-least-once"| LISTENER
+    LISTENER ==>|"republish on failure<br/>while attempts remain"| RETRYQ
+    RETRYQ ==>|"re-route after TTL"| WORKQ
+    WORKQ ==>|"after max attempts, or<br/>unconvertible on first rejection"| DLQ
+
+    LISTENER -->|"typed event"| PROCESSOR
+    PROCESSOR ---|"insert notification + event ID<br/>in one transaction"| NOTIF_DB
+    PROCESSOR -->|"stored notification"| PUSH
+    PUSH ==>|"STOMP push to each<br/>party's /user destination"| WEB
+    WEB -->|"REST: list, mark read/unread"| API
+    API ---|"read/update rows"| NOTIF_DB
+    PURGE ---|"delete rows older<br/>than retention window"| NOTIF_DB
+
+    classDef planned stroke-dasharray: 6 4
+    class API planned
