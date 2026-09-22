@@ -9,6 +9,7 @@ import type { RouteObject } from 'react-router'
 import { AppShell } from '@/shared/shell/AppShell'
 import { NotFound } from '@/shared/shell/NotFound'
 import { Home } from './home'
+import { Suppliers } from './suppliers'
 
 // One page = one file in this folder + one child entry below, so
 // five owners adding pages touch one line each here. Loaders/actions
@@ -18,6 +19,7 @@ export const routes: RouteObject[] = [
     element: <AppShell />,
     children: [
       { index: true, element: <Home /> },
+      { path: 'suppliers', element: <Suppliers /> },
       // Renders inside the shell, so the nav stays visible on
       // unknown paths (including nav destinations not built yet).
       { path: '*', element: <NotFound /> },
