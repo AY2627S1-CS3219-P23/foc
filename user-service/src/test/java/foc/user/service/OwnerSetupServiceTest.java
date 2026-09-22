@@ -30,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,10 +48,10 @@ class OwnerSetupServiceTest {
 
     @BeforeEach
     void setUpDefaultStubs() {
-        when(userRepository.countByRole("OWNER")).thenReturn(0L);
-        when(userRepository.existsByEmail(anyString())).thenReturn(false);
-        when(userRepository.existsByUsername(anyString())).thenReturn(false);
-        when(passwordEncoder.encode(anyString())).thenReturn("hashed_password");
+        lenient().when(userRepository.countByRole("OWNER")).thenReturn(0L);
+        lenient().when(userRepository.existsByEmail(anyString())).thenReturn(false);
+        lenient().when(userRepository.existsByUsername(anyString())).thenReturn(false);
+        lenient().when(passwordEncoder.encode(anyString())).thenReturn("hashed_password");
     }
 
     // --- owner guard ---
