@@ -1,18 +1,16 @@
 package foc.user.service;
 
-import foc.user.dto.SetupOwnerRequest;
-import foc.user.dto.UserResponse;
-import foc.user.entity.User;
-import foc.user.exception.OwnerAlreadySetException;
-import foc.user.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.Instant;
-import java.util.List;
+import foc.user.dto.SetupOwnerRequest;
+import foc.user.dto.UserResponse;
+import foc.user.entity.User;
+import foc.user.exception.OwnerAlreadySetException;
+import foc.user.repository.UserRepository;
 
 @Service 
 public class OwnerSetupService {

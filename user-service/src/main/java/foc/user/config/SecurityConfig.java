@@ -1,3 +1,11 @@
+/* 
+AI Assistance Disclosure:
+Tool: Claude (Sonnet 5), date: 2026-09-22
+Scope: Generated placeholder class to enable use of password encoder.
+Author review: Ryan validated correctness.
+
+*/
+
 package foc.user.config;
 
 import org.springframework.context.annotation.Bean;
