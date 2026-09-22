@@ -14,6 +14,9 @@
   (issue #69), and the project MCP server configuration (developer
   tooling only); and again for the user-service Spring Boot scaffold
   (issue #84).
+  2026-09-22, Claude Code (Sonnet 5): extended again for the
+  supplier-service Spring Boot scaffold and the compose.yaml/AGENTS.md/
+  .env.example wiring that went with it.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -80,7 +83,7 @@ This section is the consolidated AI-use disclosure required by the CS3219
 AI Usage Policy (project document, Appendix 2). The detailed log with
 prompts and timestamps lives in [`ai/usage-log.md`](ai/usage-log.md).
 
-**Tools:** Claude Code (Fable 5, Opus 5)
+**Tools:** Claude Code (Fable 5, Opus 5, Sonnet 5)
 
 **Prohibited phases avoided:** requirements elicitation and
 prioritization; architecture and design decisions. Requirements, service
@@ -105,11 +108,19 @@ unit and integration tests) written strictly from the team's
 finalized design docs and issue specifications, with per-file
 attribution headers; developer tooling configuration (the
 project-scoped MCP servers declared in `.mcp.json`, documented in
-`AGENTS.md`); and the user-service Spring Boot scaffold (issue #84) —
+`AGENTS.md`); the user-service Spring Boot scaffold (issue #84) —
 pom, application config, Dockerfile, and application/test classes
 mirroring the notification-service pattern, with the dependency-set,
 Dockerfile-shape, and config-scope choices made by the author via
-neutral-options Q&A.
+neutral-options Q&A; and the supplier-service Spring Boot scaffold —
+pom (completed from the author's own partial postgres/opencsv
+dependency fragment), application config, Dockerfile, and
+application/test classes mirroring the same pattern, plus the
+compose.yaml supplier-db/supplier-service wiring, `.env.example`
+section, and `AGENTS.md` port-table entry that went with it, with
+scope confirmed by the author via options Q&A (including how to
+resolve a pre-existing compose.yaml anomaly found in the working
+tree).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

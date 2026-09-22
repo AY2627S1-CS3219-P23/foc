@@ -26,6 +26,39 @@ Entry template:
 ```
 
 ---
+## 2026-09-22 — Ko-Khan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** generate (scaffolding/boilerplate)
+- **Scope:** `supplier-service/` Spring Boot scaffold: completed
+  `pom.xml` into a full POM (kept the author's existing postgres +
+  opencsv dependencies, added the standard actuator/webmvc/data-jpa
+  starters and matching test starters, following the user-service /
+  notification-service pattern), `application.yaml`, `Dockerfile`,
+  application + contextLoads test classes (`foc.supplier`), Maven
+  wrapper and Initializr dotfiles copied from `user-service/`, and a
+  short service README. Also fixed `compose.yaml`, which had the
+  notification-service/rabbitmq/notification-db block and `name: foc`
+  accidentally commented out, and a malformed `supplier-db` block (not
+  nested under `services:`, no matching `volumes:` entry) in the
+  working tree before this session started; restored the former and
+  properly wired `supplier-db` + a new `supplier-service` app service
+  (host ports 8086 / 5434), following the notification-service
+  pattern. Added the Supplier Service section to `.env.example` and
+  filled in the `supplier-db` row of the port table in `AGENTS.md`.
+- **Prompt(s):** Asked to set up Spring Boot for supplier-service.
+  Flagged the compose.yaml anomaly and asked the author to confirm
+  scope before proceeding (options Q&A): restore + fix compose.yaml
+  vs. leave as-is, and full runnable skeleton vs. pom.xml only. Author
+  chose restore + fix and the full skeleton.
+- **Author review:** No architecture or dependency decisions were
+  made — the dependency set, package layout, and file shapes mirror
+  the already-team-reviewed user-service/notification-service scaffolds
+  exactly; the pre-existing `postgres`/`opencsv` dependency choice in
+  the partial `pom.xml` was kept unchanged. `docker compose config`
+  verified the fixed compose.yaml resolves cleanly. Reviewed via pull
+  request.
+
+---
 ## 2026-09-21 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** docs
