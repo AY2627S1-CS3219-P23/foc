@@ -3,6 +3,8 @@ AI Assistance Disclosure:
 Tool: Claude (Sonnet 5), date: 2026-09-22
 Scope: Generated placeholder class to enable use of password encoder.
 Author review: Ryan validated correctness.
+2026-09-23 (Claude Code, Opus 5.5): /actuator/health permitted so container
+health checks work (PR #126 review).
 
 */
 
@@ -36,6 +38,8 @@ public class SecurityConfig {
                 // Spring Security blocks that internal forward, clobbering
                 // the real status/body with a bare 403.
                 .requestMatchers("/auth/**", "/error").permitAll()
+                // health checks (compose depends_on / probes) carry no credentials
+                .requestMatchers("/actuator/health").permitAll()
                 .anyRequest().authenticated()
             )
             .build();

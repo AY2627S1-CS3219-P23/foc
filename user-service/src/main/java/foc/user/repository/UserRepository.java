@@ -1,3 +1,12 @@
+/*
+AI Assistance Disclosure:
+Tool: Claude (Sonnet 5), date: 2026-09-22
+Scope: Generated repository queries (owner count, uniqueness checks) and the
+       advisory-lock query guarding concurrent owner setup.
+Author review: Ryan validated that the endpoint logic matches the feature design.
+File renamed from userRepository.java to match the public type (Claude Code, Opus 5.5, 2026-09-23).
+*/
+
 package foc.user.repository;
 
 import java.util.Optional;

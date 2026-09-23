@@ -26,6 +26,35 @@ Entry template:
 ```
 
 ---
+## 2026-09-23 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, debug, generate (tests), docs
+- **Scope:** `user-service/` fixes from the PR #126 review (issue #97):
+  renamed `dto/userResponse.java` → `UserResponse.java`,
+  `repository/userRepository.java` → `UserRepository.java`, and
+  `OwnerSetUpControllerTest.java` → `OwnerSetupControllerTest.java`;
+  `SecurityConfig.java` (permit `/actuator/health`);
+  `SetupOwnerRequest.java` (case-insensitive, whitespace-tolerant email
+  pattern; redundant `@Email` removed; password size message covers both
+  bounds); `User.java` (dropped `unique = true` duplicated by the named
+  unique indexes); `pom.xml` (removed duplicate `spring-boot-starter-web`
+  and explicit `jackson-databind`, dropped the `testcontainers-bom` import,
+  switched to Testcontainers 2.x artifact names); tests moved to Jackson 3
+  / Testcontainers 2.x, with new controller cases for mixed-case/padded
+  email, over-long password, concurrent setup requests, and public health
+  endpoint; missing AI disclosure headers added to `OwnerSetupService`,
+  `OwnerSetupController`, `UserRepository`, `UserResponse`,
+  `OwnerAlreadySetException`, and `src/test/resources/application.yaml`;
+  existing headers extended in the other touched files; README AI Use
+  Summary updated.
+- **Prompt(s):** "look at the pr comments on pr 126", then "fix the rest"
+  — i.e. apply every review finding except the two left for a team
+  decision (durable bootstrap-used marker; production datasource/schema
+  strategy and compose wiring).
+- **Author review:** _to be completed by Ryan_. `OwnerSetupServiceTest`
+  (9/9) passed locally, and all test sources compile; the Testcontainers
+  controller/context tests were not run because Docker was not running.
+
 ## 2026-09-22 — Ryan Ang
 - **Tool:** Claude Code (Sonnet 4.6)
 - **Mode:** debug, generate (tests)
@@ -56,9 +85,12 @@ Entry template:
   `UnnecessaryStubbingException` from Mockito strict mode was fixed by
   changing `@BeforeEach` stubs to `lenient()`.
 - **Author review:** Ryan ran `mvn test` after each fix and confirmed
-  15/15 tests green. Confirmed tests cover the self-disabling owner
+  15/15 tests green at that point. Confirmed tests cover the self-disabling owner
   bootstrap feature end-to-end (happy path, idempotency guard, all
   Bean Validation constraints, service-layer business rules).
+  (Corrected 2026-09-23: after the setup-token gate the suite grew to
+  20 tests — 10 controller, 9 service, `contextLoads` — and the PR #126
+  review fixes below add 4 more controller cases.)
 
 ## 2026-09-22 — Ryan Ang
 - **Tool:** Claude (Sonnet 5)

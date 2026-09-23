@@ -1,3 +1,12 @@
+/*
+AI Assistance Disclosure:
+Tool: Claude (Sonnet 5), date: 2026-09-22
+Scope: Generated owner bootstrap logic (advisory lock, owner guard,
+       normalisation, uniqueness checks, BCrypt hashing); setup-token
+       check added on 2026-09-23.
+Author review: Ryan validated that the endpoint logic matches the feature design.
+*/
+
 package foc.user.service;
 
 import java.nio.charset.StandardCharsets;

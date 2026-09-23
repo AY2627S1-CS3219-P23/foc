@@ -3,6 +3,8 @@ AI Assistance Disclosure:
 Tool: Claude (Sonnet 5), date: 2026-09-22
 Scope: Converted user schema into code
 Author review: Ryan validated that it matches schema design.
+2026-09-23 (Claude Code, Opus 5.5): dropped unique = true from email/username
+columns; the named unique indexes already enforce it (PR #126 review).
 */
 
 package foc.user.entity;
@@ -31,10 +33,10 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String email;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String username;
 
     @Column(name = "password_hash", nullable = false)

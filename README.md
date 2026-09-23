@@ -16,6 +16,8 @@
   (issue #84).
   2026-09-21: AI Use Summary wording extended for the web/ SPA
   scaffold (issue #108).
+  2026-09-23: AI Use Summary extended for the user-service first-owner
+  bootstrap (issue #97) by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -82,7 +84,7 @@ This section is the consolidated AI-use disclosure required by the CS3219
 AI Usage Policy (project document, Appendix 2). The detailed log with
 prompts and timestamps lives in [`ai/usage-log.md`](ai/usage-log.md).
 
-**Tools:** Claude Code (Fable 5, Opus 5)
+**Tools:** Claude Code (Fable 5, Opus 5, Opus 5.5, Sonnet 4.6), Claude (Sonnet 5)
 
 **Prohibited phases avoided:** requirements elicitation and
 prioritization; architecture and design decisions. Requirements, service
@@ -117,7 +119,11 @@ the shared app shell (wireframe top bar and mobile tab bar) and 404,
 shared API fetch wrapper, tooling configuration, and Docker/compose
 wiring, deliberately without a data-fetching library, with the stack,
 tooling, scope, and port choices made by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`.
+neutral-options Q&A and recorded in `ai/usage-log.md`; and the
+user-service first-owner bootstrap (issue #97) — request/response DTOs,
+the `User` entity transcribed from the team's schema, repository,
+service, controller, setup-token gate, and its unit and Testcontainers
+integration tests, plus the fixes from the PR #126 review.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

@@ -3,6 +3,8 @@
 # Scope: scaffolded for issue #84. Application name and health endpoint
 # only (scope chosen by Leong Wei Zhi via options Q&A); datasource
 # config arrives with issue #86.
+# 2026-09-23 (Ryan Ang, Claude): owner.setup.token property added for
+# the owner-bootstrap setup-token gate (issue #97).
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:

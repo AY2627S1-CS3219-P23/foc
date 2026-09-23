@@ -1,3 +1,11 @@
+/*
+AI Assistance Disclosure:
+Tool: Claude (Sonnet 5), date: 2026-09-22
+Scope: Generated POST /auth/setup-owner endpoint; X-Setup-Token header
+       added for the setup-token gate on 2026-09-23.
+Author review: Ryan validated that the endpoint logic matches the feature design.
+*/
+
 package foc.user.controller;
 
 import org.springframework.http.HttpStatus;
