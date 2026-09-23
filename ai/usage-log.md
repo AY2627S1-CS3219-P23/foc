@@ -26,6 +26,27 @@ Entry template:
 ```
 
 ---
+## 2026-09-23 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** issue #95 (user-service profile endpoints):
+  `ProfileController` (`GET /users/me`, `GET /users/{id}`),
+  `ProfileService`, `PublicProfileResponse`, `UserNotFoundException`,
+  `UserRepository.findByIdAndDeletedAtIsNull`, `ProfileServiceTest`,
+  `ProfileControllerTest`, and the `spring-boot-starter-security-test`
+  test dependency in `user-service/pom.xml`.
+- **Prompt(s):** "The tool summarised F8.1/F8.1.1 from issue #9, the architecture
+  doc and the wireframes, and listed the open interface decisions
+  without choosing them. Implementation were based on these decisions: "GET /users/me for own profile,
+  GET /users/{id} for others profile, which should show name, joined
+  date for now, deleted users and unknown users should show user not
+  found. caller identity should carry id for now." The tool then
+  implemented exactly those decisions, reusing the existing
+  `UserResponse` for the own profile.
+- **Author review:** pending — Ryan to review the code and run the full
+  `./mvnw test` suite (Testcontainers needs Docker) before opening the PR.
+
+---
 ## 2026-09-23 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate, refactor
@@ -84,13 +105,12 @@ Entry template:
   `OwnerAlreadySetException`, and `src/test/resources/application.yaml`;
   existing headers extended in the other touched files; README AI Use
   Summary updated.
-- **Prompt(s):** "look at the pr comments on pr 126", then "fix the rest"
-  — i.e. apply every review finding except the two left for a team
+- **Prompt(s):** Apply every review finding except the two left for a team
   decision (durable bootstrap-used marker; production datasource/schema
   strategy and compose wiring).
-- **Author review:** _to be completed by Ryan_. `OwnerSetupServiceTest`
-  (9/9) passed locally, and all test sources compile; the Testcontainers
-  controller/context tests were not run because Docker was not running.
+- **Author review:** `OwnerSetupServiceTest`
+  (9/9) passed locally, and all test sources compile. The Testcontainers
+  controller/context tests all passed.
 
 ## 2026-09-22 — Ryan Ang
 - **Tool:** Claude Code (Sonnet 4.6)

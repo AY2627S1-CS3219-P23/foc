@@ -22,7 +22,8 @@
   2026-09-23: AI Use Summary extended for the user-service first-owner
   bootstrap (issue #97) by Claude Code (Opus 5.5); and again for the
   user-db infrastructure and user-service JPA schema (issues #85/#86)
-  by Claude Code (Fable 5).
+  by Claude Code (Fable 5); and again for the user-service profile
+  endpoints (issue #95) by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -145,7 +146,12 @@ transcribed from the team's design-doc erDiagram, the `Role` enum
 conversion of the merged String role column, and per-entity
 persistence round-trip tests, with the image-version, port,
 role-representation, FK-shape, and test-scope choices made by the
-author via neutral-options Q&A and recorded in `ai/usage-log.md`.
+author via neutral-options Q&A and recorded in `ai/usage-log.md`; and
+the user-service profile endpoints (issue #95) — `GET /users/me` and
+`GET /users/{id}`, their service, DTO, not-found exception, repository
+query, and unit and Testcontainers integration tests, with the paths,
+response fields, not-found behaviour, and caller-identity choices made
+by the author and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

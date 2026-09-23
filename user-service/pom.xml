@@ -17,6 +17,8 @@
   2026-09-23, Claude Code (Fable 5), issue #86: spring-boot-starter-data-jpa-test
   added for the @DataJpaTest entity round-trip tests (the artifact
   notification-service used for the same purpose).
+  2026-09-23, Claude Code (Opus 5.5), issue #95: spring-boot-starter-security-test
+  added so the profile controller tests can supply a mock caller.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -88,6 +90,11 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
