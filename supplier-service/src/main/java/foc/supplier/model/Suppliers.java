@@ -1,5 +1,19 @@
+/*
+ * AI-assisted (CS3219 AI Usage Policy disclosure):
+ * Tool: Claude Code (Sonnet 5), 2026-09-23.
+ * Scope: added @CsvBindByName to every CSV-seeded field. Once any one
+ * field carries the annotation, opencsv's HeaderColumnNameMappingStrategy
+ * switches from auto-matching every field by name to binding only
+ * annotated fields — an initial partial annotation (locationDescription
+ * only) left all other fields, including the NOT NULL "name" column,
+ * unbound and caused seeding to fail; all fields are now annotated
+ * explicitly (author's existing field names and CSV headers kept as-is;
+ * no schema/design change).
+ * Reviewed by: Ko-Khan (via pull request).
+ */
 package foc.supplier.model;
 
+import com.opencsv.bean.CsvBindByName;
 import jakarta.persistence.*;
 
 @Entity
@@ -11,26 +25,35 @@ public class Suppliers {
     private Long id;
 
     @Column(nullable = false)
+    @CsvBindByName(column = "Name")
     private String name;
 
+    @CsvBindByName(column = "Type")
     private String type;
 
+    @CsvBindByName(column = "Building")
     private String building;
 
+    @CsvBindByName(column = "Floor")
     private String floor;
 
+    @CsvBindByName(column = "Location Description")
     private String locationDescription;
 
+    @CsvBindByName(column = "Latitude")
     private Double latitude;
 
+    @CsvBindByName(column = "Longitude")
     private Double longitude;
 
+    @CsvBindByName(column = "StartingTime")
     private String startingTime;
 
+    @CsvBindByName(column = "ClosingTime")
     private String closingTime;
 
     @Column(nullable = true)
-
+    @CsvBindByName(column = "ImageURL")
     private String imageURL;
 
     // Getters and Setters
