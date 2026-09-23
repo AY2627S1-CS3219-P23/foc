@@ -4,22 +4,21 @@ Tool: Claude Code (Opus 5.5), date: 2026-09-23
 Scope: Generated unit tests for ProfileService (issue #95) covering own and
        public profile lookups and the not-found path. Tests use Mockito to
        isolate the service from the database.
-Author review: pending (Ryan to review before merge).
+Author review: Ryan reviewed and ensured tests run successfully.
 */
 
 package foc.user.service;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.when;
-
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import foc.user.dto.PublicProfileResponse;

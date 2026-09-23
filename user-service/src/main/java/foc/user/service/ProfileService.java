@@ -3,14 +3,13 @@ AI Assistance Disclosure:
 Tool: Claude Code (Opus 5.5), date: 2026-09-23
 Scope: Generated profile lookups for issue #95 (own profile and public
        profile). Unknown and soft-deleted users both raise
-       UserNotFoundException, per Ryan's decision.
-Author review: pending (Ryan to review before merge).
+       UserNotFoundException.
+Author review: Ryan reviewed to ensure that it follows team's decisions.
 */
 
 package foc.user.service;
 
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import foc.user.dto.PublicProfileResponse;
 import foc.user.dto.UserResponse;
@@ -28,7 +27,6 @@ public class ProfileService {
     }
 
     // own profile: username, email, role (credits are fetched from credit-service by the web app)
-    @Transactional(readOnly = true)
     public UserResponse getOwnProfile(Long userId) {
         User user = findActiveUser(userId);
 
@@ -42,7 +40,6 @@ public class ProfileService {
     }
 
     // another user's profile: username and joined date only
-    @Transactional(readOnly = true)
     public PublicProfileResponse getPublicProfile(Long userId) {
         User user = findActiveUser(userId);
 
