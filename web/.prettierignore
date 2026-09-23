@@ -1,0 +1,7 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5), 2026-09-21, issue #108.
+# Reviewed by: Leong Wei Zhi (via pull request).
+dist
+package-lock.json
+docs
+AGENTS.md

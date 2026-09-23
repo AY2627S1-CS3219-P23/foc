@@ -61,6 +61,49 @@ Entry template:
 ---
 ## 2026-09-21 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `web/` SPA scaffold, redone from scratch after PR #118 was
+  closed unmerged (issue #108): Vite/React/TS project skeleton
+  (`package.json`, `vite.config.ts`, tsconfigs, `index.html`,
+  `src/index.css`, `.nvmrc`, `.prettierrc`/`.prettierignore`,
+  `eslint.config.js`, `.gitignore`/`.dockerignore`); react-router (v8)
+  route table (`src/routes/index.tsx`, `src/routes/home.tsx`,
+  `src/main.tsx`); shared app shell rebuilt to the committed wireframes
+  (`src/shared/shell/` — top bar, mobile bottom tab bar, credits +
+  notification placeholders, 404); shared API layer
+  (`src/lib/api/config.ts`, `http.ts`); convention READMEs
+  (`web/README.md`, `src/features/`, `src/shared/{auth,components}/`);
+  tests (`src/test/`); Docker/nginx/compose wiring and the root
+  `.env.example`, `AGENTS.md` port-table row, `.gitignore`, and README
+  AI Use Summary updates. Files that cannot carry a header comment
+  (`package.json`, `package-lock.json`, the tsconfigs, `.gitignore`,
+  `.nvmrc`, `.prettierrc`, `public/favicon.svg`) are covered by this
+  entry instead.
+- **Prompt(s):** Author directed a fresh, leaner redo of the PR #118
+  scaffold and made each decision via neutral-options Q&A: drop
+  TanStack Router and TanStack Query (too much lock-in for the other
+  owners); routing via react-router (v8) in data-router mode
+  (`createBrowserRouter` with a plain route table, no codegen); no
+  data-fetching library at all (only the shared `apiFetch` wrapper —
+  each owner picks their own tools); keep Tailwind CSS, the
+  features/shared/lib folder structure and API config, Docker +
+  compose, and the Vitest/ESLint/Prettier tooling; include the shared
+  app shell but follow the committed wireframes (top nav bar with
+  credits badge and notification bell; mobile bottom tab bar instead
+  of PR #118's hamburger menu). Two issues flagged on the old PR were
+  fixed in the port: the compose default for the notification URL no
+  longer hardcodes a port (values live in `.env`), and `apiFetch`
+  merges headers via `Headers` so all `RequestInit.headers` forms
+  work.
+- **Author review:** `npm run lint`, `npm run format:check`,
+  `npm run test`, `npm run build` all green; dev-server and
+  `docker compose up --build web` smoke tests including the
+  deep-link 404 fallback; Playwright viewport checks at 1280×800
+  (top nav, no tab bar) and 375×812 (bottom tab bar, credits and
+  bell visible) against the wireframes; reviewed via pull request.
+
+## 2026-09-21 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
 - **Mode:** docs
 - **Scope:** Notification docs cleanup — `docs/notification-service.md`
   / `.mmd`, `docs/architecture.md` / `.mmd` (notification-related

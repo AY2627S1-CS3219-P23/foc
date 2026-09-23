@@ -17,6 +17,8 @@
   2026-09-22, Claude Code (Sonnet 5): extended again for the
   supplier-service Spring Boot scaffold and the compose.yaml/AGENTS.md/
   .env.example wiring that went with it.
+  2026-09-21: AI Use Summary wording extended for the web/ SPA
+  scaffold (issue #108).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -121,6 +123,13 @@ section, and `AGENTS.md` port-table entry that went with it, with
 scope confirmed by the author via options Q&A (including how to
 resolve a pre-existing compose.yaml anomaly found in the working
 tree).
+neutral-options Q&A; and the `web/` SPA scaffold (issue #108) —
+Vite/React/TypeScript project skeleton, react-router route table with
+the shared app shell (wireframe top bar and mobile tab bar) and 404,
+shared API fetch wrapper, tooling configuration, and Docker/compose
+wiring, deliberately without a data-fetching library, with the stack,
+tooling, scope, and port choices made by the author via
+neutral-options Q&A and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
