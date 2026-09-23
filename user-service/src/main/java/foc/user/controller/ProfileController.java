@@ -1,10 +1,9 @@
 /*
 AI Assistance Disclosure:
 Tool: Claude Code (Opus 5.5), date: 2026-09-23
-Scope: Generated GET /users/me and GET /users/{id} for issue #95, with
-       paths chosen by Ryan. The caller's id is read from the
+Scope: Generated GET /users/me and GET /users/{id} for issue #95. The caller's id is read from the
        authenticated principal's name (the JWT subject once #90/#91 land).
-Author review: pending (Ryan to review before merge).
+Author review: Ryan reviewed to ensure that it follows the team's decision for the endpoints.
 */
 
 package foc.user.controller;

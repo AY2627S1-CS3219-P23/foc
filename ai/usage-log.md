@@ -43,8 +43,8 @@ Entry template:
   found. caller identity should carry id for now." The tool then
   implemented exactly those decisions, reusing the existing
   `UserResponse` for the own profile.
-- **Author review:** pending — Ryan to review the code and run the full
-  `./mvnw test` suite (Testcontainers needs Docker) before opening the PR.
+- **Author review:** Ryan reviewed the code and ran the full
+  `./mvnw test` suite to ensure it all passed (38/38).
 
 ---
 ## 2026-09-23 — Leong Wei Zhi
