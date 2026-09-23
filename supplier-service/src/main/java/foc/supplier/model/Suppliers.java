@@ -56,6 +56,10 @@ public class Suppliers {
     @CsvBindByName(column = "ImageURL")
     private String imageURL;
 
+    private String supplierDescription;
+
+    private String status;
+
     // Getters and Setters
 
     private Long getId() {
@@ -146,5 +150,20 @@ public class Suppliers {
         this.imageURL = imageURL;
     }
 
+    public String getSupplierDescription() {
+        return supplierDescription;
+    }
+
+    public void setSupplierDescription(String supplierDescription) {
+        this.supplierDescription = supplierDescription;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
 
 }
