@@ -26,6 +26,41 @@ Entry template:
 ```
 
 ---
+## 2026-09-23 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate, refactor
+- **Scope:** issues #85 + #86 in one PR. Infra (#85): `compose.yaml`
+  user-service + user-db entries and volume, `.env.example` User
+  Service port/DB variables, `AGENTS.md` user-db port-table row,
+  `user-service/src/main/resources/application.yaml` datasource +
+  `ddl-auto: update` — all following the supplier-service rows.
+  Schema (#86): new entities `Otp`, `AccountToken`,
+  `TokenDenylistEntry` from the design doc's §2 erDiagram; `User.role`
+  converted from String to a new `Role` enum (USER/ADMIN/OWNER, stored
+  as text) with the design doc's CHECK constraint, updating PR #126's
+  usages (`UserRepository.countByRole`, `OwnerSetupService`, both test
+  classes; `UserResponse` JSON shape unchanged); new
+  `EntityMappingTest` round-trip tests (Testcontainers pattern).
+- **Prompt(s):** Asked to read the D2 design doc's Task Allocation and
+  plan/implement user-service tasks #2 and #3 (issues #85/#86) in one
+  PR. Decisions were made by Leong Wei Zhi via neutral options Q&As:
+  postgres:17 image (matching the merged Testcontainers tests), host
+  ports 8087/5435 (8085/5433 reserved for the notification re-add),
+  Role as a Java enum with the CHECK added now, @ManyToOne FK
+  representation for `otps`/`account_tokens`, and round-trip test
+  scope. The OWNER value follows the merged owner-bootstrap feature
+  (issue #97): treated as admin-equivalent.
+- **Author review:** full suite green locally (28/28 incl. Ryan's
+  OwnerSetup tests, BUILD SUCCESS); `docker compose up --build
+  user-service user-db` from a fresh volume verified: health UP on
+  8087, all four tables present with the role CHECK, unique
+  email/username indexes and both FKs (inspected via psql), and
+  `POST /auth/setup-owner` exercised end-to-end (201 with role
+  "OWNER", 409 on the second call, BCrypt hash stored). An explicit
+  @Check was dropped during review: Hibernate 7 already generates the
+  role CHECK from the STRING enum mapping, and the duplicate showed up
+  in psql. Reviewed via pull request.
+
 ## 2026-09-23 — Ryan Ang
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor, debug, generate (tests), docs

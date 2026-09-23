@@ -10,7 +10,8 @@ Author review: Ryan validated correctness and naming.
        moved to Jackson 3 / Testcontainers 2.x; added cases for mixed-case and
        padded email, the password length message, concurrent setup requests,
        and an unauthenticated /actuator/health (PR #126 review).
-
+2026-09-23 (Claude Code, Fable 5), issue #86: countByRole calls switched to the
+       Role enum following the entity's String-to-enum conversion.
 */
 
 
@@ -48,6 +49,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 import foc.user.dto.SetupOwnerRequest;
+import foc.user.entity.Role;
 import foc.user.repository.UserRepository;
 
 @SpringBootTest
@@ -281,7 +283,7 @@ class OwnerSetupControllerTest {
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isBadRequest());
 
-        assertThat(userRepository.countByRole("OWNER")).isZero();
+        assertThat(userRepository.countByRole(Role.OWNER)).isZero();
     }
 
     @Test
@@ -321,7 +323,7 @@ class OwnerSetupControllerTest {
             }
 
             assertThat(statuses).containsExactlyInAnyOrder(201, 409);
-            assertThat(userRepository.countByRole("OWNER")).isEqualTo(1);
+            assertThat(userRepository.countByRole(Role.OWNER)).isEqualTo(1);
         } finally {
             pool.shutdownNow();
         }
