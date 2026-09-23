@@ -34,6 +34,3 @@ public record SetupOwnerRequest(
             message = "Password must contain at least one uppercase letter, one lowercase letter, and one number.")
     String password
 ) {}
-
-
-// i need help let me drop out

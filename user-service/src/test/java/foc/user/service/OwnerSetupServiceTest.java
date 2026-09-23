@@ -58,7 +58,7 @@ class OwnerSetupServiceTest {
         lenient().when(passwordEncoder.encode(anyString())).thenReturn("hashed_password");
     }
 
-    // --- setup token guard ---
+    // setup token guard
 
     @Test
     @DisplayName("Should throw 403 Forbidden when setup token is missing")
@@ -107,7 +107,7 @@ class OwnerSetupServiceTest {
             );
     }
 
-    // --- owner guard ---
+    // owner guard
 
     @Test
     @DisplayName("Should throw OwnerAlreadySetException when an owner already exists")
@@ -122,7 +122,7 @@ class OwnerSetupServiceTest {
             .isInstanceOf(OwnerAlreadySetException.class);
     }
 
-    // --- uniqueness checks ---
+    // checks uniqueness of details
 
     @Test
     @DisplayName("Should throw 400 when email is already registered")
@@ -158,7 +158,7 @@ class OwnerSetupServiceTest {
             );
     }
 
-    // --- normalisation ---
+    // normalise email and usernames
 
     @Test
     @DisplayName("Should normalise email to lowercase before saving")
