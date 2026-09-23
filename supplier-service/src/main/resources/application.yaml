@@ -1,0 +1,25 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Sonnet 5), 2026-09-22.
+# Scope: service configuration scaffolded following the
+# notification-service pattern — application name, datasource bound to
+# the service-owned supplier-db, JPA schema-from-entities, and the
+# actuator health endpoint.
+# Reviewed by: Ko-Khan (via pull request).
+
+spring:
+  application:
+    name: supplier-service
+  datasource:
+    url: jdbc:postgresql://${SUPPLIER_DB_HOST:localhost}:${SUPPLIER_DB_PORT:5432}/${SUPPLIER_DB_NAME:supplier}
+    username: ${SUPPLIER_DB_USER:supplier}
+    password: ${SUPPLIER_DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
