@@ -3,7 +3,7 @@
 // Scope: user domain types for the admin user-management screen.
 // Mirrors the backend's existing UserResponse DTO (PR #126) — not a new
 // contract; revisit once #96 defines the admin endpoints.
-// Reviewed by: [pending]
+// Reviewed by: Ryan Ang
 
 // Role values as stored by user-service (User.role).
 export type UserRole = 'USER' | 'ADMIN' | 'OWNER'

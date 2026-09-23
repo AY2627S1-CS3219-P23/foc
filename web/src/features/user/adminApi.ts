@@ -8,7 +8,7 @@
 // with an apiFetch('user', ...) call (see features/supplier/api.ts for
 // the pattern) and delete the mock data — the page only depends on the
 // adminUserApi object's signatures.
-// Reviewed by: [pending]
+// Reviewed by: Ryan Ang
 
 import type { AdminUser, UserRole } from './types'
 

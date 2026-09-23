@@ -2,7 +2,7 @@
 // Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113.
 // Scope: remove-account confirmation for the admin user-management
 // screen, following features/supplier/components/DeleteSupplierModal.
-// Reviewed by: [pending]
+// Reviewed by: Ryan Ang
 
 import { Modal } from '@/shared/components/Modal'
 import type { AdminUser } from '../types'

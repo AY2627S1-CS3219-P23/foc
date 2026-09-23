@@ -3,7 +3,7 @@
 // Scope: admin users list — a table at md+ and stacked cards below,
 // per web/docs/wireframes/admin-dashboard.png (Users section),
 // including the Credits (available/reserved) column and Add Credits.
-// Reviewed by: [pending]
+// Reviewed by: Ryan Ang
 
 import type { CreditBalance } from '@/features/credit/types'
 import type { AdminUser, UserRole } from '../types'
