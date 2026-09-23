@@ -30,7 +30,12 @@ public class SecurityConfig {
         return http
             .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/**").permitAll()
+                // /error must stay open: any exception thrown from a
+                // permitAll route (e.g. /auth/**) makes the container
+                // forward here to render the response, and without this
+                // Spring Security blocks that internal forward, clobbering
+                // the real status/body with a bare 403.
+                .requestMatchers("/auth/**", "/error").permitAll()
                 .anyRequest().authenticated()
             )
             .build();
