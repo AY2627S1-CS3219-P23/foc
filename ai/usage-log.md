@@ -26,6 +26,27 @@ Entry template:
 ```
 
 ---
+## 2026-09-23 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `web/` Admin Dashboard user-management screen (issue #113):
+  `src/features/user/types.ts`, `src/features/user/adminApi.ts`
+  (in-memory mock), `src/features/user/components/UserTable.tsx`,
+  `src/features/user/components/RemoveUserModal.tsx`,
+  `src/routes/admin.tsx`, one `/admin` entry in `src/routes/index.tsx`,
+  and `src/test/admin.test.tsx` (9 cases).
+- **Prompt(s):** "create a new branch and lets work on the UI", then
+  "cant i just create the ui and wire it up later". Built from
+  `web/docs/wireframes/admin-dashboard.png` (Users section only), on
+  mock data because #96 has not defined the admin API; no endpoint
+  paths were chosen. Defaults applied and stated to the author: #113
+  scope only (no Suppliers table or Add Credits), route without a nav
+  item, and USER/ADMIN/OWNER roles matching the PR #126 entity.
+- **Author review:** _to be completed by Ryan_. Vitest 12/12, tsc,
+  eslint and prettier clean on the new files; checked at 1280px and
+  390px widths in the browser.
+
+---
 ## 2026-09-22 — Ko-Khan
 - **Tool:** Claude Code (Sonnet 5)
 - **Mode:** generate (scaffolding/boilerplate)

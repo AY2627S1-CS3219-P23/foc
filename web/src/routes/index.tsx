@@ -2,12 +2,14 @@
 // Tool: Claude Code (Fable 5), 2026-09-21, issue #108.
 // Scope: the SPA's single route table — every page hangs off the
 // shared app shell here; 404 handling.
+// 2026-09-23, Claude Code (Opus 5.5): /admin route added (issue #113).
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import type { RouteObject } from 'react-router'
 
 import { AppShell } from '@/shared/shell/AppShell'
 import { NotFound } from '@/shared/shell/NotFound'
+import { Admin } from './admin'
 import { Home } from './home'
 import { Suppliers } from './suppliers'
 
@@ -20,6 +22,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <Home /> },
       { path: 'suppliers', element: <Suppliers /> },
+      { path: 'admin', element: <Admin /> },
       // Renders inside the shell, so the nav stays visible on
       // unknown paths (including nav destinations not built yet).
       { path: '*', element: <NotFound /> },
