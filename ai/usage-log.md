@@ -41,6 +41,8 @@ Entry template:
   usages (`UserRepository.countByRole`, `OwnerSetupService`, both test
   classes; `UserResponse` JSON shape unchanged); new
   `EntityMappingTest` round-trip tests (Testcontainers pattern).
+  README AI Use Summary extended for this work (PR #130 Copilot
+  review).
 - **Prompt(s):** Asked to read the D2 design doc's Task Allocation and
   plan/implement user-service tasks #2 and #3 (issues #85/#86) in one
   PR. Decisions were made by Leong Wei Zhi via neutral options Q&As:

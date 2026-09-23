@@ -20,7 +20,9 @@
   2026-09-21: AI Use Summary wording extended for the web/ SPA
   scaffold (issue #108).
   2026-09-23: AI Use Summary extended for the user-service first-owner
-  bootstrap (issue #97) by Claude Code (Opus 5.5).
+  bootstrap (issue #97) by Claude Code (Opus 5.5); and again for the
+  user-db infrastructure and user-service JPA schema (issues #85/#86)
+  by Claude Code (Fable 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -134,7 +136,16 @@ neutral-options Q&A and recorded in `ai/usage-log.md`; and the
 user-service first-owner bootstrap (issue #97) — request/response DTOs,
 the `User` entity transcribed from the team's schema, repository,
 service, controller, setup-token gate, and its unit and Testcontainers
-integration tests, plus the fixes from the PR #126 review.
+integration tests, plus the fixes from the PR #126 review; and the
+user-db infrastructure and user-service JPA schema (issues #85/#86) —
+compose.yaml user-service/user-db wiring with the `.env.example`
+section and `AGENTS.md` port-table entry that went with it, datasource
+configuration, the `Otp`/`AccountToken`/`TokenDenylistEntry` entities
+transcribed from the team's design-doc erDiagram, the `Role` enum
+conversion of the merged String role column, and per-entity
+persistence round-trip tests, with the image-version, port,
+role-representation, FK-shape, and test-scope choices made by the
+author via neutral-options Q&A and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
