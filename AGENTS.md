@@ -1,7 +1,7 @@
 <!--
   AI-assisted (CS3219 AI Usage Policy disclosure):
   Tool: Claude Code (Fable 5), 2026-09-10; revised 2026-09-19,
-  2026-09-20 (Opus 5).
+  2026-09-20 (Opus 5), 2026-09-22 (Sonnet 5).
   Scope: team-decided tech stack, architecture, conventions, and course
   constraints transcribed into this guide (2026-09-10). 2026-09-19: the
   foc-contracts shared-library exception recorded under Architecture
@@ -11,6 +11,9 @@
   port table used to target the right DB (developer tooling only - no
   product or architecture decision; host ports are claimed by each
   service owner in that service's own PR).
+  2026-09-22: supplier-db row in the port table filled in (host port
+  5434) while scaffolding the supplier-service Spring Boot skeleton and
+  wiring supplier-db into compose.yaml.
   2026-09-21, issue #108: web row added to the port table recording the
   frontend's claimed host port (WEB_PORT, default 5173).
   All decisions documented here were made by the team.
@@ -128,7 +131,7 @@ alone is only a gate inside the server.
 | --- | --- | --- |
 | `notification-db` | `${NOTIFICATION_DB_HOST_PORT:-5433}` (loopback only) | available |
 | `user-db` | — | not created yet |
-| `supplier-db` | — | not created yet |
+| `supplier-db` | `${SUPPLIER_DB_HOST_PORT:-5434}` (loopback only) | available |
 | `order-db` | — | not created yet |
 | `credit-db` | — | not created yet |
 | `web` | — | no database (frontend itself published on `${WEB_PORT:-5173}`) |
