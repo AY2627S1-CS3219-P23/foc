@@ -14,6 +14,8 @@
   2026-09-22: supplier-db row in the port table filled in (host port
   5434) while scaffolding the supplier-service Spring Boot skeleton and
   wiring supplier-db into compose.yaml.
+  2026-09-21, issue #108: web row added to the port table recording the
+  frontend's claimed host port (WEB_PORT, default 5173).
   All decisions documented here were made by the team.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
@@ -132,6 +134,7 @@ alone is only a gate inside the server.
 | `supplier-db` | `${SUPPLIER_DB_HOST_PORT:-5434}` (loopback only) | available |
 | `order-db` | — | not created yet |
 | `credit-db` | — | not created yet |
+| `web` | — | no database (frontend itself published on `${WEB_PORT:-5173}`) |
 
 When a service gains its own database, its owner adds the container to
 `compose.yaml` in that service's own PR (the same convention the compose

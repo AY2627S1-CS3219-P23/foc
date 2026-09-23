@@ -1,0 +1,30 @@
+---
+title: "FoC — Supplier Service Component Diagram"
+---
+%% AI-assisted (CS3219 AI Usage Policy disclosure):
+%% Tool: Claude, 2026-09-21.
+%% Scope: Companion diagram to supplier-service.md, drafted from the
+%% team's finalized D1 backlog. Same status as the doc: proposals
+%% pending owner/team review (see supplier-service.md, D1-D8).
+%% Reviewed by: XXX
+flowchart TB
+    WEB["Web App<br/>(web/)"]
+    ORDER_SVC["Order Service<br/>(external)"]
+
+    subgraph SUP["Supplier Service"]
+        API["Browse/search REST API<br/>F1.2, F1.2.1, F2.1, F2.2, F2.2.1"]
+        ADMIN_API["Admin CRUD REST API<br/>JWT role-gated (D2) — F1.1-F1.1.4"]
+        VALID_API["Internal validation/lookup API<br/>D6 — serves Order F1.1.1, Order F8.1"]
+        SEED["Seed loader<br/>issue #102"]
+    end
+
+    SUP_DB[("Supplier DB<br/>PostgreSQL — D1<br/>suppliers, supplier_categories, zones")]
+
+    WEB -->|"REST/JSON: browse, search, filter"| API
+    WEB -->|"REST/JSON: admin CRUD"| ADMIN_API
+    ORDER_SVC -->|"REST/JSON: validate pickup location<br/>(F1.1.1); get coordinates (F8.1)"| VALID_API
+
+    API ---|"Spring Data JPA"| SUP_DB
+    ADMIN_API ---|"Spring Data JPA"| SUP_DB
+    VALID_API ---|"Spring Data JPA"| SUP_DB
+    SEED -.->|"on first startup"| SUP_DB
