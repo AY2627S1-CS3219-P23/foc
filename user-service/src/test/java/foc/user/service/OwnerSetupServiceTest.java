@@ -5,6 +5,8 @@ Scope: Generated unit tests for OwnerSetupService covering owner guard,
        duplicate checks, email/username normalisation, and the happy path.
        Tests use Mockito to isolate the service from the database.
 Author review: Ryan validated test assertions to match intended behaviour.
+2026-09-23 (Claude, Sonnet 4.6): added setup-token guard tests (missing token,
+       wrong token, token not configured).
 */
 
 package foc.user.service;

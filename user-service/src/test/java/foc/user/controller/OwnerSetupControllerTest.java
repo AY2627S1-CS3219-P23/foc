@@ -4,6 +4,8 @@ Tool: Claude (Sonnet 4.6), date: 2026-09-22
 Scope: Generated test code to test controller layer. Generated code included set up of testcontainers running Postgres.
        Additional cases added for blank fields, password character class violations, and invalid username characters.
 Author review: Ryan validated correctness and naming.
+2026-09-23 (Claude, Sonnet 4.6): setup token supplied on existing cases; added
+       missing-token and wrong-token 403 cases.
 2026-09-23 (Claude Code, Opus 5.5): file renamed from OwnerSetUpControllerTest.java;
        moved to Jackson 3 / Testcontainers 2.x; added cases for mixed-case and
        padded email, the password length message, concurrent setup requests,

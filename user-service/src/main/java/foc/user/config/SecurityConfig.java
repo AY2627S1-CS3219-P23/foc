@@ -3,6 +3,8 @@ AI Assistance Disclosure:
 Tool: Claude (Sonnet 5), date: 2026-09-22
 Scope: Generated placeholder class to enable use of password encoder.
 Author review: Ryan validated correctness.
+2026-09-23 (Claude Code, Opus 5.5): /error permitted so exceptions from /auth/**
+keep their real status instead of a bare 403.
 2026-09-23 (Claude Code, Opus 5.5): /actuator/health permitted so container
 health checks work (PR #126 review).
 

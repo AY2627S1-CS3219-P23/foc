@@ -1,8 +1,9 @@
 /*
 AI Assistance Disclosure:
 Tool: Claude (Sonnet 5), date: 2026-09-22
-Scope: Generated POST /auth/setup-owner endpoint; X-Setup-Token header
-       added for the setup-token gate on 2026-09-23.
+Scope: Generated POST /auth/setup-owner endpoint.
+       2026-09-23 (Claude, Sonnet 4.6): X-Setup-Token header added for the
+       setup-token gate.
 Author review: Ryan validated that the endpoint logic matches the feature design.
 */
 
