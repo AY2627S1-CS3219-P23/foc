@@ -4,3 +4,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+
+owner:
+  setup:
+    token: test-owner-setup-token

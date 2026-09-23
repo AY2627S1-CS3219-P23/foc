@@ -14,3 +14,11 @@ management:
     web:
       exposure:
         include: health
+
+owner:
+  setup:
+    # Shared secret required to call POST /auth/setup-owner. Must be set via
+    # the OWNER_SETUP_TOKEN env var before first deploy; setup is disabled
+    # (503) while it is unset, so the endpoint can't be raced by an
+    # unauthenticated caller.
+    token: ${OWNER_SETUP_TOKEN:}

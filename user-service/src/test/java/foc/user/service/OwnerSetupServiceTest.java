@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import foc.user.dto.SetupOwnerRequest;
@@ -36,6 +37,8 @@ import foc.user.repository.UserRepository;
 
 @ExtendWith(MockitoExtension.class)
 class OwnerSetupServiceTest {
+
+    private static final String VALID_SETUP_TOKEN = "correct-setup-token";
 
     @Mock
     private UserRepository userRepository;
@@ -48,10 +51,60 @@ class OwnerSetupServiceTest {
 
     @BeforeEach
     void setUpDefaultStubs() {
+        ReflectionTestUtils.setField(ownerSetupService, "expectedSetupToken", VALID_SETUP_TOKEN);
         lenient().when(userRepository.countByRole("OWNER")).thenReturn(0L);
         lenient().when(userRepository.existsByEmail(anyString())).thenReturn(false);
         lenient().when(userRepository.existsByUsername(anyString())).thenReturn(false);
         lenient().when(passwordEncoder.encode(anyString())).thenReturn("hashed_password");
+    }
+
+    // --- setup token guard ---
+
+    @Test
+    @DisplayName("Should throw 403 Forbidden when setup token is missing")
+    void setupFirstOwner_throwsForbiddenWhenTokenMissing() {
+        SetupOwnerRequest request = new SetupOwnerRequest(
+            "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
+        );
+
+        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request, null))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex ->
+                assertThat(((ResponseStatusException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN)
+            );
+    }
+
+    @Test
+    @DisplayName("Should throw 403 Forbidden when setup token is wrong")
+    void setupFirstOwner_throwsForbiddenWhenTokenWrong() {
+        SetupOwnerRequest request = new SetupOwnerRequest(
+            "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
+        );
+
+        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request, "wrong-token"))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex ->
+                assertThat(((ResponseStatusException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN)
+            );
+    }
+
+    @Test
+    @DisplayName("Should throw 503 Service Unavailable when OWNER_SETUP_TOKEN is not configured")
+    void setupFirstOwner_throwsServiceUnavailableWhenTokenNotConfigured() {
+        ReflectionTestUtils.setField(ownerSetupService, "expectedSetupToken", "");
+
+        SetupOwnerRequest request = new SetupOwnerRequest(
+            "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
+        );
+
+        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request, VALID_SETUP_TOKEN))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex ->
+                assertThat(((ResponseStatusException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE)
+            );
     }
 
     // --- owner guard ---
@@ -65,7 +118,7 @@ class OwnerSetupServiceTest {
             "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
         );
 
-        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request))
+        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request, VALID_SETUP_TOKEN))
             .isInstanceOf(OwnerAlreadySetException.class);
     }
 
@@ -80,7 +133,7 @@ class OwnerSetupServiceTest {
             "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
         );
 
-        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request))
+        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request, VALID_SETUP_TOKEN))
             .isInstanceOf(ResponseStatusException.class)
             .satisfies(ex ->
                 assertThat(((ResponseStatusException) ex).getStatusCode())
@@ -97,7 +150,7 @@ class OwnerSetupServiceTest {
             "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
         );
 
-        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request))
+        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request, VALID_SETUP_TOKEN))
             .isInstanceOf(ResponseStatusException.class)
             .satisfies(ex ->
                 assertThat(((ResponseStatusException) ex).getStatusCode())
@@ -118,7 +171,7 @@ class OwnerSetupServiceTest {
             "  E1234567@U.NUS.EDU  ", "owner_user", "ValidPassword123!"
         );
 
-        ownerSetupService.setupFirstOwner(request);
+        ownerSetupService.setupFirstOwner(request, VALID_SETUP_TOKEN);
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
@@ -135,7 +188,7 @@ class OwnerSetupServiceTest {
             "e1234567@u.nus.edu", "  owner_user  ", "ValidPassword123!"
         );
 
-        ownerSetupService.setupFirstOwner(request);
+        ownerSetupService.setupFirstOwner(request, VALID_SETUP_TOKEN);
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
@@ -155,7 +208,7 @@ class OwnerSetupServiceTest {
             "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
         );
 
-        UserResponse response = ownerSetupService.setupFirstOwner(request);
+        UserResponse response = ownerSetupService.setupFirstOwner(request, VALID_SETUP_TOKEN);
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());

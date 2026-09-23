@@ -36,6 +36,8 @@ import foc.user.repository.UserRepository;
 @Testcontainers
 class OwnerSetupControllerTest {
 
+    private static final String VALID_SETUP_TOKEN = "test-owner-setup-token";
+
     @Container
     @ServiceConnection
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17");
@@ -54,7 +56,7 @@ class OwnerSetupControllerTest {
     }
 
     @Test
-    @DisplayName("Should successfully bootstrap initial OWNER when 0 admins exist")
+    @DisplayName("Should successfully bootstrap initial OWNER when 0 owners exist")
     void setupFirstOwner_success() throws Exception {
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu",
@@ -63,6 +65,7 @@ class OwnerSetupControllerTest {
         );
 
         mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", VALID_SETUP_TOKEN)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isCreated())
@@ -82,6 +85,7 @@ class OwnerSetupControllerTest {
             "ValidPassword123!"
         );
         mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", VALID_SETUP_TOKEN)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(first)))
             .andExpect(status().isCreated());
@@ -93,6 +97,7 @@ class OwnerSetupControllerTest {
             "ValidPassword123!"
         );
         mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", VALID_SETUP_TOKEN)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(second)))
             .andExpect(status().isConflict());
@@ -108,6 +113,7 @@ class OwnerSetupControllerTest {
         );
 
         mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", VALID_SETUP_TOKEN)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(invalidEmailRequest)))
             .andExpect(status().isBadRequest());
@@ -123,6 +129,7 @@ class OwnerSetupControllerTest {
         );
 
         mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", VALID_SETUP_TOKEN)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(shortPasswordRequest)))
             .andExpect(status().isBadRequest());
@@ -138,6 +145,7 @@ class OwnerSetupControllerTest {
         );
 
         mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", VALID_SETUP_TOKEN)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isBadRequest());
@@ -153,6 +161,7 @@ class OwnerSetupControllerTest {
         );
 
         mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", VALID_SETUP_TOKEN)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isBadRequest());
@@ -168,6 +177,7 @@ class OwnerSetupControllerTest {
         );
 
         mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", VALID_SETUP_TOKEN)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isBadRequest());
@@ -183,8 +193,40 @@ class OwnerSetupControllerTest {
         );
 
         mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", VALID_SETUP_TOKEN)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Should reject setup call with no setup token with 403 Forbidden")
+    void setupFirstOwner_missingSetupToken() throws Exception {
+        SetupOwnerRequest request = new SetupOwnerRequest(
+            "e1234567@u.nus.edu",
+            "owner_user",
+            "ValidPassword123!"
+        );
+
+        mockMvc.perform(post("/auth/setup-owner")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Should reject setup call with wrong setup token with 403 Forbidden")
+    void setupFirstOwner_wrongSetupToken() throws Exception {
+        SetupOwnerRequest request = new SetupOwnerRequest(
+            "e1234567@u.nus.edu",
+            "owner_user",
+            "ValidPassword123!"
+        );
+
+        mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", "wrong-token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isForbidden());
     }
 }

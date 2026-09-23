@@ -5,6 +5,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -24,8 +25,10 @@ public class OwnerSetupController {
     }
 
     @PostMapping(value = "/setup-owner", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<UserResponse> setupFirstOwner(@Valid @RequestBody SetupOwnerRequest request) {
-        UserResponse response = ownerSetupService.setupFirstOwner(request);
+    public ResponseEntity<UserResponse> setupFirstOwner(
+            @Valid @RequestBody SetupOwnerRequest request,
+            @RequestHeader(value = "X-Setup-Token", required = false, defaultValue = "") String setupToken) {
+        UserResponse response = ownerSetupService.setupFirstOwner(request, setupToken);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

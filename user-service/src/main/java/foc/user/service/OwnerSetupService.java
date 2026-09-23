@@ -1,5 +1,9 @@
 package foc.user.service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -12,21 +16,28 @@ import foc.user.entity.User;
 import foc.user.exception.OwnerAlreadySetException;
 import foc.user.repository.UserRepository;
 
-@Service 
+@Service
 public class OwnerSetupService {
 
     private static final String ROLE_OWNER = "OWNER";
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final String expectedSetupToken;
 
-    public OwnerSetupService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public OwnerSetupService(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            @Value("${owner.setup.token:}") String expectedSetupToken) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.expectedSetupToken = expectedSetupToken;
     }
 
     // bootstraps first owner account, only when owners = 0
-    @Transactional 
-    public UserResponse setupFirstOwner(SetupOwnerRequest request) {
+    @Transactional
+    public UserResponse setupFirstOwner(SetupOwnerRequest request, String providedSetupToken) {
+        ensureValidSetupToken(providedSetupToken);
+
         userRepository.acquireSetupLock();
 
         ensureSetupAvailable();
@@ -41,6 +52,24 @@ public class OwnerSetupService {
         User saved = userRepository.save(owner);
 
         return toUserResponse(saved);
+    }
+
+    // guards against an unauthenticated caller. fails if the deploy forgot to set
+    // OWNER_SETUP_TOKEN.
+    private void ensureValidSetupToken(String providedToken) {
+        if (expectedSetupToken == null || expectedSetupToken.isBlank()) {
+            throw new ResponseStatusException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Owner setup is disabled: OWNER_SETUP_TOKEN is not configured"
+            );
+        }
+
+        byte[] expected = expectedSetupToken.getBytes(StandardCharsets.UTF_8);
+        byte[] provided = (providedToken == null ? "" : providedToken).getBytes(StandardCharsets.UTF_8);
+
+        if (!MessageDigest.isEqual(expected, provided)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid or missing setup token");
+        }
     }
 
     private void ensureSetupAvailable() {
