@@ -3,6 +3,8 @@
 # Scope: scaffolded for issue #84. Application name and health endpoint
 # only (scope chosen by Leong Wei Zhi via options Q&A); datasource
 # config arrives with issue #86.
+# 2026-09-23 (Ryan Ang, Claude Sonnet 4.6): owner.setup.token property added for
+# the owner-bootstrap setup-token gate (issue #97).
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -14,3 +16,10 @@ management:
     web:
       exposure:
         include: health
+
+owner:
+  setup:
+    # Shared secret required to call POST /auth/setup-owner. Must be set via
+    # the OWNER_SETUP_TOKEN env var before first deploy. Setup is disabled
+    # (503) while it is unset, so the endpoint can't be reached.
+    token: ${OWNER_SETUP_TOKEN:}
