@@ -1,9 +1,11 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113.
 // Scope: admin users list — a table at md+ and stacked cards below,
-// per web/docs/wireframes/admin-dashboard.png (Users section).
+// per web/docs/wireframes/admin-dashboard.png (Users section),
+// including the Credits (available/reserved) column and Add Credits.
 // Reviewed by: [pending]
 
+import type { CreditBalance } from '@/features/credit/types'
 import type { AdminUser, UserRole } from '../types'
 
 const roleLabels: Record<UserRole, string> = {
@@ -14,31 +16,39 @@ const roleLabels: Record<UserRole, string> = {
 
 interface UserTableProps {
   users: AdminUser[]
+  // null while balances are unavailable (still loading or failed).
+  balances: Map<number, CreditBalance> | null
   busyUserId: number | null
   onChangeRole: (user: AdminUser, role: UserRole) => void
+  onAddCredits: (user: AdminUser) => void
   onRemove: (user: AdminUser) => void
 }
 
-interface UserActionsProps {
+type UserActionsProps = Omit<
+  UserTableProps,
+  'users' | 'balances' | 'busyUserId'
+> & {
   user: AdminUser
   busy: boolean
-  onChangeRole: (user: AdminUser, role: UserRole) => void
-  onRemove: (user: AdminUser) => void
 }
 
-// The owner account has no actions: it is created once via setup-owner
-// and is not managed from this screen.
-function UserActions({ user, busy, onChangeRole, onRemove }: UserActionsProps) {
-  if (user.role === 'OWNER') {
-    return <span className="text-sm text-gray-400">—</span>
-  }
+const linkClass =
+  'text-sm font-medium text-gray-900 hover:underline disabled:cursor-not-allowed disabled:opacity-50'
 
-  const linkClass =
-    'text-sm font-medium text-gray-900 hover:underline disabled:cursor-not-allowed disabled:opacity-50'
+// The owner account can't be promoted, demoted or removed here: it is
+// created once via setup-owner and is not managed from this screen.
+function UserActions({
+  user,
+  busy,
+  onChangeRole,
+  onAddCredits,
+  onRemove,
+}: UserActionsProps) {
+  const isOwner = user.role === 'OWNER'
 
   return (
     <div className="flex flex-wrap gap-x-3 gap-y-1">
-      {user.role === 'USER' ? (
+      {user.role === 'USER' && (
         <button
           type="button"
           disabled={busy}
@@ -47,7 +57,8 @@ function UserActions({ user, busy, onChangeRole, onRemove }: UserActionsProps) {
         >
           Promote to Admin
         </button>
-      ) : (
+      )}
+      {user.role === 'ADMIN' && (
         <button
           type="button"
           disabled={busy}
@@ -60,25 +71,43 @@ function UserActions({ user, busy, onChangeRole, onRemove }: UserActionsProps) {
       <button
         type="button"
         disabled={busy}
-        onClick={() => onRemove(user)}
-        className="text-sm font-medium text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+        onClick={() => onAddCredits(user)}
+        className={linkClass}
       >
-        Remove Account
+        Add Credits
       </button>
+      {!isOwner && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onRemove(user)}
+          className="text-sm font-medium text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Remove Account
+        </button>
+      )}
     </div>
   )
 }
 
 export function UserTable({
   users,
+  balances,
   busyUserId,
-  onChangeRole,
-  onRemove,
+  ...actions
 }: UserTableProps) {
+  function credits(user: AdminUser, format: 'table' | 'card') {
+    const balance = balances?.get(user.id)
+    if (!balance) return '—'
+    return format === 'table'
+      ? `${balance.available} / ${balance.reserved} reserved`
+      : `${balance.available} (${balance.reserved} reserved)`
+  }
+
   return (
     <>
       {/* Desktop / tablet */}
-      <div className="hidden overflow-hidden rounded-lg border border-gray-200 bg-white md:block">
+      <div className="hidden overflow-x-auto rounded-lg border border-gray-200 bg-white md:block">
         <table className="w-full text-left text-sm">
           <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
             <tr>
@@ -90,6 +119,9 @@ export function UserTable({
               </th>
               <th scope="col" className="px-4 py-3">
                 Role
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Credits (Av/Res)
               </th>
               <th scope="col" className="px-4 py-3 text-right">
                 Actions
@@ -106,13 +138,15 @@ export function UserTable({
                 <td className="px-4 py-3 text-gray-600">
                   {roleLabels[user.role]}
                 </td>
+                <td className="whitespace-nowrap px-4 py-3 text-gray-600">
+                  {credits(user, 'table')}
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end">
                     <UserActions
                       user={user}
                       busy={busyUserId === user.id}
-                      onChangeRole={onChangeRole}
-                      onRemove={onRemove}
+                      {...actions}
                     />
                   </div>
                 </td>
@@ -131,20 +165,19 @@ export function UserTable({
           >
             <p className="font-medium text-gray-900">{user.username}</p>
             <p className="text-sm text-gray-600">{user.email}</p>
+            <p className="text-sm text-gray-600">
+              Credits: {credits(user, 'card')}
+            </p>
             <p className="text-xs text-gray-400">
               Role: {roleLabels[user.role]}
             </p>
-            {/* The table's "—" placeholder reads as noise on a card. */}
-            {user.role !== 'OWNER' && (
-              <div className="mt-3">
-                <UserActions
-                  user={user}
-                  busy={busyUserId === user.id}
-                  onChangeRole={onChangeRole}
-                  onRemove={onRemove}
-                />
-              </div>
-            )}
+            <div className="mt-3">
+              <UserActions
+                user={user}
+                busy={busyUserId === user.id}
+                {...actions}
+              />
+            </div>
           </li>
         ))}
       </ul>

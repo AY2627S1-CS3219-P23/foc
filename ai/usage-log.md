@@ -29,22 +29,28 @@ Entry template:
 ## 2026-09-23 — Ryan Ang
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (implementation + tests)
-- **Scope:** `web/` Admin Dashboard user-management screen (issue #113):
-  `src/features/user/types.ts`, `src/features/user/adminApi.ts`
-  (in-memory mock), `src/features/user/components/UserTable.tsx`,
-  `src/features/user/components/RemoveUserModal.tsx`,
-  `src/routes/admin.tsx`, one `/admin` entry in `src/routes/index.tsx`,
-  and `src/test/admin.test.tsx` (9 cases).
-- **Prompt(s):** "create a new branch and lets work on the UI", then
-  "cant i just create the ui and wire it up later". Built from
-  `web/docs/wireframes/admin-dashboard.png` (Users section only), on
-  mock data because #96 has not defined the admin API; no endpoint
-  paths were chosen. Defaults applied and stated to the author: #113
-  scope only (no Suppliers table or Add Credits), route without a nav
-  item, and USER/ADMIN/OWNER roles matching the PR #126 entity.
-- **Author review:** _to be completed by Ryan_. Vitest 12/12, tsc,
-  eslint and prettier clean on the new files; checked at 1280px and
-  390px widths in the browser.
+- **Scope:** `web/` Admin Dashboard (issue #113), built to match
+  `web/docs/wireframes/admin-dashboard.png`: `src/routes/admin.tsx` (+
+  one `/admin` entry in `src/routes/index.tsx`); Users section in
+  `src/features/user/` (`types.ts`, `adminApi.ts` in-memory mock,
+  `components/UsersSection.tsx`, `UserTable.tsx`, `RemoveUserModal.tsx`);
+  Credits column + Add Credits in `src/features/credit/` (`types.ts`,
+  `adminCreditApi.ts` in-memory mock, `components/AddCreditsModal.tsx`);
+  Suppliers section as two new files in `src/features/supplier/components/`
+  (`SuppliersAdminSection.tsx`, `SupplierTable.tsx`) reusing the existing
+  supplier `api.ts` and form/delete modals, with no existing supplier code
+  changed; `src/test/admin.test.tsx` (15 cases).
+- **Prompt(s):** "create a new branch and lets work on the UI", "cant i
+  just create the ui and wire it up later", then "can you make it so that
+  it matches wireframe?". Users and credits run on in-memory mocks because
+  #96 and credit-service have not defined their APIs; no endpoint paths
+  were chosen. The Suppliers section calls the real supplier api and shows
+  its error state until supplier-service serves data. Defaults applied and
+  stated to the author: route without a nav item, USER/ADMIN/OWNER roles
+  matching the PR #126 entity, owner row limited to Add Credits.
+- **Author review:** _to be completed by Ryan_. Vitest 18/18, tsc, eslint
+  and prettier clean on the new files; checked at desktop (1280/1920px)
+  and mobile (390px) widths in the browser.
 
 ---
 ## 2026-09-22 — Ko-Khan
