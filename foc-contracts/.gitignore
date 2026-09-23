@@ -1,7 +1,0 @@
-# AI-assisted (CS3219 AI Usage Policy disclosure):
-# Tool: Claude Code (Fable 5), 2026-09-19.
-# Scope: added while creating the foc-contracts library for issue #62
-# (team decision D15).
-# Reviewed by: Leong Wei Zhi (via pull request).
-
-target/

@@ -26,6 +26,28 @@ Entry template:
 ```
 
 ---
+## 2026-09-23 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (removal), docs
+- **Scope:** Removed `notification-service/` and `foc-contracts/` and
+  their wiring: `compose.yaml` (notification-service, notification-db
+  and rabbitmq services + their volumes), `.env.example` (Notification
+  Service and RabbitMQ sections; `VITE_NOTIFICATION_SERVICE_URL` reset
+  to empty), root `README.md` (structure tree) and `AGENTS.md`
+  (port-table row, postgres-MCP example switched to supplier-db).
+  Design docs (`docs/notification-service.md`, decisions D1–D22) are
+  untouched; the old implementation is preserved on the
+  `archive/notification-ai-impl` branch.
+- **Prompt(s):** Asked to plan and execute a revert of the two folders
+  so the notification pipeline can be re-implemented manually stage by
+  stage (issues #61–#69), each stage as a reviewable PR.
+- **Author review:** Removal scope and the keep/remove decisions
+  (drop the shared rabbitmq container, archive as a branch, reopen
+  issues #61–#69) were made by the author via options Q&A; verified by
+  `docker compose config`, the web test suite, and a repo-wide grep for
+  dangling references; reviewed via pull request.
+
+---
 ## 2026-09-22 — Ko-Khan
 - **Tool:** Claude Code (Sonnet 5)
 - **Mode:** generate (scaffolding/boilerplate)

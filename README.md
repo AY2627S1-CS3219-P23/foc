@@ -19,6 +19,10 @@
   .env.example wiring that went with it.
   2026-09-21: AI Use Summary wording extended for the web/ SPA
   scaffold (issue #108).
+  2026-09-23, Claude Code (Fable 5): repository-structure tree updated
+  for the removal of notification-service/ and foc-contracts/ (pipeline
+  re-implementation, issues #61-#69); the AI Use Summary is unchanged
+  as the historical disclosure record.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -60,8 +64,6 @@ folder. The frontend lives in `web/`.
 ├── supplier-service/
 ├── order-service/
 ├── credit-service/
-├── notification-service/
-├── foc-contracts/
 ├── <n2h-service>/
 └── README.md
 ```
@@ -69,10 +71,10 @@ folder. The frontend lives in `web/`.
 - Any **nice-to-have (N2H)** feature that warrants its own service should
   be added as an **additional folder** at the same level, following the
   same per-service structure.
-- `foc-contracts/` is a shared library (not a service) holding
-  cross-service contract constants such as broker exchange names and
-  the typed event contracts (event records + registry + fixtures) —
-  team decision D15 (`docs/notification-service.md`).
+- The `notification-service/` folder will be (re)added by its
+  implementation PRs (issues #61–#69), together with the shared
+  `foc-contracts/` contract library it depends on — team decision D15
+  (`docs/notification-service.md`).
 - Files for agentic coding tools (e.g. agent configs, prompts, skills)
   may be added as needed, but must still **respect the
   one-service-per-folder skeleton** for core implementation.

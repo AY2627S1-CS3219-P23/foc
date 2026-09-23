@@ -16,6 +16,10 @@
   wiring supplier-db into compose.yaml.
   2026-09-21, issue #108: web row added to the port table recording the
   frontend's claimed host port (WEB_PORT, default 5173).
+  2026-09-23, Claude Code (Fable 5): notification-db port-table row
+  reset and the postgres-MCP example switched to supplier-db, following
+  the removal of notification-service/ and foc-contracts/ (pipeline
+  re-implementation, issues #61-#69); the D15 convention text stands.
   All decisions documented here were made by the team.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
@@ -57,10 +61,12 @@ top-level folder following the same skeleton. A service folder may contain
 its own `AGENTS.md` with service-specific instructions — read it before
 working in that service.
 
-One top-level folder is **not** a service: `foc-contracts/` is a shared
-Maven library holding cross-service contract constants (e.g. broker
-exchange names) and the typed event contracts (event records +
-registry) — see the exception under Conventions.
+One additional top-level folder is **not** a service: `foc-contracts/`,
+a shared Maven library holding cross-service contract constants (e.g.
+broker exchange names) and the typed event contracts (event records +
+registry) — see the exception under Conventions. It is currently
+removed while the notification pipeline is re-implemented (issues
+#61–#69); the convention stands and the folder returns with those PRs.
 
 ## Conventions
 
@@ -105,9 +111,9 @@ into `.env` or any committed file:
 
 ```sh
 # one profile per service DB, named after the service
-npx -y @microsoft/postgres-mcp connection add foc-notification \
-  "postgresql://notification@localhost:5433/notification"
-npx -y @microsoft/postgres-mcp connection set-password foc-notification
+npx -y @microsoft/postgres-mcp connection add foc-supplier \
+  "postgresql://supplier@localhost:5434/supplier"
+npx -y @microsoft/postgres-mcp connection set-password foc-supplier
 npx -y @microsoft/postgres-mcp connection list
 ```
 
@@ -129,7 +135,7 @@ alone is only a gate inside the server.
 
 | Service DB | Host port | Status |
 | --- | --- | --- |
-| `notification-db` | `${NOTIFICATION_DB_HOST_PORT:-5433}` (loopback only) | available |
+| `notification-db` | — | not created yet (re-added under issues #61–#69) |
 | `user-db` | — | not created yet |
 | `supplier-db` | `${SUPPLIER_DB_HOST_PORT:-5434}` (loopback only) | available |
 | `order-db` | — | not created yet |
