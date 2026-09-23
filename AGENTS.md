@@ -16,6 +16,9 @@
   wiring supplier-db into compose.yaml.
   2026-09-21, issue #108: web row added to the port table recording the
   frontend's claimed host port (WEB_PORT, default 5173).
+  2026-09-23, issue #85: user-db row in the port table filled in (host
+  port 5435, chosen by Leong Wei Zhi via options Q&A) while wiring
+  user-db into compose.yaml.
   All decisions documented here were made by the team.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
@@ -130,7 +133,7 @@ alone is only a gate inside the server.
 | Service DB | Host port | Status |
 | --- | --- | --- |
 | `notification-db` | `${NOTIFICATION_DB_HOST_PORT:-5433}` (loopback only) | available |
-| `user-db` | — | not created yet |
+| `user-db` | `${USER_DB_HOST_PORT:-5435}` (loopback only) | available |
 | `supplier-db` | `${SUPPLIER_DB_HOST_PORT:-5434}` (loopback only) | available |
 | `order-db` | — | not created yet |
 | `credit-db` | — | not created yet |

@@ -7,6 +7,8 @@ Scope: Generated unit tests for OwnerSetupService covering owner guard,
 Author review: Ryan validated test assertions to match intended behaviour.
 2026-09-23 (Claude, Sonnet 4.6): added setup-token guard tests (missing token,
        wrong token, token not configured).
+2026-09-23 (Claude Code, Fable 5), issue #86: role literals switched to the
+       Role enum following the entity's String-to-enum conversion.
 */
 
 package foc.user.service;
@@ -33,6 +35,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import foc.user.dto.SetupOwnerRequest;
 import foc.user.dto.UserResponse;
+import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.exception.OwnerAlreadySetException;
 import foc.user.repository.UserRepository;
@@ -54,7 +57,7 @@ class OwnerSetupServiceTest {
     @BeforeEach
     void setUpDefaultStubs() {
         ReflectionTestUtils.setField(ownerSetupService, "expectedSetupToken", VALID_SETUP_TOKEN);
-        lenient().when(userRepository.countByRole("OWNER")).thenReturn(0L);
+        lenient().when(userRepository.countByRole(Role.OWNER)).thenReturn(0L);
         lenient().when(userRepository.existsByEmail(anyString())).thenReturn(false);
         lenient().when(userRepository.existsByUsername(anyString())).thenReturn(false);
         lenient().when(passwordEncoder.encode(anyString())).thenReturn("hashed_password");
@@ -114,7 +117,7 @@ class OwnerSetupServiceTest {
     @Test
     @DisplayName("Should throw OwnerAlreadySetException when an owner already exists")
     void setupFirstOwner_throwsWhenOwnerAlreadyExists() {
-        when(userRepository.countByRole("OWNER")).thenReturn(1L);
+        when(userRepository.countByRole(Role.OWNER)).thenReturn(1L);
 
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
@@ -165,7 +168,7 @@ class OwnerSetupServiceTest {
     @Test
     @DisplayName("Should normalise email to lowercase before saving")
     void setupFirstOwner_normalisesEmailToLowercase() {
-        User saved = new User("e1234567@u.nus.edu", "owner_user", "hashed_password", "OWNER");
+        User saved = new User("e1234567@u.nus.edu", "owner_user", "hashed_password", Role.OWNER);
         when(userRepository.save(any(User.class))).thenReturn(saved);
 
         // Bypass Bean Validation intentionally — service must still normalise
@@ -183,7 +186,7 @@ class OwnerSetupServiceTest {
     @Test
     @DisplayName("Should trim leading and trailing whitespace from username before saving")
     void setupFirstOwner_trimsUsernameWhitespace() {
-        User saved = new User("e1234567@u.nus.edu", "owner_user", "hashed_password", "OWNER");
+        User saved = new User("e1234567@u.nus.edu", "owner_user", "hashed_password", Role.OWNER);
         when(userRepository.save(any(User.class))).thenReturn(saved);
 
         SetupOwnerRequest request = new SetupOwnerRequest(
@@ -203,7 +206,7 @@ class OwnerSetupServiceTest {
     @DisplayName("Should save user with OWNER role and a bcrypt-hashed password, and return a response with no password field")
     void setupFirstOwner_savesOwnerAndReturnsResponse() {
         when(passwordEncoder.encode("ValidPassword123!")).thenReturn("bcrypt_hash");
-        User saved = new User("e1234567@u.nus.edu", "owner_user", "bcrypt_hash", "OWNER");
+        User saved = new User("e1234567@u.nus.edu", "owner_user", "bcrypt_hash", Role.OWNER);
         when(userRepository.save(any(User.class))).thenReturn(saved);
 
         SetupOwnerRequest request = new SetupOwnerRequest(
@@ -215,7 +218,7 @@ class OwnerSetupServiceTest {
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
 
-        assertThat(captor.getValue().getRole()).isEqualTo("OWNER");
+        assertThat(captor.getValue().getRole()).isEqualTo(Role.OWNER);
         assertThat(captor.getValue().getPasswordHash()).isEqualTo("bcrypt_hash");
         assertThat(response.role()).isEqualTo("OWNER");
         assertThat(response.email()).isEqualTo("e1234567@u.nus.edu");

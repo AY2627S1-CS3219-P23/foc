@@ -4,6 +4,9 @@ Tool: Claude (Sonnet 5), date: 2026-09-22
 Scope: Generated owner bootstrap logic (advisory lock, owner guard,
        normalisation, uniqueness checks, BCrypt hashing).
        2026-09-23 (Claude, Sonnet 4.6): setup-token check added.
+       2026-09-23 (Claude Code, Fable 5), issue #86: role handled via the
+       Role enum following the entity's String-to-enum conversion; the
+       response DTO keeps its String role (unchanged JSON shape).
 Author review: Ryan validated that the endpoint logic matches the feature design.
 */
 
@@ -21,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import foc.user.dto.SetupOwnerRequest;
 import foc.user.dto.UserResponse;
+import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.exception.OwnerAlreadySetException;
 import foc.user.repository.UserRepository;
@@ -28,7 +32,6 @@ import foc.user.repository.UserRepository;
 @Service
 public class OwnerSetupService {
 
-    private static final String ROLE_OWNER = "OWNER";
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final String expectedSetupToken;
@@ -82,7 +85,7 @@ public class OwnerSetupService {
     }
 
     private void ensureSetupAvailable() {
-        if (userRepository.countByRole(ROLE_OWNER) > 0) {
+        if (userRepository.countByRole(Role.OWNER) > 0) {
             throw new OwnerAlreadySetException();
         }
     }
@@ -120,7 +123,7 @@ public class OwnerSetupService {
         owner.setEmail(email);
         owner.setUsername(username);
         owner.setPasswordHash(passwordEncoder.encode(password));
-        owner.setRole(ROLE_OWNER);
+        owner.setRole(Role.OWNER);
         owner.setFailedLoginAttempts(0);
         owner.setLockedUntil(null);
         owner.setDeletedAt(null);
@@ -132,7 +135,7 @@ public class OwnerSetupService {
             user.getId(),
             user.getEmail(),
             user.getUsername(),
-            user.getRole(),
+            user.getRole().name(),
             user.getCreatedAt()
         );
     }
