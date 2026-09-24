@@ -95,12 +95,12 @@ class ProfileControllerTest {
     // public profile
 
     @Test
-    @DisplayName("GET /users/{id} should return only username and joined date")
+    @DisplayName("GET /users/{id} should return only the username")
     void getPublicProfile_success() throws Exception {
         mockMvc.perform(get("/users/{id}", alex.getId()).with(user("999")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.username").value("student_alex"))
-            .andExpect(jsonPath("$.createdAt").exists())
+            .andExpect(jsonPath("$.createdAt").doesNotExist())
             .andExpect(jsonPath("$.email").doesNotExist())
             .andExpect(jsonPath("$.role").doesNotExist())
             .andExpect(jsonPath("$.id").doesNotExist());

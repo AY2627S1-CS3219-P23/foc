@@ -39,11 +39,11 @@ public class ProfileService {
         );
     }
 
-    // another user's profile: username and joined date only
+    // another user's profile: username only
     public PublicProfileResponse getPublicProfile(Long userId) {
         User user = findActiveUser(userId);
 
-        return new PublicProfileResponse(user.getUsername(), user.getCreatedAt());
+        return new PublicProfileResponse(user.getUsername());
     }
 
     private User findActiveUser(Long userId) {

@@ -35,14 +35,16 @@ Entry template:
   `UserRepository.findByIdAndDeletedAtIsNull`, `ProfileServiceTest`,
   `ProfileControllerTest`, and the `spring-boot-starter-security-test`
   test dependency in `user-service/pom.xml`.
-- **Prompt(s):** "The tool summarised F8.1/F8.1.1 from issue #9, the architecture
+- **Prompt(s):** Summary: The tool summarised F8.1/F8.1.1 from issue #9, the architecture
   doc and the wireframes, and listed the open interface decisions
-  without choosing them. Implementation were based on these decisions: "GET /users/me for own profile,
-  GET /users/{id} for others profile, which should show name, joined
+  without choosing them. Implementation were based on these decisions: 
+  "GET /users/me for own profile, GET /users/{id} for others profile, which should show name, joined
   date for now, deleted users and unknown users should show user not
   found. caller identity should carry id for now." The tool then
   implemented exactly those decisions, reusing the existing
-  `UserResponse` for the own profile.
+  `UserResponse` for the own profile Follow-up on the PR #131 Copilot review: Limitged the public profile to the username (F8.1.1); the tool dropped
+  `createdAt` from `PublicProfileResponse` and updated the service
+  mapping and both test classes.
 - **Author review:** Ryan reviewed the code and ran the full
   `./mvnw test` suite to ensure it all passed (38/38).
 

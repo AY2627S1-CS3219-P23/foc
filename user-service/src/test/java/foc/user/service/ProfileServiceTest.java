@@ -65,14 +65,13 @@ class ProfileServiceTest {
     // public profile
 
     @Test
-    @DisplayName("Should return only username and joined date for public profile")
-    void getPublicProfile_returnsUsernameAndJoinedDate() {
+    @DisplayName("Should return only the username for public profile")
+    void getPublicProfile_returnsUsernameOnly() {
         when(userRepository.findByIdAndDeletedAtIsNull(2L)).thenReturn(Optional.of(user));
 
         PublicProfileResponse response = profileService.getPublicProfile(2L);
 
         assertThat(response.username()).isEqualTo("student_alex");
-        assertThat(response.createdAt()).isEqualTo(user.getCreatedAt());
     }
 
     @Test
