@@ -73,7 +73,7 @@ public class Suppliers {
 
     // Getters and Setters
 
-    private Long getId() {
+    public Long getId() {
         return id;
     }
 
