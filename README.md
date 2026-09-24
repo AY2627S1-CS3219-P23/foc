@@ -19,6 +19,10 @@
   .env.example wiring that went with it.
   2026-09-21: AI Use Summary wording extended for the web/ SPA
   scaffold (issue #108).
+  2026-09-23: AI Use Summary extended for the user-service first-owner
+  bootstrap (issue #97) by Claude Code (Opus 5.5); and again for the
+  user-db infrastructure and user-service JPA schema (issues #85/#86)
+  by Claude Code (Fable 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -85,7 +89,7 @@ This section is the consolidated AI-use disclosure required by the CS3219
 AI Usage Policy (project document, Appendix 2). The detailed log with
 prompts and timestamps lives in [`ai/usage-log.md`](ai/usage-log.md).
 
-**Tools:** Claude Code (Fable 5, Opus 5, Sonnet 5)
+**Tools:** Claude Code (Fable 5, Opus 5, Opus 5.5, Sonnet 4.6, Sonnet 5), Claude (Sonnet 5)
 
 **Prohibited phases avoided:** requirements elicitation and
 prioritization; architecture and design decisions. Requirements, service
@@ -122,14 +126,26 @@ compose.yaml supplier-db/supplier-service wiring, `.env.example`
 section, and `AGENTS.md` port-table entry that went with it, with
 scope confirmed by the author via options Q&A (including how to
 resolve a pre-existing compose.yaml anomaly found in the working
-tree).
-neutral-options Q&A; and the `web/` SPA scaffold (issue #108) —
+tree); the `web/` SPA scaffold (issue #108) —
 Vite/React/TypeScript project skeleton, react-router route table with
 the shared app shell (wireframe top bar and mobile tab bar) and 404,
 shared API fetch wrapper, tooling configuration, and Docker/compose
 wiring, deliberately without a data-fetching library, with the stack,
 tooling, scope, and port choices made by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`.
+neutral-options Q&A and recorded in `ai/usage-log.md`; and the
+user-service first-owner bootstrap (issue #97) — request/response DTOs,
+the `User` entity transcribed from the team's schema, repository,
+service, controller, setup-token gate, and its unit and Testcontainers
+integration tests, plus the fixes from the PR #126 review; and the
+user-db infrastructure and user-service JPA schema (issues #85/#86) —
+compose.yaml user-service/user-db wiring with the `.env.example`
+section and `AGENTS.md` port-table entry that went with it, datasource
+configuration, the `Otp`/`AccountToken`/`TokenDenylistEntry` entities
+transcribed from the team's design-doc erDiagram, the `Role` enum
+conversion of the merged String role column, and per-entity
+persistence round-trip tests, with the image-version, port,
+role-representation, FK-shape, and test-scope choices made by the
+author via neutral-options Q&A and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
