@@ -26,6 +26,55 @@ Entry template:
 ```
 
 ---
+## 2026-09-23 — Ko-Khan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** debug
+- **Scope:** `supplier-service/src/main/java/foc/supplier/seed/SuppliersSeeder.java`,
+  `supplier-service/src/main/java/foc/supplier/model/Suppliers.java` —
+  fixed a Maven `MojoFailureException` blocking both local build and the
+  Docker image build, then two further runtime bugs found while
+  verifying the seeder actually populates `supplier-db`.
+- **Prompt(s):** Author reported "I am getting a mojofailure" (no other
+  detail), then pasted the Docker build failure log. Asked to diagnose
+  and fix. Findings: (1) `SuppliersSeeder.java` used `FileReader`
+  without importing `java.io.FileReader` — compile error; (2) the CSV
+  path pointed at `resources/data/...` but the seed file lives at
+  `resources/csv/supplier-seed-data.csv` — confirmed with author before
+  changing; (3) after fixing (1), `docker build` still failed:
+  `CsvToBean.setType(Class)` does not exist in opencsv 5.9 (verified by
+  extracting and `javap`-ing the jar inside a throwaway Maven
+  container) — only `CsvToBeanBuilder.withType(...)` does, so the
+  seeder was rebuilt to use `CsvToBeanBuilder`; (4) while in there,
+  noticed the CSV header `Location Description` (has a space) would
+  silently fail to auto-map to the `locationDescription` field under
+  opencsv's default case-insensitive matching, so added an explicit
+  `@CsvBindByName` for that one column.
+  Separately, author reported a DBeaver "connection has been closed"
+  error; traced to `supplier-db`'s container having been recreated
+  (fresh `initdb`), invalidating DBeaver's open session — a client-side
+  reconnect, not a code issue. While checking, found the containerized
+  service was still failing to seed: (5) `FileNotFoundException` at
+  runtime, because the Dockerfile's final stage only copies the built
+  jar — `src/main/resources/csv/...` is packaged as a classpath
+  resource inside the jar, not a file on disk, so a relative filesystem
+  path can't resolve in the container even though it worked when run
+  locally from the source tree; switched to `ClassPathResource`. (6)
+  After that fix, seeding then failed with a `NOT NULL` violation on
+  `name`: opencsv's `HeaderColumnNameMappingStrategy` stops
+  auto-matching fields by name as soon as any field carries a
+  `@CsvBindByName` annotation, so the earlier fix (4), which annotated
+  only `locationDescription`, silently unbound every other field;
+  fixed by annotating all CSV-seeded fields explicitly.
+- **Author review:** No architecture, schema, or interface changes —
+  same fields, same CSV, same DB columns; only the CSV-parsing
+  implementation and file paths were corrected. Verified end-to-end by
+  running `docker compose build supplier-service` and
+  `docker compose up -d supplier-service` against the real
+  `supplier-db` and querying the resulting table (21 rows, all columns
+  including `location_description` populated correctly). Reviewed by
+  author via pull request.
+
+---
 ## 2026-09-23 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate, refactor
