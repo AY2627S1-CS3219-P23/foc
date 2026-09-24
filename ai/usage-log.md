@@ -75,6 +75,130 @@ Entry template:
   author via pull request.
 
 ---
+## 2026-09-23 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate, refactor
+- **Scope:** issues #85 + #86 in one PR. Infra (#85): `compose.yaml`
+  user-service + user-db entries and volume, `.env.example` User
+  Service port/DB variables, `AGENTS.md` user-db port-table row,
+  `user-service/src/main/resources/application.yaml` datasource +
+  `ddl-auto: update` — all following the supplier-service rows.
+  Schema (#86): new entities `Otp`, `AccountToken`,
+  `TokenDenylistEntry` from the design doc's §2 erDiagram; `User.role`
+  converted from String to a new `Role` enum (USER/ADMIN/OWNER, stored
+  as text) with the design doc's CHECK constraint, updating PR #126's
+  usages (`UserRepository.countByRole`, `OwnerSetupService`, both test
+  classes; `UserResponse` JSON shape unchanged); new
+  `EntityMappingTest` round-trip tests (Testcontainers pattern).
+  README AI Use Summary extended for this work (PR #130 Copilot
+  review).
+- **Prompt(s):** Asked to read the D2 design doc's Task Allocation and
+  plan/implement user-service tasks #2 and #3 (issues #85/#86) in one
+  PR. Decisions were made by Leong Wei Zhi via neutral options Q&As:
+  postgres:17 image (matching the merged Testcontainers tests), host
+  ports 8087/5435 (8085/5433 reserved for the notification re-add),
+  Role as a Java enum with the CHECK added now, @ManyToOne FK
+  representation for `otps`/`account_tokens`, and round-trip test
+  scope. The OWNER value follows the merged owner-bootstrap feature
+  (issue #97): treated as admin-equivalent.
+- **Author review:** full suite green locally (28/28 incl. Ryan's
+  OwnerSetup tests, BUILD SUCCESS); `docker compose up --build
+  user-service user-db` from a fresh volume verified: health UP on
+  8087, all four tables present with the role CHECK, unique
+  email/username indexes and both FKs (inspected via psql), and
+  `POST /auth/setup-owner` exercised end-to-end (201 with role
+  "OWNER", 409 on the second call, BCrypt hash stored). An explicit
+  @Check was dropped during review: Hibernate 7 already generates the
+  role CHECK from the STRING enum mapping, and the duplicate showed up
+  in psql. Reviewed via pull request.
+
+## 2026-09-23 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, debug, generate (tests), docs
+- **Scope:** `user-service/` fixes from the PR #126 review (issue #97):
+  renamed `dto/userResponse.java` → `UserResponse.java`,
+  `repository/userRepository.java` → `UserRepository.java`, and
+  `OwnerSetUpControllerTest.java` → `OwnerSetupControllerTest.java`;
+  `SecurityConfig.java` (permit `/actuator/health`);
+  `SetupOwnerRequest.java` (case-insensitive, whitespace-tolerant email
+  pattern; redundant `@Email` removed; password size message covers both
+  bounds); `User.java` (dropped `unique = true` duplicated by the named
+  unique indexes); `pom.xml` (removed duplicate `spring-boot-starter-web`
+  and explicit `jackson-databind`, dropped the `testcontainers-bom` import,
+  switched to Testcontainers 2.x artifact names); tests moved to Jackson 3
+  / Testcontainers 2.x, with new controller cases for mixed-case/padded
+  email, over-long password, concurrent setup requests, and public health
+  endpoint; missing AI disclosure headers added to `OwnerSetupService`,
+  `OwnerSetupController`, `UserRepository`, `UserResponse`,
+  `OwnerAlreadySetException`, and `src/test/resources/application.yaml`;
+  existing headers extended in the other touched files; README AI Use
+  Summary updated.
+- **Prompt(s):** "look at the pr comments on pr 126", then "fix the rest"
+  — i.e. apply every review finding except the two left for a team
+  decision (durable bootstrap-used marker; production datasource/schema
+  strategy and compose wiring).
+- **Author review:** _to be completed by Ryan_. `OwnerSetupServiceTest`
+  (9/9) passed locally, and all test sources compile; the Testcontainers
+  controller/context tests were not run because Docker was not running.
+
+## 2026-09-22 — Ryan Ang
+- **Tool:** Claude Code (Sonnet 4.6)
+- **Mode:** debug, generate (tests)
+- **Scope:** `user-service/` test suite for issue #86 / #91 scope:
+  `src/test/java/foc/user/controller/OwnerSetUpControllerTest.java` (bug
+  fixes + 4 additional cases), `src/test/java/foc/user/service/OwnerSetupServiceTest.java`
+  (new file), `src/test/java/foc/user/UserServiceApplicationTests.java`
+  (Testcontainers wiring), `src/test/resources/application.yaml` (new file).
+- **Prompt(s):** Asked to diagnose why `OwnerSetUpControllerTest` was not
+  running. Issues found and fixed: (1) `@AutoConfigureMockMvc` import was
+  wrong for Spring Boot 4.x — corrected to
+  `org.springframework.boot.webmvc.test.autoconfigure`; (2) `pom.xml` had
+  two non-existent test artifacts (`spring-boot-starter-actuator-test`,
+  `spring-boot-starter-webmvc-test`) causing Maven to fail dependency
+  resolution — `spring-boot-starter-webmvc-test` restored (Spring Boot 4.x
+  artifact), bogus actuator-test artifact removed; (3) `ObjectMapper` was
+  `@Autowired` but not registered as a bean in the test context — replaced
+  with `new ObjectMapper()`; (4) `UserServiceApplicationTests` had no
+  datasource, causing context load failure — wired up the same
+  Testcontainers `@ServiceConnection` pattern; (5) `users` table did not
+  exist in the Testcontainers Postgres DB — created
+  `src/test/resources/application.yaml` with `ddl-auto: create-drop`.
+  After tests passed, asked whether more test coverage was warranted; the
+  tool generated `OwnerSetupServiceTest` (6 Mockito unit tests: owner guard,
+  duplicate email/username, email normalisation, username trim, happy path)
+  and added 4 controller test cases (blank email, password missing uppercase,
+  password missing digit, invalid username characters). A subsequent
+  `UnnecessaryStubbingException` from Mockito strict mode was fixed by
+  changing `@BeforeEach` stubs to `lenient()`.
+- **Author review:** Ryan ran `mvn test` after each fix and confirmed
+  15/15 tests green at that point. Confirmed tests cover the self-disabling owner
+  bootstrap feature end-to-end (happy path, idempotency guard, all
+  Bean Validation constraints, service-layer business rules).
+  (Corrected 2026-09-23: after the setup-token gate the suite grew to
+  20 tests — 10 controller, 9 service, `contextLoads` — and the PR #126
+  review fixes below add 4 more controller cases.)
+
+## 2026-09-22 — Ryan Ang
+- **Tool:** Claude (Sonnet 5)
+- **Mode:** generate (implementation)
+- **Scope:** `user-service/` first-owner bootstrap feature (issue #86 /
+  #91 scope): `src/main/java/foc/user/dto/SetupOwnerRequest.java`,
+  `src/main/java/foc/user/dto/UserResponse.java`,
+  `src/main/java/foc/user/entity/User.java`,
+  `src/main/java/foc/user/repository/UserRepository.java`,
+  `src/main/java/foc/user/service/OwnerSetupService.java`,
+  `src/main/java/foc/user/controller/OwnerSetupController.java`,
+  `src/main/java/foc/user/exception/OwnerAlreadySetException.java`,
+  and an initial `OwnerSetUpControllerTest.java` (4 cases).
+- **Prompt(s):** Generated the `SetupOwnerRequest` DTO with Bean
+  Validation annotations (NUS email regex, password strength rules,
+  username format). Converted the agreed user schema into the `User`
+  JPA entity. Generated initial controller integration tests with Testcontainers Postgres setup.
+- **Author review:** Ryan validated that the entity matches the agreed
+  schema, that the email/password/username regex rules are correct, and
+  that the endpoint logic (advisory lock, owner guard, uniqueness
+  checks, BCrypt hashing) matches the feature design. 
+
 ## 2026-09-22 — Ko-Khan
 - **Tool:** Claude Code (Sonnet 5)
 - **Mode:** generate (scaffolding/boilerplate)

@@ -24,6 +24,12 @@
 # 2026-09-21, issue #108: web frontend container added (Vite static
 # build served by nginx); service URLs passed as build args because
 # Vite inlines VITE_* values at build time.
+# 2026-09-23, Claude Code (Fable 5), issue #85: user-service + user-db
+# wiring added, following the supplier-service pattern (host ports
+# 8087/5435 and the postgres:17 image chosen by Leong Wei Zhi via
+# options Q&A; 8085/5433 stay reserved for the notification re-add,
+# issues #61-#69). OWNER_SETUP_TOKEN passed through for the merged
+# owner-bootstrap endpoint (issue #97).
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -173,9 +179,55 @@ services:
       retries: 10
     restart: unless-stopped
 
+  user-service:
+    # Context is the repo root (repo compose convention), even though
+    # this service has no shared-library build stage yet.
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    ports:
+      - "${USER_SERVICE_PORT:-8087}:8080"
+    environment:
+      USER_DB_HOST: user-db
+      USER_DB_PORT: "5432"
+      USER_DB_NAME: ${USER_DB_NAME:-user}
+      USER_DB_USER: ${USER_DB_USER:-user}
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD:?set in .env}
+      # Shared secret gating POST /auth/setup-owner (issue #97); the
+      # endpoint answers 503 while it is unset.
+      OWNER_SETUP_TOKEN: ${OWNER_SETUP_TOKEN:-}
+    depends_on:
+      user-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # User DB: PostgreSQL owned exclusively by the user service
+  # (database-per-service).
+  user-db:
+    image: postgres:17
+    # Published on the host so local tooling (psql, DB GUIs, the postgres
+    # MCP server) can reach the service-owned DB; the service itself talks
+    # to it over the compose network on 5432. Bound to loopback so the
+    # database is reachable from this machine only.
+    ports:
+      - "127.0.0.1:${USER_DB_HOST_PORT:-5435}:5432"
+    environment:
+      POSTGRES_DB: ${USER_DB_NAME:-user}
+      POSTGRES_USER: ${USER_DB_USER:-user}
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD:?set in .env}
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${USER_DB_USER:-user} -d ${USER_DB_NAME:-user}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
 # Other services add their own entries in their own PRs.
 
 volumes:
   notification-db-data:
   rabbitmq-data:
   supplier-db-data:
+  user-db-data:

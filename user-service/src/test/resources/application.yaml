@@ -1,0 +1,17 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Sonnet 4.6), 2026-09-22; setup token added 2026-09-23.
+# Scope: test-only config: ddl-auto create-drop so the Testcontainers
+# Postgres has the users table, plus a fixed owner setup token for the
+# controller tests.
+# Author review: Ryan ran mvn test and confirmed the suite is green.
+
+spring:
+  application:
+    name: user-service
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+owner:
+  setup:
+    token: test-owner-setup-token
