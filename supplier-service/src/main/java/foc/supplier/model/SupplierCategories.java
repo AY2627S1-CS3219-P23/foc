@@ -13,6 +13,10 @@
  * primary key is now the composite (id, type) via @IdClass(SupplierTypeId),
  * with id still derived from the associated Suppliers row via
  * @MapsId("id") and type promoted to part of the key.
+ * Renamed same day, SupplierTypes -> SupplierCategories (class, table,
+ * repository, id class), per author decision; the internal "type"
+ * field/getter/setter were explicitly kept as-is (author decision), only
+ * the outer names changed.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.supplier.model;
@@ -20,9 +24,9 @@ package foc.supplier.model;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "SupplierTypes")
-@IdClass(SupplierTypeId.class)
-public class SupplierTypes {
+@Table(name = "SupplierCategories")
+@IdClass(SupplierCategoryId.class)
+public class SupplierCategories {
 
     @Id
     private Long id;

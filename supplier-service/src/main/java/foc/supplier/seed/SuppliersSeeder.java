@@ -19,6 +19,9 @@
  * Revised same day: a supplier can carry multiple types in one CSV cell
  * (e.g. "Food/Coffee"), so the Type column is now split on "/" and one
  * SupplierTypes row is saved per resulting type, per author decision.
+ * Renamed same day, SupplierTypes -> SupplierCategories (class, table,
+ * repository, id class), per author decision; the internal "type"
+ * field/getter/setter were kept as-is.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.supplier.seed;
@@ -26,10 +29,10 @@ package foc.supplier.seed;
 import com.opencsv.bean.CsvToBean;
 import com.opencsv.bean.CsvToBeanBuilder;
 
+import foc.supplier.model.SupplierCategories;
 import foc.supplier.model.Suppliers;
-import foc.supplier.model.SupplierTypes;
+import foc.supplier.repository.SupplierCategoriesRepository;
 import foc.supplier.repository.SuppliersRepository;
-import foc.supplier.repository.SupplierTypesRepository;
 
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.io.ClassPathResource;
@@ -41,11 +44,11 @@ import java.nio.charset.StandardCharsets;
 @Component
 public class SuppliersSeeder implements CommandLineRunner {
     private final SuppliersRepository suppliersRepository;
-    private final SupplierTypesRepository supplierTypesRepository;
+    private final SupplierCategoriesRepository supplierCategoriesRepository;
 
-    public SuppliersSeeder(SuppliersRepository suppliersRepository, SupplierTypesRepository supplierTypesRepository) {
+    public SuppliersSeeder(SuppliersRepository suppliersRepository, SupplierCategoriesRepository supplierCategoriesRepository) {
         this.suppliersRepository = suppliersRepository;
-        this.supplierTypesRepository = supplierTypesRepository;
+        this.supplierCategoriesRepository = supplierCategoriesRepository;
     }
 
     @Override
@@ -63,10 +66,10 @@ public class SuppliersSeeder implements CommandLineRunner {
                     Suppliers savedSupplier = suppliersRepository.save(supplier);
 
                     for (String type : savedSupplier.getType().split("/")) {
-                        SupplierTypes supplierType = new SupplierTypes();
-                        supplierType.setSupplier(savedSupplier);
-                        supplierType.setType(type.trim());
-                        supplierTypesRepository.save(supplierType);
+                        SupplierCategories supplierCategory = new SupplierCategories();
+                        supplierCategory.setSupplier(savedSupplier);
+                        supplierCategory.setType(type.trim());
+                        supplierCategoriesRepository.save(supplierCategory);
                     }
                 }
             } catch (Exception e) {

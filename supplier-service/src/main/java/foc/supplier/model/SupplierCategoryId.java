@@ -5,6 +5,9 @@
  * supplier with multiple types (e.g. CSV "Food/Coffee") gets one
  * SupplierTypes row per type, so (id, type) together are the primary
  * key rather than id alone.
+ * Renamed same day, SupplierTypeId -> SupplierCategoryId, following the
+ * SupplierTypes -> SupplierCategories table/entity rename (author
+ * decision; the internal "type" field itself was kept as-is).
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.supplier.model;
@@ -12,15 +15,15 @@ package foc.supplier.model;
 import java.io.Serializable;
 import java.util.Objects;
 
-public class SupplierTypeId implements Serializable {
+public class SupplierCategoryId implements Serializable {
 
     private Long id;
     private String type;
 
-    public SupplierTypeId() {
+    public SupplierCategoryId() {
     }
 
-    public SupplierTypeId(Long id, String type) {
+    public SupplierCategoryId(Long id, String type) {
         this.id = id;
         this.type = type;
     }
@@ -28,7 +31,7 @@ public class SupplierTypeId implements Serializable {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof SupplierTypeId that)) return false;
+        if (!(o instanceof SupplierCategoryId that)) return false;
         return Objects.equals(id, that.id) && Objects.equals(type, that.type);
     }
 
