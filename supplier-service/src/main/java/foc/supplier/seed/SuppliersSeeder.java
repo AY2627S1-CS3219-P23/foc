@@ -70,7 +70,7 @@ public class SuppliersSeeder implements CommandLineRunner {
                     }
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                throw new IllegalStateException("Failed to seed suppliers", e);
             }
 
         }
