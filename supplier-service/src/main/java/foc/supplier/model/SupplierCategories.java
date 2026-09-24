@@ -14,9 +14,12 @@
  * with id still derived from the associated Suppliers row via
  * @MapsId("id") and type promoted to part of the key.
  * Renamed same day, SupplierTypes -> SupplierCategories (class, table,
- * repository, id class), per author decision; the internal "type"
- * field/getter/setter were explicitly kept as-is (author decision), only
- * the outer names changed.
+ * repository, id class); the internal "type" field/getter/setter were
+ * initially kept as-is, then also renamed to "category"
+ * (getType/setType -> getCategory/setCategory) per author decision for
+ * full consistency. @IdClass field names must match the entity's @Id
+ * field names exactly, so SupplierCategoryId's field was renamed to
+ * match.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.supplier.model;
@@ -32,7 +35,7 @@ public class SupplierCategories {
     private Long id;
 
     @Id
-    private String type;
+    private String category;
 
     @ManyToOne
     @MapsId("id")
@@ -53,12 +56,12 @@ public class SupplierCategories {
         this.supplier = supplier;
     }
 
-    public String getType() {
-        return type;
+    public String getCategory() {
+        return category;
     }
 
-    public void setType(String type) {
-        this.type = type;
+    public void setCategory(String category) {
+        this.category = category;
     }
 
 }

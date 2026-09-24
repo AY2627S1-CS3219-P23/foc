@@ -6,8 +6,11 @@
  * SupplierTypes row per type, so (id, type) together are the primary
  * key rather than id alone.
  * Renamed same day, SupplierTypeId -> SupplierCategoryId, following the
- * SupplierTypes -> SupplierCategories table/entity rename (author
- * decision; the internal "type" field itself was kept as-is).
+ * SupplierTypes -> SupplierCategories table/entity rename; the internal
+ * "type" field was initially kept as-is, then also renamed to
+ * "category" per author decision — this must match SupplierCategories'
+ * @Id field name exactly, since @IdClass field names are matched by
+ * name against the entity's @Id fields.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.supplier.model;
@@ -18,25 +21,25 @@ import java.util.Objects;
 public class SupplierCategoryId implements Serializable {
 
     private Long id;
-    private String type;
+    private String category;
 
     public SupplierCategoryId() {
     }
 
-    public SupplierCategoryId(Long id, String type) {
+    public SupplierCategoryId(Long id, String category) {
         this.id = id;
-        this.type = type;
+        this.category = category;
     }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof SupplierCategoryId that)) return false;
-        return Objects.equals(id, that.id) && Objects.equals(type, that.type);
+        return Objects.equals(id, that.id) && Objects.equals(category, that.category);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, type);
+        return Objects.hash(id, category);
     }
 }

@@ -15,6 +15,12 @@
  * Parsing handled via opencsv's @CsvDate with the custom pattern
  * "HHmm'hrs'" (opencsv supports java.time temporal types for @CsvDate,
  * not just java.util.Date).
+ * 2026-09-25: field renamed type -> category (getType/setType ->
+ * getCategory/setCategory), per author decision, matching the
+ * SupplierTypes -> SupplierCategories rename elsewhere. The
+ * @CsvBindByName(column = "Type") binding is unchanged since it targets
+ * the CSV's actual header text, not the Java field name; the CSV file
+ * itself was not touched.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.supplier.model;
@@ -38,7 +44,7 @@ public class Suppliers {
     private String name;
 
     @CsvBindByName(column = "Type")
-    private String type;
+    private String category;
 
     @CsvBindByName(column = "Building")
     private String building;
@@ -89,12 +95,12 @@ public class Suppliers {
         this.name = name;
     }
 
-    public String getType() {
-        return type;
+    public String getCategory() {
+        return category;
     }
 
-    public void setType(String type) {
-        this.type = type;
+    public void setCategory(String category) {
+        this.category = category;
     }
 
     public String getBuilding() {

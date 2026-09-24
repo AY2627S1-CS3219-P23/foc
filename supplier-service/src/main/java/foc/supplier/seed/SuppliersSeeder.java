@@ -20,8 +20,12 @@
  * (e.g. "Food/Coffee"), so the Type column is now split on "/" and one
  * SupplierTypes row is saved per resulting type, per author decision.
  * Renamed same day, SupplierTypes -> SupplierCategories (class, table,
- * repository, id class), per author decision; the internal "type"
- * field/getter/setter were kept as-is.
+ * repository, id class); the internal "type" field/getter/setter were
+ * initially kept as-is, then also renamed to "category" (including
+ * Suppliers.type -> Suppliers.category) per author decision — the CSV
+ * file and its "Type" header were explicitly left untouched, since
+ * @CsvBindByName(column = "Type") binds by the CSV's actual header text,
+ * not the Java field name.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.supplier.seed;
@@ -65,10 +69,10 @@ public class SuppliersSeeder implements CommandLineRunner {
                 for (Suppliers supplier : csvToBean) {
                     Suppliers savedSupplier = suppliersRepository.save(supplier);
 
-                    for (String type : savedSupplier.getType().split("/")) {
+                    for (String category : savedSupplier.getCategory().split("/")) {
                         SupplierCategories supplierCategory = new SupplierCategories();
                         supplierCategory.setSupplier(savedSupplier);
-                        supplierCategory.setType(type.trim());
+                        supplierCategory.setCategory(category.trim());
                         supplierCategoriesRepository.save(supplierCategory);
                     }
                 }
