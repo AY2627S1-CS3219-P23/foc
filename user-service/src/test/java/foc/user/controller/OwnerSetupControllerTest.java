@@ -18,6 +18,9 @@ Author review: Ryan validated correctness and naming.
        owner; the second-call case now expects another OWNER, and the concurrency
        case uses the same email to exercise the setup lock. Test names
        follow the setupFirstOwner -> setupOwner rename.
+2026-09-25 (Claude Code, Opus 5.5), PR #132 review: concurrent setups with
+       different emails must both succeed; the concurrent-request code is
+       shared by both concurrency cases.
 */
 
 
@@ -284,20 +287,8 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
         assertThat(userRepository.countByRole(Role.OWNER)).isZero();
     }
 
-    @Test
-    @DisplayName("Concurrent setup calls with the same email should yield one 201, one 400 and one OWNER row")
-    void setupOwner_concurrentRequests() throws Exception {
-        SetupOwnerRequest first = new SetupOwnerRequest(
-            "e1234567@u.nus.edu",
-            "owner_one",
-            "ValidPassword123!"
-        );
-        SetupOwnerRequest second = new SetupOwnerRequest(
-            "e1234567@u.nus.edu",
-            "owner_two",
-            "ValidPassword123!"
-        );
-
+    // sends both requests at the same moment and returns their status codes
+    private List<Integer> sendConcurrently(SetupOwnerRequest first, SetupOwnerRequest second) throws Exception {
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
@@ -319,12 +310,46 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
             for (Future<Integer> result : results) {
                 statuses.add(result.get(30, TimeUnit.SECONDS));
             }
-
-            assertThat(statuses).containsExactlyInAnyOrder(201, 400);
-            assertThat(userRepository.countByRole(Role.OWNER)).isEqualTo(1);
+            return statuses;
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    @Test
+    @DisplayName("Concurrent setup calls with the same email should yield one 201, one 400 and one OWNER row")
+    void setupOwner_concurrentRequests() throws Exception {
+        SetupOwnerRequest first = new SetupOwnerRequest(
+            "e1234567@u.nus.edu",
+            "owner_one",
+            "ValidPassword123!"
+        );
+        SetupOwnerRequest second = new SetupOwnerRequest(
+            "e1234567@u.nus.edu",
+            "owner_two",
+            "ValidPassword123!"
+        );
+
+        assertThat(sendConcurrently(first, second)).containsExactlyInAnyOrder(201, 400);
+        assertThat(userRepository.countByRole(Role.OWNER)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Concurrent setup calls with different emails should both succeed and create two OWNER rows")
+    void setupOwner_concurrentRequestsWithDifferentEmails() throws Exception {
+        SetupOwnerRequest first = new SetupOwnerRequest(
+            "e1234567@u.nus.edu",
+            "owner_one",
+            "ValidPassword123!"
+        );
+        SetupOwnerRequest second = new SetupOwnerRequest(
+            "e2234567@u.nus.edu",
+            "owner_two",
+            "ValidPassword123!"
+        );
+
+        assertThat(sendConcurrently(first, second)).containsExactly(201, 201);
+        assertThat(userRepository.countByRole(Role.OWNER)).isEqualTo(2);
     }
 
     @Test

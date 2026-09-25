@@ -14,6 +14,8 @@ Scope: Generated owner bootstrap logic (advisory lock, owner guard,
        setupFirstOwner renamed to setupOwner.
        2026-09-25 (Claude Code, Opus 5.5): setup token expiry added, then
        removed again (deferred by Ryan); the setup token does not expire.
+       2026-09-25 (Claude Code, Opus 5.5), PR #132 review: password hashed
+       before the setup lock is taken, so the lock no longer covers BCrypt.
 Author review: Ryan validated that the endpoint logic matches the feature design.
 */
 
@@ -56,14 +58,16 @@ public class OwnerSetupService {
     public UserResponse setupOwner(SetupOwnerRequest request, String providedSetupToken) {
         ensureValidSetupToken(providedSetupToken);
 
-        userRepository.acquireSetupLock();
-
         String email = normalizeEmail(request.email());
         String username = normalizeUsername(request.username());
+        // hashed before the lock: BCrypt is slow and only depends on the request
+        String passwordHash = passwordEncoder.encode(request.password());
+
+        userRepository.acquireSetupLock();
 
         ensureUserDetailsAreUnique(email, username);
 
-        User owner = createOwner(email, username, request.password());
+        User owner = createOwner(email, username, passwordHash);
 
         User saved = userRepository.save(owner);
 
@@ -115,12 +119,12 @@ public class OwnerSetupService {
     }  
     
     
-    private User createOwner(String email, String username, String password) {
+    private User createOwner(String email, String username, String passwordHash) {
         User owner = new User();
 
         owner.setEmail(email);
         owner.setUsername(username);
-        owner.setPasswordHash(passwordEncoder.encode(password));
+        owner.setPasswordHash(passwordHash);
         owner.setRole(Role.OWNER);
         owner.setFailedLoginAttempts(0);
         owner.setLockedUntil(null);

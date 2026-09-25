@@ -37,8 +37,12 @@ Entry template:
   the multi-owner commit (21a86fb).
 - **Prompt(s):** Summary: Token expiry is to be deferred to another issue in the future. The tool removed the
   expiry code, config and tests (including the lock-wait recheck added
-  earlier the same day) and the log line with its test.
-- **Author review:** The tool ran the full `./mvnw test` suite: 39/39
+  earlier the same day) and the log line with its test. The tool
+  moved password hashing before the setup lock in `OwnerSetupService`,
+  added a concurrent different-email test (two 201s, two OWNER rows) to
+  `OwnerSetupControllerTest` with the concurrent-request code shared
+  between both concurrency tests.
+- **Author review:** The tool ran the full `./mvnw test` suite: 40/40
   passed. Ryan to review via the PR.
 
 ## 2026-09-25 — Ryan Ang

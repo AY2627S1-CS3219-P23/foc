@@ -12,7 +12,8 @@ for profile lookups that skip soft-deleted users.
 2026-09-25 (Claude Code, Opus 5.5), PR #131 review: soft-delete convention
 documented (team decision: deleted accounts stay reserved for recovery).
 2026-09-25 (Claude Code, Opus 5.5): comments on countByRole and the setup lock
-updated after owner setup stopped checking for an existing owner.
+updated after owner setup stopped checking for an existing owner; countByRole
+noted as kept temporarily for #96 (PR #132 review).
 */
 
 package foc.user.repository;
@@ -34,7 +35,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // deliberately include them, so a deleted account's email and username
     // stay reserved. Profile lookups use findByIdAndDeletedAtIsNull.
 
-    // number of users holding a role
+    // number of users holding a role. No production caller since owner setup
+    // stopped checking for an existing owner; kept temporarily for potential
+    // use in #96 (admin endpoints). Tests use it meanwhile.
     long countByRole(Role role);
 
     boolean existsByEmail(String email);
