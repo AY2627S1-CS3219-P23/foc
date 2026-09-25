@@ -25,8 +25,8 @@
   by Claude Code (Fable 5); and again for the user-service profile
   endpoints (issue #95) by Claude Code (Opus 5.5).
   2026-09-25: AI Use Summary extended for the owner-setup change
-  (setup no longer limited to one owner, then a setup token expiry and
-  a setup log line) by Claude Code (Opus 5.5).
+  (setup no longer limited to one owner; a setup token expiry and a
+  setup log line were added and then removed) by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -160,9 +160,8 @@ review fixes (guarded caller-id parse, problem+json 404, shared
 assertions), each chosen by the author; and the removal of the
 existing-owner check from user-service owner setup, decided by the
 author, with the matching test, comment, and `.env.example` updates;
-and an expiry for the owner setup token (`OWNER_SETUP_TOKEN_EXPIRES_AT`)
-plus a log line for each setup, with the expiry format, status codes,
-and logged fields chosen by the author via neutral-options Q&A.
+a setup token expiry and a setup log line were also built, then
+removed by the author, with expiry deferred to a later issue.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

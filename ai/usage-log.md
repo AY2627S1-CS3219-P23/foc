@@ -28,6 +28,21 @@ Entry template:
 ---
 ## 2026-09-25 — Ryan Ang
 - **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor
+- **Scope:** user-service owner setup (PR #132): removed the setup
+  token expiry and the setup log line, leaving only the multi-owner
+  change. `OwnerSetupService`, `OwnerSetupController`, both test
+  classes, both `application.yaml` files, `.env.example`,
+  `compose.yaml` and the user-service README returned to their state in
+  the multi-owner commit (21a86fb).
+- **Prompt(s):** Summary: Token expiry is to be deferred to another issue in the future. The tool removed the
+  expiry code, config and tests (including the lock-wait recheck added
+  earlier the same day) and the log line with its test.
+- **Author review:** The tool ran the full `./mvnw test` suite: 39/39
+  passed. Ryan to review via the PR.
+
+## 2026-09-25 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate
 - **Scope:** PR #132 review fixes in user-service owner setup:
   `OwnerSetupService` re-checks the token expiry after taking the setup

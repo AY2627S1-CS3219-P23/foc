@@ -4,8 +4,6 @@
 # Postgres has the users table, plus a fixed owner setup token for the
 # controller tests.
 # Author review: Ryan ran mvn test and confirmed the suite is green.
-# 2026-09-25 (Claude Code, Opus 5.5): far-future token expiry added for the
-# setup token expiry.
 
 spring:
   application:
@@ -17,4 +15,3 @@ spring:
 owner:
   setup:
     token: test-owner-setup-token
-    token-expires-at: 2999-01-01T00:00:00Z
