@@ -26,6 +26,86 @@ Entry template:
 ```
 
 ---
+## 2026-09-25 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor
+- **Scope:** user-service owner setup (PR #132): removed the setup
+  token expiry and the setup log line, leaving only the multi-owner
+  change. `OwnerSetupService`, `OwnerSetupController`, both test
+  classes, both `application.yaml` files, `.env.example`,
+  `compose.yaml` and the user-service README returned to their state in
+  the multi-owner commit (21a86fb).
+- **Prompt(s):** Summary: Token expiry is to be deferred to another issue in the future. The tool removed the
+  expiry code, config and tests (including the lock-wait recheck added
+  earlier the same day) and the log line with its test. The tool
+  moved password hashing before the setup lock in `OwnerSetupService`,
+  added a concurrent different-email test (two 201s, two OWNER rows) to
+  `OwnerSetupControllerTest` with the concurrent-request code shared
+  between both concurrency tests.
+- **Author review:** The tool ran the full `./mvnw test` suite: 40/40
+  passed. Ryan to review via the PR.
+
+## 2026-09-25 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** PR #132 review fixes in user-service owner setup:
+  `OwnerSetupService` re-checks the token expiry after taking the setup
+  lock; `OwnerSetupServiceTest` and `OwnerSetupControllerTest` gain a
+  lock-wait expiry case and a log-line assertion.
+- **Prompt(s):** Summary: Ryan asked the tool to review the PR #132
+  comments. The tool explained each one: the expiry could be passed
+  while a request waits on the lock; the removed zero-owner guard
+  conflicts with the text of issue #97 (a requirements update for the
+  team, not code); the setup log line had no test; and LeongWZ's
+  question about what happens after the expiry. Ryan chose to fix the
+  first and third. The tool implemented them.
+- **Author review:** The tool ran the full `./mvnw test` suite: 46/46
+  passed. Ryan to review via the PR.
+
+## 2026-09-25 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** user-service owner setup (issue #97): setup token expiry
+  and a setup log line. `OwnerSetupService` reads
+  `OWNER_SETUP_TOKEN_EXPIRES_AT`; `OwnerSetupController` logs each
+  successful setup. Tests added to `OwnerSetupServiceTest` and
+  `OwnerSetupControllerTest`; the variable added to `application.yaml`,
+  the test `application.yaml`, `.env.example` and `compose.yaml`; the
+  user-service README updated.
+- **Prompt(s):** Summary: Asked to add expiry to tokens and remove 1 owner restriction. Token still
+  set by the operator in `.env`; expiry only (no single use), given as
+  an ISO-8601 timestamp; setup disabled (503) when no expiry is set; an
+  expired token gets 403; and a log line on success with the new
+  owner's id, email and caller IP, never the token. Asked to add log lines for creating owners for audit.
+- **Author review:** The tool ran the full `./mvnw test` suite: 44/44
+  passed. Ryan reviewed before PR.
+
+## 2026-09-25 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor
+- **Scope:** user-service owner setup (`POST /auth/setup-owner`, issue
+  #97): removed the existing-owner check from `OwnerSetupService` and
+  deleted the now-unused `OwnerAlreadySetException`; updated
+  `OwnerSetupServiceTest` and `OwnerSetupControllerTest`; updated
+  comments in `UserRepository`, `application.yaml`, `.env.example` and
+  the user-service README.
+- **Prompt(s):** Summary: Ryan asked whether the one-owner rule could be
+  dropped, so an owner who loses both their password and email access
+  doesn't leave the system without a recoverable owner. The tool listed
+  the facts only: the backlog items and design-doc sections the change
+  conflicts with (F6.2.3, design doc §6, the course's bootstrap guide),
+  what it means for the setup token, and the questions left for the
+  team. It made no recommendation. Ryan then decided to drop the
+  "owner already exists" (409) check first. The tool removed it, kept
+  the advisory lock (it still serialises the email/username uniqueness
+  checks), changed the second-call test to expect another OWNER, and
+  changed the concurrency test to use the same email (one 201, one
+  400). Ryan then asked to rename `setupFirstOwner` to `setupOwner`; the
+  tool renamed the service and controller methods and the test method
+  prefixes.
+- **Author review:** The tool ran the full `./mvnw test` suite: 39/39
+  passed. Reviewed by Ryan before PR.
+
 ## 2026-09-23 — Ko-Khan
 - **Tool:** Claude Code (Sonnet 5)
 - **Mode:** debug

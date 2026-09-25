@@ -4,6 +4,8 @@ Tool: Claude (Sonnet 5), date: 2026-09-22
 Scope: Generated POST /auth/setup-owner endpoint.
        2026-09-23 (Claude, Sonnet 4.6): X-Setup-Token header added for the
        setup-token gate.
+       2026-09-25 (Claude Code, Opus 5.5): setupFirstOwner renamed to
+       setupOwner, since setup is no longer limited to the first owner.
 Author review: Ryan validated that the endpoint logic matches the feature design.
 */
 
@@ -34,10 +36,10 @@ public class OwnerSetupController {
     }
 
     @PostMapping(value = "/setup-owner", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<UserResponse> setupFirstOwner(
+    public ResponseEntity<UserResponse> setupOwner(
             @Valid @RequestBody SetupOwnerRequest request,
             @RequestHeader(value = "X-Setup-Token", required = false, defaultValue = "") String setupToken) {
-        UserResponse response = ownerSetupService.setupFirstOwner(request, setupToken);
+        UserResponse response = ownerSetupService.setupOwner(request, setupToken);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

@@ -24,6 +24,9 @@
   user-db infrastructure and user-service JPA schema (issues #85/#86)
   by Claude Code (Fable 5); and again for the user-service profile
   endpoints (issue #95) by Claude Code (Opus 5.5).
+  2026-09-25: AI Use Summary extended for the owner-setup change
+  (setup no longer limited to one owner; a setup token expiry and a
+  setup log line were added and then removed) by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -154,7 +157,11 @@ response fields, not-found behaviour, and caller-identity choices made
 by the author and recorded in `ai/usage-log.md`, plus the PR #131
 review fixes (guarded caller-id parse, problem+json 404, shared
 `UserResponse` mapping, shared Testcontainers base, and added test
-assertions), each chosen by the author.
+assertions), each chosen by the author; and the removal of the
+existing-owner check from user-service owner setup, decided by the
+author, with the matching test, comment, and `.env.example` updates;
+a setup token expiry and a setup log line were also built, then
+removed by the author, with expiry deferred to a later issue.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
