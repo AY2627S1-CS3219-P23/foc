@@ -9,12 +9,12 @@ Scope: Generated owner bootstrap logic (advisory lock, owner guard,
        response DTO keeps its String role (unchanged JSON shape).
        2026-09-25 (Claude Code, Opus 5.5), PR #131 review: private
        toUserResponse replaced by the shared UserResponse.from.
-       2026-09-25 (Claude Code, Opus 5.5): existing-owner check (409)
-       removed per Ryan's decision; any caller with the setup token can
-       now create an OWNER. setupFirstOwner renamed to setupOwner.
+       2026-09-25 (Claude Code, Opus 5.5): existing-owner check (409);
+       any caller with the setup token can now create an OWNER. 
+       setupFirstOwner renamed to setupOwner.
        2026-09-25 (Claude Code, Opus 5.5): setup token expiry added
        (OWNER_SETUP_TOKEN_EXPIRES_AT, ISO-8601; unset -> 503, expired ->
-       403; choices made by Ryan).
+       403)
 Author review: Ryan validated that the endpoint logic matches the feature design.
 */
 
