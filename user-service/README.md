@@ -4,6 +4,10 @@
   Scope: service README written while scaffolding for issue #84.
   2026-09-23, Claude Code (Opus 5.5): status and test instructions updated
   for the first-owner bootstrap (issue #97, PR #126 review).
+  2026-09-23, Claude Code (Opus 5.5): status updated for the profile
+  endpoints (issue #95).
+  2026-09-25, Claude Code (Opus 5.5): stale "no DB wiring" sentence
+  replaced (PR #131 review).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -15,11 +19,12 @@ Backlog: issues #84–#98.
 
 Spring Boot 4 · Java 21 · Maven.
 
-Currently: actuator health endpoint and `POST /auth/setup-owner` (first
-OWNER bootstrap, #97), backed by Postgres via Spring Data JPA. There is
-no production datasource or compose/DB wiring yet (#85/#86), so
-`spring-boot:run` fails at startup until that lands; tests supply their
-own database.
+Currently: actuator health endpoint, `POST /auth/setup-owner` (first
+OWNER bootstrap, #97), and `GET /users/me` / `GET /users/{id}` (own and
+public profile, #95), backed by Postgres via Spring Data JPA. The root
+`compose.yaml` runs it with its own `user-db` (host port
+`${USER_SERVICE_PORT:-8087}`); `spring-boot:run` needs that database
+reachable (`USER_DB_*` env vars). Tests supply their own database.
 
 ## Run
 
