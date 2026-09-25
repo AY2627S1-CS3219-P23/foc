@@ -7,6 +7,8 @@ Scope: Generated owner bootstrap logic (advisory lock, owner guard,
        2026-09-23 (Claude Code, Fable 5), issue #86: role handled via the
        Role enum following the entity's String-to-enum conversion; the
        response DTO keeps its String role (unchanged JSON shape).
+       2026-09-25 (Claude Code, Opus 5.5), PR #131 review: private
+       toUserResponse replaced by the shared UserResponse.from.
 Author review: Ryan validated that the endpoint logic matches the feature design.
 */
 
@@ -63,7 +65,7 @@ public class OwnerSetupService {
 
         User saved = userRepository.save(owner);
 
-        return toUserResponse(saved);
+        return UserResponse.from(saved);
     }
 
     // guards against an unauthenticated caller. fails if the deploy forgot to set
@@ -129,14 +131,5 @@ public class OwnerSetupService {
         owner.setDeletedAt(null);
 
         return owner;
-    }
-    private UserResponse toUserResponse(User user) {
-        return new UserResponse(
-            user.getId(),
-            user.getEmail(),
-            user.getUsername(),
-            user.getRole().name(),
-            user.getCreatedAt()
-        );
     }
 }

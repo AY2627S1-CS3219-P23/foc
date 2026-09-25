@@ -5,6 +5,8 @@ Scope: Generated unit tests for ProfileService (issue #95) covering own and
        public profile lookups and the not-found path. Tests use Mockito to
        isolate the service from the database.
 Author review: Ryan reviewed and ensured tests run successfully.
+2026-09-25 (Claude Code, Opus 5.5), PR #131 review: own-profile test asserts
+       the full response, including id and createdAt.
 */
 
 package foc.user.service;
@@ -20,6 +22,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import foc.user.dto.PublicProfileResponse;
 import foc.user.dto.UserResponse;
@@ -42,15 +45,15 @@ class ProfileServiceTest {
     // own profile
 
     @Test
-    @DisplayName("Should return username, email and role for own profile")
+    @DisplayName("Should return id, email, username, role and joined date for own profile")
     void getOwnProfile_returnsAccountDetails() {
+        ReflectionTestUtils.setField(user, "id", 1L);
         when(userRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(user));
 
         UserResponse response = profileService.getOwnProfile(1L);
 
-        assertThat(response.username()).isEqualTo("student_alex");
-        assertThat(response.email()).isEqualTo("e1234567@u.nus.edu");
-        assertThat(response.role()).isEqualTo("USER");
+        assertThat(response).isEqualTo(new UserResponse(
+            1L, "e1234567@u.nus.edu", "student_alex", "USER", user.getCreatedAt()));
     }
 
     @Test

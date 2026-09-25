@@ -151,7 +151,10 @@ the user-service profile endpoints (issue #95) — `GET /users/me` and
 `GET /users/{id}`, their service, DTO, not-found exception, repository
 query, and unit and Testcontainers integration tests, with the paths,
 response fields, not-found behaviour, and caller-identity choices made
-by the author and recorded in `ai/usage-log.md`.
+by the author and recorded in `ai/usage-log.md`, plus the PR #131
+review fixes (guarded caller-id parse, problem+json 404, shared
+`UserResponse` mapping, shared Testcontainers base, and added test
+assertions), each chosen by the author.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

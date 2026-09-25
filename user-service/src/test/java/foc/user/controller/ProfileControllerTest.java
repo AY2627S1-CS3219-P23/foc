@@ -6,6 +6,9 @@ Scope: Generated controller tests for GET /users/me and GET /users/{id}
        OwnerSetupControllerTest. The caller is mocked with the user id as
        the principal name until JWT auth (#90/#91) lands.
 Author review: Ryan reviewed and ensured tests run successfully.
+2026-09-25 (Claude Code, Opus 5.5), PR #131 review: container moved to the
+       shared PostgresTestContainer base; createdAt, problem+json detail and
+       non-numeric principal (401) assertions added; 403 marked provisional.
 */
 
 package foc.user.controller;
@@ -17,29 +20,21 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import foc.user.PostgresTestContainer;
 import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.repository.UserRepository;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Testcontainers
-class ProfileControllerTest {
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17");
+class ProfileControllerTest extends PostgresTestContainer {
 
     @Autowired
     private MockMvc mockMvc;
@@ -73,14 +68,24 @@ class ProfileControllerTest {
             .andExpect(jsonPath("$.username").value("student_alex"))
             .andExpect(jsonPath("$.email").value("e1234567@u.nus.edu"))
             .andExpect(jsonPath("$.role").value("USER"))
+            .andExpect(jsonPath("$.createdAt").exists())
             .andExpect(jsonPath("$.passwordHash").doesNotExist());
     }
 
     @Test
     @DisplayName("GET /users/me should be rejected without credentials")
     void getOwnProfile_unauthenticated() throws Exception {
+        // provisional: 403 is Spring Security's default with no entry point
+        // configured; expected to become 401 once JWT auth (#91) adds one
         mockMvc.perform(get("/users/me"))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("GET /users/me should return 401 when the principal is not a user id")
+    void getOwnProfile_nonNumericPrincipal() throws Exception {
+        mockMvc.perform(get("/users/me").with(user("not-a-number")))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -110,7 +115,8 @@ class ProfileControllerTest {
     @DisplayName("GET /users/{id} should return 404 for an unknown user")
     void getPublicProfile_unknownUser() throws Exception {
         mockMvc.perform(get("/users/{id}", alex.getId() + 1000).with(user("999")))
-            .andExpect(status().isNotFound());
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.detail").value("User not found"));
     }
 
     @Test
@@ -119,6 +125,7 @@ class ProfileControllerTest {
         User deleted = saveDeletedUser();
 
         mockMvc.perform(get("/users/{id}", deleted.getId()).with(user("999")))
-            .andExpect(status().isNotFound());
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.detail").value("User not found"));
     }
 }

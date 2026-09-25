@@ -6,22 +6,21 @@
  * round-trips), following the merged Testcontainers pattern (PR #126)
  * so mappings are exercised against real PostgreSQL, not an embedded
  * substitute.
+ * 2026-09-25, Claude Code (Opus 5.5): container moved to the shared
+ * PostgresTestContainer base (PR #131 review).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.user.entity;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-import jakarta.persistence.EntityManager;
 import java.time.Instant;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
+
+import foc.user.PostgresTestContainer;
+import jakarta.persistence.EntityManager;
 
 /**
  * Persists and reloads one row per entity so a mapping mistake (wrong
@@ -29,14 +28,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * fails here rather than in the feature issues (#87+).
  */
 @DataJpaTest
-@Testcontainers
-class EntityMappingTest {
+class EntityMappingTest extends PostgresTestContainer {
 
     private static final Instant EXPIRY = Instant.parse("2026-09-24T12:00:00Z");
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17");
 
     @Autowired
     private EntityManager entityManager;

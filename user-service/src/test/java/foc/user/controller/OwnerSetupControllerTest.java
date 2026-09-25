@@ -12,12 +12,12 @@ Author review: Ryan validated correctness and naming.
        and an unauthenticated /actuator/health (PR #126 review).
 2026-09-23 (Claude Code, Fable 5), issue #86: countByRole calls switched to the
        Role enum following the entity's String-to-enum conversion.
+2026-09-25 (Claude Code, Opus 5.5): container moved to the shared
+       PostgresTestContainer base (PR #131 review).
 */
 
 
 package foc.user.controller;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,12 +28,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -41,27 +41,19 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
-
+import foc.user.PostgresTestContainer;
 import foc.user.dto.SetupOwnerRequest;
 import foc.user.entity.Role;
 import foc.user.repository.UserRepository;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Testcontainers
-class OwnerSetupControllerTest {
+class OwnerSetupControllerTest extends PostgresTestContainer {
 
     private static final String VALID_SETUP_TOKEN = "test-owner-setup-token";
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17");
 
     @Autowired
     private MockMvc mockMvc;

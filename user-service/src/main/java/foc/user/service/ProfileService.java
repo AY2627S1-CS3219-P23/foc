@@ -5,6 +5,8 @@ Scope: Generated profile lookups for issue #95 (own profile and public
        profile). Unknown and soft-deleted users both raise
        UserNotFoundException.
 Author review: Ryan reviewed to ensure that it follows team's decisions.
+2026-09-25 (Claude Code, Opus 5.5), PR #131 review: own profile uses the
+shared UserResponse.from mapping.
 */
 
 package foc.user.service;
@@ -28,15 +30,7 @@ public class ProfileService {
 
     // own profile: username, email, role (credits are fetched from credit-service by the web app)
     public UserResponse getOwnProfile(Long userId) {
-        User user = findActiveUser(userId);
-
-        return new UserResponse(
-            user.getId(),
-            user.getEmail(),
-            user.getUsername(),
-            user.getRole().name(),
-            user.getCreatedAt()
-        );
+        return UserResponse.from(findActiveUser(userId));
     }
 
     // another user's profile: username only
