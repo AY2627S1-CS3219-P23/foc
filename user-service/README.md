@@ -9,7 +9,7 @@
   2026-09-25, Claude Code (Opus 5.5): stale "no DB wiring" sentence
   replaced (PR #131 review).
   2026-09-25, Claude Code (Opus 5.5): setup-owner no longer limited to
-  the first owner.
+  the first owner; setup token expiry added.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -22,7 +22,8 @@ Backlog: issues #84–#98.
 Spring Boot 4 · Java 21 · Maven.
 
 Currently: actuator health endpoint, `POST /auth/setup-owner` (creates an
-OWNER for any caller with the setup token, #97), and `GET /users/me` /
+OWNER for any caller with the setup token until
+`OWNER_SETUP_TOKEN_EXPIRES_AT`, #97), and `GET /users/me` /
 `GET /users/{id}` (own and public profile, #95), backed by Postgres via
 Spring Data JPA. The root `compose.yaml` runs it with its own `user-db` (host port
 `${USER_SERVICE_PORT:-8087}`); `spring-boot:run` needs that database

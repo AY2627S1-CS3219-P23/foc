@@ -18,11 +18,15 @@ Author review: Ryan validated correctness and naming.
        owner; the second-call case now expects another OWNER, and the concurrency
        case uses the same email to exercise the setup lock. Test names
        follow the setupFirstOwner -> setupOwner rename.
+2026-09-25 (Claude Code, Opus 5.5): expired-token (403) and unset-expiry
+       (503) cases added.
 */
 
 
 package foc.user.controller;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -33,6 +37,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,6 +45,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -50,6 +56,7 @@ import foc.user.PostgresTestContainer;
 import foc.user.dto.SetupOwnerRequest;
 import foc.user.entity.Role;
 import foc.user.repository.UserRepository;
+import foc.user.service.OwnerSetupService;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -65,11 +72,23 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private OwnerSetupService ownerSetupService;
+
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
+
+    // expiry from the test application.yaml; restored after tests that change it
+    private Object configuredExpiry;
 
     @BeforeEach
     void cleanDatabase() {
         userRepository.deleteAll();
+        configuredExpiry = ReflectionTestUtils.getField(ownerSetupService, "tokenExpiresAt");
+    }
+
+    @AfterEach
+    void restoreTokenExpiry() {
+        ReflectionTestUtils.setField(ownerSetupService, "tokenExpiresAt", configuredExpiry);
     }
 
     @Test
@@ -120,6 +139,47 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
             .andExpect(jsonPath("$.role").value("OWNER"));
 
         assertThat(userRepository.countByRole(Role.OWNER)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("Should reject an expired setup token with 403 Forbidden")
+    void setupOwner_expiredTokenFailsWith403() throws Exception {
+        ReflectionTestUtils.setField(ownerSetupService, "tokenExpiresAt",
+            Instant.now().minus(1, ChronoUnit.MINUTES));
+
+        SetupOwnerRequest request = new SetupOwnerRequest(
+            "e1234567@u.nus.edu",
+            "owner_user",
+            "ValidPassword123!"
+        );
+
+        mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", VALID_SETUP_TOKEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isForbidden());
+
+        assertThat(userRepository.countByRole(Role.OWNER)).isZero();
+    }
+
+    @Test
+    @DisplayName("Should disable setup with 503 when no token expiry is configured")
+    void setupOwner_noExpiryConfiguredFailsWith503() throws Exception {
+        ReflectionTestUtils.setField(ownerSetupService, "tokenExpiresAt", null);
+
+        SetupOwnerRequest request = new SetupOwnerRequest(
+            "e1234567@u.nus.edu",
+            "owner_user",
+            "ValidPassword123!"
+        );
+
+        mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", VALID_SETUP_TOKEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isServiceUnavailable());
+
+        assertThat(userRepository.countByRole(Role.OWNER)).isZero();
     }
 
     @Test

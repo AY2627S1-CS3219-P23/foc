@@ -28,6 +28,24 @@ Entry template:
 ---
 ## 2026-09-25 — Ryan Ang
 - **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** user-service owner setup (issue #97): setup token expiry
+  and a setup log line. `OwnerSetupService` reads
+  `OWNER_SETUP_TOKEN_EXPIRES_AT`; `OwnerSetupController` logs each
+  successful setup. Tests added to `OwnerSetupServiceTest` and
+  `OwnerSetupControllerTest`; the variable added to `application.yaml`,
+  the test `application.yaml`, `.env.example` and `compose.yaml`; the
+  user-service README updated.
+- **Prompt(s):** Summary: Asked to add expiry to tokens and remove 1 owner restriction. Token still
+  set by the operator in `.env`; expiry only (no single use), given as
+  an ISO-8601 timestamp; setup disabled (503) when no expiry is set; an
+  expired token gets 403; and a log line on success with the new
+  owner's id, email and caller IP, never the token. Asked to add log lines for creating owners for audit.
+- **Author review:** The tool ran the full `./mvnw test` suite: 44/44
+  passed. Ryan reviewed before PR.
+
+## 2026-09-25 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor
 - **Scope:** user-service owner setup (`POST /auth/setup-owner`, issue
   #97): removed the existing-owner check from `OwnerSetupService` and

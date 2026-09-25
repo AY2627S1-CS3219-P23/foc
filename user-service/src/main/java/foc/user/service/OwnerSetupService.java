@@ -12,6 +12,9 @@ Scope: Generated owner bootstrap logic (advisory lock, owner guard,
        2026-09-25 (Claude Code, Opus 5.5): existing-owner check (409)
        removed per Ryan's decision; any caller with the setup token can
        now create an OWNER. setupFirstOwner renamed to setupOwner.
+       2026-09-25 (Claude Code, Opus 5.5): setup token expiry added
+       (OWNER_SETUP_TOKEN_EXPIRES_AT, ISO-8601; unset -> 503, expired ->
+       403; choices made by Ryan).
 Author review: Ryan validated that the endpoint logic matches the feature design.
 */
 
@@ -19,6 +22,7 @@ package foc.user.service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -39,17 +43,24 @@ public class OwnerSetupService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final String expectedSetupToken;
+    // null when OWNER_SETUP_TOKEN_EXPIRES_AT is unset; a malformed value
+    // fails startup rather than silently disabling or opening setup
+    private final Instant tokenExpiresAt;
 
     public OwnerSetupService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
-            @Value("${owner.setup.token:}") String expectedSetupToken) {
+            @Value("${owner.setup.token:}") String expectedSetupToken,
+            @Value("${owner.setup.token-expires-at:}") String tokenExpiresAt) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.expectedSetupToken = expectedSetupToken;
+        this.tokenExpiresAt = (tokenExpiresAt == null || tokenExpiresAt.isBlank())
+            ? null
+            : Instant.parse(tokenExpiresAt.trim());
     }
 
-    // creates an OWNER account; repeatable for as long as the setup token is valid
+    // creates an OWNER account; repeatable until the setup token expires
     @Transactional
     public UserResponse setupOwner(SetupOwnerRequest request, String providedSetupToken) {
         ensureValidSetupToken(providedSetupToken);
@@ -69,7 +80,7 @@ public class OwnerSetupService {
     }
 
     // guards against an unauthenticated caller. fails if the deploy forgot to set
-    // OWNER_SETUP_TOKEN.
+    // OWNER_SETUP_TOKEN or OWNER_SETUP_TOKEN_EXPIRES_AT.
     private void ensureValidSetupToken(String providedToken) {
         if (expectedSetupToken == null || expectedSetupToken.isBlank()) {
             throw new ResponseStatusException(
@@ -78,11 +89,24 @@ public class OwnerSetupService {
             );
         }
 
+        if (tokenExpiresAt == null) {
+            throw new ResponseStatusException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Owner setup is disabled: OWNER_SETUP_TOKEN_EXPIRES_AT is not configured"
+            );
+        }
+
         byte[] expected = expectedSetupToken.getBytes(StandardCharsets.UTF_8);
         byte[] provided = (providedToken == null ? "" : providedToken).getBytes(StandardCharsets.UTF_8);
 
         if (!MessageDigest.isEqual(expected, provided)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid or missing setup token");
+        }
+
+        // checked after the token match, so only a caller holding the token
+        // learns that it has expired
+        if (!Instant.now().isBefore(tokenExpiresAt)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Setup token has expired");
         }
     }
 

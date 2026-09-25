@@ -29,7 +29,9 @@
 # 8087/5435 and the postgres:17 image chosen by Leong Wei Zhi via
 # options Q&A; 8085/5433 stay reserved for the notification re-add,
 # issues #61-#69). OWNER_SETUP_TOKEN passed through for the merged
-# owner-bootstrap endpoint (issue #97).
+# owner-bootstrap endpoint (issue #97). OWNER_SETUP_TOKEN_EXPIRES_AT
+# passed through for the setup token expiry (2026-09-25, Ryan Ang,
+# Claude Code (Opus 5.5)).
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -196,6 +198,9 @@ services:
       # Shared secret gating POST /auth/setup-owner (issue #97); the
       # endpoint answers 503 while it is unset.
       OWNER_SETUP_TOKEN: ${OWNER_SETUP_TOKEN:-}
+      # ISO-8601 instant after which the setup token gets 403; setup
+      # answers 503 while it is unset.
+      OWNER_SETUP_TOKEN_EXPIRES_AT: ${OWNER_SETUP_TOKEN_EXPIRES_AT:-}
     depends_on:
       user-db:
         condition: service_healthy
