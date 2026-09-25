@@ -9,6 +9,9 @@ Author review: Ryan validated test assertions to match intended behaviour.
        wrong token, token not configured).
 2026-09-23 (Claude Code, Fable 5), issue #86: role literals switched to the
        Role enum following the entity's String-to-enum conversion.
+2026-09-25 (Claude Code, Opus 5.5): existing-owner guard test replaced by one
+       asserting setup never checks for existing owners. Test names
+       follow the setupFirstOwner -> setupOwner rename.
 */
 
 package foc.user.service;
@@ -25,6 +28,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -37,7 +41,6 @@ import foc.user.dto.SetupOwnerRequest;
 import foc.user.dto.UserResponse;
 import foc.user.entity.Role;
 import foc.user.entity.User;
-import foc.user.exception.OwnerAlreadySetException;
 import foc.user.repository.UserRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -57,7 +60,6 @@ class OwnerSetupServiceTest {
     @BeforeEach
     void setUpDefaultStubs() {
         ReflectionTestUtils.setField(ownerSetupService, "expectedSetupToken", VALID_SETUP_TOKEN);
-        lenient().when(userRepository.countByRole(Role.OWNER)).thenReturn(0L);
         lenient().when(userRepository.existsByEmail(anyString())).thenReturn(false);
         lenient().when(userRepository.existsByUsername(anyString())).thenReturn(false);
         lenient().when(passwordEncoder.encode(anyString())).thenReturn("hashed_password");
@@ -67,12 +69,12 @@ class OwnerSetupServiceTest {
 
     @Test
     @DisplayName("Should throw 403 Forbidden when setup token is missing")
-    void setupFirstOwner_throwsForbiddenWhenTokenMissing() {
+    void setupOwner_throwsForbiddenWhenTokenMissing() {
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
         );
 
-        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request, null))
+        assertThatThrownBy(() -> ownerSetupService.setupOwner(request, null))
             .isInstanceOf(ResponseStatusException.class)
             .satisfies(ex ->
                 assertThat(((ResponseStatusException) ex).getStatusCode())
@@ -82,12 +84,12 @@ class OwnerSetupServiceTest {
 
     @Test
     @DisplayName("Should throw 403 Forbidden when setup token is wrong")
-    void setupFirstOwner_throwsForbiddenWhenTokenWrong() {
+    void setupOwner_throwsForbiddenWhenTokenWrong() {
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
         );
 
-        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request, "wrong-token"))
+        assertThatThrownBy(() -> ownerSetupService.setupOwner(request, "wrong-token"))
             .isInstanceOf(ResponseStatusException.class)
             .satisfies(ex ->
                 assertThat(((ResponseStatusException) ex).getStatusCode())
@@ -97,14 +99,14 @@ class OwnerSetupServiceTest {
 
     @Test
     @DisplayName("Should throw 503 Service Unavailable when OWNER_SETUP_TOKEN is not configured")
-    void setupFirstOwner_throwsServiceUnavailableWhenTokenNotConfigured() {
+    void setupOwner_throwsServiceUnavailableWhenTokenNotConfigured() {
         ReflectionTestUtils.setField(ownerSetupService, "expectedSetupToken", "");
 
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
         );
 
-        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request, VALID_SETUP_TOKEN))
+        assertThatThrownBy(() -> ownerSetupService.setupOwner(request, VALID_SETUP_TOKEN))
             .isInstanceOf(ResponseStatusException.class)
             .satisfies(ex ->
                 assertThat(((ResponseStatusException) ex).getStatusCode())
@@ -112,33 +114,36 @@ class OwnerSetupServiceTest {
             );
     }
 
-    // owner guard
+    // existing owners
 
     @Test
-    @DisplayName("Should throw OwnerAlreadySetException when an owner already exists")
-    void setupFirstOwner_throwsWhenOwnerAlreadyExists() {
-        when(userRepository.countByRole(Role.OWNER)).thenReturn(1L);
+    @DisplayName("Should create an OWNER without checking for existing owners")
+    void setupOwner_doesNotCheckExistingOwners() {
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
         );
 
-        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request, VALID_SETUP_TOKEN))
-            .isInstanceOf(OwnerAlreadySetException.class);
+        UserResponse response = ownerSetupService.setupOwner(request, VALID_SETUP_TOKEN);
+
+        assertThat(response.role()).isEqualTo("OWNER");
+        verify(userRepository).save(any(User.class));
+        verify(userRepository, never()).countByRole(any());
     }
 
     // checks uniqueness of details
 
     @Test
     @DisplayName("Should throw 400 when email is already registered")
-    void setupFirstOwner_throwsBadRequestOnDuplicateEmail() {
+    void setupOwner_throwsBadRequestOnDuplicateEmail() {
         when(userRepository.existsByEmail("e1234567@u.nus.edu")).thenReturn(true);
 
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
         );
 
-        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request, VALID_SETUP_TOKEN))
+        assertThatThrownBy(() -> ownerSetupService.setupOwner(request, VALID_SETUP_TOKEN))
             .isInstanceOf(ResponseStatusException.class)
             .satisfies(ex ->
                 assertThat(((ResponseStatusException) ex).getStatusCode())
@@ -148,14 +153,14 @@ class OwnerSetupServiceTest {
 
     @Test
     @DisplayName("Should throw 400 when username is already taken")
-    void setupFirstOwner_throwsBadRequestOnDuplicateUsername() {
+    void setupOwner_throwsBadRequestOnDuplicateUsername() {
         when(userRepository.existsByUsername("owner_user")).thenReturn(true);
 
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
         );
 
-        assertThatThrownBy(() -> ownerSetupService.setupFirstOwner(request, VALID_SETUP_TOKEN))
+        assertThatThrownBy(() -> ownerSetupService.setupOwner(request, VALID_SETUP_TOKEN))
             .isInstanceOf(ResponseStatusException.class)
             .satisfies(ex ->
                 assertThat(((ResponseStatusException) ex).getStatusCode())
@@ -167,7 +172,7 @@ class OwnerSetupServiceTest {
 
     @Test
     @DisplayName("Should normalise email to lowercase before saving")
-    void setupFirstOwner_normalisesEmailToLowercase() {
+    void setupOwner_normalisesEmailToLowercase() {
         User saved = new User("e1234567@u.nus.edu", "owner_user", "hashed_password", Role.OWNER);
         when(userRepository.save(any(User.class))).thenReturn(saved);
 
@@ -176,7 +181,7 @@ class OwnerSetupServiceTest {
             "  E1234567@U.NUS.EDU  ", "owner_user", "ValidPassword123!"
         );
 
-        ownerSetupService.setupFirstOwner(request, VALID_SETUP_TOKEN);
+        ownerSetupService.setupOwner(request, VALID_SETUP_TOKEN);
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
@@ -185,7 +190,7 @@ class OwnerSetupServiceTest {
 
     @Test
     @DisplayName("Should trim leading and trailing whitespace from username before saving")
-    void setupFirstOwner_trimsUsernameWhitespace() {
+    void setupOwner_trimsUsernameWhitespace() {
         User saved = new User("e1234567@u.nus.edu", "owner_user", "hashed_password", Role.OWNER);
         when(userRepository.save(any(User.class))).thenReturn(saved);
 
@@ -193,7 +198,7 @@ class OwnerSetupServiceTest {
             "e1234567@u.nus.edu", "  owner_user  ", "ValidPassword123!"
         );
 
-        ownerSetupService.setupFirstOwner(request, VALID_SETUP_TOKEN);
+        ownerSetupService.setupOwner(request, VALID_SETUP_TOKEN);
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
@@ -204,7 +209,7 @@ class OwnerSetupServiceTest {
 
     @Test
     @DisplayName("Should save user with OWNER role and a bcrypt-hashed password, and return a response with no password field")
-    void setupFirstOwner_savesOwnerAndReturnsResponse() {
+    void setupOwner_savesOwnerAndReturnsResponse() {
         when(passwordEncoder.encode("ValidPassword123!")).thenReturn("bcrypt_hash");
         User saved = new User("e1234567@u.nus.edu", "owner_user", "bcrypt_hash", Role.OWNER);
         when(userRepository.save(any(User.class))).thenReturn(saved);
@@ -213,7 +218,7 @@ class OwnerSetupServiceTest {
             "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
         );
 
-        UserResponse response = ownerSetupService.setupFirstOwner(request, VALID_SETUP_TOKEN);
+        UserResponse response = ownerSetupService.setupOwner(request, VALID_SETUP_TOKEN);
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());

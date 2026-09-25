@@ -9,6 +9,8 @@
 # service-owned user-db and JPA schema-from-entities, following the
 # supplier/notification pattern. Tests are unaffected: Testcontainers
 # @ServiceConnection overrides the datasource there.
+# 2026-09-25 (Ryan Ang, Claude Code (Opus 5.5)): owner.setup.token comment
+# updated; setup no longer stops after the first owner.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -33,5 +35,6 @@ owner:
   setup:
     # Shared secret required to call POST /auth/setup-owner. Must be set via
     # the OWNER_SETUP_TOKEN env var before first deploy. Setup is disabled
-    # (503) while it is unset, so the endpoint can't be reached.
+    # (503) while it is unset, so the endpoint can't be reached. Each call
+    # with the token creates another OWNER.
     token: ${OWNER_SETUP_TOKEN:}

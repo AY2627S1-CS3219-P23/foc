@@ -14,6 +14,10 @@ Author review: Ryan validated correctness and naming.
        Role enum following the entity's String-to-enum conversion.
 2026-09-25 (Claude Code, Opus 5.5): container moved to the shared
        PostgresTestContainer base (PR #131 review).
+2026-09-25 (Claude Code, Opus 5.5): owner setup no longer rejects a second
+       owner; the second-call case now expects another OWNER, and the concurrency
+       case uses the same email to exercise the setup lock. Test names
+       follow the setupFirstOwner -> setupOwner rename.
 */
 
 
@@ -69,8 +73,8 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("Should successfully bootstrap initial OWNER when 0 owners exist")
-    void setupFirstOwner_success() throws Exception {
+    @DisplayName("Should successfully create an OWNER with a valid setup token")
+    void setupOwner_success() throws Exception {
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu",
             "root_owner",
@@ -90,8 +94,8 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("Should reject second setup call with 409 Conflict")
-    void setupFirstOwner_secondCallFailsWith409() throws Exception {
+    @DisplayName("Should allow a second setup call to create another OWNER")
+    void setupOwner_secondCallCreatesAnotherOwner() throws Exception {
         SetupOwnerRequest first = new SetupOwnerRequest(
             "e1234567@u.nus.edu",
             "owner_one",
@@ -103,7 +107,6 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
                 .content(objectMapper.writeValueAsString(first)))
             .andExpect(status().isCreated());
 
-        // Attempting to bootstrap a second time must fail with 409
         SetupOwnerRequest second = new SetupOwnerRequest(
             "e2234567@u.nus.edu",
             "owner_two",
@@ -113,12 +116,15 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
                 .header("X-Setup-Token", VALID_SETUP_TOKEN)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(second)))
-            .andExpect(status().isConflict());
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.role").value("OWNER"));
+
+        assertThat(userRepository.countByRole(Role.OWNER)).isEqualTo(2);
     }
 
     @Test
     @DisplayName("Should reject non-NUS email domain with 400 Bad Request")
-    void setupFirstOwner_invalidEmailDomain() throws Exception {
+    void setupOwner_invalidEmailDomain() throws Exception {
         SetupOwnerRequest invalidEmailRequest = new SetupOwnerRequest(
             "e1234567@gmail.com",
             "owner_user",
@@ -134,7 +140,7 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
 
     @Test
     @DisplayName("Should reject short password (< 10 chars) with 400 Bad Request")
-    void setupFirstOwner_shortPassword() throws Exception {
+    void setupOwner_shortPassword() throws Exception {
         SetupOwnerRequest shortPasswordRequest = new SetupOwnerRequest(
             "e1234567@u.nus.edu",
             "owner_user",
@@ -150,7 +156,7 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
 
     @Test
     @DisplayName("Should reject blank email with 400 Bad Request")
-    void setupFirstOwner_blankEmail() throws Exception {
+    void setupOwner_blankEmail() throws Exception {
         SetupOwnerRequest request = new SetupOwnerRequest(
             "",
             "owner_user",
@@ -166,7 +172,7 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
 
     @Test
     @DisplayName("Should reject password with no uppercase letter with 400 Bad Request")
-    void setupFirstOwner_passwordMissingUppercase() throws Exception {
+    void setupOwner_passwordMissingUppercase() throws Exception {
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu",
             "owner_user",
@@ -182,7 +188,7 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
 
     @Test
     @DisplayName("Should reject password with no digit with 400 Bad Request")
-    void setupFirstOwner_passwordMissingDigit() throws Exception {
+    void setupOwner_passwordMissingDigit() throws Exception {
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu",
             "owner_user",
@@ -198,7 +204,7 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
 
     @Test
     @DisplayName("Should reject username with special characters with 400 Bad Request")
-    void setupFirstOwner_invalidUsernameCharacters() throws Exception {
+    void setupOwner_invalidUsernameCharacters() throws Exception {
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu",
             "owner-user!", // hyphens and ! not allowed
@@ -214,7 +220,7 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
 
     @Test
     @DisplayName("Should reject setup call with no setup token with 403 Forbidden")
-    void setupFirstOwner_missingSetupToken() throws Exception {
+    void setupOwner_missingSetupToken() throws Exception {
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu",
             "owner_user",
@@ -229,7 +235,7 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
 
     @Test
     @DisplayName("Should reject setup call with wrong setup token with 403 Forbidden")
-    void setupFirstOwner_wrongSetupToken() throws Exception {
+    void setupOwner_wrongSetupToken() throws Exception {
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu",
             "owner_user",
@@ -245,7 +251,7 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
 
     @Test
     @DisplayName("Should accept mixed-case, padded NUS email and store it normalised")
-    void setupFirstOwner_mixedCasePaddedEmail() throws Exception {
+    void setupOwner_mixedCasePaddedEmail() throws Exception {
         SetupOwnerRequest request = new SetupOwnerRequest(
             " E1234567@U.NUS.EDU ",
             "owner_user",
@@ -262,7 +268,7 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
 
     @Test
     @DisplayName("Should reject over-long password (> 50 chars) with 400 Bad Request")
-    void setupFirstOwner_longPassword() throws Exception {
+    void setupOwner_longPassword() throws Exception {
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu",
             "owner_user",
@@ -279,15 +285,15 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("Concurrent setup calls should yield exactly one 201, one 409 and one OWNER row")
-    void setupFirstOwner_concurrentRequests() throws Exception {
+    @DisplayName("Concurrent setup calls with the same email should yield one 201, one 400 and one OWNER row")
+    void setupOwner_concurrentRequests() throws Exception {
         SetupOwnerRequest first = new SetupOwnerRequest(
             "e1234567@u.nus.edu",
             "owner_one",
             "ValidPassword123!"
         );
         SetupOwnerRequest second = new SetupOwnerRequest(
-            "e2234567@u.nus.edu",
+            "e1234567@u.nus.edu",
             "owner_two",
             "ValidPassword123!"
         );
@@ -314,7 +320,7 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
                 statuses.add(result.get(30, TimeUnit.SECONDS));
             }
 
-            assertThat(statuses).containsExactlyInAnyOrder(201, 409);
+            assertThat(statuses).containsExactlyInAnyOrder(201, 400);
             assertThat(userRepository.countByRole(Role.OWNER)).isEqualTo(1);
         } finally {
             pool.shutdownNow();

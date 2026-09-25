@@ -11,6 +11,8 @@ following the entity's String-to-enum conversion.
 for profile lookups that skip soft-deleted users.
 2026-09-25 (Claude Code, Opus 5.5), PR #131 review: soft-delete convention
 documented (team decision: deleted accounts stay reserved for recovery).
+2026-09-25 (Claude Code, Opus 5.5): comments on countByRole and the setup lock
+updated after owner setup stopped checking for an existing owner.
 */
 
 package foc.user.repository;
@@ -32,7 +34,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // deliberately include them, so a deleted account's email and username
     // stay reserved. Profile lookups use findByIdAndDeletedAtIsNull.
 
-    // checks whether there are any owners yet
+    // number of users holding a role
     long countByRole(Role role);
 
     boolean existsByEmail(String email);
@@ -44,7 +46,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // active (not soft-deleted) user by id
     Optional<User> findByIdAndDeletedAtIsNull(Long id);
 
-    // meant to guard against concurrent calls to prevent double owner creation
+    // serialises owner setup calls so two concurrent requests can't both pass
+    // the email/username uniqueness checks
     @Query(value = "SELECT pg_advisory_xact_lock(1000)", nativeQuery = true)
     void acquireSetupLock();
 }

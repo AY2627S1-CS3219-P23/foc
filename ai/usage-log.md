@@ -26,6 +26,32 @@ Entry template:
 ```
 
 ---
+## 2026-09-25 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor
+- **Scope:** user-service owner setup (`POST /auth/setup-owner`, issue
+  #97): removed the existing-owner check from `OwnerSetupService` and
+  deleted the now-unused `OwnerAlreadySetException`; updated
+  `OwnerSetupServiceTest` and `OwnerSetupControllerTest`; updated
+  comments in `UserRepository`, `application.yaml`, `.env.example` and
+  the user-service README.
+- **Prompt(s):** Summary: Ryan asked whether the one-owner rule could be
+  dropped, so an owner who loses both their password and email access
+  doesn't leave the system without a recoverable owner. The tool listed
+  the facts only: the backlog items and design-doc sections the change
+  conflicts with (F6.2.3, design doc §6, the course's bootstrap guide),
+  what it means for the setup token, and the questions left for the
+  team. It made no recommendation. Ryan then decided to drop the
+  "owner already exists" (409) check first. The tool removed it, kept
+  the advisory lock (it still serialises the email/username uniqueness
+  checks), changed the second-call test to expect another OWNER, and
+  changed the concurrency test to use the same email (one 201, one
+  400). Ryan then asked to rename `setupFirstOwner` to `setupOwner`; the
+  tool renamed the service and controller methods and the test method
+  prefixes.
+- **Author review:** The tool ran the full `./mvnw test` suite: 39/39
+  passed. Reviewed by Ryan before PR.
+
 ## 2026-09-23 — Ko-Khan
 - **Tool:** Claude Code (Sonnet 5)
 - **Mode:** debug

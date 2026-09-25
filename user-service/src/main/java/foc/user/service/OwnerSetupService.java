@@ -9,6 +9,9 @@ Scope: Generated owner bootstrap logic (advisory lock, owner guard,
        response DTO keeps its String role (unchanged JSON shape).
        2026-09-25 (Claude Code, Opus 5.5), PR #131 review: private
        toUserResponse replaced by the shared UserResponse.from.
+       2026-09-25 (Claude Code, Opus 5.5): existing-owner check (409)
+       removed per Ryan's decision; any caller with the setup token can
+       now create an OWNER. setupFirstOwner renamed to setupOwner.
 Author review: Ryan validated that the endpoint logic matches the feature design.
 */
 
@@ -28,7 +31,6 @@ import foc.user.dto.SetupOwnerRequest;
 import foc.user.dto.UserResponse;
 import foc.user.entity.Role;
 import foc.user.entity.User;
-import foc.user.exception.OwnerAlreadySetException;
 import foc.user.repository.UserRepository;
 
 @Service
@@ -47,14 +49,12 @@ public class OwnerSetupService {
         this.expectedSetupToken = expectedSetupToken;
     }
 
-    // bootstraps first owner account, only when owners = 0
+    // creates an OWNER account; repeatable for as long as the setup token is valid
     @Transactional
-    public UserResponse setupFirstOwner(SetupOwnerRequest request, String providedSetupToken) {
+    public UserResponse setupOwner(SetupOwnerRequest request, String providedSetupToken) {
         ensureValidSetupToken(providedSetupToken);
 
         userRepository.acquireSetupLock();
-
-        ensureSetupAvailable();
 
         String email = normalizeEmail(request.email());
         String username = normalizeUsername(request.username());
@@ -83,12 +83,6 @@ public class OwnerSetupService {
 
         if (!MessageDigest.isEqual(expected, provided)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid or missing setup token");
-        }
-    }
-
-    private void ensureSetupAvailable() {
-        if (userRepository.countByRole(Role.OWNER) > 0) {
-            throw new OwnerAlreadySetException();
         }
     }
 
