@@ -20,6 +20,8 @@ Author review: Ryan validated correctness and naming.
        follow the setupFirstOwner -> setupOwner rename.
 2026-09-25 (Claude Code, Opus 5.5): expired-token (403) and unset-expiry
        (503) cases added.
+2026-09-25 (Claude Code, Opus 5.5), PR #132 review: the setup log line is
+       asserted (user id, normalised email, remote address, no token).
 */
 
 
@@ -41,8 +43,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -62,6 +67,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@ExtendWith(OutputCaptureExtension.class)
 class OwnerSetupControllerTest extends PostgresTestContainer {
 
     private static final String VALID_SETUP_TOKEN = "test-owner-setup-token";
@@ -139,6 +145,33 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
             .andExpect(jsonPath("$.role").value("OWNER"));
 
         assertThat(userRepository.countByRole(Role.OWNER)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("Should log the new owner's id, normalised email and remote address, but never the token")
+    void setupOwner_logsSetup(CapturedOutput output) throws Exception {
+        SetupOwnerRequest request = new SetupOwnerRequest(
+            " E1234567@U.NUS.EDU ",
+            "owner_user",
+            "ValidPassword123!"
+        );
+
+        mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", VALID_SETUP_TOKEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+                .with(req -> {
+                    req.setRemoteAddr("203.0.113.7");
+                    return req;
+                }))
+            .andExpect(status().isCreated());
+
+        Long ownerId = userRepository.findByEmail("e1234567@u.nus.edu").orElseThrow().getId();
+
+        assertThat(output.getOut())
+            .contains("Owner created via setup: userId=" + ownerId
+                + ", email=e1234567@u.nus.edu, remoteAddr=203.0.113.7")
+            .doesNotContain(VALID_SETUP_TOKEN);
     }
 
     @Test

@@ -14,6 +14,8 @@ Author review: Ryan validated test assertions to match intended behaviour.
        follow the setupFirstOwner -> setupOwner rename.
 2026-09-25 (Claude Code, Opus 5.5): token expiry cases added (expired -> 403,
        expiry unset -> 503, wrong token checked before expiry).
+2026-09-25 (Claude Code, Opus 5.5), PR #132 review: case for a token that
+       expires while the request waits on the setup lock.
 */
 
 package foc.user.service;
@@ -29,6 +31,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -128,6 +131,30 @@ class OwnerSetupServiceTest {
     void setupOwner_throwsForbiddenWhenTokenExpired() {
         ReflectionTestUtils.setField(ownerSetupService, "tokenExpiresAt",
             Instant.now().minus(1, ChronoUnit.MINUTES));
+
+        SetupOwnerRequest request = new SetupOwnerRequest(
+            "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
+        );
+
+        assertThatThrownBy(() -> ownerSetupService.setupOwner(request, VALID_SETUP_TOKEN))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> {
+                ResponseStatusException rse = (ResponseStatusException) ex;
+                assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+                assertThat(rse.getReason()).isEqualTo("Setup token has expired");
+            });
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("Should throw 403 Forbidden when the token expires while waiting on the setup lock")
+    void setupOwner_throwsForbiddenWhenTokenExpiresWhileWaitingOnLock() {
+        // simulates another setup holding the lock until after the deadline
+        doAnswer(inv -> {
+            ReflectionTestUtils.setField(ownerSetupService, "tokenExpiresAt",
+                Instant.now().minus(1, ChronoUnit.MINUTES));
+            return null;
+        }).when(userRepository).acquireSetupLock();
 
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"

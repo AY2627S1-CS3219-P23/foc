@@ -29,6 +29,23 @@ Entry template:
 ## 2026-09-25 — Ryan Ang
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate
+- **Scope:** PR #132 review fixes in user-service owner setup:
+  `OwnerSetupService` re-checks the token expiry after taking the setup
+  lock; `OwnerSetupServiceTest` and `OwnerSetupControllerTest` gain a
+  lock-wait expiry case and a log-line assertion.
+- **Prompt(s):** Summary: Ryan asked the tool to review the PR #132
+  comments. The tool explained each one: the expiry could be passed
+  while a request waits on the lock; the removed zero-owner guard
+  conflicts with the text of issue #97 (a requirements update for the
+  team, not code); the setup log line had no test; and LeongWZ's
+  question about what happens after the expiry. Ryan chose to fix the
+  first and third. The tool implemented them.
+- **Author review:** The tool ran the full `./mvnw test` suite: 46/46
+  passed. Ryan to review via the PR.
+
+## 2026-09-25 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
 - **Scope:** user-service owner setup (issue #97): setup token expiry
   and a setup log line. `OwnerSetupService` reads
   `OWNER_SETUP_TOKEN_EXPIRES_AT`; `OwnerSetupController` logs each

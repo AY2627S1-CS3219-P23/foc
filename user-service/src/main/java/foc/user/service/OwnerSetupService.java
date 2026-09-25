@@ -15,6 +15,8 @@ Scope: Generated owner bootstrap logic (advisory lock, owner guard,
        2026-09-25 (Claude Code, Opus 5.5): setup token expiry added
        (OWNER_SETUP_TOKEN_EXPIRES_AT, ISO-8601; unset -> 503, expired ->
        403)
+       2026-09-25 (Claude Code, Opus 5.5), PR #132 review: expiry rechecked
+       after the setup lock is acquired.
 Author review: Ryan validated that the endpoint logic matches the feature design.
 */
 
@@ -67,6 +69,9 @@ public class OwnerSetupService {
 
         userRepository.acquireSetupLock();
 
+        // a request can wait on the lock past the deadline, so check again
+        ensureTokenNotExpired();
+
         String email = normalizeEmail(request.email());
         String username = normalizeUsername(request.username());
 
@@ -105,6 +110,10 @@ public class OwnerSetupService {
 
         // checked after the token match, so only a caller holding the token
         // learns that it has expired
+        ensureTokenNotExpired();
+    }
+
+    private void ensureTokenNotExpired() {
         if (!Instant.now().isBefore(tokenExpiresAt)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Setup token has expired");
         }
