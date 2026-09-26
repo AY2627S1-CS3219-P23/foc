@@ -27,6 +27,8 @@
   2026-09-25: AI Use Summary extended for the owner-setup change
   (setup no longer limited to one owner; a setup token expiry and a
   setup log line were added and then removed) by Claude Code (Opus 5.5).
+  2026-09-26: AI Use Summary extended for the user-service admin
+  endpoints (issue #96) by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -161,7 +163,12 @@ assertions), each chosen by the author; and the removal of the
 existing-owner check from user-service owner setup, decided by the
 author, with the matching test, comment, and `.env.example` updates;
 a setup token expiry and a setup log line were also built, then
-removed by the author, with expiry deferred to a later issue.
+removed by the author, with expiry deferred to a later issue; and the
+user-service admin endpoints (issue #96) — user list with search, role
+filter, sorting and fixed page sizes, promote/demote, and soft-delete
+removal, with their service, request DTO, URL-based role rules,
+and unit and Testcontainers integration tests, following rules decided
+by the team and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

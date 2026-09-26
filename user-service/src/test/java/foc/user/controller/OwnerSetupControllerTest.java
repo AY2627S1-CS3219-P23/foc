@@ -21,6 +21,8 @@ Author review: Ryan validated correctness and naming.
 2026-09-25 (Claude Code, Opus 5.5), PR #132 review: concurrent setups with
        different emails must both succeed; the concurrent-request code is
        shared by both concurrency cases.
+2026-09-26 (Claude Code, Opus 5.5), issue #96: owner counts taken from
+       findAll, as UserRepository.countByRole was removed.
 */
 
 
@@ -75,6 +77,12 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
         userRepository.deleteAll();
     }
 
+    private long ownerCount() {
+        return userRepository.findAll().stream()
+            .filter(user -> user.getRole() == Role.OWNER)
+            .count();
+    }
+
     @Test
     @DisplayName("Should successfully create an OWNER with a valid setup token")
     void setupOwner_success() throws Exception {
@@ -122,7 +130,7 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.role").value("OWNER"));
 
-        assertThat(userRepository.countByRole(Role.OWNER)).isEqualTo(2);
+        assertThat(ownerCount()).isEqualTo(2);
     }
 
     @Test
@@ -284,7 +292,7 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isBadRequest());
 
-        assertThat(userRepository.countByRole(Role.OWNER)).isZero();
+        assertThat(ownerCount()).isZero();
     }
 
     // sends both requests at the same moment and returns their status codes
@@ -331,7 +339,7 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
         );
 
         assertThat(sendConcurrently(first, second)).containsExactlyInAnyOrder(201, 400);
-        assertThat(userRepository.countByRole(Role.OWNER)).isEqualTo(1);
+        assertThat(ownerCount()).isEqualTo(1);
     }
 
     @Test
@@ -349,7 +357,7 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
         );
 
         assertThat(sendConcurrently(first, second)).containsExactly(201, 201);
-        assertThat(userRepository.countByRole(Role.OWNER)).isEqualTo(2);
+        assertThat(ownerCount()).isEqualTo(2);
     }
 
     @Test

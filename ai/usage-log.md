@@ -26,6 +26,55 @@ Entry template:
 ```
 
 ---
+## 2026-09-26 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, generate
+- **Scope:** issue #96 review follow-up: `UserRepository.countByRole`
+  removed (`OwnerSetupControllerTest` and `OwnerSetupServiceTest`
+  updated to match); the admin role check moved from `@PreAuthorize`
+  to URL rules in `SecurityConfig`; 12 test cases added to
+  `AdminControllerTest`.
+- **Prompt(s):** Summary: Asked whether `countByRole` was still used
+  and for a review of the #96 code for missing tests or anything else
+  missed. The tool reported that only tests used `countByRole`, listed
+  untested cases, and noted that non-admins got 400 instead of 403 for
+  bad input. Per team decision: remove `countByRole`, add the missing
+  tests plus out-of-range page sizes, and give non-admins 403 before
+  their input is checked. A removed user's token staying valid was
+  added to the deferred items.
+- **Author review:** The tool ran the full `./mvnw test` suite:
+  100/100 passed. Ryan to review via the PR.
+
+## 2026-09-26 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** user-service admin endpoints (issue #96): `AdminController`
+  (`GET /users`, `PATCH /users/{id}`, `DELETE /users/{id}`),
+  `AdminService`, `UpdateRoleRequest`; `UserRepository` gains
+  `JpaSpecificationExecutor`; `SecurityConfig` restricts the admin
+  routes to ADMIN/OWNER; `AdminServiceTest` (unit) and
+  `AdminControllerTest` (Testcontainers); user-service README status.
+- **Prompt(s):** Summary: Asked to start issue #96. The tool listed the
+  open questions, pointed to the relevant parts of the D2 design doc
+  (Part 1 §1, §3, §4, §6), and implemented the answers. Per team
+  decisions: build before #91 (JWT filter) and #93 (soft delete) land,
+  setting `deleted_at` directly for now; the caller's role comes from
+  the ADMIN/OWNER authorities that #91 maps from the token; admins and
+  owners can promote to ADMIN; admins can demote or remove other admins
+  and demote themselves (to be raised again in team discussion at PR
+  time); nobody can change or remove an OWNER, and OWNER is never
+  granted here; admins remove themselves only through `DELETE
+  /users/me`; PATCH for role change, 200 unchanged on a no-op, 403 for
+  blocked actions, 404 for missing or deleted users; the list includes
+  soft-deleted accounts, has partial case-insensitive search on
+  id/username/email, a role filter, sorting on any field in either
+  direction (role by rank), and page sizes of 20, 50 or 100 (default
+  100). Ownership transfer was deferred to #7. Double confirmation
+  stays in the frontend. A `deletedAt` field, an active/deleted filter
+  and stale-role handling were deferred.
+- **Author review:** The tool ran the full `./mvnw test` suite: 89/89
+  passed. Ryan to review via the PR.
+
 ## 2026-09-25 — Ryan Ang
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor

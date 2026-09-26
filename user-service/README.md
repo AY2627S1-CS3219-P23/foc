@@ -10,6 +10,8 @@
   replaced (PR #131 review).
   2026-09-25, Claude Code (Opus 5.5): setup-owner no longer limited to
   the first owner.
+  2026-09-26, Claude Code (Opus 5.5): status updated for the admin
+  endpoints (issue #96).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -23,7 +25,10 @@ Spring Boot 4 · Java 21 · Maven.
 
 Currently: actuator health endpoint, `POST /auth/setup-owner` (creates an
 OWNER for any caller with the setup token, #97), and `GET /users/me` /
-`GET /users/{id}` (own and public profile, #95), backed by Postgres via
+`GET /users/{id}` (own and public profile, #95), and the admin endpoints
+`GET /users` (list, search, role filter, sort, 20/50/100 page sizes),
+`PATCH /users/{id}` (promote/demote) and `DELETE /users/{id}` (soft
+delete) for ADMIN/OWNER callers (#96), backed by Postgres via
 Spring Data JPA. The root `compose.yaml` runs it with its own `user-db` (host port
 `${USER_SERVICE_PORT:-8087}`); `spring-boot:run` needs that database
 reachable (`USER_DB_*` env vars). Tests supply their own database.
