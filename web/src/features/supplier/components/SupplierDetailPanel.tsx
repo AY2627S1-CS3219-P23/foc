@@ -1,16 +1,17 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
-// Tool: Claude, 2026-09-22.
+// Tool: Claude, 2026-09-22; revised 2026-09-26 (Claude Code, Sonnet 5).
 // Scope: supplier detail panel, per web/docs/wireframes/suppliers.png.
 // `onSelect` is optional so this can be reused later inside the Order
 // Service's "create request" flow (pickup-location picker) without
 // change; the pure Supplier browse page just omits it.
+// 2026-09-26: removed the `zone` prop and its display line — the team
+// dropped the zone feature.
 // Reviewed by: [pending]
 
-import type { Supplier, Zone } from '../types'
+import type { Supplier } from '../types'
 
 interface SupplierDetailPanelProps {
   supplier: Supplier
-  zone?: Zone
   onSelect?: () => void
   isAdmin?: boolean // TEMPORARY — see suppliers.tsx for why
   onEdit?: () => void
@@ -19,7 +20,6 @@ interface SupplierDetailPanelProps {
 
 export function SupplierDetailPanel({
   supplier,
-  zone,
   onSelect,
   isAdmin,
   onEdit,
@@ -45,10 +45,7 @@ export function SupplierDetailPanel({
       <dl className="mt-4 space-y-2 text-sm">
         <div>
           <dt className="inline font-medium text-gray-900">Location: </dt>
-          <dd className="inline text-gray-600">
-            {supplier.location}
-            {zone ? `, ${zone.name}` : ''}
-          </dd>
+          <dd className="inline text-gray-600">{supplier.location}</dd>
         </div>
         <div>
           <dt className="inline font-medium text-gray-900">Opening hours: </dt>
