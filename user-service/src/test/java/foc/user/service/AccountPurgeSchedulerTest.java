@@ -6,7 +6,7 @@ Scope: integration test for issue #93's day-31 purge, following
        is called directly rather than waiting on the cron trigger. Rows are
        seeded with backdated deleted_at values (the column is updatable, so
        no JPQL backdating is needed).
-Author review: (pending pull request)
+Reviewed by: Leong Wei Zhi (via pull request).
 */
 
 package foc.user.service;

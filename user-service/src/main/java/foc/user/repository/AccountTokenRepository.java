@@ -6,7 +6,7 @@ Scope: repository created for issue #93's day-31 purge — the only query so
        deletes in the purge transaction chosen by Leong Wei Zhi via options
        Q&A, over DB-level ON DELETE CASCADE). The recovery and password-reset
        flows that read these rows arrive with #94.
-Author review: (pending pull request)
+Reviewed by: Leong Wei Zhi (via pull request).
 */
 
 package foc.user.repository;

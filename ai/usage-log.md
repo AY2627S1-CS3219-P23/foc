@@ -46,7 +46,9 @@ Entry template:
   env-overridable, defaults matching: 30 days, daily 03:00). The
   30-day reuse block needed no new code — uniqueness checks already
   include soft-deleted rows — so it was pinned with tests instead.
-- **Author review:** (pending pull request)
+- **Author review:** All design decisions made by the author during the
+  options Q&A; suite run with `./mvnw test` (49/49 green); code, tests,
+  and disclosures reviewed via pull request (#136).
 
 ## 2026-09-25 — Ryan Ang
 - **Tool:** Claude Code (Opus 5.5)

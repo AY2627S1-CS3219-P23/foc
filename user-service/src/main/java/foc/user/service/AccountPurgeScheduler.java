@@ -6,7 +6,7 @@ Scope: day-31 purge scheduler for issue #93 (design doc §2: "purge on
        FK cleanup as bulk deletes inside the purge transaction chosen by
        Leong Wei Zhi via options Q&A (over DB-level ON DELETE CASCADE);
        window and cadence are env-overridable like the notification purge.
-Author review: (pending pull request)
+Reviewed by: Leong Wei Zhi (via pull request).
 */
 
 package foc.user.service;

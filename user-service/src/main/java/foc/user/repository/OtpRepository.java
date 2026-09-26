@@ -5,7 +5,7 @@ Scope: repository created for issue #93's day-31 purge — the only query so
        far removes OTPs owned by purged accounts (bulk deletes in the purge
        transaction chosen by Leong Wei Zhi via options Q&A, over DB-level
        ON DELETE CASCADE). The OTP flows themselves arrive with #87/#92.
-Author review: (pending pull request)
+Reviewed by: Leong Wei Zhi (via pull request).
 */
 
 package foc.user.repository;
