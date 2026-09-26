@@ -30,6 +30,9 @@
 # options Q&A; 8085/5433 stay reserved for the notification re-add,
 # issues #61-#69). OWNER_SETUP_TOKEN passed through for the merged
 # owner-bootstrap endpoint (issue #97).
+# 2026-09-26, Claude Code (Sonnet 5), issue #133: WEB_ALLOWED_ORIGIN
+# passed to supplier-service for its CORS config, so the browser can
+# call GET /suppliers directly.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -151,6 +154,7 @@ services:
       SUPPLIER_DB_NAME: ${SUPPLIER_DB_NAME:-supplier}
       SUPPLIER_DB_USER: ${SUPPLIER_DB_USER:-supplier}
       SUPPLIER_DB_PASSWORD: ${SUPPLIER_DB_PASSWORD:?set in .env}
+      WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
     depends_on:
       supplier-db:
         condition: service_healthy

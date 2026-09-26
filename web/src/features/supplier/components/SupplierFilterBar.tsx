@@ -1,11 +1,11 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
-// Tool: Claude, 2026-09-22.
-// Scope: search + category/zone filter controls, implementing F2.1
-// (search by name) and F2.2 (filter by category and zone), per
+// Tool: Claude, 2026-09-22; revised 2026-09-26 (Claude Code, Sonnet 5).
+// Scope: search + category filter controls, implementing F2.1
+// (search by name) and F2.2 (filter by category), per
 // web/docs/wireframes/suppliers.png.
+// 2026-09-26: removed the zone filter — the team dropped the zone
+// feature, and the dropdown had nothing to populate it with.
 // Reviewed by: [pending]
-
-import type { Zone } from '../types'
 
 interface SupplierFilterBarProps {
   query: string
@@ -13,9 +13,6 @@ interface SupplierFilterBarProps {
   category: string
   onCategoryChange: (value: string) => void
   categories: string[]
-  zoneCode: string
-  onZoneChange: (value: string) => void
-  zones: Zone[]
 }
 
 export function SupplierFilterBar({
@@ -24,9 +21,6 @@ export function SupplierFilterBar({
   category,
   onCategoryChange,
   categories,
-  zoneCode,
-  onZoneChange,
-  zones,
 }: SupplierFilterBarProps) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -47,19 +41,6 @@ export function SupplierFilterBar({
         {categories.map((c) => (
           <option key={c} value={c}>
             {c}
-          </option>
-        ))}
-      </select>
-
-      <select
-        value={zoneCode}
-        onChange={(e) => onZoneChange(e.target.value)}
-        className="rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-gray-400 focus:outline-none"
-      >
-        <option value="">Zone: All</option>
-        {zones.map((z) => (
-          <option key={z.code} value={z.code}>
-            {z.name}
           </option>
         ))}
       </select>

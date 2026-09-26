@@ -27,6 +27,10 @@
   2026-09-25: AI Use Summary extended for the owner-setup change
   (setup no longer limited to one owner; a setup token expiry and a
   setup log line were added and then removed) by Claude Code (Opus 5.5).
+  2026-09-26: AI Use Summary extended for the supplier-service list
+  endpoint (issue #133 — search/filter/paging) and the accompanying
+  removal of the zone feature's remaining frontend wiring, by Claude
+  Code (Sonnet 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -161,7 +165,17 @@ assertions), each chosen by the author; and the removal of the
 existing-owner check from user-service owner setup, decided by the
 author, with the matching test, comment, and `.env.example` updates;
 a setup token expiry and a setup log line were also built, then
-removed by the author, with expiry deferred to a later issue.
+removed by the author, with expiry deferred to a later issue; and the
+supplier-service list endpoint (issue #133) — `GET /suppliers` with
+search-by-name, category filtering (joined against the
+`supplier_categories` table), paging, and sorting, plus the response
+DTOs and CORS configuration, with the default page size, sort field,
+and response-envelope shape chosen by the author; alongside this, the
+`web/` suppliers page's remaining zone-feature wiring (the `Zone` type,
+the filter bar's zone dropdown, the edit form's required Campus Zone
+field, and a call to a `/zones` endpoint the backend never implemented)
+was removed, per the team's decision to drop the zone feature, since
+the unpopulatable required field was blocking every supplier edit.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

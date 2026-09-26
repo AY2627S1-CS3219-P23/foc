@@ -26,6 +26,50 @@ Entry template:
 ```
 
 ---
+## 2026-09-26 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** generate (implementation), debug
+- **Scope:** issue #133 — `GET /suppliers` list endpoint: search by
+  name, filter by category, paging + sorting. New files
+  `supplier-service/src/main/java/foc/supplier/{controller/SupplierController,
+  service/SupplierService, dto/SupplierResponse, dto/PageResponse,
+  config/CorsConfig}.java`; extended `SuppliersRepository` (paginated
+  search/filter query) and `SupplierCategoriesRepository` (batch
+  category lookup); `application.yaml`/`compose.yaml`/`.env.example`
+  (CORS-allowed origin for the browser). Frontend: `web/src/features/supplier/api.ts`
+  and `types.ts` updated to the new paginated response shape;
+  `routes/suppliers.tsx` given page state + Prev/Next controls. Also
+  removed the zone feature's remaining frontend wiring (`Zone` type,
+  `SupplierFilterBar`'s zone dropdown, `SupplierFormModal`'s required
+  Campus Zone field, `SupplierDetailPanel`'s zone line, and the
+  `listZones()` call to a nonexistent `/zones` endpoint) — the team
+  dropped the zone feature; the required, unpopulatable Campus Zone
+  `<select>` was blocking every supplier edit.
+- **Prompt(s):** Asked to implement task #7 (pagination first, per
+  author's own build-order decision) end-to-end and run the app to see
+  it working. Bugs found and fixed while verifying live: (1) the JPQL
+  search query threw `function lower(bytea) does not exist` on Postgres
+  when `search`/`category` were null — fixed with explicit
+  `CAST(:param AS string)`; (2) Vite's dev server doesn't read the
+  repo-root `.env` (only `web/`'s own env files or the shell
+  environment) — `VITE_SUPPLIER_SERVICE_URL` had to be exported before
+  `npm run dev`; (3) a `react-hooks/set-state-in-effect` lint error from
+  resetting `page` in a plain effect — fixed via React's documented
+  "adjust state during render" pattern instead; (4) discovered mid-task
+  that the suppliers page was already broken independent of this work —
+  it called a `/zones` endpoint the backend never implemented, throwing
+  inside `Promise.all` and failing the page's entire initial load —
+  removed as part of the zone-feature drop.
+- **Author review:** Verified live end-to-end: `docker compose up`
+  supplier-db + supplier-service, `curl` against `GET /suppliers` with
+  search/category/page/sort params, and the actual browser UI via
+  Playwright (21 seeded suppliers paginate across 3 pages, category
+  dropdown populated from live data, multi-category suppliers e.g.
+  "Food, Coffee" display correctly, empty-state renders on no match).
+  `tsc -b`, `eslint .`, and `vitest run` all pass on `web/`. Reviewed by
+  author via pull request.
+
+---
 ## 2026-09-25 — Ryan Ang
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor
