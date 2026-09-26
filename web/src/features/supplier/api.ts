@@ -12,6 +12,9 @@
 // `Supplier[]` to `PagedResponse<Supplier>`. `listZones` removed — the
 // backend has no /zones endpoint, and calling it was breaking the
 // suppliers page entirely (Promise.all rejects if either call fails).
+// Added listCategories() (GET /suppliers/categories) — the filter
+// dropdown needs every category that exists, not just those on the
+// currently filtered/paginated result set.
 // Reviewed by: [pending]
 
 import { apiFetch } from '@/lib/api/http'
@@ -40,6 +43,10 @@ export function listSuppliers(params: SupplierSearchParams = {}) {
 
 export function getSupplier(id: string) {
   return apiFetch<Supplier>('supplier', `/suppliers/${id}`)
+}
+
+export function listCategories() {
+  return apiFetch<string[]>('supplier', '/suppliers/categories')
 }
 
 export function createSupplier(input: SupplierInput) {

@@ -4,6 +4,9 @@
  * Scope: new service for issue #133 — the supplier list endpoint's
  * pagination, search-by-name, and category-filter logic. Maps
  * `Suppliers` + its `SupplierCategories` rows into `SupplierResponse`.
+ * Revised same day: added listCategories() — the frontend's filter
+ * dropdown needs every category that exists, not just those on the
+ * currently filtered page.
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
@@ -51,6 +54,10 @@ public class SupplierService {
                 .toList();
 
         return PageResponse.of(page, content);
+    }
+
+    public List<String> listCategories() {
+        return supplierCategoriesRepository.findDistinctCategories();
     }
 
     private static SupplierResponse toResponse(Suppliers s, List<String> categories) {

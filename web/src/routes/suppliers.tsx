@@ -20,13 +20,19 @@
 // to SupplierFilterBar/SupplierFormModal/SupplierDetailPanel) — the
 // empty, required Campus Zone <select> in the edit form could never
 // pass validation with no zones to populate it, blocking every edit.
+// 2026-09-26: fetch the category-filter options from the new
+// GET /suppliers/categories endpoint instead of deriving them from the
+// current (filtered, paginated) `suppliers` state — the derived list
+// was a bug: filtering to "Food" then reopening the dropdown only
+// offered categories present on Food suppliers, not every category.
 // Reviewed by: [pending]
 
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 
 import {
   createSupplier,
   deleteSupplier,
+  listCategories,
   listSuppliers,
   updateSupplier,
 } from '@/features/supplier/api'
@@ -45,6 +51,7 @@ const PAGE_SIZE = 10
 
 export function Suppliers() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [categories, setCategories] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -102,10 +109,24 @@ export function Suppliers() {
     }
   }, [query, category, page])
 
-  const categories = useMemo(
-    () => Array.from(new Set(suppliers.flatMap((s) => s.categories))).sort(),
-    [suppliers],
-  )
+  // Fetched once, independent of the current search/category filter —
+  // this must always offer every category that exists, not just those
+  // present on the currently filtered/paginated suppliers.
+  useEffect(() => {
+    let cancelled = false
+
+    listCategories()
+      .then((result) => {
+        if (!cancelled) setCategories(result)
+      })
+      .catch(() => {
+        // Non-fatal: the filter dropdown just falls back to "All" only.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const selected = suppliers.find((s) => s.id === selectedId) ?? null
 

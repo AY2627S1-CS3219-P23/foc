@@ -5,6 +5,10 @@
  * filter by category, paging + sorting. Default page size and sort
  * follow docs/supplier-service.md's D7 (indexed on name/category for
  * the NFR1.1 5-second bound); author decision on the default of 20.
+ * Revised same day: added GET /suppliers/categories — the frontend's
+ * filter dropdown needs the full set of categories, independent of any
+ * current search/filter, so it can't be derived from listSuppliers's
+ * own (filtered, paginated) response.
  * Reviewed by: [pending]
  */
 package foc.supplier.controller;
@@ -12,6 +16,7 @@ package foc.supplier.controller;
 import foc.supplier.dto.PageResponse;
 import foc.supplier.dto.SupplierResponse;
 import foc.supplier.service.SupplierService;
+import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -34,5 +39,10 @@ public class SupplierController {
             @RequestParam(required = false) String category,
             @PageableDefault(size = 20, sort = "name", direction = Sort.Direction.ASC) Pageable pageable) {
         return supplierService.listSuppliers(search, category, pageable);
+    }
+
+    @GetMapping("/suppliers/categories")
+    public List<String> listCategories() {
+        return supplierService.listCategories();
     }
 }
