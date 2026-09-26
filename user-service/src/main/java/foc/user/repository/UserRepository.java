@@ -14,6 +14,9 @@ documented (team decision: deleted accounts stay reserved for recovery).
 2026-09-25 (Claude Code, Opus 5.5): comments on countByRole and the setup lock
 updated after owner setup stopped checking for an existing owner; countByRole
 noted as kept temporarily for #96 (PR #132 review).
+2026-09-26 (Claude Code, Opus 5.5), issue #96: JpaSpecificationExecutor added
+for the admin user list (search, role filter, sorting, paging). countByRole
+removed: #96 has no admin-count guard, so nothing uses it.
 */
 
 package foc.user.repository;
@@ -21,24 +24,19 @@ package foc.user.repository;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
-import foc.user.entity.Role;
 import foc.user.entity.User;
 
 @Repository
-public interface UserRepository extends JpaRepository<User, Long> {
+public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificationExecutor<User> {
 
     // Soft-deleted users stay in the table for the 30-day recovery window.
     // Uniqueness checks (existsByEmail/existsByUsername) and findByEmail
     // deliberately include them, so a deleted account's email and username
     // stay reserved. Profile lookups use findByIdAndDeletedAtIsNull.
-
-    // number of users holding a role. No production caller since owner setup
-    // stopped checking for an existing owner; kept temporarily for potential
-    // use in #96 (admin endpoints). Tests use it meanwhile.
-    long countByRole(Role role);
 
     boolean existsByEmail(String email);
 

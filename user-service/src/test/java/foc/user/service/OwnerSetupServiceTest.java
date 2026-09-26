@@ -12,6 +12,9 @@ Author review: Ryan validated test assertions to match intended behaviour.
 2026-09-25 (Claude Code, Opus 5.5): existing-owner guard test replaced by one
        asserting setup never checks for existing owners. Test names
        follow the setupFirstOwner -> setupOwner rename.
+2026-09-26 (Claude Code, Opus 5.5), issue #96: UserRepository.countByRole
+       removed; the existing-owners test now checks setup makes only the
+       uniqueness, lock and save calls.
 */
 
 package foc.user.service;
@@ -28,8 +31,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -128,8 +131,11 @@ class OwnerSetupServiceTest {
         UserResponse response = ownerSetupService.setupOwner(request, VALID_SETUP_TOKEN);
 
         assertThat(response.role()).isEqualTo("OWNER");
+        verify(userRepository).existsByEmail("e1234567@u.nus.edu");
+        verify(userRepository).existsByUsername("owner_user");
+        verify(userRepository).acquireSetupLock();
         verify(userRepository).save(any(User.class));
-        verify(userRepository, never()).countByRole(any());
+        verifyNoMoreInteractions(userRepository);
     }
 
     // checks uniqueness of details
