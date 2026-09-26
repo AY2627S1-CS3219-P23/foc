@@ -65,6 +65,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // provides the transaction and must remove dependent otps /
     // account_tokens rows first — their user_id FKs block this delete.
     @Modifying(clearAutomatically = true)
-    @Query("delete from User u where u.deletedAt < :cutoff")
+    @Query("DELETE FROM User u WHERE u.deletedAt < :cutoff")
     int deleteByDeletedBefore(@Param("cutoff") Instant cutoff);
 }

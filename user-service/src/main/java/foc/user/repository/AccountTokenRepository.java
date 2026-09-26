@@ -28,6 +28,6 @@ public interface AccountTokenRepository extends JpaRepository<AccountToken, Long
     // the purge's users delete doesn't trip the user_id FK (bulk delete
     // statements can't join, hence the subquery)
     @Modifying(clearAutomatically = true)
-    @Query("delete from AccountToken t where t.user in (select u from User u where u.deletedAt < :cutoff)")
+    @Query("DELETE FROM AccountToken t WHERE t.user IN (SELECT u FROM User u WHERE u.deletedAt < :cutoff)")
     int deleteByUserDeletedBefore(@Param("cutoff") Instant cutoff);
 }
