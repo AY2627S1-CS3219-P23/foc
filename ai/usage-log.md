@@ -26,6 +26,28 @@ Entry template:
 ```
 
 ---
+## 2026-09-27 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** user-service issue #93 — soft delete (`DELETE /users/me`,
+  `User.softDelete`), the day-31 purge (`AccountPurgeScheduler`,
+  `OtpRepository`/`AccountTokenRepository` purge queries,
+  `user.retention.*` config, `@EnableScheduling`), reuse-block and
+  purge tests, README/.env.example updates.
+- **Prompt(s):** Asked to plan and implement issue #93 from the D2
+  design doc (§2: soft delete = reuse block, purge on day 31). Open
+  design points were decided by the author via neutral options Q&A:
+  `DELETE /users/me` needs the bearer token only (no password/OTP
+  re-check); the shared soft-delete path is an entity method
+  (`User.softDelete`), which admin removal (#96/PR #135) switches to
+  after merge; purge FK cleanup is bulk deletes inside the purge
+  transaction (over DB-level ON DELETE CASCADE). The scheduler follows
+  notification-service's retention purge pattern (cadence/window
+  env-overridable, defaults matching: 30 days, daily 03:00). The
+  30-day reuse block needed no new code — uniqueness checks already
+  include soft-deleted rows — so it was pinned with tests instead.
+- **Author review:** (pending pull request)
+
 ## 2026-09-25 — Ryan Ang
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor

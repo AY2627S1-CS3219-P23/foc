@@ -14,14 +14,20 @@ documented (team decision: deleted accounts stay reserved for recovery).
 2026-09-25 (Claude Code, Opus 5.5): comments on countByRole and the setup lock
 updated after owner setup stopped checking for an existing owner; countByRole
 noted as kept temporarily for #96 (PR #132 review).
+2026-09-27 (Claude Code, Fable 5), issue #93: deleteByDeletedBefore added for
+the day-31 purge scheduler (bulk @Modifying query, following the
+notification-service purge pattern from PR #81).
 */
 
 package foc.user.repository;
 
+import java.time.Instant;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import foc.user.entity.Role;
@@ -53,4 +59,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // the email/username uniqueness checks
     @Query(value = "SELECT pg_advisory_xact_lock(1000)", nativeQuery = true)
     void acquireSetupLock();
+
+    // bulk-deletes accounts whose 30-day recovery window has passed,
+    // releasing their email/username. The caller (AccountPurgeScheduler)
+    // provides the transaction and must remove dependent otps /
+    // account_tokens rows first — their user_id FKs block this delete.
+    @Modifying(clearAutomatically = true)
+    @Query("delete from User u where u.deletedAt < :cutoff")
+    int deleteByDeletedBefore(@Param("cutoff") Instant cutoff);
 }

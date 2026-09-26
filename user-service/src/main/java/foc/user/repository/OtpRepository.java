@@ -1,0 +1,32 @@
+/*
+AI Assistance Disclosure:
+Tool: Claude Code (Fable 5), date: 2026-09-27
+Scope: repository created for issue #93's day-31 purge — the only query so
+       far removes OTPs owned by purged accounts (bulk deletes in the purge
+       transaction chosen by Leong Wei Zhi via options Q&A, over DB-level
+       ON DELETE CASCADE). The OTP flows themselves arrive with #87/#92.
+Author review: (pending pull request)
+*/
+
+package foc.user.repository;
+
+import java.time.Instant;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import foc.user.entity.Otp;
+
+@Repository
+public interface OtpRepository extends JpaRepository<Otp, Long> {
+
+    // removes OTPs owned by accounts whose recovery window has passed, so
+    // the purge's users delete doesn't trip the user_id FK (bulk delete
+    // statements can't join, hence the subquery)
+    @Modifying(clearAutomatically = true)
+    @Query("delete from Otp o where o.user in (select u from User u where u.deletedAt < :cutoff)")
+    int deleteByUserDeletedBefore(@Param("cutoff") Instant cutoff);
+}
