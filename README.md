@@ -174,9 +174,9 @@ filter, sorting and fixed page sizes, promote/demote, and soft-delete
 removal, with their service, request DTO, URL-based role rules,
 and unit and Testcontainers integration tests, following rules decided
 by the team and recorded in `ai/usage-log.md`, plus the PR #135 review
-fixes (HEAD rule for the user list, shared caller-id and problem+json
-handling, optimistic locking on users with a 409 on a lost race, per
-team decision); and the
+fixes (fail-closed /users security rules, shared caller-id,
+active-user lookup and problem+json handling, optimistic locking on
+users with a 409 on a lost race, per team decision); and the
 user-service soft delete and day-31 purge (issue #93) — `DELETE
 /users/me`, the shared `User.softDelete` entity method, the
 `AccountPurgeScheduler` with its purge repositories and

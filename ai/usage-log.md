@@ -26,6 +26,28 @@ Entry template:
 ```
 
 ---
+## 2026-09-27 — Ryan Ang (PR #135 second review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, review
+- **Scope:** `SecurityConfig` /users rules rewritten to fail closed
+  (only `GET /users/*` and `DELETE /users/me` open to any signed-in
+  user; every other method on `/users` and `/users/*` needs
+  ADMIN/OWNER, replacing the per-method admin lines and the HEAD rule),
+  with an `AdminControllerTest` case; `UserRepository.getActiveUser`
+  shared by `AdminService` and `ProfileService` (their service tests'
+  repository mocks now call real default methods); `AdminService` role
+  rank taken from the `Role` enum's declaration order, noted on `Role`.
+- **Prompt(s):** Summary: Asked to go through the new PR #135 review
+  comments. The tool checked each against the code and noted that the
+  reviewer's suggested method-less `/users/*` admin rule would also
+  block the public profile (`GET /users/{id}`), and offered a rule set
+  that keeps it open. Per team decision: apply that rule set, share the
+  active-user lookup, and derive the role rank from the enum; the
+  problem+json consistency comments are handled separately.
+- **Author review:** The tool ran the full `./mvnw test` suite:
+  117/117 passed; the new security test failed before the rule change
+  (a USER's `PATCH /users/me` returned 400). Ryan to review via the PR.
+
 ## 2026-09-27 — Ryan Ang
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor, review

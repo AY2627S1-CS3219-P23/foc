@@ -13,6 +13,10 @@ non-admin gets 403 before the request is parsed; /users/me stays open to
 any signed-in user.
 2026-09-27 (Claude Code, Opus 5.5), PR #135 review: HEAD /users restricted
 like GET, since Spring MVC serves HEAD through the GET list handler.
+2026-09-27 (Claude Code, Opus 5.5), PR #135 review: /users rules rewritten to
+fail closed — only GET /users/* and DELETE /users/me are open to any
+signed-in user; every other method on /users and /users/* needs ADMIN/OWNER
+(replaces the per-method admin lines and the HEAD rule).
 
 */
 
@@ -49,17 +53,17 @@ public class SecurityConfig {
                 .requestMatchers("/auth/**", "/error").permitAll()
                 // health checks (compose depends_on / probes) carry no credentials
                 .requestMatchers("/actuator/health").permitAll()
-                // own-account routes, matched before the admin rules below
-                // so /users/me isn't treated as an admin target
-                .requestMatchers("/users/me").authenticated()
-                // admin endpoints (#96). Checked here rather than on the
-                // controller so a non-admin gets 403 before the path id or
-                // body is parsed (which would otherwise give them a 400)
-                .requestMatchers(HttpMethod.GET, "/users").hasAnyRole("ADMIN", "OWNER")
-                // Spring MVC answers HEAD with the GET handler, so it needs the same rule
-                .requestMatchers(HttpMethod.HEAD, "/users").hasAnyRole("ADMIN", "OWNER")
-                .requestMatchers(HttpMethod.PATCH, "/users/*").hasAnyRole("ADMIN", "OWNER")
-                .requestMatchers(HttpMethod.DELETE, "/users/*").hasAnyRole("ADMIN", "OWNER")
+                // routes open to any signed-in user, each listed by method:
+                // own and public profile, and self-deletion. A new /users/me
+                // route (e.g. PATCH from #92) needs its own line here.
+                .requestMatchers(HttpMethod.GET, "/users/*").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/users/me").authenticated()
+                // everything else under /users, whatever the method, is an
+                // admin endpoint (#96). Method-less so unlisted methods (HEAD,
+                // OPTIONS, POST, ...) fail closed, and checked here rather
+                // than on the controller so a non-admin gets 403 before the
+                // path id or body is parsed (which would otherwise give a 400)
+                .requestMatchers("/users", "/users/*").hasAnyRole("ADMIN", "OWNER")
                 .anyRequest().authenticated()
             )
             .build();

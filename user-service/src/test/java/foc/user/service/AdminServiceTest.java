@@ -7,6 +7,8 @@ Scope: Generated unit tests for AdminService (issue #96): role change,
        AdminControllerTest. Tests use Mockito to isolate the service from
        the database.
 Author review: Ryan reviewed and ensured tests run successfully.
+2026-09-27 (Claude Code, Opus 5.5), PR #135 review: the repository mock
+       calls real default methods, so getActiveUser uses the stubbed finder.
 */
 
 package foc.user.service;
@@ -22,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.Answers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.ArgumentMatchers.any;
@@ -46,7 +49,8 @@ class AdminServiceTest {
     private static final Long CALLER_ID = 1L;
     private static final Long TARGET_ID = 2L;
 
-    @Mock
+    // runs real default methods (getActiveUser) against the stubbed finders
+    @Mock(answer = Answers.CALLS_REAL_METHODS)
     private UserRepository userRepository;
 
     @InjectMocks

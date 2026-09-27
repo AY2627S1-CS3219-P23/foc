@@ -37,7 +37,9 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -124,6 +126,24 @@ class AdminControllerTest extends PostgresTestContainer {
             .andExpect(status().isForbidden());
         mockMvc.perform(head("/users").with(as(admin)))
             .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Methods the user routes don't open to everyone should return 403 to a USER caller")
+    void unlistedMethodsRestricted() throws Exception {
+        // no profile PATCH yet (#92), so this would reach the admin PATCH handler
+        mockMvc.perform(patch("/users/me").with(as(alex))
+                .contentType(MediaType.APPLICATION_JSON).content(roleBody("ADMIN")))
+            .andExpect(status().isForbidden());
+        // would otherwise answer 200 / 405 and reveal the admin endpoints
+        mockMvc.perform(options("/users").with(as(alex)))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(post("/users").with(as(alex)))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(options("/users/{id}", admin.getId()).with(as(alex)))
+            .andExpect(status().isForbidden());
+
+        assertThat(userRepository.findById(alex.getId()).orElseThrow().getRole()).isEqualTo(Role.USER);
     }
 
     @Test

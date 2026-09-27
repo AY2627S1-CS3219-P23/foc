@@ -11,6 +11,8 @@ Scope: Generated the admin user management logic for issue #96: user list
 Author review: Ryan reviewed to ensure it follows the team's decisions.
 2026-09-27 (Claude Code, Opus 5.5): removal switched to the shared
 User.softDelete from #93 after PR #136 merged.
+2026-09-27 (Claude Code, Opus 5.5), PR #135 review: lookups use the shared
+UserRepository.getActiveUser; role rank taken from the Role enum order.
 */
 
 package foc.user.service;
@@ -31,7 +33,6 @@ import org.springframework.web.server.ResponseStatusException;
 import foc.user.dto.UserResponse;
 import foc.user.entity.Role;
 import foc.user.entity.User;
-import foc.user.exception.UserNotFoundException;
 import foc.user.repository.UserRepository;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
@@ -46,8 +47,8 @@ public class AdminService {
 
     private static final Set<String> SORT_FIELDS = Set.of("id", "email", "username", "role", "createdAt");
 
-    // sorting by role follows rank, lowest first
-    private static final List<Role> ROLE_RANK = List.of(Role.USER, Role.ADMIN, Role.OWNER);
+    // sorting by role follows rank, lowest first: the Role enum's declaration order
+    private static final List<Role> ROLE_RANK = List.of(Role.values());
 
     private final UserRepository userRepository;
 
@@ -81,7 +82,7 @@ public class AdminService {
             throw forbidden("OWNER can only be granted through owner setup");
         }
 
-        User target = findActiveUser(targetId);
+        User target = userRepository.getActiveUser(targetId);
         ensureNotOwner(target);
 
         if (target.getRole() == newRole) {
@@ -99,16 +100,11 @@ public class AdminService {
             throw forbidden("Use DELETE /users/me to delete your own account");
         }
 
-        User target = findActiveUser(targetId);
+        User target = userRepository.getActiveUser(targetId);
         ensureNotOwner(target);
 
         target.softDelete(Instant.now());
         userRepository.save(target);
-    }
-
-    private User findActiveUser(Long userId) {
-        return userRepository.findByIdAndDeletedAtIsNull(userId)
-            .orElseThrow(UserNotFoundException::new);
     }
 
     private static void ensureNotOwner(User target) {

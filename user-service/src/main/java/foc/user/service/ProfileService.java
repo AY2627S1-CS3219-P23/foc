@@ -10,6 +10,8 @@ shared UserResponse.from mapping.
 2026-09-27 (Claude Code, Fable 5), issue #93: deleteOwnAccount added
 (bearer-only self-deletion, no password/OTP re-check — chosen by
 Leong Wei Zhi via options Q&A).
+2026-09-27 (Claude Code, Opus 5.5), PR #135 review: lookups use the shared
+UserRepository.getActiveUser.
 */
 
 package foc.user.service;
@@ -21,7 +23,6 @@ import org.springframework.stereotype.Service;
 import foc.user.dto.PublicProfileResponse;
 import foc.user.dto.UserResponse;
 import foc.user.entity.User;
-import foc.user.exception.UserNotFoundException;
 import foc.user.repository.UserRepository;
 
 @Service
@@ -35,12 +36,12 @@ public class ProfileService {
 
     // own profile: username, email, role (credits are fetched from credit-service by the web app)
     public UserResponse getOwnProfile(Long userId) {
-        return UserResponse.from(findActiveUser(userId));
+        return UserResponse.from(userRepository.getActiveUser(userId));
     }
 
     // another user's profile: username only
     public PublicProfileResponse getPublicProfile(Long userId) {
-        User user = findActiveUser(userId);
+        User user = userRepository.getActiveUser(userId);
 
         return new PublicProfileResponse(user.getUsername());
     }
@@ -49,13 +50,8 @@ public class ProfileService {
     // username reservation) for the 30-day recovery window (#94);
     // AccountPurgeScheduler hard-deletes it on day 31
     public void deleteOwnAccount(Long userId) {
-        User user = findActiveUser(userId);
+        User user = userRepository.getActiveUser(userId);
         user.softDelete(Instant.now());
         userRepository.save(user);
-    }
-
-    private User findActiveUser(Long userId) {
-        return userRepository.findByIdAndDeletedAtIsNull(userId)
-            .orElseThrow(UserNotFoundException::new);
     }
 }

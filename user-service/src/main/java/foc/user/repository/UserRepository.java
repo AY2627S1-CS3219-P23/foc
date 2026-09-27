@@ -20,6 +20,8 @@ removed: #96 has no admin-count guard, so nothing uses it.
 2026-09-27 (Claude Code, Fable 5), issue #93: deleteByDeletedBefore added for
 the day-31 purge scheduler (bulk @Modifying query, following the
 notification-service purge pattern from PR #81).
+2026-09-27 (Claude Code, Opus 5.5), PR #135 review: getActiveUser added so
+AdminService and ProfileService share one active-user lookup.
 */
 
 package foc.user.repository;
@@ -35,6 +37,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import foc.user.entity.User;
+import foc.user.exception.UserNotFoundException;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificationExecutor<User> {
@@ -42,7 +45,7 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     // Soft-deleted users stay in the table for the 30-day recovery window.
     // Uniqueness checks (existsByEmail/existsByUsername) and findByEmail
     // deliberately include them, so a deleted account's email and username
-    // stay reserved. Profile lookups use findByIdAndDeletedAtIsNull.
+    // stay reserved. Profile and admin lookups use getActiveUser.
 
     boolean existsByEmail(String email);
 
@@ -52,6 +55,12 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
     // active (not soft-deleted) user by id
     Optional<User> findByIdAndDeletedAtIsNull(Long id);
+
+    // the same lookup for the profile and admin services: a missing or
+    // soft-deleted user is a 404
+    default User getActiveUser(Long id) {
+        return findByIdAndDeletedAtIsNull(id).orElseThrow(UserNotFoundException::new);
+    }
 
     // serialises owner setup calls so two concurrent requests can't both pass
     // the email/username uniqueness checks
