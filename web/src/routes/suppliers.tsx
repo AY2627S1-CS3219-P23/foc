@@ -70,6 +70,18 @@
 // whether the browser's own timeout does.
 // 2026-09-28: shortened the timeout from 10s to 3s (author decision) —
 // faster feedback for the user when location can't be obtained.
+// 2026-09-28 (PR #134 review, LeongWZ): handleSave/handleDelete used
+// to call fetchCurrentPage() and set suppliers/totalPages/totalElements
+// themselves — a third copy of that logic (alongside the load effect),
+// with two problems: (1) it shared one try/catch with the actual
+// mutation, so a refetch failure after a successful save was reported
+// as "Could not save supplier," and (2) unlike the load effect it had
+// no `cancelled` staleness guard, so an in-flight post-mutation
+// refetch could resolve after a newer, filter-changed request and
+// overwrite it with stale data. Fixed by having both handlers just
+// bump `refreshKey`, an effect dependency with no other purpose, so
+// the refresh runs through the load effect itself and inherits its
+// existing guard and error handling instead of duplicating them.
 // Reviewed by: [pending]
 
 import { Fragment, useCallback, useEffect, useState } from 'react'
@@ -117,6 +129,9 @@ export function Suppliers() {
   const [page, setPage] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [totalElements, setTotalElements] = useState(0)
+  // Bumped by handleSave/handleDelete to re-trigger the load effect
+  // below after a mutation — see that effect's comment for why.
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const [formOpenFor, setFormOpenFor] = useState<Supplier | 'new' | null>(null)
   const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null)
@@ -204,12 +219,8 @@ export function Suppliers() {
     }
   }, [sort, userLocation])
 
-  // The single source of truth for "what does the current page look
-  // like" — used both by the reactive effect below (whenever a filter
-  // changes) and, after a create/update/delete, by handleSave/handleDelete
-  // directly, so the list and its pagination metadata (totalElements,
-  // totalPages) always come from the same server response rather than
-  // being hand-patched in two different places that can drift apart.
+  // What the current page's request looks like, given the active
+  // filters/sort/location. Only ever called from the effect below.
   const fetchCurrentPage = useCallback(() => {
     if (sort === DISTANCE_SORT && !userLocation) {
       // Waiting on the geolocation callback above — nothing to fetch yet.
@@ -227,6 +238,19 @@ export function Suppliers() {
       : listSuppliers({ search: query, category, page, size: PAGE_SIZE, sort })
   }, [query, category, page, sort, userLocation])
 
+  // The single source of truth for "what does the current page look
+  // like" — reacts to filter/sort/location changes directly, and to a
+  // create/update/delete indirectly via `refreshKey` (bumped by
+  // handleSave/handleDelete rather than those handlers calling
+  // fetchCurrentPage themselves). Centralizing the refetch here means:
+  // (1) it inherits this effect's own `cancelled` guard, so a stale
+  // response from before a filter change can no longer overwrite a
+  // newer one — handleSave/handleDelete previously called
+  // fetchCurrentPage() directly with no such protection; and (2) a
+  // mutation's own try/catch no longer wraps this fetch too, so a
+  // failure here can't be misattributed as "the save/delete failed"
+  // when the write actually succeeded and only this unrelated
+  // read-back failed (PR #134 review, LeongWZ).
   useEffect(() => {
     let cancelled = false
 
@@ -256,7 +280,7 @@ export function Suppliers() {
     return () => {
       cancelled = true
     }
-  }, [fetchCurrentPage])
+  }, [fetchCurrentPage, refreshKey])
 
   // Fetched once, independent of the current search/category filter —
   // this must always offer every category that exists, not just those
@@ -294,12 +318,11 @@ export function Suppliers() {
         await createSupplier(input)
       }
       setFormOpenFor(null)
-      const result = await fetchCurrentPage()
-      if (result) {
-        setSuppliers(result.content)
-        setTotalPages(result.totalPages)
-        setTotalElements(result.totalElements)
-      }
+      // Trigger the load effect rather than fetching and setting state
+      // here directly — see that effect's comment for why (staleness
+      // guard, and not misattributing a refetch failure as "the save
+      // failed").
+      setRefreshKey((k) => k + 1)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save supplier.')
     } finally {
@@ -316,16 +339,13 @@ export function Suppliers() {
       setPendingDelete(null)
       // Deleting the last item on the last page would otherwise leave
       // `page` pointing past the new totalPages — step back a page
-      // first when that happens, then fetch.
+      // first when that happens; `page` is already one of
+      // fetchCurrentPage's own dependencies, so that alone re-triggers
+      // the load effect without also bumping refreshKey.
       if (page > 0 && suppliers.length === 1) {
         setPage((p) => p - 1)
-        return
-      }
-      const result = await fetchCurrentPage()
-      if (result) {
-        setSuppliers(result.content)
-        setTotalPages(result.totalPages)
-        setTotalElements(result.totalElements)
+      } else {
+        setRefreshKey((k) => k + 1)
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not delete supplier.')
