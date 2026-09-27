@@ -11,6 +11,8 @@ health checks work (PR #126 review).
 endpoints (GET /users, PATCH and DELETE /users/{id}) to ADMIN/OWNER, so a
 non-admin gets 403 before the request is parsed; /users/me stays open to
 any signed-in user.
+2026-09-27 (Claude Code, Opus 5.5), PR #135 review: HEAD /users restricted
+like GET, since Spring MVC serves HEAD through the GET list handler.
 
 */
 
@@ -54,6 +56,8 @@ public class SecurityConfig {
                 // controller so a non-admin gets 403 before the path id or
                 // body is parsed (which would otherwise give them a 400)
                 .requestMatchers(HttpMethod.GET, "/users").hasAnyRole("ADMIN", "OWNER")
+                // Spring MVC answers HEAD with the GET handler, so it needs the same rule
+                .requestMatchers(HttpMethod.HEAD, "/users").hasAnyRole("ADMIN", "OWNER")
                 .requestMatchers(HttpMethod.PATCH, "/users/*").hasAnyRole("ADMIN", "OWNER")
                 .requestMatchers(HttpMethod.DELETE, "/users/*").hasAnyRole("ADMIN", "OWNER")
                 .anyRequest().authenticated()

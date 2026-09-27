@@ -11,6 +11,8 @@ Scope: Generated controller tests for the admin endpoints (issue #96)
        and role filter, more sort fields, literal _, lower-case and
        missing body roles, unauthenticated PATCH/DELETE, removed users
        across endpoints).
+       2026-09-27 (Claude Code, Opus 5.5), PR #135 review: HEAD /users
+       case added (USER gets 403, admin gets 200).
 Author review: Ryan reviewed and ensured tests run successfully.
 */
 
@@ -33,6 +35,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -108,6 +111,18 @@ class AdminControllerTest extends PostgresTestContainer {
             .andExpect(status().isForbidden());
         mockMvc.perform(delete("/users/{id}", "abc").with(as(alex)))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("HEAD /users should follow the same ADMIN/OWNER rule as GET")
+    void headListRestricted() throws Exception {
+        // Spring MVC serves HEAD through the @GetMapping list handler
+        mockMvc.perform(head("/users").with(as(alex)))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(head("/users").param("size", "30").with(as(alex)))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(head("/users").with(as(admin)))
+            .andExpect(status().isOk());
     }
 
     @Test

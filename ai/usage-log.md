@@ -34,13 +34,20 @@ Entry template:
   `ai/usage-log.md`, `user-service/README.md`, `UserRepository` and
   `OwnerSetupControllerTest` resolved by keeping both sides), and
   `AdminService.removeUser` switched to the shared `User.softDelete`.
+  Then, from the PR #135 review comments: `HEAD /users` given the same
+  ADMIN/OWNER rule as `GET /users` in `SecurityConfig`, with a test in
+  `AdminControllerTest`.
 - **Prompt(s):** Summary: Asked for a review of PR #136 and which of
   #135/#136 to merge first. The tool raised owner self-deletion via
   `DELETE /users/me` and the wording of the #89 login note; both were
   answered by the team. The tool suggested merging #136 first, then
-  asked to do the follow-up merge on the #96 branch.
+  asked to do the follow-up merge on the #96 branch. Then asked to go
+  through the PR #135 comments; the tool confirmed that a USER could
+  call `HEAD /users` and offered two fixes. Per team decision: add a
+  separate HEAD rule.
 - **Author review:** The tool ran the full `./mvnw test` suite:
-  109/109 passed. Ryan to review via the PR.
+  110/110 passed (the new HEAD test failed before the fix). Ryan to
+  review via the PR.
 
 ## 2026-09-27 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
