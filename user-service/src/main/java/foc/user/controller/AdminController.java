@@ -9,6 +9,9 @@ Scope: Generated the admin endpoints for issue #96: GET /users (list),
        the authorities directly. Errors are
        problem+json, as in ProfileController.
 Author review: Ryan reviewed to ensure it follows the team's decisions.
+2026-09-27 (Claude Code, Opus 5.5), PR #135 review: callerId and the
+UserNotFoundException handler moved to CallerId / UserNotFoundAdvice,
+shared with ProfileController.
 */
 
 package foc.user.controller;
@@ -36,7 +39,6 @@ import org.springframework.web.server.ResponseStatusException;
 import foc.user.dto.UpdateRoleRequest;
 import foc.user.dto.UserResponse;
 import foc.user.entity.Role;
-import foc.user.exception.UserNotFoundException;
 import foc.user.service.AdminService;
 import jakarta.validation.Valid;
 
@@ -69,15 +71,11 @@ public class AdminController {
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removeUser(@PathVariable Long id, Authentication authentication) {
-        adminService.removeUser(callerId(authentication), id);
+        adminService.removeUser(CallerId.from(authentication), id);
     }
 
-    // the web client reads RFC 9457 problem+json error bodies
-
-    @ExceptionHandler(UserNotFoundException.class)
-    public ProblemDetail handleUserNotFound(UserNotFoundException e) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
-    }
+    // the web client reads RFC 9457 problem+json error bodies (404s are
+    // handled by UserNotFoundAdvice)
 
     // blocked actions (403) and invalid list parameters (400)
     @ExceptionHandler(ResponseStatusException.class)
@@ -93,15 +91,5 @@ public class AdminController {
     })
     public ProblemDetail handleBadInput(Exception e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid request parameter or body");
-    }
-
-    // the principal name carries the caller's user id until JWT auth (#91);
-    // a non-numeric name is treated as unauthenticated rather than a 500
-    private static Long callerId(Authentication authentication) {
-        try {
-            return Long.valueOf(authentication.getName());
-        } catch (NumberFormatException e) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        }
     }
 }

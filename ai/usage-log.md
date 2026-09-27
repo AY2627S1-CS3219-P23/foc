@@ -36,7 +36,10 @@ Entry template:
   `AdminService.removeUser` switched to the shared `User.softDelete`.
   Then, from the PR #135 review comments: `HEAD /users` given the same
   ADMIN/OWNER rule as `GET /users` in `SecurityConfig`, with a test in
-  `AdminControllerTest`.
+  `AdminControllerTest`. The `callerId` parsing and the
+  `UserNotFoundException` handler, copied in `ProfileController` and
+  `AdminController`, moved to the new `CallerId` and
+  `UserNotFoundAdvice` in the controller package.
 - **Prompt(s):** Summary: Asked for a review of PR #136 and which of
   #135/#136 to merge first. The tool raised owner self-deletion via
   `DELETE /users/me` and the wording of the #89 login note; both were
@@ -44,7 +47,8 @@ Entry template:
   asked to do the follow-up merge on the #96 branch. Then asked to go
   through the PR #135 comments; the tool confirmed that a USER could
   call `HEAD /users` and offered two fixes. Per team decision: add a
-  separate HEAD rule.
+  separate HEAD rule. Then asked to fix the duplicated caller-id and
+  404 handling that the review flagged now instead of with #91.
 - **Author review:** The tool ran the full `./mvnw test` suite:
   110/110 passed (the new HEAD test failed before the fix). Ryan to
   review via the PR.
