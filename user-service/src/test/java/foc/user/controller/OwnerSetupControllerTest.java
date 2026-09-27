@@ -21,11 +21,15 @@ Author review: Ryan validated correctness and naming.
 2026-09-25 (Claude Code, Opus 5.5), PR #132 review: concurrent setups with
        different emails must both succeed; the concurrent-request code is
        shared by both concurrency cases.
+2026-09-27 (Claude Code, Fable 5), issue #93: reuse-block cases added — a
+       soft-deleted account's email and username still fail the uniqueness
+       checks (design doc §2: 30-day reuse block).
 */
 
 
 package foc.user.controller;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -52,6 +56,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import foc.user.PostgresTestContainer;
 import foc.user.dto.SetupOwnerRequest;
 import foc.user.entity.Role;
+import foc.user.entity.User;
 import foc.user.repository.UserRepository;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
@@ -123,6 +128,51 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
             .andExpect(jsonPath("$.role").value("OWNER"));
 
         assertThat(userRepository.countByRole(Role.OWNER)).isEqualTo(2);
+    }
+
+    // 30-day reuse block (issue #93): a soft-deleted account keeps its row,
+    // so its email and username stay reserved until the day-31 purge
+
+    @Test
+    @DisplayName("Should reject a soft-deleted account's email with 400 Bad Request")
+    void setupOwner_softDeletedEmailStaysReserved() throws Exception {
+        saveSoftDeletedUser("e1234567@u.nus.edu", "gone_user");
+
+        SetupOwnerRequest request = new SetupOwnerRequest(
+            "e1234567@u.nus.edu",
+            "new_owner",
+            "ValidPassword123!"
+        );
+
+        mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", VALID_SETUP_TOKEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Should reject a soft-deleted account's username with 400 Bad Request")
+    void setupOwner_softDeletedUsernameStaysReserved() throws Exception {
+        saveSoftDeletedUser("e1234567@u.nus.edu", "gone_user");
+
+        SetupOwnerRequest request = new SetupOwnerRequest(
+            "e2234567@u.nus.edu",
+            "gone_user",
+            "ValidPassword123!"
+        );
+
+        mockMvc.perform(post("/auth/setup-owner")
+                .header("X-Setup-Token", VALID_SETUP_TOKEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    private void saveSoftDeletedUser(String email, String username) {
+        User deleted = new User(email, username, "hashed_password", Role.USER);
+        deleted.softDelete(Instant.now());
+        userRepository.save(deleted);
     }
 
     @Test

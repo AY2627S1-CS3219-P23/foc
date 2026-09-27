@@ -7,6 +7,9 @@ Scope: Generated unit tests for ProfileService (issue #95) covering own and
 Author review: Ryan reviewed and ensured tests run successfully.
 2026-09-25 (Claude Code, Opus 5.5), PR #131 review: own-profile test asserts
        the full response, including id and createdAt.
+2026-09-27 (Claude Code, Fable 5), issue #93: deleteOwnAccount cases added
+       (soft delete stamps deleted_at; missing/deleted account throws
+       without saving).
 */
 
 package foc.user.service;
@@ -20,6 +23,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -63,6 +69,30 @@ class ProfileServiceTest {
 
         assertThatThrownBy(() -> profileService.getOwnProfile(1L))
             .isInstanceOf(UserNotFoundException.class);
+    }
+
+    // delete own account
+
+    @Test
+    @DisplayName("Should stamp deleted_at when deleting own account")
+    void deleteOwnAccount_softDeletes() {
+        when(userRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(user));
+
+        profileService.deleteOwnAccount(1L);
+
+        assertThat(user.isActive()).isFalse();
+        assertThat(user.getDeletedAt()).isNotNull();
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    @DisplayName("Should throw UserNotFoundException when the account is missing or already deleted")
+    void deleteOwnAccount_throwsWhenNotFound() {
+        when(userRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> profileService.deleteOwnAccount(1L))
+            .isInstanceOf(UserNotFoundException.class);
+        verify(userRepository, never()).save(any());
     }
 
     // public profile

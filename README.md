@@ -31,6 +31,9 @@
   endpoint (issue #133 — search/filter/paging) and the accompanying
   removal of the zone feature's remaining frontend wiring, by Claude
   Code (Sonnet 5).
+  2026-09-27: AI Use Summary extended for the user-service soft delete
+  and day-31 purge (issue #93) by Claude Code (Fable 5), on PR #136
+  Copilot review.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -176,6 +179,15 @@ the filter bar's zone dropdown, the edit form's required Campus Zone
 field, and a call to a `/zones` endpoint the backend never implemented)
 was removed, per the team's decision to drop the zone feature, since
 the unpopulatable required field was blocking every supplier edit.
+user-service soft delete and day-31 purge (issue #93) — `DELETE
+/users/me`, the shared `User.softDelete` entity method, the
+`AccountPurgeScheduler` with its purge repositories and
+config/compose/`.env.example` wiring (mirroring the notification
+retention purge), and the unit, integration, and reuse-block tests,
+with the endpoint-confirmation, shared-path, and FK-cleanup choices
+made by the author via neutral-options Q&A and recorded in
+`ai/usage-log.md` (the 30-day reuse block itself needed no new code
+and was pinned with tests).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
