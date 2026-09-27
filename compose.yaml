@@ -30,6 +30,11 @@
 # options Q&A; 8085/5433 stay reserved for the notification re-add,
 # issues #61-#69). OWNER_SETUP_TOKEN passed through for the merged
 # owner-bootstrap endpoint (issue #97).
+# 2026-09-27, Claude Code (Fable 5), issue #93: retention window /
+# purge-cron passed to the user service for the day-31 account purge
+# scheduler, mirroring the notification retention pair (added on PR
+# #136 Copilot review — the vars were documented in .env.example but
+# not passed to the container).
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -196,6 +201,10 @@ services:
       # Shared secret gating POST /auth/setup-owner (issue #97); the
       # endpoint answers 503 while it is unset.
       OWNER_SETUP_TOKEN: ${OWNER_SETUP_TOKEN:-}
+      # Recovery window / purge cadence for soft-deleted accounts
+      # (issue #93, day-31 purge scheduler).
+      USER_RETENTION_DAYS: ${USER_RETENTION_DAYS:-30}
+      USER_PURGE_CRON: "${USER_PURGE_CRON:-0 0 3 * * *}"
     depends_on:
       user-db:
         condition: service_healthy

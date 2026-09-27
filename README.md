@@ -29,6 +29,9 @@
   setup log line were added and then removed) by Claude Code (Opus 5.5).
   2026-09-26: AI Use Summary extended for the user-service admin
   endpoints (issue #96) by Claude Code (Opus 5.5).
+  2026-09-27: AI Use Summary extended for the user-service soft delete
+  and day-31 purge (issue #93) by Claude Code (Fable 5), on PR #136
+  Copilot review.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -168,7 +171,16 @@ user-service admin endpoints (issue #96) — user list with search, role
 filter, sorting and fixed page sizes, promote/demote, and soft-delete
 removal, with their service, request DTO, URL-based role rules,
 and unit and Testcontainers integration tests, following rules decided
-by the team and recorded in `ai/usage-log.md`.
+by the team and recorded in `ai/usage-log.md`; and the
+user-service soft delete and day-31 purge (issue #93) — `DELETE
+/users/me`, the shared `User.softDelete` entity method, the
+`AccountPurgeScheduler` with its purge repositories and
+config/compose/`.env.example` wiring (mirroring the notification
+retention purge), and the unit, integration, and reuse-block tests,
+with the endpoint-confirmation, shared-path, and FK-cleanup choices
+made by the author via neutral-options Q&A and recorded in
+`ai/usage-log.md` (the 30-day reuse block itself needed no new code
+and was pinned with tests).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

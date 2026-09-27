@@ -11,6 +11,9 @@
 # @ServiceConnection overrides the datasource there.
 # 2026-09-25 (Ryan Ang, Claude Code (Opus 5.5)): owner.setup.token comment
 # updated; setup no longer stops after the first owner.
+# 2026-09-27, Claude Code (Fable 5), issue #93: user.retention bindings for
+# the day-31 account purge scheduler, mirroring notification-service's
+# retention config shape.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -30,6 +33,18 @@ management:
     web:
       exposure:
         include: health
+
+user:
+  retention:
+    # Soft-deleted accounts keep their row — and so their unique email/
+    # username — for this many days (design doc §2: 30-day reuse block).
+    # The purge scheduler hard-deletes them, with their otps and
+    # account_tokens rows, once deleted_at is older than this ("purge on
+    # day 31").
+    days: ${USER_RETENTION_DAYS:30}
+    # Cron schedule (Spring's 6-field format) controlling how often the
+    # purge sweep runs. Default: daily at 03:00 server time.
+    purge-cron: "${USER_PURGE_CRON:0 0 3 * * *}"
 
 owner:
   setup:

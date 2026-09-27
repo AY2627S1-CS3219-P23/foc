@@ -9,6 +9,8 @@ Scope: Generated the admin user management logic for issue #96: user list
        granted here, admins may act on other admins and demote themselves,
        and admins remove themselves only through DELETE /users/me.
 Author review: Ryan reviewed to ensure it follows the team's decisions.
+2026-09-27 (Claude Code, Opus 5.5): removal switched to the shared
+User.softDelete from #93 after PR #136 merged.
 */
 
 package foc.user.service;
@@ -90,8 +92,7 @@ public class AdminService {
         return UserResponse.from(userRepository.save(target));
     }
 
-    // soft delete, same as self-deletion: the account stays recoverable for 30 days.
-    // Sets deleted_at directly until the soft-delete path from #93 lands
+    // soft delete, same as self-deletion: the account stays recoverable for 30 days
     @Transactional
     public void removeUser(Long callerId, Long targetId) {
         if (targetId.equals(callerId)) {
@@ -101,7 +102,7 @@ public class AdminService {
         User target = findActiveUser(targetId);
         ensureNotOwner(target);
 
-        target.setDeletedAt(Instant.now());
+        target.softDelete(Instant.now());
         userRepository.save(target);
     }
 

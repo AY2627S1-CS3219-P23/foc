@@ -26,6 +26,46 @@ Entry template:
 ```
 
 ---
+## 2026-09-27 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, review
+- **Scope:** PR #136 (issue #93) reviewed for gaps; after it merged,
+  `main` merged into the #96 branch (conflicts in `README.md`,
+  `ai/usage-log.md`, `user-service/README.md`, `UserRepository` and
+  `OwnerSetupControllerTest` resolved by keeping both sides), and
+  `AdminService.removeUser` switched to the shared `User.softDelete`.
+- **Prompt(s):** Summary: Asked for a review of PR #136 and which of
+  #135/#136 to merge first. The tool raised owner self-deletion via
+  `DELETE /users/me` and the wording of the #89 login note; both were
+  answered by the team. The tool suggested merging #136 first, then
+  asked to do the follow-up merge on the #96 branch.
+- **Author review:** The tool ran the full `./mvnw test` suite:
+  109/109 passed. Ryan to review via the PR.
+
+## 2026-09-27 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** user-service issue #93 — soft delete (`DELETE /users/me`,
+  `User.softDelete`), the day-31 purge (`AccountPurgeScheduler`,
+  `OtpRepository`/`AccountTokenRepository` purge queries,
+  `user.retention.*` config, `@EnableScheduling`), reuse-block and
+  purge tests, README/.env.example updates.
+- **Prompt(s):** Asked to plan and implement issue #93 from the D2
+  design doc (§2: soft delete = reuse block, purge on day 31). Open
+  design points were decided by the author via neutral options Q&A:
+  `DELETE /users/me` needs the bearer token only (no password/OTP
+  re-check); the shared soft-delete path is an entity method
+  (`User.softDelete`), which admin removal (#96/PR #135) switches to
+  after merge; purge FK cleanup is bulk deletes inside the purge
+  transaction (over DB-level ON DELETE CASCADE). The scheduler follows
+  notification-service's retention purge pattern (cadence/window
+  env-overridable, defaults matching: 30 days, daily 03:00). The
+  30-day reuse block needed no new code — uniqueness checks already
+  include soft-deleted rows — so it was pinned with tests instead.
+- **Author review:** All design decisions made by the author during the
+  options Q&A; suite run with `./mvnw test` (49/49 green); code, tests,
+  and disclosures reviewed via pull request (#136).
+
 ## 2026-09-26 — Ryan Ang
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor, generate
