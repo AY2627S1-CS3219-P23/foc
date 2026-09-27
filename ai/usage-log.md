@@ -45,7 +45,8 @@ Entry template:
   on `users`: a `@Version` column on `User` (default 0 so `ddl-auto`
   can add it to existing rows), a 409 problem+json handler in
   `ProblemDetailAdvice`, `UserOptimisticLockTest` and
-  `ConflictResponseTest`.
+  `ConflictResponseTest`. A `ProfileControllerTest` case pins that an
+  OWNER can delete their own account via `DELETE /users/me`.
 - **Prompt(s):** Summary: Asked for a review of PR #136 and which of
   #135/#136 to merge first. The tool raised owner self-deletion via
   `DELETE /users/me` and the wording of the #89 login note; both were
@@ -59,9 +60,12 @@ Entry template:
   a delete, the tool listed row locking, a version column,
   changed-columns-only updates, or deferring. Per team decision:
   optimistic locking with a version column, and a lost race returns
-  409 problem+json.
+  409 problem+json. The tool noted that `DELETE /users/me` lets an
+  OWNER delete themselves, against the earlier ownership-transfer
+  decision. Per team decision: owners may delete themselves via
+  `DELETE /users/me`, like any user.
 - **Author review:** The tool ran the full `./mvnw test` suite:
-  115/115 passed. The new HEAD test failed before the fix, the
+  116/116 passed. The new HEAD test failed before the fix, the
   underscore test failed with `_` escaping temporarily removed, and
   the 5 locking/409 tests failed before `@Version` and the handler. Ryan
   to review via the PR.
