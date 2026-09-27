@@ -4,6 +4,9 @@
 # Postgres has the users table, plus a fixed owner setup token for the
 # controller tests.
 # Author review: Ryan ran mvn test and confirmed the suite is green.
+# 2026-09-27, Claude Code (Fable 5), issue #93: user.retention values for
+# the purge scheduler bean (30-day window; cron irrelevant in tests, which
+# call the purge method directly).
 
 spring:
   application:
@@ -15,3 +18,8 @@ spring:
 owner:
   setup:
     token: test-owner-setup-token
+
+user:
+  retention:
+    days: 30
+    purge-cron: "0 0 3 * * *"

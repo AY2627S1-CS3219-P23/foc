@@ -27,6 +27,9 @@
   2026-09-25: AI Use Summary extended for the owner-setup change
   (setup no longer limited to one owner; a setup token expiry and a
   setup log line were added and then removed) by Claude Code (Opus 5.5).
+  2026-09-27: AI Use Summary extended for the user-service soft delete
+  and day-31 purge (issue #93) by Claude Code (Fable 5), on PR #136
+  Copilot review.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -161,7 +164,16 @@ assertions), each chosen by the author; and the removal of the
 existing-owner check from user-service owner setup, decided by the
 author, with the matching test, comment, and `.env.example` updates;
 a setup token expiry and a setup log line were also built, then
-removed by the author, with expiry deferred to a later issue.
+removed by the author, with expiry deferred to a later issue; and the
+user-service soft delete and day-31 purge (issue #93) — `DELETE
+/users/me`, the shared `User.softDelete` entity method, the
+`AccountPurgeScheduler` with its purge repositories and
+config/compose/`.env.example` wiring (mirroring the notification
+retention purge), and the unit, integration, and reuse-block tests,
+with the endpoint-confirmation, shared-path, and FK-cleanup choices
+made by the author via neutral-options Q&A and recorded in
+`ai/usage-log.md` (the 30-day reuse block itself needed no new code
+and was pinned with tests).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
