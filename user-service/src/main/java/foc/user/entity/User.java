@@ -13,6 +13,9 @@ was removed as it duplicated the constraint (verified against user-db).
 2026-09-27 (Claude Code, Fable 5), issue #93: softDelete added as the shared
 soft-delete entry point (entity method chosen by Leong Wei Zhi via options
 Q&A); admin removal (#96) switches to it when both are merged.
+2026-09-27 (Claude Code, Opus 5.5), PR #135 review: @Version column added
+for optimistic locking (team decision), so a role change racing a delete
+can't write deleted_at back to null.
 */
 
 package foc.user.entity;
@@ -26,7 +29,10 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
+
+import org.hibernate.annotations.ColumnDefault;
 
 
 @Entity
@@ -71,6 +77,14 @@ public class User {
      */
     @Column(name = "deleted_at")
     private Instant deletedAt;
+
+    // optimistic lock: a save made from a stale copy fails instead of
+    // overwriting a newer one (e.g. a role change undoing a delete). The
+    // default fills existing rows when ddl-auto adds the column.
+    @Version
+    @ColumnDefault("0")
+    @Column(nullable = false)
+    private long version;
 
     public User() {
     }
