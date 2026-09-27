@@ -39,9 +39,13 @@ Entry template:
   `AdminControllerTest`. The `callerId` parsing and the
   `UserNotFoundException` handler, copied in `ProfileController` and
   `AdminController`, moved to the new `CallerId` and
-  `UserNotFoundAdvice` in the controller package. The literal-`_`
+  `ProblemDetailAdvice` in the controller package. The literal-`_`
   search test switched from `"o_u"` to `"o_n"`, since a wildcard `_`
-  never matched `"o_u"` against the seeded users.
+  never matched `"o_u"` against the seeded users. Optimistic locking
+  on `users`: a `@Version` column on `User` (default 0 so `ddl-auto`
+  can add it to existing rows), a 409 problem+json handler in
+  `ProblemDetailAdvice`, `UserOptimisticLockTest` and
+  `ConflictResponseTest`.
 - **Prompt(s):** Summary: Asked for a review of PR #136 and which of
   #135/#136 to merge first. The tool raised owner self-deletion via
   `DELETE /users/me` and the wording of the #89 login note; both were
@@ -51,10 +55,15 @@ Entry template:
   call `HEAD /users` and offered two fixes. Per team decision: add a
   separate HEAD rule. Then asked to fix the duplicated caller-id and
   404 handling that the review flagged now instead of with #91, and
-  to fix the underscore test.
+  to fix the underscore test. For the race between a role change and
+  a delete, the tool listed row locking, a version column,
+  changed-columns-only updates, or deferring. Per team decision:
+  optimistic locking with a version column, and a lost race returns
+  409 problem+json.
 - **Author review:** The tool ran the full `./mvnw test` suite:
-  110/110 passed. The new HEAD test failed before the fix, and the
-  underscore test failed with `_` escaping temporarily removed. Ryan
+  115/115 passed. The new HEAD test failed before the fix, the
+  underscore test failed with `_` escaping temporarily removed, and
+  the 5 locking/409 tests failed before `@Version` and the handler. Ryan
   to review via the PR.
 
 ## 2026-09-27 — Leong Wei Zhi

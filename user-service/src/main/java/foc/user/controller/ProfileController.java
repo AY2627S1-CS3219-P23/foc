@@ -9,7 +9,7 @@ instead of a 500; UserNotFoundException rendered as problem+json for the web cli
 2026-09-27 (Claude Code, Fable 5), issue #93: DELETE /users/me added (soft
 delete; bearer token only, no body — chosen by Leong Wei Zhi via options Q&A).
 2026-09-27 (Claude Code, Opus 5.5), PR #135 review: callerId and the
-UserNotFoundException handler moved to CallerId / UserNotFoundAdvice,
+UserNotFoundException handler moved to CallerId / ProblemDetailAdvice,
 shared with AdminController.
 */
 

@@ -10,7 +10,7 @@ Scope: Generated the admin endpoints for issue #96: GET /users (list),
        problem+json, as in ProfileController.
 Author review: Ryan reviewed to ensure it follows the team's decisions.
 2026-09-27 (Claude Code, Opus 5.5), PR #135 review: callerId and the
-UserNotFoundException handler moved to CallerId / UserNotFoundAdvice,
+UserNotFoundException handler moved to CallerId / ProblemDetailAdvice,
 shared with ProfileController.
 */
 
@@ -74,8 +74,8 @@ public class AdminController {
         adminService.removeUser(CallerId.from(authentication), id);
     }
 
-    // the web client reads RFC 9457 problem+json error bodies (404s are
-    // handled by UserNotFoundAdvice)
+    // the web client reads RFC 9457 problem+json error bodies (404s and
+    // 409s are handled by ProblemDetailAdvice)
 
     // blocked actions (403) and invalid list parameters (400)
     @ExceptionHandler(ResponseStatusException.class)
