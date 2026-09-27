@@ -9,6 +9,10 @@
  * filter dropdown needs the full set of categories, independent of any
  * current search/filter, so it can't be derived from listSuppliers's
  * own (filtered, paginated) response.
+ * 2026-09-27: added optional lat/lng params — team decision to support
+ * sorting by distance from the user's current (browser-geolocated)
+ * position. When both are present they take priority over the
+ * Pageable's own sort.
  * Reviewed by: [pending]
  */
 package foc.supplier.controller;
@@ -37,8 +41,10 @@ public class SupplierController {
     public PageResponse<SupplierResponse> listSuppliers(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) Double lat,
+            @RequestParam(required = false) Double lng,
             @PageableDefault(size = 20, sort = "name", direction = Sort.Direction.ASC) Pageable pageable) {
-        return supplierService.listSuppliers(search, category, pageable);
+        return supplierService.listSuppliers(search, category, lat, lng, pageable);
     }
 
     @GetMapping("/suppliers/categories")

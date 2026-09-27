@@ -15,6 +15,11 @@
 // Added listCategories() (GET /suppliers/categories) — the filter
 // dropdown needs every category that exists, not just those on the
 // currently filtered/paginated result set.
+// 2026-09-27: added `sort` (PR #134 Copilot review — the backend
+// supported it via Pageable but this helper never serialized one) and
+// optional lat/lng — team decision to support "sort by distance from
+// the user's current location." When lat/lng are present, the backend
+// orders by distance from that point instead of `sort`.
 // Reviewed by: [pending]
 
 import { apiFetch } from '@/lib/api/http'
@@ -25,6 +30,9 @@ export interface SupplierSearchParams {
   category?: string
   page?: number
   size?: number
+  sort?: string
+  lat?: number
+  lng?: number
 }
 
 function toQuery(params: SupplierSearchParams): string {
@@ -33,6 +41,9 @@ function toQuery(params: SupplierSearchParams): string {
   if (params.category) search.set('category', params.category)
   if (params.page !== undefined) search.set('page', String(params.page))
   if (params.size !== undefined) search.set('size', String(params.size))
+  if (params.sort) search.set('sort', params.sort)
+  if (params.lat !== undefined) search.set('lat', String(params.lat))
+  if (params.lng !== undefined) search.set('lng', String(params.lng))
   const qs = search.toString()
   return qs ? `?${qs}` : ''
 }

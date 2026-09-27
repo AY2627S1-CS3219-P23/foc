@@ -25,6 +25,14 @@
 // current (filtered, paginated) `suppliers` state — the derived list
 // was a bug: filtering to "Food" then reopening the dropdown only
 // offered categories present on Food suppliers, not every category.
+// 2026-09-27: added a sort control, including "Nearest to Me" (team
+// decision) which requests the browser's Geolocation API and, once
+// granted, passes lat/lng to GET /suppliers so the backend orders by
+// distance. On denial/error, falls back to name sort with a notice
+// rather than leaving the page stuck loading. Distance labels on each
+// card are computed client-side (features/supplier/distance.ts) from
+// the same coordinates already in the response — display only; the
+// authoritative order comes from the backend.
 // Reviewed by: [pending]
 
 import { Fragment, useEffect, useState } from 'react'
@@ -41,6 +49,7 @@ import { SupplierCard } from '@/features/supplier/components/SupplierCard'
 import { SupplierDetailPanel } from '@/features/supplier/components/SupplierDetailPanel'
 import { SupplierFilterBar } from '@/features/supplier/components/SupplierFilterBar'
 import { SupplierFormModal } from '@/features/supplier/components/SupplierFormModal'
+import { formatDistance, haversineDistanceMeters } from '@/features/supplier/distance'
 import type { Supplier, SupplierInput } from '@/features/supplier/types'
 import { ApiError } from '@/lib/api/http'
 
@@ -48,6 +57,12 @@ import { ApiError } from '@/lib/api/http'
 const IS_ADMIN = true
 
 const PAGE_SIZE = 10
+const DISTANCE_SORT = 'distance'
+
+interface Coordinates {
+  lat: number
+  lng: number
+}
 
 export function Suppliers() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -57,6 +72,9 @@ export function Suppliers() {
 
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('')
+  const [sort, setSort] = useState('name,asc')
+  const [userLocation, setUserLocation] = useState<Coordinates | null>(null)
+  const [locationNotice, setLocationNotice] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const [page, setPage] = useState(0)
@@ -72,20 +90,72 @@ export function Suppliers() {
   // otherwise silently show an empty page. Reset during render (React's
   // recommended pattern for "adjust state when a prop changes") rather
   // than in an effect, which would cause an extra render pass.
-  const [prevFilters, setPrevFilters] = useState({ query, category })
-  if (query !== prevFilters.query || category !== prevFilters.category) {
-    setPrevFilters({ query, category })
+  const [prevFilters, setPrevFilters] = useState({ query, category, sort })
+  if (query !== prevFilters.query || category !== prevFilters.category || sort !== prevFilters.sort) {
+    setPrevFilters({ query, category, sort })
     setPage(0)
   }
 
+  // Geolocation support is a static browser capability, not something
+  // that changes — safe to check and adjust state during render
+  // (React's "adjust state during render" pattern) rather than in an
+  // effect, which would call setState synchronously as the effect's
+  // first action (flagged by react-hooks/set-state-in-effect).
+  if (sort === DISTANCE_SORT && !userLocation && !navigator.geolocation && !locationNotice) {
+    setLocationNotice('Location is not supported by this browser — showing suppliers sorted by name instead.')
+    setSort('name,asc')
+  }
+
+  // "Nearest to Me" needs a coordinate before it can fetch anything —
+  // request it only when that sort is actually selected (never
+  // proactively), and fall back to name sort with a visible notice if
+  // geolocation fails. The effect's only synchronous action is
+  // starting the browser's async geolocation call; both setState calls
+  // happen inside its callbacks, not directly in the effect body.
   useEffect(() => {
+    if (sort !== DISTANCE_SORT || userLocation || !navigator.geolocation) return
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude })
+        setLocationNotice(null)
+      },
+      () => {
+        // GeolocationPositionError has three distinct codes (denied,
+        // unavailable, timeout) — deliberately not distinguishing them
+        // here (author decision): the fallback behavior is identical
+        // either way, and a message like "permission denied" would be
+        // an outright wrong claim when the real cause is something
+        // else (e.g. incognito mode blocking location entirely, or the
+        // OS's own location toggle being off) rather than the user
+        // having denied anything.
+        setLocationNotice("Couldn't get your location — showing suppliers sorted by name instead.")
+        setSort('name,asc')
+      },
+    )
+  }, [sort, userLocation])
+
+  useEffect(() => {
+    // Waiting on the geolocation callback above — nothing to fetch yet.
+    if (sort === DISTANCE_SORT && !userLocation) return
+
     let cancelled = false
 
     async function loadSuppliers() {
       setLoading(true)
       setError(null)
       try {
-        const result = await listSuppliers({ search: query, category, page, size: PAGE_SIZE })
+        const result =
+          sort === DISTANCE_SORT && userLocation
+            ? await listSuppliers({
+                search: query,
+                category,
+                page,
+                size: PAGE_SIZE,
+                lat: userLocation.lat,
+                lng: userLocation.lng,
+              })
+            : await listSuppliers({ search: query, category, page, size: PAGE_SIZE, sort })
         if (cancelled) return
         setSuppliers(result.content)
         setTotalPages(result.totalPages)
@@ -107,7 +177,7 @@ export function Suppliers() {
     return () => {
       cancelled = true
     }
-  }, [query, category, page])
+  }, [query, category, page, sort, userLocation])
 
   // Fetched once, independent of the current search/category filter —
   // this must always offer every category that exists, not just those
@@ -184,6 +254,9 @@ export function Suppliers() {
         category={category}
         onCategoryChange={setCategory}
         categories={categories}
+        sort={sort}
+        onSortChange={setSort}
+        locationNotice={locationNotice}
       />
 
       {error && (
@@ -214,6 +287,18 @@ export function Suppliers() {
                     selected={supplier.id === selectedId}
                     onSelect={() =>
                       setSelectedId(supplier.id === selectedId ? null : supplier.id)
+                    }
+                    distanceLabel={
+                      sort === DISTANCE_SORT && userLocation
+                        ? formatDistance(
+                            haversineDistanceMeters(
+                              userLocation.lat,
+                              userLocation.lng,
+                              supplier.latitude,
+                              supplier.longitude,
+                            ),
+                          )
+                        : undefined
                     }
                   />
                   {/* Below lg, the sidebar column collapses away, so show

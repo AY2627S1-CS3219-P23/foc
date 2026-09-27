@@ -7,6 +7,15 @@
  * Revised same day: added listCategories() — the frontend's filter
  * dropdown needs every category that exists, not just those on the
  * currently filtered page.
+ * 2026-09-27: listSuppliers() now takes optional lat/lng and, when
+ * both are present, orders by distance from that point instead of the
+ * Pageable's own sort (team decision: sort by distance from the
+ * user's current location). The distance query strips the incoming
+ * Pageable's Sort before calling the repository — Spring Data appends
+ * a Pageable's Sort onto a native @Query's raw SQL as a naive string
+ * concatenation, and the query already ends in its own ORDER BY, so
+ * leaving the default "name" sort attached produced a malformed
+ * double ORDER BY (Postgres: "syntax error at or near order").
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
@@ -21,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
@@ -36,11 +46,18 @@ public class SupplierService {
         this.supplierCategoriesRepository = supplierCategoriesRepository;
     }
 
-    public PageResponse<SupplierResponse> listSuppliers(String search, String category, Pageable pageable) {
+    public PageResponse<SupplierResponse> listSuppliers(String search, String category, Double lat, Double lng,
+            Pageable pageable) {
         String normalizedSearch = blankToNull(search);
         String normalizedCategory = blankToNull(category);
 
-        Page<Suppliers> page = suppliersRepository.search(normalizedSearch, normalizedCategory, pageable);
+        Page<Suppliers> page;
+        if (lat != null && lng != null) {
+            Pageable unsorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+            page = suppliersRepository.searchOrderedByDistance(normalizedSearch, normalizedCategory, lat, lng, unsorted);
+        } else {
+            page = suppliersRepository.search(normalizedSearch, normalizedCategory, pageable);
+        }
 
         List<Long> supplierIds = page.getContent().stream().map(Suppliers::getId).toList();
         Map<Long, List<String>> categoriesBySupplierId = supplierCategoriesRepository
