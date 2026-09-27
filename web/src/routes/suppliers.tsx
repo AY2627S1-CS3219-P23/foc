@@ -44,6 +44,32 @@
 // fetch into fetchCurrentPage() and calling it after a successful
 // mutation instead of hand-patching state, so the list and its
 // pagination metadata always come from the same server response.
+// 2026-09-28 (PR #134 review, LeongWZ): getCurrentPosition had no
+// `timeout` — the spec default is Infinity, so a user who dismissed or
+// ignored the browser's permission prompt (rather than explicitly
+// allowing or denying it) left neither callback ever firing.
+// `userLocation` stayed null forever, `fetchCurrentPage` kept
+// resolving to null, and the page silently kept showing the previous
+// (stale) sorted-by-name results under a "Nearest to Me" label with no
+// spinner or notice — and, worse, this state made handleSave/handleDelete's
+// `if (result)` guard skip the post-mutation refresh entirely,
+// reintroducing the exact stale-list bug fixed above through a
+// different path. Fixed by passing a `timeout` (falls into the
+// existing, already-correct error callback after the timeout) and adding
+// `waitingForLocation`, a derived render-time flag (not stored state —
+// it's fully computed from sort/userLocation already in scope) that
+// shows an explicit "Waiting for your location…" state instead of
+// silently rendering stale data during the wait.
+// 2026-09-28: added a JS-level backstop timer alongside the native
+// `timeout` option — observed in practice (Chrome/Windows, incognito)
+// that the native timeout isn't always honored when the browser's
+// underlying call to the OS's location service itself hangs; the
+// JS-level option only preempts the browser's own internal logic, not
+// a blocked native call underneath it. An independent `setTimeout`
+// guarantees the fallback fires after the timeout regardless of
+// whether the browser's own timeout does.
+// 2026-09-28: shortened the timeout from 10s to 3s (author decision) —
+// faster feedback for the user when location can't be obtained.
 // Reviewed by: [pending]
 
 import { Fragment, useCallback, useEffect, useState } from 'react'
@@ -126,24 +152,56 @@ export function Suppliers() {
   useEffect(() => {
     if (sort !== DISTANCE_SORT || userLocation || !navigator.geolocation) return
 
+    // `settled` guards against a double-resolution: either the native
+    // callback and the backstop timer both firing (whichever wins
+    // first should be the only one that takes effect), or a late
+    // native callback arriving after this effect has already been
+    // cleaned up (e.g. the user switched sort again in the meantime).
+    let settled = false
+
+    function handleFailure() {
+      if (settled) return
+      settled = true
+      // GeolocationPositionError has three distinct codes (denied,
+      // unavailable, timeout) — deliberately not distinguishing them
+      // here (author decision): the fallback behavior is identical
+      // either way, and a message like "permission denied" would be
+      // an outright wrong claim when the real cause is something
+      // else (e.g. incognito mode blocking location entirely, or the
+      // OS's own location toggle being off) rather than the user
+      // having denied anything.
+      setLocationNotice("Couldn't get your location — showing suppliers sorted by name instead.")
+      setSort('name,asc')
+    }
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        if (settled) return
+        settled = true
         setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude })
         setLocationNotice(null)
       },
-      () => {
-        // GeolocationPositionError has three distinct codes (denied,
-        // unavailable, timeout) — deliberately not distinguishing them
-        // here (author decision): the fallback behavior is identical
-        // either way, and a message like "permission denied" would be
-        // an outright wrong claim when the real cause is something
-        // else (e.g. incognito mode blocking location entirely, or the
-        // OS's own location toggle being off) rather than the user
-        // having denied anything.
-        setLocationNotice("Couldn't get your location — showing suppliers sorted by name instead.")
-        setSort('name,asc')
-      },
+      handleFailure,
+      // Without a timeout, an unanswered (dismissed/ignored, not
+      // explicitly denied) permission prompt never fires either
+      // callback — the spec default is Infinity.
+      { timeout: 3000 },
     )
+
+    // Backstop: the native `timeout` option above isn't reliably
+    // honored by every browser/OS combination — observed in practice
+    // on Chrome/Windows, where a stuck call down to the OS's own
+    // location service can hang past the requested timeout, since the
+    // JS-level option only preempts the browser's own internal logic,
+    // not a blocked native call underneath it. This independent timer
+    // guarantees the fallback fires regardless of whether the browser
+    // honors its own timeout.
+    const backstop = window.setTimeout(handleFailure, 3000)
+
+    return () => {
+      settled = true
+      window.clearTimeout(backstop)
+    }
   }, [sort, userLocation])
 
   // The single source of truth for "what does the current page look
@@ -220,6 +278,12 @@ export function Suppliers() {
   }, [])
 
   const selected = suppliers.find((s) => s.id === selectedId) ?? null
+
+  // Derived, not stored — while true, fetchCurrentPage resolves to
+  // null (nothing to show yet), so the list below must not render
+  // whatever `suppliers` was left over from before "Nearest to Me"
+  // was selected.
+  const waitingForLocation = sort === DISTANCE_SORT && !userLocation
 
   async function handleSave(input: SupplierInput) {
     setSaving(true)
@@ -304,8 +368,10 @@ export function Suppliers() {
 
       <div className={`grid gap-6 ${selected ? 'lg:grid-cols-[1fr_20rem]' : ''}`}>
         <div>
-          {loading ? (
-            <p className="text-sm text-gray-500">Loading suppliers...</p>
+          {loading || waitingForLocation ? (
+            <p className="text-sm text-gray-500">
+              {waitingForLocation ? 'Waiting for your location…' : 'Loading suppliers...'}
+            </p>
           ) : suppliers.length === 0 ? (
             <div className="rounded-lg border border-gray-200 bg-white py-10 text-center">
               <p className="font-medium text-gray-900">
@@ -356,7 +422,7 @@ export function Suppliers() {
             </div>
           )}
 
-          {!loading && totalPages > 1 && (
+          {!loading && !waitingForLocation && totalPages > 1 && (
             <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
               <button
                 type="button"
