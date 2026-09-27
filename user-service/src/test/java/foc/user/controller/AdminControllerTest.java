@@ -12,7 +12,8 @@ Scope: Generated controller tests for the admin endpoints (issue #96)
        missing body roles, unauthenticated PATCH/DELETE, removed users
        across endpoints).
        2026-09-27 (Claude Code, Opus 5.5), PR #135 review: HEAD /users
-       case added (USER gets 403, admin gets 200).
+       case added (USER gets 403, admin gets 200); the literal _ search
+       switched to "o_n", which a wildcard _ would match.
 Author review: Ryan reviewed and ensured tests run successfully.
 */
 
@@ -228,8 +229,9 @@ class AdminControllerTest extends PostgresTestContainer {
     void list_searchUnderscore() throws Exception {
         userRepository.save(new User("e1111111@u.nus.edu", "nounderscore", "hashed_password", Role.USER));
 
-        // "o_u" as a LIKE pattern would match "nounderscore"
-        mockMvc.perform(get("/users").param("search", "o_u").with(as(admin)))
+        // "o_n" as a LIKE pattern would match "nounderscore" ("oun") and
+        // "owner@u.nus.edu" ("own"); taken literally it matches nothing
+        mockMvc.perform(get("/users").param("search", "o_n").with(as(admin)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.content.length()").value(0));
         mockMvc.perform(get("/users").param("search", "n_admin").with(as(admin)))

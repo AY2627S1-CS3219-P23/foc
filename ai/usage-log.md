@@ -39,7 +39,9 @@ Entry template:
   `AdminControllerTest`. The `callerId` parsing and the
   `UserNotFoundException` handler, copied in `ProfileController` and
   `AdminController`, moved to the new `CallerId` and
-  `UserNotFoundAdvice` in the controller package.
+  `UserNotFoundAdvice` in the controller package. The literal-`_`
+  search test switched from `"o_u"` to `"o_n"`, since a wildcard `_`
+  never matched `"o_u"` against the seeded users.
 - **Prompt(s):** Summary: Asked for a review of PR #136 and which of
   #135/#136 to merge first. The tool raised owner self-deletion via
   `DELETE /users/me` and the wording of the #89 login note; both were
@@ -48,10 +50,12 @@ Entry template:
   through the PR #135 comments; the tool confirmed that a USER could
   call `HEAD /users` and offered two fixes. Per team decision: add a
   separate HEAD rule. Then asked to fix the duplicated caller-id and
-  404 handling that the review flagged now instead of with #91.
+  404 handling that the review flagged now instead of with #91, and
+  to fix the underscore test.
 - **Author review:** The tool ran the full `./mvnw test` suite:
-  110/110 passed (the new HEAD test failed before the fix). Ryan to
-  review via the PR.
+  110/110 passed. The new HEAD test failed before the fix, and the
+  underscore test failed with `_` escaping temporarily removed. Ryan
+  to review via the PR.
 
 ## 2026-09-27 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
