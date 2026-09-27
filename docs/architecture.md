@@ -1,6 +1,7 @@
 <!--
   AI-assisted (CS3219 AI Usage Policy disclosure):
-  Tool: Claude Code (Fable 5), 2026-09-14 – 2026-09-21.
+  Tool: Claude Code (Fable 5), 2026-09-14 – 2026-09-21; revised
+  2026-09-27 (Claude Code, Sonnet 5).
   Scope: transcribed the team-decided architecture (AGENTS.md service
   boundaries + D1 requirements interactions) into this document and the
   companion diagram, and kept both aligned with the backlog and the
@@ -8,6 +9,9 @@
   docs/notification-service.md with its decision-maker). No architecture
   or design decisions were made by the tool; remaining open decisions
   are marked "TBD" for the team.
+  2026-09-27: team decision to reduce the Supplier Service capacity
+  target from 100,000 to 1,000 suppliers — updated here to match
+  docs/supplier-service.md's NFR2.1/D7.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -109,9 +113,10 @@ These shape sizing and implementation rather than adding components:
   NFR3); passwords hashed with SHA256 or equivalent (User NFR1.1);
   uniqueness checks complete before other asynchronous operations can
   access the records (User NFR4).
-- **Supplier Service:** 100 000 suppliers (Supplier NFR2); listings
-  within 5 s, with caching on frequently queried fields such as name
-  and location (Supplier NFR1.1, NFR1.1.1).
+- **Supplier Service:** 1,000 suppliers (Supplier NFR2, revised
+  2026-09-27 from the original 100,000 — see docs/supplier-service.md
+  D7); listings within 5 s, with caching on frequently queried fields
+  such as name and location (Supplier NFR1.1, NFR1.1.1).
 - **Order Service:** courier listings reflect requests entering/leaving
   the created state within 5 s; every state change visible to requester
   and assigned courier within 5 s (Order NFR1.1–1.2) — via the

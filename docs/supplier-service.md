@@ -11,6 +11,12 @@
   entity/zone references removed from D7, Components, and Entities
   below (PR #134 Copilot review flagged the code/doc mismatch after the
   feature was dropped in code without updating this doc).
+  2026-09-27: team decision to reduce NFR2.1's capacity target from
+  100,000 to 1,000 suppliers (diverges from the original D1 backlog
+  transcription). D7's justification rewritten accordingly — at 1,000
+  rows a plain sequential scan for the `LIKE '%...%'` search is fast
+  enough on its own, so the trigram/GIN indexing a 100,000-row target
+  would have required is no longer warranted.
   Reviewed by: XXX
 -->
 
@@ -45,7 +51,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | NFR1.1 | Supplier listings retrieved within 5 seconds | High | Week 6 |
 | NFR1.1.1 | Caching on frequently queried fields (e.g. supplier name, location) | Medium | Week 11 |
 | NFR2 | Capacity | High | Week 6 |
-| NFR2.1 | Store up to 100,000 suppliers | High | Week 6 |
+| NFR2.1 | Store up to 1,000 suppliers | High | Week 6 |
 
 ## Requirements from other services this service serves
 
@@ -63,10 +69,10 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D1 | Persistence | PostgreSQL via Spring Data JPA | Proposal — engine not specified by the brief |
 | D2 | Authorization | CRUD endpoints admin-gated via JWT role claim; browse/search open to any authenticated user | Grounded directly in F1.1 ("by admin users") |
 | D3 | Categories | Many-to-many: a `supplier_categories` join table, not a single field, since F1.1.1 says "categories" (plural) | Grounded in F1.1.1 wording |
-| D4 | Zone modeling | ~~Zone as a lookup table, not a hardcoded enum, for configurability~~ | **Retired (2026-09-27):** team dropped the zone feature |
+| D4 | Zone modeling | ~~Zone as a lookup table, not a hardcoded enum, for configurability~~ | **Removed (2026-09-27):** team dropped the zone feature |
 | D5 | Deletion | **Open question for the team:** F1.1.3 literally says "delete suppliers," which reads as hard delete. Hard-deleting a supplier referenced by past/active orders will break order history. Recommend the team explicitly decide between (a) implementing F1.1.3 as a genuine hard delete and accepting that order history loses supplier detail, or (b) implementing it as a soft delete (`status: ACTIVE/INACTIVE`) that satisfies "delete" from the admin's point of view while preserving referential integrity. | **Needs team decision — do not default silently** |
 | D6 | Distance support | Supplier records store `latitude`/`longitude`; Supplier Service exposes an endpoint (or the raw coordinates) Order Service can use to compute the F8.1 distance check | Grounded in Order F8.1 |
-| D7 | Indexing | Index on `name` (F2.1 search), `category` (F2.2 filter) to keep NFR1.1's 5-second bound achievable at NFR2.1's 100,000-row scale | Grounded in NFR1.1, NFR2.1 |
+| D7 | Indexing | Not required at NFR2.1's revised 1,000-supplier target — a sequential scan comfortably clears NFR1.1's 5-second bound at that size, including for the search endpoint's leading-wildcard `LIKE '%...%'` query, which a standard btree index can't accelerate regardless (would need a trigram/GIN index, only worth the added complexity at a much larger row count). Revisit if NFR2.1 is raised again. | Revised 2026-09-27 (was: index on `name`/`category` to hit the original 100,000-row NFR2.1 target) |
 | D8 | Seeding | Initial data load is an implementation task (tracked as issue #102 — CSV loader), not a numbered FR in the finalized brief | Confirmed: not in scope as an FR |
 
 ## Components

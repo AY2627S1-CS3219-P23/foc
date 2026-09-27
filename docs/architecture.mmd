@@ -2,12 +2,15 @@
 title: "Favours on Campus (FoC) — High-Level Service Architecture"
 ---
 %% AI-assisted (CS3219 AI Usage Policy disclosure):
-%% Tool: Claude Code (Fable 5), 2026-09-14 – 2026-09-21.
+%% Tool: Claude Code (Fable 5), 2026-09-14 – 2026-09-21; revised
+%% 2026-09-27 (Claude Code, Sonnet 5).
 %% Scope: transcribed the team-decided architecture (AGENTS.md service
 %% boundaries + D1 requirements) into this diagram and kept it aligned
 %% with the backlog and the team's design decisions (recorded in
 %% docs/architecture.md and docs/notification-service.md). No design
 %% decisions were made by the tool; open decisions are marked "TBD".
+%% 2026-09-27: Supplier DB capacity label updated 100,000 -> 1,000 to
+%% match the team's revised NFR2.1 (docs/supplier-service.md, D7).
 %% Reviewed by: Leong Wei Zhi (via pull request).
 %% Legend and dependency table: see docs/architecture.md
 flowchart TB
@@ -39,7 +42,7 @@ flowchart TB
     BROKER ==>|"deliver events: at-least-once, persisted across<br/>restarts; consumer deduplicates, retries,<br/>dead-letters exhausted retries"| NOTIF_SVC
 
     USER_DB[("User DB<br/>engine TBD<br/>60 000 accounts (User NFR2)")]
-    SUP_DB[("Supplier DB<br/>engine TBD<br/>100 000 suppliers (Supplier NFR2)")]
+    SUP_DB[("Supplier DB<br/>engine TBD<br/>1,000 suppliers (Supplier NFR2)")]
     ORDER_DB[("Order DB<br/>engine TBD")]
     CREDIT_DB[("Credit DB<br/>engine TBD")]
     NOTIF_DB[("Notification DB<br/>PostgreSQL")]
