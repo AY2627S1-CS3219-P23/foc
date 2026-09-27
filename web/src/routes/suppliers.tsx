@@ -33,9 +33,20 @@
 // card are computed client-side (features/supplier/distance.ts) from
 // the same coordinates already in the response — display only; the
 // authoritative order comes from the backend.
+// 2026-09-27 (PR #134 Copilot review): handleSave/handleDelete used to
+// patch the local `suppliers` array directly (append on create, filter
+// on delete) without touching totalElements/totalPages — harmless
+// before pagination existed (the array held every matching supplier),
+// but a real bug once `suppliers` is just one page's slice: creating
+// on a full page silently grew it past PAGE_SIZE, and deleting the
+// last item on the last page left stale "Page N of N" pagination text
+// pointing at a page that no longer exists. Fixed by extracting the
+// fetch into fetchCurrentPage() and calling it after a successful
+// mutation instead of hand-patching state, so the list and its
+// pagination metadata always come from the same server response.
 // Reviewed by: [pending]
 
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 
 import {
   createSupplier,
@@ -135,28 +146,38 @@ export function Suppliers() {
     )
   }, [sort, userLocation])
 
-  useEffect(() => {
-    // Waiting on the geolocation callback above — nothing to fetch yet.
-    if (sort === DISTANCE_SORT && !userLocation) return
+  // The single source of truth for "what does the current page look
+  // like" — used both by the reactive effect below (whenever a filter
+  // changes) and, after a create/update/delete, by handleSave/handleDelete
+  // directly, so the list and its pagination metadata (totalElements,
+  // totalPages) always come from the same server response rather than
+  // being hand-patched in two different places that can drift apart.
+  const fetchCurrentPage = useCallback(() => {
+    if (sort === DISTANCE_SORT && !userLocation) {
+      // Waiting on the geolocation callback above — nothing to fetch yet.
+      return Promise.resolve(null)
+    }
+    return sort === DISTANCE_SORT && userLocation
+      ? listSuppliers({
+          search: query,
+          category,
+          page,
+          size: PAGE_SIZE,
+          lat: userLocation.lat,
+          lng: userLocation.lng,
+        })
+      : listSuppliers({ search: query, category, page, size: PAGE_SIZE, sort })
+  }, [query, category, page, sort, userLocation])
 
+  useEffect(() => {
     let cancelled = false
 
     async function loadSuppliers() {
       setLoading(true)
       setError(null)
       try {
-        const result =
-          sort === DISTANCE_SORT && userLocation
-            ? await listSuppliers({
-                search: query,
-                category,
-                page,
-                size: PAGE_SIZE,
-                lat: userLocation.lat,
-                lng: userLocation.lng,
-              })
-            : await listSuppliers({ search: query, category, page, size: PAGE_SIZE, sort })
-        if (cancelled) return
+        const result = await fetchCurrentPage()
+        if (cancelled || !result) return
         setSuppliers(result.content)
         setTotalPages(result.totalPages)
         setTotalElements(result.totalElements)
@@ -177,7 +198,7 @@ export function Suppliers() {
     return () => {
       cancelled = true
     }
-  }, [query, category, page, sort, userLocation])
+  }, [fetchCurrentPage])
 
   // Fetched once, independent of the current search/category filter —
   // this must always offer every category that exists, not just those
@@ -204,13 +225,17 @@ export function Suppliers() {
     setSaving(true)
     try {
       if (formOpenFor && formOpenFor !== 'new') {
-        const updated = await updateSupplier(formOpenFor.id, input)
-        setSuppliers((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+        await updateSupplier(formOpenFor.id, input)
       } else {
-        const created = await createSupplier(input)
-        setSuppliers((prev) => [...prev, created])
+        await createSupplier(input)
       }
       setFormOpenFor(null)
+      const result = await fetchCurrentPage()
+      if (result) {
+        setSuppliers(result.content)
+        setTotalPages(result.totalPages)
+        setTotalElements(result.totalElements)
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save supplier.')
     } finally {
@@ -223,9 +248,21 @@ export function Suppliers() {
     setSaving(true)
     try {
       await deleteSupplier(pendingDelete.id)
-      setSuppliers((prev) => prev.filter((s) => s.id !== pendingDelete.id))
       if (selectedId === pendingDelete.id) setSelectedId(null)
       setPendingDelete(null)
+      // Deleting the last item on the last page would otherwise leave
+      // `page` pointing past the new totalPages — step back a page
+      // first when that happens, then fetch.
+      if (page > 0 && suppliers.length === 1) {
+        setPage((p) => p - 1)
+        return
+      }
+      const result = await fetchCurrentPage()
+      if (result) {
+        setSuppliers(result.content)
+        setTotalPages(result.totalPages)
+        setTotalElements(result.totalElements)
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not delete supplier.')
     } finally {
