@@ -16,6 +16,17 @@
  * concatenation, and the query already ends in its own ORDER BY, so
  * leaving the default "name" sort attached produced a malformed
  * double ORDER BY (Postgres: "syntax error at or near order").
+ * 2026-09-28 (PR #134 review, LeongWZ): search is escaped for LIKE
+ * metacharacters before being bound — `%` and `_` are wildcards, not
+ * literal characters, in a LIKE pattern; unescaped, a literal `%` in
+ * the search box (e.g. typing just "%") produced the pattern `%%%`,
+ * which matches every supplier instead of the (correct) zero, and
+ * corrupted totalElements/totalPages the same way since the count
+ * query shares the predicate. Not a SQL-injection risk either way —
+ * :search was already a bound parameter — this only fixes wildcard
+ * *content* being misinterpreted. `\` is the escape character; it's
+ * escaped first so a literal backslash in a search term doesn't itself
+ * get misread as introducing an escape sequence.
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
@@ -48,7 +59,7 @@ public class SupplierService {
 
     public PageResponse<SupplierResponse> listSuppliers(String search, String category, Double lat, Double lng,
             Pageable pageable) {
-        String normalizedSearch = blankToNull(search);
+        String normalizedSearch = escapeLikePattern(blankToNull(search));
         String normalizedCategory = blankToNull(category);
 
         Page<Suppliers> page;
@@ -85,5 +96,18 @@ public class SupplierService {
 
     private static String blankToNull(String value) {
         return (value == null || value.isBlank()) ? null : value;
+    }
+
+    // Escapes LIKE metacharacters (%, _) and the escape character (\)
+    // itself so a search term is matched literally, not as a wildcard
+    // pattern. Paired with `ESCAPE '\'` in each repository LIKE clause.
+    private static String escapeLikePattern(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
     }
 }
