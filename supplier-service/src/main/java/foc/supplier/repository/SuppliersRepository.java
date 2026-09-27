@@ -61,7 +61,7 @@ public interface SuppliersRepository extends JpaRepository<Suppliers, Long> {
                             + sin(radians(CAST(:lat AS DOUBLE PRECISION))) * sin(radians(s.latitude))
                     ))
                 )
-            ) ASC
+            ) ASC, s.id ASC
             """,
             countQuery = """
             SELECT count(*) FROM suppliers s
