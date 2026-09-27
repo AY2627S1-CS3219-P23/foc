@@ -7,9 +7,14 @@ Scope: Generated profile lookups for issue #95 (own profile and public
 Author review: Ryan reviewed to ensure that it follows team's decisions.
 2026-09-25 (Claude Code, Opus 5.5), PR #131 review: own profile uses the
 shared UserResponse.from mapping.
+2026-09-27 (Claude Code, Fable 5), issue #93: deleteOwnAccount added
+(bearer-only self-deletion, no password/OTP re-check — chosen by
+Leong Wei Zhi via options Q&A).
 */
 
 package foc.user.service;
+
+import java.time.Instant;
 
 import org.springframework.stereotype.Service;
 
@@ -38,6 +43,15 @@ public class ProfileService {
         User user = findActiveUser(userId);
 
         return new PublicProfileResponse(user.getUsername());
+    }
+
+    // self-deletion: stamps deleted_at, keeping the row (and its email/
+    // username reservation) for the 30-day recovery window (#94);
+    // AccountPurgeScheduler hard-deletes it on day 31
+    public void deleteOwnAccount(Long userId) {
+        User user = findActiveUser(userId);
+        user.softDelete(Instant.now());
+        userRepository.save(user);
     }
 
     private User findActiveUser(Long userId) {
