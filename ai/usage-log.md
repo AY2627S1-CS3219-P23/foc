@@ -26,6 +26,32 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Ryan Ang (#113 PR #140 second review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, generate (tests)
+- **Scope:** PR #140 review fixes. `user-service`: `AdminService.listUsers`
+  leaves out soft-deleted accounts, with `AdminControllerTest` list
+  expectations updated and a hidden-when-searched case added. `web`:
+  `UsersSection.tsx` reloads after a removal, moves to the last page when
+  a reload lands past the end (role change or removal), clears the error
+  banner when the search, filter or page changes, trims search before
+  debouncing, and lists the fetch effect's inputs directly;
+  `ChangeRoleModal.tsx` shows a general self-demotion warning when the
+  signed-in admin is unknown (`GET /users/me` failure is now logged);
+  `adminApi.ts` honours `VITE_MOCK_ADMIN_API` only on the dev server and
+  imports the mock lazily, so production bundles exclude it (checked in
+  the built bundle); `ProtectedRoute.tsx` and `routes/index.tsx`
+  formatted with the repo's Prettier config; `.env.example` mock comment
+  corrected; four `admin.test.tsx` cases added.
+- **Prompt(s):** Summary: Asked to recheck new PR #140 comments (a
+  reviewer's change request and Copilot) against PR #141. The tool noted
+  #141 already sets `VITE_USER_SERVICE_URL` and adds user-service CORS
+  with preflights allowed on the admin routes. The duplicate supplier pager is
+  left for a follow-up issue, as `routes/suppliers.tsx` is the supplier
+  domain's.
+- **Author review:** Reviewed by Ryan before PR. `./mvnw test` passes
+  (0 failures); web: 25 tests pass, lint and type-check clean.
+
 ## 2026-09-28 — Ryan Ang (#113 admin user management)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor, generate (implementation + tests)

@@ -1,7 +1,10 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Opus 5.5), 2026-09-28, issue #113.
 // Scope: promote/demote confirmation for the admin user-management
-// screen, following RemoveUserModal.
+// screen, following RemoveUserModal. Revised 2026-09-29 (PR #140
+// review): when the signed-in admin is unknown, every demotion carries a
+// general warning, so a failed GET /users/me can't hide the self-demotion
+// one.
 // Reviewed by: Ryan Ang
 
 import { Modal } from '@/shared/components/Modal'
@@ -10,7 +13,8 @@ import type { AdminUser, UserRole } from '../types'
 interface ChangeRoleModalProps {
   user: AdminUser
   role: UserRole
-  isSelf: boolean
+  // null: the signed-in admin couldn't be identified
+  isSelf: boolean | null
   onCancel: () => void
   onConfirm: () => void
   saving?: boolean
@@ -38,9 +42,15 @@ export function ChangeRoleModal({
         <strong>{user.username}</strong> ({user.email})
         {promoting ? ' an admin?' : '?'}
       </p>
-      {isSelf && !promoting && (
+      {isSelf === true && !promoting && (
         <p className="mt-2 text-sm font-medium text-red-700">
           This is your own account. You will lose access to the admin dashboard.
+        </p>
+      )}
+      {isSelf === null && !promoting && (
+        <p className="mt-2 text-sm font-medium text-red-700">
+          If this is your own account, you will lose access to the admin
+          dashboard.
         </p>
       )}
       <div className="mt-5 flex justify-end gap-2">

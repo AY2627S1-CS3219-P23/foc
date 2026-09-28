@@ -3,6 +3,9 @@
 // 2026-09-28 (Suppliers section tests replaced by a placeholder check;
 // credit tests removed with the credit mock; Users section tested
 // against a fake adminUserApi, with search, role filter and paging).
+// 2026-09-29 (second PR #140 review): cases for a role change emptying a
+// later page, the general warning when the signed-in admin is unknown, the
+// error banner clearing on a new query, and whitespace-only search edits.
 // Scope: tests for the Admin Dashboard page — Users section, plus the
 // Suppliers placeholder.
 // Reviewed by: Ryan Ang
@@ -502,6 +505,107 @@ describe('Users section', () => {
 
     expect(await within(table).findByText(nth(1))).toBeInTheDocument()
     expect(lastListParams()).toEqual({ page: 0, size: USERS_PAGE_SIZE })
+  })
+
+  test('a role change that empties a later page goes back a page', async () => {
+    users = manyUsers(USERS_PAGE_SIZE + 1)
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Filter by role' }),
+      'USER',
+    )
+    await user.click(
+      await within(section('Users').getByRole('navigation')).findByRole(
+        'button',
+        { name: 'Page 2' },
+      ),
+    )
+    const last = nth(USERS_PAGE_SIZE + 1)
+    await within(table).findByText(last)
+    await changeRole(user, table, last, 'Promote to Admin')
+
+    expect(await within(table).findByText(nth(1))).toBeInTheDocument()
+    expect(lastListParams()).toEqual({
+      role: 'USER',
+      page: 0,
+      size: USERS_PAGE_SIZE,
+    })
+  })
+
+  test('an unknown signed-in admin gets a general warning when demoting', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.mocked(adminUserApi.getCurrentUser).mockRejectedValue(
+      new Error('Unauthorized'),
+    )
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+
+    await user.click(
+      rowFor(table, 'nus_courier_99').getByRole('button', {
+        name: 'Demote to User',
+      }),
+    )
+
+    expect(
+      within(screen.getByRole('dialog', { name: 'Demote to User' })).getByText(
+        /If this is your own account, you will lose access/,
+      ),
+    ).toBeInTheDocument()
+  })
+
+  test('a new search or filter clears the last action error', async () => {
+    vi.mocked(adminUserApi.changeRole).mockRejectedValue(
+      new Error('You cannot change this user.'),
+    )
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+
+    await changeRole(user, table, 'student_alex', 'Promote to Admin')
+    expect(await section('Users').findByRole('alert')).toHaveTextContent(
+      'You cannot change this user.',
+    )
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Filter by role' }),
+      'USER',
+    )
+    await waitFor(() =>
+      expect(section('Users').queryByRole('alert')).not.toBeInTheDocument(),
+    )
+  })
+
+  test("a whitespace-only search edit doesn't reload or reset the page", async () => {
+    users = manyUsers(USERS_PAGE_SIZE * 2 + 5)
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+
+    await user.click(
+      within(section('Users').getByRole('navigation')).getByRole('button', {
+        name: 'Page 2',
+      }),
+    )
+    await within(table).findByText(nth(USERS_PAGE_SIZE + 1))
+    const calls = vi.mocked(adminUserApi.listUsers).mock.calls.length
+
+    await user.type(
+      screen.getByRole('searchbox', {
+        name: 'Search by ID, username or email',
+      }),
+      '  ',
+    )
+    // longer than the debounce
+    await new Promise((resolve) => setTimeout(resolve, 400))
+
+    expect(vi.mocked(adminUserApi.listUsers).mock.calls.length).toBe(calls)
+    expect(
+      within(table).getByText(nth(USERS_PAGE_SIZE + 1)),
+    ).toBeInTheDocument()
   })
 
   test('cancelling removal keeps the user', async () => {

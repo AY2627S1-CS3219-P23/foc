@@ -4,7 +4,11 @@
 // endpoints with server-side search, role filter and paging; PR #140
 // review: reload after a role change, step back a page when its last
 // row is removed, and GET /users/me so the own row has no Remove;
-// promote/demote now asks for confirmation first).
+// promote/demote now asks for confirmation first; second PR #140 review:
+// removals reload (GET /users now hides soft-deleted accounts), a page past
+// the end moves to the last page, the error banner clears on a new query,
+// search is trimmed before debouncing, the fetch lists its inputs, and an
+// unknown signed-in user gets a general self-demotion warning).
 // Scope: Admin Dashboard "Users" section — list, search, role filter,
 // paging, promote/demote, remove — per
 // web/docs/wireframes/admin-dashboard.png.
@@ -38,8 +42,17 @@ function errorMessage(err: unknown, fallback: string) {
   return fallback
 }
 
-// The result of one list request, tagged with the query it answered so a
-// newer query shows as loading until its own result arrives.
+// Identifies one list request, so a newer query shows as loading until its
+// own result arrives.
+function queryKeyOf(
+  search: string,
+  role: UserRole | '',
+  page: number,
+  reloadCount: number,
+) {
+  return JSON.stringify([search, role, page, reloadCount])
+}
+
 interface LoadResult {
   key: string
   data: AdminUserPage | null
@@ -61,54 +74,67 @@ export function UsersSection() {
     user: AdminUser
     role: UserRole
   } | null>(null)
+  // null until GET /users/me answers, and if it fails
   const [currentUserId, setCurrentUserId] = useState<number | null>(null)
 
-  // Only used to hide Remove on the admin's own row. If this fails, the
-  // button shows and user-service still rejects self-removal.
+  // Used to hide Remove on the admin's own row and to warn before
+  // self-demotion. If it fails, Remove shows (user-service still rejects
+  // self-removal) and every demotion gets a general warning instead.
   useEffect(() => {
     let cancelled = false
     adminUserApi.getCurrentUser().then(
       (me) => {
         if (!cancelled) setCurrentUserId(me.id)
       },
-      () => {},
+      (err: unknown) => {
+        console.warn('Could not identify the signed-in admin', err)
+      },
     )
     return () => {
       cancelled = true
     }
   }, [])
 
-  // Apply the search box to the query once typing pauses.
+  // Apply the search box to the query once typing pauses. Compared
+  // trimmed, so a whitespace-only edit doesn't reset the page.
   useEffect(() => {
-    if (searchInput === search) return
+    const trimmed = searchInput.trim()
+    if (trimmed === search) return
     const timer = setTimeout(() => {
-      setSearch(searchInput)
+      setSearch(trimmed)
       setPage(1)
+      setActionError(null)
     }, SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(timer)
   }, [searchInput, search])
 
-  const trimmedSearch = search.trim()
-  const queryKey = JSON.stringify([trimmedSearch, role, page, reloadCount])
-
   useEffect(() => {
     let cancelled = false
+    const key = queryKeyOf(search, role, page, reloadCount)
 
     adminUserApi
       .listUsers({
-        search: trimmedSearch || undefined,
+        search: search || undefined,
         role: role || undefined,
         page: page - 1,
         size: USERS_PAGE_SIZE,
       })
       .then(
         (data) => {
-          if (!cancelled) setResult({ key: queryKey, data, error: null })
+          if (cancelled) return
+          // Past the last page (a role change or removal emptied it): go to
+          // the last page instead, keeping the old rows until it loads.
+          const lastPage = Math.max(1, data.page.totalPages)
+          if (page > lastPage) {
+            setPage(lastPage)
+            return
+          }
+          setResult({ key, data, error: null })
         },
         (err: unknown) => {
           if (!cancelled)
             setResult({
-              key: queryKey,
+              key,
               data: null,
               error: errorMessage(err, 'Could not load users. Try again.'),
             })
@@ -118,15 +144,22 @@ export function UsersSection() {
     return () => {
       cancelled = true
     }
-  }, [queryKey, trimmedSearch, role, page])
+  }, [search, role, page, reloadCount])
 
-  const loading = result?.key !== queryKey
+  const loading = result?.key !== queryKeyOf(search, role, page, reloadCount)
   const data = result?.data ?? null
   const error = actionError ?? (loading ? null : (result?.error ?? null))
 
+  // A new query starts without the last action's error.
   function handleRoleFilter(value: UserRole | '') {
     setRole(value)
     setPage(1)
+    setActionError(null)
+  }
+
+  function handlePageChange(value: number) {
+    setPage(value)
+    setActionError(null)
   }
 
   function updateUsers(update: (users: AdminUser[]) => AdminUser[]) {
@@ -169,14 +202,14 @@ export function UsersSection() {
     setActionError(null)
     try {
       await adminUserApi.removeUser(target.id)
-      // Removed rows aren't refetched: GET /users still returns
-      // soft-deleted accounts. Removing a later page's last row goes back
-      // a page instead of showing an empty one.
-      if (data?.content.length === 1 && page > 1) {
-        setPage(page - 1)
-      } else {
+      // Hide the row now, unless it's the page's last: then the reload's
+      // last-page check moves back a page without flashing an empty list
+      if ((data?.content.length ?? 0) > 1) {
         updateUsers((users) => users.filter((u) => u.id !== target.id))
       }
+      // GET /users leaves removed accounts out, so reload for the right
+      // counts
+      setReloadCount((n) => n + 1)
     } catch (err) {
       setActionError(errorMessage(err, `Could not remove ${target.username}.`))
     } finally {
@@ -185,7 +218,7 @@ export function UsersSection() {
     }
   }
 
-  const filtered = trimmedSearch !== '' || role !== ''
+  const filtered = search !== '' || role !== ''
 
   return (
     <section className="space-y-4" aria-labelledby="users-heading">
@@ -251,7 +284,7 @@ export function UsersSection() {
           <Pagination
             page={page}
             totalPages={data.page.totalPages}
-            onPageChange={setPage}
+            onPageChange={handlePageChange}
             disabled={loading}
           />
         </>
@@ -261,7 +294,11 @@ export function UsersSection() {
         <ChangeRoleModal
           user={pendingRoleChange.user}
           role={pendingRoleChange.role}
-          isSelf={pendingRoleChange.user.id === currentUserId}
+          isSelf={
+            currentUserId === null
+              ? null
+              : pendingRoleChange.user.id === currentUserId
+          }
           onCancel={() => setPendingRoleChange(null)}
           onConfirm={handleChangeRole}
           saving={busyUserId === pendingRoleChange.user.id}

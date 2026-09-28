@@ -31,19 +31,20 @@ export const routes: RouteObject[] = [
           { index: true, element: <Home /> },
           { path: 'login', element: <Login /> },
           { path: 'register', element: <Register /> },
-          { Component: ProtectedRoute,
+          {
+            Component: ProtectedRoute,
             children: [
-            { path: 'suppliers', element: <Suppliers /> },
-            { path: 'admin', element: <Admin /> },
+              { path: 'suppliers', element: <Suppliers /> },
+              { path: 'admin', element: <Admin /> },
             ],
           },
           // Renders inside the shell, so the nav stays visible on
           // unknown paths (including nav destinations not built yet).
           // Outside ProtectedRoute: a 404 needs no login.
           { path: '*', element: <NotFound /> },
-        ]
-      }
-    ]
+        ],
+      },
+    ],
   },
 ]
 

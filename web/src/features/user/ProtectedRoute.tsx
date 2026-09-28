@@ -6,16 +6,16 @@
 // component itself comes from PR #139.
 // Reviewed by: Ryan Ang
 
-import { Navigate, Outlet } from "react-router";
-import { useAuth } from "./useAuth";
+import { Navigate, Outlet } from 'react-router'
+import { useAuth } from './useAuth'
 
 // Only blocks on client side, still need server side protection for API calls
 export const ProtectedRoute = () => {
-  const data = useAuth();
+  const data = useAuth()
 
   if (!data?.token) {
     // user is not authenticated
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace />
   }
-  return <Outlet/>;
-};
+  return <Outlet />
+}
