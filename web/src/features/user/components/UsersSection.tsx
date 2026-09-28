@@ -1,18 +1,15 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
-// Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113.
+// Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113; revised
+// 2026-09-28 (credit balances and Add Credits removed).
 // Scope: Admin Dashboard "Users" section — list, search by username,
-// promote/demote, add credits, remove — per
-// web/docs/wireframes/admin-dashboard.png.
+// promote/demote, remove — per web/docs/wireframes/admin-dashboard.png.
 //
-// TEMPORARY: users and balances come from the in-memory adminUserApi /
-// adminCreditApi mocks until #96 and credit-service define their APIs.
+// TEMPORARY: users come from the in-memory adminUserApi mock until it is
+// wired to the #96 endpoints.
 // Reviewed by: [pending]
 
 import { useEffect, useMemo, useState } from 'react'
 
-import { adminCreditApi } from '@/features/credit/adminCreditApi'
-import { AddCreditsModal } from '@/features/credit/components/AddCreditsModal'
-import type { CreditBalance } from '@/features/credit/types'
 import { ApiError } from '@/lib/api/http'
 import { adminUserApi } from '../adminApi'
 import type { AdminUser, UserRole } from '../types'
@@ -27,43 +24,25 @@ function errorMessage(err: unknown, fallback: string) {
 
 export function UsersSection() {
   const [users, setUsers] = useState<AdminUser[]>([])
-  const [balances, setBalances] = useState<Map<number, CreditBalance> | null>(
-    null,
-  )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [busyUserId, setBusyUserId] = useState<number | null>(null)
   const [pendingRemove, setPendingRemove] = useState<AdminUser | null>(null)
-  const [creditTarget, setCreditTarget] = useState<AdminUser | null>(null)
 
   useEffect(() => {
     let cancelled = false
 
     async function load() {
-      // Balances come from a different service: if only they fail, still
-      // show the users, with "—" in the Credits column.
-      const [userResult, balanceResult] = await Promise.allSettled([
-        adminUserApi.listUsers(),
-        adminCreditApi.listBalances(),
-      ])
-      if (cancelled) return
-
-      if (userResult.status === 'fulfilled') {
-        setUsers(userResult.value)
-      } else {
-        setError(
-          errorMessage(userResult.reason, 'Could not load users. Try again.'),
-        )
+      try {
+        const result = await adminUserApi.listUsers()
+        if (!cancelled) setUsers(result)
+      } catch (err) {
+        if (!cancelled)
+          setError(errorMessage(err, 'Could not load users. Try again.'))
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-      if (balanceResult.status === 'fulfilled') {
-        setBalances(new Map(balanceResult.value.map((b) => [b.userId, b])))
-      } else if (userResult.status === 'fulfilled') {
-        setError(
-          errorMessage(balanceResult.reason, 'Could not load credit balances.'),
-        )
-      }
-      setLoading(false)
     }
 
     load()
@@ -87,24 +66,6 @@ export function UsersSection() {
     } catch (err) {
       setError(errorMessage(err, `Could not change ${user.username}'s role.`))
     } finally {
-      setBusyUserId(null)
-    }
-  }
-
-  async function handleAddCredits(amount: number) {
-    if (!creditTarget) return
-    const target = creditTarget
-    setBusyUserId(target.id)
-    setError(null)
-    try {
-      const updated = await adminCreditApi.addCredits(target.id, amount)
-      setBalances((prev) => new Map(prev ?? []).set(updated.userId, updated))
-    } catch (err) {
-      setError(
-        errorMessage(err, `Could not add credits to ${target.username}.`),
-      )
-    } finally {
-      setCreditTarget(null)
       setBusyUserId(null)
     }
   }
@@ -161,10 +122,8 @@ export function UsersSection() {
       ) : (
         <UserTable
           users={visibleUsers}
-          balances={balances}
           busyUserId={busyUserId}
           onChangeRole={handleChangeRole}
-          onAddCredits={setCreditTarget}
           onRemove={setPendingRemove}
         />
       )}
@@ -175,15 +134,6 @@ export function UsersSection() {
           onCancel={() => setPendingRemove(null)}
           onConfirm={handleRemove}
           removing={busyUserId === pendingRemove.id}
-        />
-      )}
-
-      {creditTarget && (
-        <AddCreditsModal
-          username={creditTarget.username}
-          onCancel={() => setCreditTarget(null)}
-          onConfirm={handleAddCredits}
-          saving={busyUserId === creditTarget.id}
         />
       )}
     </section>

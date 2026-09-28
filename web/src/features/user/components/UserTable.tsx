@@ -1,11 +1,10 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
-// Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113.
+// Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113; revised
+// 2026-09-28 (Credits column and Add Credits removed).
 // Scope: admin users list — a table at md+ and stacked cards below,
-// per web/docs/wireframes/admin-dashboard.png (Users section),
-// including the Credits (available/reserved) column and Add Credits.
+// per web/docs/wireframes/admin-dashboard.png (Users section).
 // Reviewed by: Ryan Ang
 
-import type { CreditBalance } from '@/features/credit/types'
 import type { AdminUser, UserRole } from '../types'
 
 const roleLabels: Record<UserRole, string> = {
@@ -16,18 +15,12 @@ const roleLabels: Record<UserRole, string> = {
 
 interface UserTableProps {
   users: AdminUser[]
-  // null while balances are unavailable (still loading or failed).
-  balances: Map<number, CreditBalance> | null
   busyUserId: number | null
   onChangeRole: (user: AdminUser, role: UserRole) => void
-  onAddCredits: (user: AdminUser) => void
   onRemove: (user: AdminUser) => void
 }
 
-type UserActionsProps = Omit<
-  UserTableProps,
-  'users' | 'balances' | 'busyUserId'
-> & {
+type UserActionsProps = Omit<UserTableProps, 'users' | 'busyUserId'> & {
   user: AdminUser
   busy: boolean
 }
@@ -37,13 +30,7 @@ const linkClass =
 
 // The owner account can't be promoted, demoted or removed here: it is
 // created once via setup-owner and is not managed from this screen.
-function UserActions({
-  user,
-  busy,
-  onChangeRole,
-  onAddCredits,
-  onRemove,
-}: UserActionsProps) {
+function UserActions({ user, busy, onChangeRole, onRemove }: UserActionsProps) {
   const isOwner = user.role === 'OWNER'
 
   return (
@@ -68,14 +55,6 @@ function UserActions({
           Demote to User
         </button>
       )}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => onAddCredits(user)}
-        className={linkClass}
-      >
-        Add Credits
-      </button>
       {!isOwner && (
         <button
           type="button"
@@ -90,20 +69,7 @@ function UserActions({
   )
 }
 
-export function UserTable({
-  users,
-  balances,
-  busyUserId,
-  ...actions
-}: UserTableProps) {
-  function credits(user: AdminUser, format: 'table' | 'card') {
-    const balance = balances?.get(user.id)
-    if (!balance) return '—'
-    return format === 'table'
-      ? `${balance.available} / ${balance.reserved} reserved`
-      : `${balance.available} (${balance.reserved} reserved)`
-  }
-
+export function UserTable({ users, busyUserId, ...actions }: UserTableProps) {
   return (
     <>
       {/* Desktop / tablet */}
@@ -120,9 +86,6 @@ export function UserTable({
               <th scope="col" className="px-4 py-3">
                 Role
               </th>
-              <th scope="col" className="px-4 py-3">
-                Credits (Av/Res)
-              </th>
               <th scope="col" className="px-4 py-3 text-right">
                 Actions
               </th>
@@ -137,9 +100,6 @@ export function UserTable({
                 <td className="px-4 py-3 text-gray-600">{user.email}</td>
                 <td className="px-4 py-3 text-gray-600">
                   {roleLabels[user.role]}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-gray-600">
-                  {credits(user, 'table')}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end">
@@ -165,9 +125,6 @@ export function UserTable({
           >
             <p className="font-medium text-gray-900">{user.username}</p>
             <p className="text-sm text-gray-600">{user.email}</p>
-            <p className="text-sm text-gray-600">
-              Credits: {credits(user, 'card')}
-            </p>
             <p className="text-xs text-gray-400">
               Role: {roleLabels[user.role]}
             </p>

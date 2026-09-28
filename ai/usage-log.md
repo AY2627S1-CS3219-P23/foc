@@ -26,6 +26,28 @@ Entry template:
 ```
 
 ---
+## 2026-09-28 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor
+- **Scope:** `web/` Admin Dashboard (issue #113): the Suppliers section
+  reduced to a "coming soon" placeholder inside `src/routes/admin.tsx`;
+  `src/features/supplier/components/SuppliersAdminSection.tsx` and
+  `SupplierTable.tsx` deleted; the three supplier tests and the supplier
+  api mock in `src/test/admin.test.tsx` replaced by one placeholder test.
+  Credit mock removed: `src/features/credit/` (`adminCreditApi.ts`,
+  `types.ts`, `components/AddCreditsModal.tsx`) deleted; the Credits
+  column and Add Credits action dropped from `UserTable.tsx` and
+  `UsersSection.tsx`; the three credit tests removed and the owner-row
+  test changed to "owner has no actions".
+- **Prompt(s):** Summary: Asked whether the admin page could show
+  suppliers once PR #134 merges. The tool noted that #134 removes
+  `listZones`/`Zone` and changes `listSuppliers` to a paged response,
+  which would break the section, and that no PR yet adds the supplier
+  create/update/delete endpoints. Per team decision, the section becomes
+  a placeholder for now; who builds the admin supplier display is left
+  to the team. Then asked to remove the credit mock as well.
+- **Author review:** Ryan reviewed before pushing PR.
+
 ## 2026-09-27 — Ryan Ang (PR #135 second review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor, review
