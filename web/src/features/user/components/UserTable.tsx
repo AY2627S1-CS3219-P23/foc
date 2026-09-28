@@ -1,7 +1,8 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113; revised
 // 2026-09-28 (Credits column and Add Credits removed; Remove hidden on
-// the signed-in admin's own row).
+// the signed-in admin's own row; ID column added, since search matches
+// IDs).
 // Scope: admin users list — a table at md+ and stacked cards below,
 // per web/docs/wireframes/admin-dashboard.png (Users section).
 // Reviewed by: [pending]
@@ -98,6 +99,9 @@ export function UserTable({
           <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
             <tr>
               <th scope="col" className="px-4 py-3">
+                ID
+              </th>
+              <th scope="col" className="px-4 py-3">
                 Username
               </th>
               <th scope="col" className="px-4 py-3">
@@ -114,6 +118,9 @@ export function UserTable({
           <tbody className="divide-y divide-gray-200">
             {users.map((user) => (
               <tr key={user.id}>
+                <td className="px-4 py-3 tabular-nums text-gray-600">
+                  {user.id}
+                </td>
                 <td className="px-4 py-3 font-medium text-gray-900">
                   {user.username}
                 </td>
@@ -147,7 +154,7 @@ export function UserTable({
             <p className="font-medium text-gray-900">{user.username}</p>
             <p className="text-sm text-gray-600">{user.email}</p>
             <p className="text-xs text-gray-400">
-              Role: {roleLabels[user.role]}
+              ID: {user.id} · Role: {roleLabels[user.role]}
             </p>
             <div className="mt-3">
               <UserActions

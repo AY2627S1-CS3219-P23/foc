@@ -156,6 +156,7 @@ describe('Users section', () => {
       screen.getByRole('heading', { name: 'Admin Dashboard' }),
     ).toBeInTheDocument()
     expect(rowFor(table, 'student_alex').getByText('User')).toBeInTheDocument()
+    expect(rowFor(table, 'student_alex').getByText('2')).toBeInTheDocument()
     expect(
       rowFor(table, 'nus_courier_99').getByText('Admin'),
     ).toBeInTheDocument()

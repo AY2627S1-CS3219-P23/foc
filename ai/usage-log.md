@@ -91,6 +91,9 @@ Entry template:
   `getCurrentUser()` (`GET /users/me`, mocked as nus_courier_99) and
   `UserTable.tsx` hides Remove on the signed-in admin's own row. Three
   tests added. The unauthenticated-requests comment is left for #91.
+  Then asked to show the ID in the users list since search matches it:
+  `UserTable.tsx` gains an ID column (desktop) and "ID:" on the mobile
+  cards, with an assertion in the list test.
 - **Author review:** Ryan reviewed the placeholder, credit removal and
   API wiring before the PR. Mock website reviewed by Ryan before PR.
   PR fixes reviewed by Ryan.
