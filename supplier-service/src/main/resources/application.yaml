@@ -1,9 +1,10 @@
 # AI-assisted (CS3219 AI Usage Policy disclosure):
-# Tool: Claude Code (Sonnet 5), 2026-09-22.
+# Tool: Claude Code (Sonnet 5), 2026-09-22; revised 2026-09-26.
 # Scope: service configuration scaffolded following the
 # notification-service pattern — application name, datasource bound to
 # the service-owned supplier-db, JPA schema-from-entities, and the
-# actuator health endpoint.
+# actuator health endpoint. 2026-09-26 (issue #133): web-allowed-origin
+# for CorsConfig, so the browser can call GET /suppliers directly.
 # Reviewed by: Ko-Khan (via pull request).
 
 spring:
@@ -17,6 +18,9 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
+
+supplier:
+  web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
 
 management:
   endpoints:

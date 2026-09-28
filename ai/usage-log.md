@@ -26,6 +26,148 @@ Entry template:
 ```
 
 ---
+## 2026-09-28 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** debug
+- **Scope:** `supplier-service` — `SupplierService.normalizeImageUrl`
+  and its tests in `SupplierServiceTest`.
+- **Prompt(s):** Asked why some supplier images didn't render in the
+  UI (broken-image icon) while others (with no image at all) showed
+  nothing. Diagnosed that the seed CSV's `ImageURL` column points at
+  GitHub's file-*viewer* page (`github.com/.../blob/<ref>/<path>`),
+  which serves `text/html`, not image bytes — only
+  `raw.githubusercontent.com/.../<ref>/<path>` (no `blob`) serves the
+  actual `image/jpeg`. Confirmed via `curl -I` on both URL forms. The
+  author said the seed CSV is course-provided data and can't be edited,
+  so asked for the fix to happen in code instead.
+- **Author review:** The constraint (CSV must stay untouched) and the
+  general fix location (normalize at the API response boundary, in
+  `SupplierService.toResponse`, so it also covers any future
+  admin-CRUD-created supplier with the same URL shape, not just the
+  CSV-seeded rows) were the author's; the tool implemented the
+  GitHub-blob-to-raw-URL regex and its tests. Verified live: rebuilt
+  and restarted the `supplier-service` container, confirmed
+  `GET /suppliers?search=Anna` now returns the raw-content URL, and
+  confirmed in a real (Playwright-driven) browser that the image
+  actually loads (200, non-zero `naturalWidth`) where it previously
+  showed a broken-image icon. `mvn test` passes (7/7). Reviewed via
+  pull request.
+
+## 2026-09-28 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** debug
+- **Scope:** `supplier-service` — `GET /suppliers` sort validation
+  (`SupplierController`, `SupplierService`, new
+  `exception/InvalidSortException`, new `SupplierServiceTest`).
+- **Prompt(s):** Asked to explain a PR #134 review comment (LeongWZ)
+  showing that an unrecognized `sort` value (e.g. `location`/
+  `openingTime`, which match the response DTO's field names but not the
+  `Suppliers` entity's) throws an unhandled `PropertyReferenceException`
+  since Spring Data resolves Sort against the entity, and the service
+  has no `@ControllerAdvice` to turn that into a clean error; the
+  frontend's own `'distance'` sentinel leaking through unconverted
+  would hit the same path. Then asked to fix it and add tests.
+- **Author review:** The fix approach (an explicit allow-list of
+  sortable properties, rejected with a 400 problem+json body via an
+  `@ExceptionHandler`, following `user-service`'s existing
+  `ProfileController` pattern) was the reviewer's, not the tool's; the
+  tool implemented it and added `SupplierServiceTest` covering the
+  allow/reject cases. Verified by running the full supplier-service
+  test suite (`mvn test`, 4/4 passing) and a live smoke test against
+  the running container confirming `sort=name,asc` still returns 200
+  while `sort=location`/`sort=distance` now return 400 instead of 500.
+  Reviewed via pull request.
+
+## 2026-09-28 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** debug
+- **Scope:** `web/src/routes/suppliers.tsx` — "Nearest to Me" sort
+  fallback.
+- **Prompt(s):** Asked to explain a PR #134 review comment (LeongWZ)
+  identifying that the render-phase guard falling back to name-sort in a
+  browser without geolocation support only fires once (it self-gates on
+  `locationNotice`, which it also sets), so re-selecting "Nearest to Me"
+  leaves `sort` stuck at `'distance'` with `fetchCurrentPage` resolving
+  `null` forever — search/category changes then silently stop updating
+  the list. Then asked to apply the reviewer's suggested fix: reject the
+  selection in the sort-change handler itself instead of correcting
+  `sort` back after the fact during render.
+- **Author review:** The fix approach (handle in `onSortChange`, never
+  commit `sort = 'distance'` when unsupported) was the reviewer's, not
+  the tool's; the tool implemented it. Reviewed via pull request.
+
+## 2026-09-26 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** generate (implementation), debug
+- **Scope:** issue #133 — `GET /suppliers` list endpoint: search by
+  name, filter by category, paging + sorting. New files
+  `supplier-service/src/main/java/foc/supplier/{controller/SupplierController,
+  service/SupplierService, dto/SupplierResponse, dto/PageResponse,
+  config/CorsConfig}.java`; extended `SuppliersRepository` (paginated
+  search/filter query) and `SupplierCategoriesRepository` (batch
+  category lookup); `application.yaml`/`compose.yaml`/`.env.example`
+  (CORS-allowed origin for the browser). Frontend: `web/src/features/supplier/api.ts`
+  and `types.ts` updated to the new paginated response shape;
+  `routes/suppliers.tsx` given page state + Prev/Next controls. Also
+  removed the zone feature's remaining frontend wiring (`Zone` type,
+  `SupplierFilterBar`'s zone dropdown, `SupplierFormModal`'s required
+  Campus Zone field, `SupplierDetailPanel`'s zone line, and the
+  `listZones()` call to a nonexistent `/zones` endpoint) — the team
+  dropped the zone feature; the required, unpopulatable Campus Zone
+  `<select>` was blocking every supplier edit.
+- **Prompt(s):** Asked to implement task #7 (pagination first, per
+  author's own build-order decision) end-to-end and run the app to see
+  it working. Bugs found and fixed while verifying live: (1) the JPQL
+  search query threw `function lower(bytea) does not exist` on Postgres
+  when `search`/`category` were null — fixed with explicit
+  `CAST(:param AS string)`; (2) Vite's dev server doesn't read the
+  repo-root `.env` (only `web/`'s own env files or the shell
+  environment) — `VITE_SUPPLIER_SERVICE_URL` had to be exported before
+  `npm run dev`; (3) a `react-hooks/set-state-in-effect` lint error from
+  resetting `page` in a plain effect — fixed via React's documented
+  "adjust state during render" pattern instead; (4) discovered mid-task
+  that the suppliers page was already broken independent of this work —
+  it called a `/zones` endpoint the backend never implemented, throwing
+  inside `Promise.all` and failing the page's entire initial load —
+  removed as part of the zone-feature drop.
+- **Author review:** Verified live end-to-end: `docker compose up`
+  supplier-db + supplier-service, `curl` against `GET /suppliers` with
+  search/category/page/sort params, and the actual browser UI via
+  Playwright (21 seeded suppliers paginate across 3 pages, category
+  dropdown populated from live data, multi-category suppliers e.g.
+  "Food, Coffee" display correctly, empty-state renders on no match).
+  `tsc -b`, `eslint .`, and `vitest run` all pass on `web/`. Reviewed by
+  author via pull request.
+
+---
+## 2026-09-27 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** generate (implementation)
+- **Scope:** "Nearest to Me" distance-sort feature, PR #134 — backend:
+  `SuppliersRepository.searchOrderedByDistance` (native Haversine
+  query), `SupplierController`'s optional `lat`/`lng` params,
+  `SupplierService.listSuppliers`'s lat/lng branch. Frontend:
+  `web/src/features/supplier/distance.ts` (client-side display-only
+  distance formatting), `SupplierFilterBar`'s `LabeledSelect` sort
+  control, `SupplierCard`'s `distanceLabel`, `suppliers.tsx`'s
+  geolocation-request effect and fallback-to-name-sort notice,
+  `api.ts`'s `sort`/lat/lng query params. Also added a required-field
+  asterisk to `SupplierFormModal` (Name, Location, Opening/Close).
+- **Prompt(s):** Asked to implement "sort suppliers by distance from
+  the user's current location" (team decision) end-to-end: request
+  browser geolocation, pass it to the backend, order results by
+  distance there (not client-side), and show a distance label per
+  card. Backend query approach (native SQL for the Haversine trig
+  functions JPQL doesn't expose) and the geolocation-denied/unavailable
+  fallback (drop to name-sort with a visible notice) were author
+  decisions.
+- **Author review:** Verified via `curl` with real lat/lng against the
+  seeded suppliers and manually in-browser (geolocation grant, deny,
+  and unavailable paths). Reviewed via pull request — see PR #134's
+  later review comments (2026-09-28 entries above) for the gaps this
+  first pass missed (geolocation timeout, LIKE-wildcard escaping,
+  sort-value validation, and this entry itself, added after review
+  flagged the missing disclosure).
 ## 2026-09-27 — Ryan Ang (PR #135 second review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor, review

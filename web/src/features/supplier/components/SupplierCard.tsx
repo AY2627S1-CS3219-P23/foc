@@ -1,7 +1,11 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
-// Tool: Claude, 2026-09-22.
+// Tool: Claude, 2026-09-22; revised 2026-09-27 (Claude Code, Sonnet 5).
 // Scope: one supplier's card in the browse grid, per
 // web/docs/wireframes/suppliers.png.
+// 2026-09-27: added an optional `distanceLabel` — team decision to
+// support "sort by distance from the user's current location"; without
+// showing the actual distance, a nearest-first re-ordering would look
+// unexplained to whoever is testing/using the feature.
 // Reviewed by: [pending]
 
 import type { Supplier } from '../types'
@@ -10,9 +14,10 @@ interface SupplierCardProps {
   supplier: Supplier
   selected: boolean
   onSelect: () => void
+  distanceLabel?: string
 }
 
-export function SupplierCard({ supplier, selected, onSelect }: SupplierCardProps) {
+export function SupplierCard({ supplier, selected, onSelect, distanceLabel }: SupplierCardProps) {
   return (
     <button
       type="button"
@@ -45,6 +50,7 @@ export function SupplierCard({ supplier, selected, onSelect }: SupplierCardProps
 
       <p className="mt-2 text-xs text-gray-400">
         {supplier.openingTime}–{supplier.closingTime}
+        {distanceLabel && <> · {distanceLabel}</>}
       </p>
     </button>
   )

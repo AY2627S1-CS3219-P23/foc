@@ -2,10 +2,12 @@
 title: "FoC — Supplier Service Component Diagram"
 ---
 %% AI-assisted (CS3219 AI Usage Policy disclosure):
-%% Tool: Claude, 2026-09-21.
+%% Tool: Claude, 2026-09-21; revised 2026-09-27 (Claude Code, Sonnet 5).
 %% Scope: Companion diagram to supplier-service.md, drafted from the
 %% team's finalized D1 backlog. Same status as the doc: proposals
 %% pending owner/team review (see supplier-service.md, D1-D8).
+%% 2026-09-27: dropped "zones" from the Supplier DB label — team
+%% decision to drop the zone feature (see supplier-service.md, D4).
 %% Reviewed by: XXX
 flowchart TB
     WEB["Web App<br/>(web/)"]
@@ -18,7 +20,7 @@ flowchart TB
         SEED["Seed loader<br/>issue #102"]
     end
 
-    SUP_DB[("Supplier DB<br/>PostgreSQL — D1<br/>suppliers, supplier_categories, zones")]
+    SUP_DB[("Supplier DB<br/>PostgreSQL — D1<br/>suppliers, supplier_categories")]
 
     WEB -->|"REST/JSON: browse, search, filter"| API
     WEB -->|"REST/JSON: admin CRUD"| ADMIN_API
