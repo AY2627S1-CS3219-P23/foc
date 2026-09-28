@@ -56,6 +56,10 @@ Entry template:
   in review: request field `usernameOrEmail`; a locked account gets the
   same 401 as a wrong password; validation reasons joined in one
   `detail`; CORS reuses `WEB_ALLOWED_ORIGIN`. 
+  PR #141 Copilot review: `login.tsx` and `register.tsx` no longer log the
+  response (the login one now holds the access token); the #90 logout
+  denylist stays deferred, per the design doc's "defer for now" on logout
+  revocation, with #90 kept open.
 - **Author review:** Full `./mvnw test`
   suite passes, including the Docker-backed `AuthControllerTest`.
 

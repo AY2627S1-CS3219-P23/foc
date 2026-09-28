@@ -2,7 +2,9 @@
 // Tool: Claude Code (Opus 5.5), 2026-09-29, issues #87/#89.
 // Scope: login now calls user-service's POST /auth/login (replacing
 // PR #139's user-auth server on port 8081) with usernameOrEmail, and
-// shows the server's error message. The page itself comes from PR #139.
+// shows the server's error message; the response is no longer logged,
+// as it now holds the access token (PR #141 review). The page itself
+// comes from PR #139.
 // Reviewed by: Ryan Ang
 
 import React, { useState } from "react";
@@ -30,7 +32,6 @@ export function Login() {
         password,
       });
 
-      console.log("response", response);
       await data.login(response.data);
       setError("");
       setUsername("");

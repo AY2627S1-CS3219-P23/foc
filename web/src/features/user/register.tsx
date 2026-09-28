@@ -3,7 +3,8 @@
 // Scope: registration now calls user-service's POST /auth/signup (replacing
 // PR #139's user-auth server on port 8081) with the NUS email it
 // requires, then sends you to log in (sign-up returns the account, not
-// a token); shows the server's error message. The page itself comes from PR #139.
+// a token); shows the server's error message. The response (the new
+// account) is not logged (PR #141 review). The page itself comes from PR #139.
 // Reviewed by: Ryan Ang
 
 import React, { useState } from "react";
@@ -20,13 +21,12 @@ export function Register() {
   const register = async (event: React.SyntheticEvent) => {
     event.preventDefault();
     try {
-      const response = await axios.post(`${serviceBaseUrls.user}/auth/signup`, {
+      await axios.post(`${serviceBaseUrls.user}/auth/signup`, {
         email,
         username,
         password,
       });
 
-      console.log("response", response);
       setError("");
       setEmail("");
       setUsername("");
