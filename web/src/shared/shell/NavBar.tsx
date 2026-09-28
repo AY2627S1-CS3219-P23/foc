@@ -6,12 +6,19 @@
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import { Link, NavLink } from 'react-router'
-
 import { CreditsBadge } from './CreditsBadge'
 import { NotificationBell } from './NotificationBell'
 import { navItems } from './navigation'
+import { router } from '../../routes/index'
+import { useAuth } from '../../features/user/useAuth'
 
 export function NavBar() {
+  const data = useAuth();
+
+  const toLogin = () => {
+    router.navigate("/login");
+  };
+
   return (
     <header className="border-b border-gray-200 bg-white">
       <nav
@@ -45,6 +52,16 @@ export function NavBar() {
           <CreditsBadge />
           <NotificationBell />
         </div>
+
+        {!data?.token ? ( // Conditionally render login and logout based on user state
+          <button onClick={toLogin} className="text-inherit no-underline rounded-md border border-gray-5=800 bg-white px-3 py-1 text-sm font-medium whitespace-nowrap cursor-pointer">
+            Log In
+          </button>
+        ) : (
+          <button className="text-inherit no-underline rounded-md border border-gray-5=800 bg-white px-3 py-1 text-sm font-medium whitespace-nowrap cursor-pointer"
+            onClick={data.logout}>Logout
+          </button>
+        )}
       </nav>
     </header>
   )
