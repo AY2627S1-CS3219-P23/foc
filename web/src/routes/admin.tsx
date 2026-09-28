@@ -9,7 +9,7 @@
 // supplier-service list endpoint (PR #134) and its admin CRUD endpoints.
 // TEMPORARY: there is no admin role gate because src/shared/auth/
 // doesn't exist yet (see its README).
-// Reviewed by: [pending]
+// Reviewed by: Ryan Ang.
 
 import { UsersSection } from '@/features/user/components/UsersSection'
 

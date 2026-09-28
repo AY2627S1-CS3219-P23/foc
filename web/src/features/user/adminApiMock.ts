@@ -8,7 +8,7 @@
 //
 // TEMPORARY: delete this file (and the switch in adminApi.ts) once the
 // real endpoints are reachable from the browser.
-// Reviewed by: Ryann
+// Reviewed by: Ryan Ang
 
 import type {
   AdminUser,

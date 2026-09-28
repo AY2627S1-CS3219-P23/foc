@@ -436,7 +436,7 @@ Entry template:
   its error state until supplier-service serves data. Defaults applied and
   stated to the author: route without a nav item, USER/ADMIN/OWNER roles
   matching the PR #126 entity, owner row limited to Add Credits.
-- **Author review:** _to be completed by Ryan_. Vitest 18/18, tsc, eslint
+- **Author review:** Vitest 18/18, tsc, eslint
   and prettier clean on the new files; checked at desktop (1280/1920px)
   and mobile (390px) widths in the browser.
 

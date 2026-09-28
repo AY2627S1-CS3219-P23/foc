@@ -5,7 +5,7 @@
 // Scope: admin user endpoints of user-service — GET /users (search, role
 // filter, paging), PATCH /users/{id} (role change), DELETE /users/{id}
 // (soft delete) — through the shared apiFetch wrapper.
-// Reviewed by: [pending] (reviewed by Ryan Ang before the mock switch)
+// Reviewed by: Ryan Ang
 
 import { apiFetch } from '@/lib/api/http'
 import { mockAdminUserApi } from './adminApiMock'

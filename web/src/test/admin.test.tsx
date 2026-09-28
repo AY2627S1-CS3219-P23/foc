@@ -5,7 +5,7 @@
 // against a fake adminUserApi, with search, role filter and paging).
 // Scope: tests for the Admin Dashboard page — Users section, plus the
 // Suppliers placeholder.
-// Reviewed by: [pending]
+// Reviewed by: Ryan Ang
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
