@@ -1,17 +1,86 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113; revised
 // 2026-09-28 (Suppliers section tests replaced by a placeholder check;
-// credit tests removed with the credit mock).
-// Scope: tests for the Admin Dashboard page — Users section against the
-// in-memory user mock, plus the Suppliers placeholder.
+// credit tests removed with the credit mock; Users section tested
+// against a fake adminUserApi, with search, role filter and paging).
+// Scope: tests for the Admin Dashboard page — Users section, plus the
+// Suppliers placeholder.
 // Reviewed by: [pending]
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
-import { adminUserApi, resetMockUsers } from '@/features/user/adminApi'
+import { adminUserApi } from '@/features/user/adminApi'
+import type {
+  AdminUser,
+  AdminUserPage,
+  ListUsersParams,
+} from '@/features/user/types'
 import { routes } from '../routes'
+
+const seedUsers: readonly AdminUser[] = [
+  {
+    id: 1,
+    email: 'e0000001@u.nus.edu',
+    username: 'foc_owner',
+    role: 'OWNER',
+    createdAt: '2026-09-01T09:00:00Z',
+  },
+  {
+    id: 2,
+    email: 'e0123456@u.nus.edu',
+    username: 'student_alex',
+    role: 'USER',
+    createdAt: '2026-09-10T03:15:00Z',
+  },
+  {
+    id: 3,
+    email: 'e0999999@u.nus.edu',
+    username: 'nus_courier_99',
+    role: 'ADMIN',
+    createdAt: '2026-09-12T11:40:00Z',
+  },
+  {
+    id: 4,
+    email: 'e0345678@u.nus.edu',
+    username: 'utown_runner',
+    role: 'USER',
+    createdAt: '2026-09-18T07:05:00Z',
+  },
+]
+
+let users: AdminUser[] = []
+
+// Stand-in for GET /users: filters, then pages like the backend.
+function fakeListUsers(params: ListUsersParams): AdminUserPage {
+  const search = params.search?.toLowerCase()
+  const matches = users.filter(
+    (u) =>
+      (!params.role || u.role === params.role) &&
+      (!search || u.username.toLowerCase().includes(search)),
+  )
+  const start = params.page * params.size
+  return {
+    content: matches.slice(start, start + params.size),
+    page: {
+      size: params.size,
+      number: params.page,
+      totalElements: matches.length,
+      totalPages: Math.ceil(matches.length / params.size),
+    },
+  }
+}
+
+function manyUsers(count: number): AdminUser[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: 100 + i,
+    email: `e${1000000 + i}@u.nus.edu`,
+    username: `user_${String(i + 1).padStart(2, '0')}`,
+    role: 'USER',
+    createdAt: '2026-09-20T00:00:00Z',
+  }))
+}
 
 function renderAdmin() {
   render(
@@ -37,9 +106,25 @@ function rowFor(table: HTMLElement, text: string) {
   return within(row)
 }
 
+function lastListParams() {
+  return vi.mocked(adminUserApi.listUsers).mock.lastCall?.[0]
+}
+
 beforeEach(() => {
-  resetMockUsers()
   vi.restoreAllMocks()
+  users = seedUsers.map((u) => ({ ...u }))
+  vi.spyOn(adminUserApi, 'listUsers').mockImplementation(async (params) =>
+    fakeListUsers(params),
+  )
+  vi.spyOn(adminUserApi, 'changeRole').mockImplementation(async (id, role) => {
+    const user = users.find((u) => u.id === id)
+    if (!user) throw new Error('User not found.')
+    user.role = role
+    return { ...user }
+  })
+  vi.spyOn(adminUserApi, 'removeUser').mockImplementation(async (id) => {
+    users = users.filter((u) => u.id !== id)
+  })
 })
 
 describe('Users section', () => {
@@ -50,12 +135,15 @@ describe('Users section', () => {
     expect(
       screen.getByRole('heading', { name: 'Admin Dashboard' }),
     ).toBeInTheDocument()
-    const alex = rowFor(table, 'student_alex')
-    expect(alex.getByText('User')).toBeInTheDocument()
+    expect(rowFor(table, 'student_alex').getByText('User')).toBeInTheDocument()
     expect(
       rowFor(table, 'nus_courier_99').getByText('Admin'),
     ).toBeInTheDocument()
     expect(rowFor(table, 'foc_owner').getByText('Owner')).toBeInTheDocument()
+    expect(adminUserApi.listUsers).toHaveBeenCalledWith({
+      page: 0,
+      size: 20,
+    })
   })
 
   test('owner has no actions', async () => {
@@ -65,18 +153,115 @@ describe('Users section', () => {
     expect(owner.queryAllByRole('button')).toEqual([])
   })
 
-  test('search filters by username', async () => {
+  test('search is sent to the server once typing pauses', async () => {
     const user = userEvent.setup()
     renderAdmin()
     const table = await findSectionTable('Users')
 
     await user.type(
-      screen.getByRole('searchbox', { name: 'Search by username' }),
+      screen.getByRole('searchbox', {
+        name: 'Search by ID, username or email',
+      }),
       'alex',
     )
 
+    await waitFor(() =>
+      expect(
+        within(table).queryByText('nus_courier_99'),
+      ).not.toBeInTheDocument(),
+    )
     expect(within(table).getByText('student_alex')).toBeInTheDocument()
-    expect(within(table).queryByText('nus_courier_99')).not.toBeInTheDocument()
+    // One request for the initial load, one for the finished word.
+    expect(adminUserApi.listUsers).toHaveBeenCalledTimes(2)
+    expect(lastListParams()).toEqual({ search: 'alex', page: 0, size: 20 })
+  })
+
+  test('role filter is sent to the server', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Filter by role' }),
+      'ADMIN',
+    )
+
+    await waitFor(() =>
+      expect(within(table).queryByText('student_alex')).not.toBeInTheDocument(),
+    )
+    expect(within(table).getByText('nus_courier_99')).toBeInTheDocument()
+    expect(lastListParams()).toEqual({ role: 'ADMIN', page: 0, size: 20 })
+  })
+
+  test('next, previous and page numbers request that page', async () => {
+    users = manyUsers(45)
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+    const pager = within(section('Users').getByRole('navigation'))
+
+    expect(within(table).getByText('user_01')).toBeInTheDocument()
+    expect(pager.getByRole('button', { name: 'Previous' })).toBeDisabled()
+    expect(pager.getByRole('button', { name: 'Page 1' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+
+    await user.click(pager.getByRole('button', { name: 'Next' }))
+    expect(await within(table).findByText('user_21')).toBeInTheDocument()
+    expect(lastListParams()).toEqual({ page: 1, size: 20 })
+
+    await user.click(pager.getByRole('button', { name: 'Page 3' }))
+    expect(await within(table).findByText('user_41')).toBeInTheDocument()
+    expect(pager.getByRole('button', { name: 'Next' })).toBeDisabled()
+
+    await user.click(pager.getByRole('button', { name: 'Previous' }))
+    expect(await within(table).findByText('user_21')).toBeInTheDocument()
+    expect(lastListParams()).toEqual({ page: 1, size: 20 })
+  })
+
+  test('changing the search or role filter goes back to page 1', async () => {
+    users = [...manyUsers(45), ...seedUsers.map((u) => ({ ...u }))]
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+    const pager = within(section('Users').getByRole('navigation'))
+
+    await user.click(pager.getByRole('button', { name: 'Page 2' }))
+    expect(await within(table).findByText('user_21')).toBeInTheDocument()
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Filter by role' }),
+      'USER',
+    )
+    await waitFor(() =>
+      expect(lastListParams()).toEqual({ role: 'USER', page: 0, size: 20 }),
+    )
+
+    await user.click(
+      await within(section('Users').getByRole('navigation')).findByRole(
+        'button',
+        { name: 'Page 2' },
+      ),
+    )
+    await waitFor(() =>
+      expect(lastListParams()).toEqual({ role: 'USER', page: 1, size: 20 }),
+    )
+
+    await user.type(
+      screen.getByRole('searchbox', {
+        name: 'Search by ID, username or email',
+      }),
+      'user_0',
+    )
+    await waitFor(() =>
+      expect(lastListParams()).toEqual({
+        search: 'user_0',
+        role: 'USER',
+        page: 0,
+        size: 20,
+      }),
+    )
   })
 
   test('search with no match shows empty state', async () => {
@@ -85,11 +270,15 @@ describe('Users section', () => {
     await findSectionTable('Users')
 
     await user.type(
-      screen.getByRole('searchbox', { name: 'Search by username' }),
+      screen.getByRole('searchbox', {
+        name: 'Search by ID, username or email',
+      }),
       'zzz',
     )
 
-    expect(screen.getByText('No users match your search.')).toBeInTheDocument()
+    expect(
+      await screen.findByText('No users match your search or filter.'),
+    ).toBeInTheDocument()
   })
 
   test('promote and demote toggle a user between User and Admin', async () => {
@@ -105,6 +294,7 @@ describe('Users section', () => {
     expect(
       await rowFor(table, 'student_alex').findByText('Admin'),
     ).toBeInTheDocument()
+    expect(adminUserApi.changeRole).toHaveBeenCalledWith(2, 'ADMIN')
 
     await user.click(
       rowFor(table, 'student_alex').getByRole('button', {
@@ -114,6 +304,7 @@ describe('Users section', () => {
     expect(
       await rowFor(table, 'student_alex').findByText('User'),
     ).toBeInTheDocument()
+    expect(adminUserApi.changeRole).toHaveBeenLastCalledWith(2, 'USER')
   })
 
   test('remove asks for confirmation, then removes the user', async () => {
@@ -134,6 +325,7 @@ describe('Users section', () => {
     await waitFor(() =>
       expect(within(table).queryByText('utown_runner')).not.toBeInTheDocument(),
     )
+    expect(adminUserApi.removeUser).toHaveBeenCalledWith(4)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -151,11 +343,12 @@ describe('Users section', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(within(table).getByText('utown_runner')).toBeInTheDocument()
+    expect(adminUserApi.removeUser).not.toHaveBeenCalled()
   })
 
   test('a failed role change shows the error and leaves the role unchanged', async () => {
-    vi.spyOn(adminUserApi, 'changeRole').mockRejectedValue(
-      new Error('Cannot demote the last admin.'),
+    vi.mocked(adminUserApi.changeRole).mockRejectedValue(
+      new Error('You cannot change this user.'),
     )
     const user = userEvent.setup()
     renderAdmin()
@@ -168,7 +361,7 @@ describe('Users section', () => {
     )
 
     expect(await section('Users').findByRole('alert')).toHaveTextContent(
-      'Cannot demote the last admin.',
+      'You cannot change this user.',
     )
     expect(
       rowFor(table, 'nus_courier_99').getByText('Admin'),
@@ -176,7 +369,7 @@ describe('Users section', () => {
   })
 
   test('a failed user load shows an error', async () => {
-    vi.spyOn(adminUserApi, 'listUsers').mockRejectedValue(
+    vi.mocked(adminUserApi.listUsers).mockRejectedValue(
       new Error('Network down'),
     )
     renderAdmin()

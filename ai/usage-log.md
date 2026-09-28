@@ -26,27 +26,51 @@ Entry template:
 ```
 
 ---
-## 2026-09-28 — Ryan Ang
+## 2026-09-28 — Ryan Ang (#113 admin user management)
 - **Tool:** Claude Code (Opus 5.5)
-- **Mode:** refactor
-- **Scope:** `web/` Admin Dashboard (issue #113): the Suppliers section
-  reduced to a "coming soon" placeholder inside `src/routes/admin.tsx`;
-  `src/features/supplier/components/SuppliersAdminSection.tsx` and
-  `SupplierTable.tsx` deleted; the three supplier tests and the supplier
-  api mock in `src/test/admin.test.tsx` replaced by one placeholder test.
-  Credit mock removed: `src/features/credit/` (`adminCreditApi.ts`,
-  `types.ts`, `components/AddCreditsModal.tsx`) deleted; the Credits
-  column and Add Credits action dropped from `UserTable.tsx` and
-  `UsersSection.tsx`; the three credit tests removed and the owner-row
-  test changed to "owner has no actions".
+- **Mode:** refactor, generate (implementation + tests)
+- **Scope:** `web/` Admin Dashboard (issue #113):
+  - Suppliers section reduced to a "coming soon" placeholder inside
+    `src/routes/admin.tsx`; `src/features/supplier/components/`
+    `SuppliersAdminSection.tsx` and `SupplierTable.tsx` deleted.
+  - Credit mock removed: `src/features/credit/` (`adminCreditApi.ts`,
+    `types.ts`, `components/AddCreditsModal.tsx`) deleted; the Credits
+    column and Add Credits action dropped from `UserTable.tsx` and
+    `UsersSection.tsx`.
+  - `src/features/user/adminApi.ts` in-memory mock replaced by
+    `apiFetch('user', ...)` calls to `GET /users`, `PATCH /users/{id}`
+    and `DELETE /users/{id}`; `types.ts` gains `AdminUserPage` (Spring
+    PagedModel body) and `ListUsersParams`.
+  - `UsersSection.tsx` sends search (debounced, `SEARCH_DEBOUNCE_MS` =
+    300) and a new role filter to the server, pages with
+    `USERS_PAGE_SIZE` = 100, and resets to page 1 when either changes;
+    new shared `src/shared/components/Pagination.tsx` (Previous / page
+    numbers / Next).
+  - New `src/features/user/adminApiMock.ts` (in-memory stand-in with the
+    same signatures, 30 demo users, filters and pages like `GET /users`);
+    `adminApi.ts` uses it only when `VITE_MOCK_ADMIN_API=true`, set in
+    the git-ignored `web/.env.local`.
+  - `src/test/admin.test.tsx` rewritten against a fake `adminUserApi`:
+    supplier and credit tests replaced by one placeholder test, owner-row
+    test changed to "owner has no actions", search, role filter, paging
+    and page-reset cases added.
 - **Prompt(s):** Summary: Asked whether the admin page could show
   suppliers once PR #134 merges. The tool noted that #134 removes
   `listZones`/`Zone` and changes `listSuppliers` to a paged response,
   which would break the section, and that no PR yet adds the supplier
   create/update/delete endpoints. Per team decision, the section becomes
   a placeholder for now; who builds the admin supplier display is left
-  to the team. Then asked to remove the credit mock as well.
-- **Author review:** Ryan reviewed before pushing PR.
+  to the team. Then asked to remove the credit mock as well. Then asked
+  which files change now that #96 is merged, and to connect the Users
+  section to it: search goes to the server with a ~300 ms debounce kept
+  as an editable constant; paging with Previous/Next and page numbers;
+  typing a search or choosing a role filter resets to page 1 and reloads
+  from the server; page size 100, also a constant. Finally asked for a
+  mock to view the page in the browser before #91 (login) and
+  user-service CORS exist, keeping the real calls in place for when
+  those land; the flag name was the tool's choice.
+- **Author review:** Ryan reviewed the placeholder, credit removal and
+  API wiring before the PR. Mock website reviewed by Ryan before PR.
 
 ## 2026-09-27 — Ryan Ang (PR #135 second review)
 - **Tool:** Claude Code (Opus 5.5)

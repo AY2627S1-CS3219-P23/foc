@@ -1,20 +1,32 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113; revised
-// 2026-09-28 (credit balances and Add Credits removed).
-// Scope: Admin Dashboard "Users" section — list, search by username,
-// promote/demote, remove — per web/docs/wireframes/admin-dashboard.png.
-//
-// TEMPORARY: users come from the in-memory adminUserApi mock until it is
-// wired to the #96 endpoints.
-// Reviewed by: [pending]
+// 2026-09-28 (credit balances and Add Credits removed; wired to the #96
+// endpoints with server-side search, role filter and paging).
+// Scope: Admin Dashboard "Users" section — list, search, role filter,
+// paging, promote/demote, remove — per
+// web/docs/wireframes/admin-dashboard.png.
+// Reviewed by: Ryan Ang
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { ApiError } from '@/lib/api/http'
+import { Pagination } from '@/shared/components/Pagination'
 import { adminUserApi } from '../adminApi'
-import type { AdminUser, UserRole } from '../types'
+import type { AdminUser, AdminUserPage, UserRole } from '../types'
 import { RemoveUserModal } from './RemoveUserModal'
 import { UserTable } from './UserTable'
+
+// Wait this long after the last keystroke before searching.
+const SEARCH_DEBOUNCE_MS = 300
+// user-service accepts 20, 50 or 100.
+const USERS_PAGE_SIZE = 100
+
+const roleOptions: { value: UserRole | ''; label: string }[] = [
+  { value: '', label: 'All roles' },
+  { value: 'USER', label: 'User' },
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'OWNER', label: 'Owner' },
+]
 
 function errorMessage(err: unknown, fallback: string) {
   if (err instanceof ApiError) return err.message
@@ -22,49 +34,98 @@ function errorMessage(err: unknown, fallback: string) {
   return fallback
 }
 
+// The result of one list request, tagged with the query it answered so a
+// newer query shows as loading until its own result arrives.
+interface LoadResult {
+  key: string
+  data: AdminUserPage | null
+  error: string | null
+}
+
 export function UsersSection() {
-  const [users, setUsers] = useState<AdminUser[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useState('')
+  const [role, setRole] = useState<UserRole | ''>('')
+  const [page, setPage] = useState(1) // 1-based; the API is 0-based
+  const [result, setResult] = useState<LoadResult | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [busyUserId, setBusyUserId] = useState<number | null>(null)
   const [pendingRemove, setPendingRemove] = useState<AdminUser | null>(null)
+
+  // Apply the search box to the query once typing pauses.
+  useEffect(() => {
+    if (searchInput === search) return
+    const timer = setTimeout(() => {
+      setSearch(searchInput)
+      setPage(1)
+    }, SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [searchInput, search])
+
+  const trimmedSearch = search.trim()
+  const queryKey = JSON.stringify([trimmedSearch, role, page])
 
   useEffect(() => {
     let cancelled = false
 
-    async function load() {
-      try {
-        const result = await adminUserApi.listUsers()
-        if (!cancelled) setUsers(result)
-      } catch (err) {
-        if (!cancelled)
-          setError(errorMessage(err, 'Could not load users. Try again.'))
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
-    load()
+    adminUserApi
+      .listUsers({
+        search: trimmedSearch || undefined,
+        role: role || undefined,
+        page: page - 1,
+        size: USERS_PAGE_SIZE,
+      })
+      .then(
+        (data) => {
+          if (!cancelled) setResult({ key: queryKey, data, error: null })
+        },
+        (err: unknown) => {
+          if (!cancelled)
+            setResult({
+              key: queryKey,
+              data: null,
+              error: errorMessage(err, 'Could not load users. Try again.'),
+            })
+        },
+      )
 
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [queryKey, trimmedSearch, role, page])
 
-  const visibleUsers = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return q ? users.filter((u) => u.username.toLowerCase().includes(q)) : users
-  }, [users, query])
+  const loading = result?.key !== queryKey
+  const data = result?.data ?? null
+  const error = actionError ?? (loading ? null : (result?.error ?? null))
 
-  async function handleChangeRole(user: AdminUser, role: UserRole) {
+  function handleRoleFilter(value: UserRole | '') {
+    setRole(value)
+    setPage(1)
+  }
+
+  function updateUsers(update: (users: AdminUser[]) => AdminUser[]) {
+    setResult((prev) =>
+      prev?.data
+        ? {
+            ...prev,
+            data: { ...prev.data, content: update(prev.data.content) },
+          }
+        : prev,
+    )
+  }
+
+  async function handleChangeRole(user: AdminUser, newRole: UserRole) {
     setBusyUserId(user.id)
-    setError(null)
+    setActionError(null)
     try {
-      const updated = await adminUserApi.changeRole(user.id, role)
-      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)))
+      const updated = await adminUserApi.changeRole(user.id, newRole)
+      updateUsers((users) =>
+        users.map((u) => (u.id === updated.id ? updated : u)),
+      )
     } catch (err) {
-      setError(errorMessage(err, `Could not change ${user.username}'s role.`))
+      setActionError(
+        errorMessage(err, `Could not change ${user.username}'s role.`),
+      )
     } finally {
       setBusyUserId(null)
     }
@@ -74,17 +135,19 @@ export function UsersSection() {
     if (!pendingRemove) return
     const target = pendingRemove
     setBusyUserId(target.id)
-    setError(null)
+    setActionError(null)
     try {
       await adminUserApi.removeUser(target.id)
-      setUsers((prev) => prev.filter((u) => u.id !== target.id))
+      updateUsers((users) => users.filter((u) => u.id !== target.id))
     } catch (err) {
-      setError(errorMessage(err, `Could not remove ${target.username}.`))
+      setActionError(errorMessage(err, `Could not remove ${target.username}.`))
     } finally {
       setPendingRemove(null)
       setBusyUserId(null)
     }
   }
+
+  const filtered = trimmedSearch !== '' || role !== ''
 
   return (
     <section className="space-y-4" aria-labelledby="users-heading">
@@ -92,14 +155,28 @@ export function UsersSection() {
         <h2 id="users-heading" className="text-lg font-semibold text-gray-900">
           Users
         </h2>
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by username..."
-          aria-label="Search by username"
-          className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:border-gray-400 focus:outline-none sm:w-64"
-        />
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            type="search"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search by ID, username or email..."
+            aria-label="Search by ID, username or email"
+            className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:border-gray-400 focus:outline-none sm:w-64"
+          />
+          <select
+            value={role}
+            onChange={(e) => handleRoleFilter(e.target.value as UserRole | '')}
+            aria-label="Filter by role"
+            className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-gray-400 focus:outline-none sm:w-36"
+          >
+            {roleOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {error && (
@@ -111,21 +188,32 @@ export function UsersSection() {
         </p>
       )}
 
-      {loading ? (
-        <p className="text-sm text-gray-500">Loading users...</p>
-      ) : visibleUsers.length === 0 ? (
+      {/* While a new query loads, the previous results stay on screen. */}
+      {!data ? (
+        loading && <p className="text-sm text-gray-500">Loading users...</p>
+      ) : data.content.length === 0 ? (
         <div className="rounded-lg border border-gray-200 bg-white py-10 text-center">
           <p className="font-medium text-gray-900">
-            {query ? 'No users match your search.' : 'No users yet.'}
+            {filtered
+              ? 'No users match your search or filter.'
+              : 'No users yet.'}
           </p>
         </div>
       ) : (
-        <UserTable
-          users={visibleUsers}
-          busyUserId={busyUserId}
-          onChangeRole={handleChangeRole}
-          onRemove={setPendingRemove}
-        />
+        <>
+          <UserTable
+            users={data.content}
+            busyUserId={busyUserId}
+            onChangeRole={handleChangeRole}
+            onRemove={setPendingRemove}
+          />
+          <Pagination
+            page={page}
+            totalPages={data.page.totalPages}
+            onPageChange={setPage}
+            disabled={loading}
+          />
+        </>
       )}
 
       {pendingRemove && (

@@ -28,11 +28,19 @@ export function SupplierFormModal({
 }: SupplierFormModalProps) {
   const [name, setName] = useState(initial?.name ?? '')
   const [location, setLocation] = useState(initial?.location ?? '')
-  const [zoneCode, setZoneCode] = useState(initial?.zoneCode ?? zones[0]?.code ?? '')
-  const [categories, setCategories] = useState<string[]>(initial?.categories ?? [])
+  const [zoneCode, setZoneCode] = useState(
+    initial?.zoneCode ?? zones[0]?.code ?? '',
+  )
+  const [categories, setCategories] = useState<string[]>(
+    initial?.categories ?? [],
+  )
   const [categoryDraft, setCategoryDraft] = useState('')
-  const [openingTime, setOpeningTime] = useState(initial?.openingTime ?? '09:00')
-  const [closingTime, setClosingTime] = useState(initial?.closingTime ?? '18:00')
+  const [openingTime, setOpeningTime] = useState(
+    initial?.openingTime ?? '09:00',
+  )
+  const [closingTime, setClosingTime] = useState(
+    initial?.closingTime ?? '18:00',
+  )
   const [description, setDescription] = useState(initial?.description ?? '')
 
   function addCategory() {
@@ -66,7 +74,10 @@ export function SupplierFormModal({
   }
 
   return (
-    <Modal title={initial ? 'Edit Supplier' : 'Add Supplier'} onClose={onCancel}>
+    <Modal
+      title={initial ? 'Edit Supplier' : 'Add Supplier'}
+      onClose={onCancel}
+    >
       <form onSubmit={handleSubmit} className="space-y-4">
         <label className="block text-sm">
           <span className="font-medium text-gray-700">Supplier Name</span>
@@ -116,7 +127,9 @@ export function SupplierFormModal({
                 {c}
                 <button
                   type="button"
-                  onClick={() => setCategories(categories.filter((x) => x !== c))}
+                  onClick={() =>
+                    setCategories(categories.filter((x) => x !== c))
+                  }
                   aria-label={`Remove ${c}`}
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -137,7 +150,9 @@ export function SupplierFormModal({
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block text-sm">
-            <span className="font-medium text-gray-700">Opening Hours — Open</span>
+            <span className="font-medium text-gray-700">
+              Opening Hours — Open
+            </span>
             <input
               required
               type="time"

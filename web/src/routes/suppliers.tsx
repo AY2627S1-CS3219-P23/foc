@@ -84,21 +84,27 @@ export function Suppliers() {
   )
 
   const selected = suppliers.find((s) => s.id === selectedId) ?? null
-  const selectedZone = selected ? zones.find((z) => z.code === selected.zoneCode) : undefined
+  const selectedZone = selected
+    ? zones.find((z) => z.code === selected.zoneCode)
+    : undefined
 
   async function handleSave(input: SupplierInput) {
     setSaving(true)
     try {
       if (formOpenFor && formOpenFor !== 'new') {
         const updated = await updateSupplier(formOpenFor.id, input)
-        setSuppliers((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+        setSuppliers((prev) =>
+          prev.map((s) => (s.id === updated.id ? updated : s)),
+        )
       } else {
         const created = await createSupplier(input)
         setSuppliers((prev) => [...prev, created])
       }
       setFormOpenFor(null)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save supplier.')
+      setError(
+        err instanceof ApiError ? err.message : 'Could not save supplier.',
+      )
     } finally {
       setSaving(false)
     }
@@ -113,7 +119,9 @@ export function Suppliers() {
       if (selectedId === pendingDelete.id) setSelectedId(null)
       setPendingDelete(null)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete supplier.')
+      setError(
+        err instanceof ApiError ? err.message : 'Could not delete supplier.',
+      )
     } finally {
       setSaving(false)
     }
@@ -122,7 +130,9 @@ export function Suppliers() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold text-gray-900">Active Campus Suppliers</h1>
+        <h1 className="text-xl font-semibold text-gray-900">
+          Active Campus Suppliers
+        </h1>
         {IS_ADMIN && (
           <button
             type="button"
@@ -151,7 +161,9 @@ export function Suppliers() {
         </p>
       )}
 
-      <div className={`grid gap-6 ${selected ? 'lg:grid-cols-[1fr_20rem]' : ''}`}>
+      <div
+        className={`grid gap-6 ${selected ? 'lg:grid-cols-[1fr_20rem]' : ''}`}
+      >
         <div>
           {loading ? (
             <p className="text-sm text-gray-500">Loading suppliers...</p>
@@ -172,7 +184,9 @@ export function Suppliers() {
                     supplier={supplier}
                     selected={supplier.id === selectedId}
                     onSelect={() =>
-                      setSelectedId(supplier.id === selectedId ? null : supplier.id)
+                      setSelectedId(
+                        supplier.id === selectedId ? null : supplier.id,
+                      )
                     }
                   />
                   {/* Below lg, the sidebar column collapses away, so show
