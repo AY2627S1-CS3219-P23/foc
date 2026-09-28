@@ -29,6 +29,31 @@ Entry template:
 ## 2026-09-28 — Alastair Tan
 - **Tool:** Claude Code (Sonnet 5)
 - **Mode:** debug
+- **Scope:** `supplier-service` — `GET /suppliers` sort validation
+  (`SupplierController`, `SupplierService`, new
+  `exception/InvalidSortException`, new `SupplierServiceTest`).
+- **Prompt(s):** Asked to explain a PR #134 review comment (LeongWZ)
+  showing that an unrecognized `sort` value (e.g. `location`/
+  `openingTime`, which match the response DTO's field names but not the
+  `Suppliers` entity's) throws an unhandled `PropertyReferenceException`
+  since Spring Data resolves Sort against the entity, and the service
+  has no `@ControllerAdvice` to turn that into a clean error; the
+  frontend's own `'distance'` sentinel leaking through unconverted
+  would hit the same path. Then asked to fix it and add tests.
+- **Author review:** The fix approach (an explicit allow-list of
+  sortable properties, rejected with a 400 problem+json body via an
+  `@ExceptionHandler`, following `user-service`'s existing
+  `ProfileController` pattern) was the reviewer's, not the tool's; the
+  tool implemented it and added `SupplierServiceTest` covering the
+  allow/reject cases. Verified by running the full supplier-service
+  test suite (`mvn test`, 4/4 passing) and a live smoke test against
+  the running container confirming `sort=name,asc` still returns 200
+  while `sort=location`/`sort=distance` now return 400 instead of 500.
+  Reviewed via pull request.
+
+## 2026-09-28 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** debug
 - **Scope:** `web/src/routes/suppliers.tsx` — "Nearest to Me" sort
   fallback.
 - **Prompt(s):** Asked to explain a PR #134 review comment (LeongWZ)

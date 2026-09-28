@@ -27,22 +27,38 @@
  * *content* being misinterpreted. `\` is the escape character; it's
  * escaped first so a literal backslash in a search term doesn't itself
  * get misread as introducing an escape sequence.
+ * 2026-09-28 (PR #134 review, LeongWZ): the `sort` request parameter
+ * was passed straight into the repository's Pageable with no
+ * validation. Spring Data resolves a Sort property against the JPA
+ * entity (Suppliers), not the response DTO (SupplierResponse) — the
+ * two don't share field names (e.g. the DTO's "location"/"openingTime"
+ * are the entity's "locationDescription"/"startingTime"), so a value
+ * that matches the API response but not the entity — or the frontend's
+ * own 'distance' sentinel, if it ever leaked through unconverted —
+ * throws PropertyReferenceException. This service has no
+ * @ControllerAdvice, so that surfaced as an unhandled HTTP 500. Fixed
+ * by validating against an explicit allow-list before the Sort ever
+ * reaches the repository, throwing InvalidSortException (mapped to 400
+ * in the controller) for anything else.
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
 
 import foc.supplier.dto.PageResponse;
 import foc.supplier.dto.SupplierResponse;
+import foc.supplier.exception.InvalidSortException;
 import foc.supplier.model.SupplierCategories;
 import foc.supplier.model.Suppliers;
 import foc.supplier.repository.SupplierCategoriesRepository;
 import foc.supplier.repository.SuppliersRepository;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -57,8 +73,16 @@ public class SupplierService {
         this.supplierCategoriesRepository = supplierCategoriesRepository;
     }
 
+    // The only Suppliers entity properties this endpoint allows sorting
+    // by. "distance" is deliberately absent — it's the frontend's own
+    // sentinel for the lat/lng branch below, not a Sort property; it
+    // must never reach Spring Data as one.
+    private static final Set<String> SORTABLE_PROPERTIES = Set.of("name", "id");
+
     public PageResponse<SupplierResponse> listSuppliers(String search, String category, Double lat, Double lng,
             Pageable pageable) {
+        validateSort(pageable.getSort());
+
         String normalizedSearch = escapeLikePattern(blankToNull(search));
         String normalizedCategory = blankToNull(category);
 
@@ -92,6 +116,14 @@ public class SupplierService {
         return new SupplierResponse(s.getId(), s.getName(), s.getBuilding(), s.getLocationDescription(),
                 s.getLatitude(), s.getLongitude(), categories, s.getStartingTime(), s.getClosingTime(),
                 s.getSupplierDescription(), s.getImageURL());
+    }
+
+    private static void validateSort(Sort sort) {
+        for (Sort.Order order : sort) {
+            if (!SORTABLE_PROPERTIES.contains(order.getProperty())) {
+                throw new InvalidSortException(order.getProperty());
+            }
+        }
     }
 
     private static String blankToNull(String value) {

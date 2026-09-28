@@ -13,17 +13,26 @@
  * sorting by distance from the user's current (browser-geolocated)
  * position. When both are present they take priority over the
  * Pageable's own sort.
+ * 2026-09-28 (PR #134 review, LeongWZ): added a handler for
+ * InvalidSortException (see SupplierService.validateSort) so an
+ * unrecognized `sort` value renders as a clean 400 problem+json body
+ * instead of an unhandled 500, matching ProfileController's pattern in
+ * user-service.
  * Reviewed by: [pending]
  */
 package foc.supplier.controller;
 
 import foc.supplier.dto.PageResponse;
 import foc.supplier.dto.SupplierResponse;
+import foc.supplier.exception.InvalidSortException;
 import foc.supplier.service.SupplierService;
 import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,5 +59,11 @@ public class SupplierController {
     @GetMapping("/suppliers/categories")
     public List<String> listCategories() {
         return supplierService.listCategories();
+    }
+
+    // the web client reads RFC 9457 problem+json error bodies
+    @ExceptionHandler(InvalidSortException.class)
+    public ProblemDetail handleInvalidSort(InvalidSortException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
     }
 }

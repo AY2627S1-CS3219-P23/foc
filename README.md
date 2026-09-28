@@ -35,7 +35,9 @@
   and day-31 purge (issue #93) by Claude Code (Fable 5), on PR #136
   Copilot review.
   2026-09-28: AI Use Summary extended for the "Nearest to Me" sort
-  fallback fix on PR #134 review (LeongWZ), by Claude Code (Sonnet 5).
+  fallback fix on PR #134 review (LeongWZ), by Claude Code (Sonnet 5);
+  and again for the supplier-service GET /suppliers sort-validation fix
+  on the same PR's review, also by Claude Code (Sonnet 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -195,7 +197,13 @@ name-sort on an unsupported browser only fired once (it self-gated on
 the notice it set), leaving the sort stuck and the supplier list frozen
 on any later filter change; fixed by rejecting the sort selection in
 the `onSortChange` handler instead, per the reviewer's suggested
-approach.
+approach; and the supplier-service `GET /suppliers` sort-validation fix
+(same PR's review) — an unrecognized `sort` value threw an unhandled
+`PropertyReferenceException` (500) because Spring Data resolves Sort
+against the JPA entity, not the response DTO's field names, and the
+service had no error handler for it; fixed with an explicit sortable-
+property allow-list returning a 400 problem+json body instead, plus
+unit tests, per the reviewer's suggested approach.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
