@@ -44,6 +44,13 @@
   by Claude Code (Sonnet 5); and again for the supplier image-URL
   normalization fix (broken images from the seed CSV's GitHub blob
   links), also by Claude Code (Sonnet 5).
+  2026-09-26: AI Use Summary extended for the user-service admin
+  endpoints (issue #96) by Claude Code (Opus 5.5).
+  2026-09-27: AI Use Summary extended for the user-service soft delete
+  and day-31 purge (issue #93) by Claude Code (Fable 5), on PR #136
+  Copilot review.
+  2026-09-27: AI Use Summary extended for the PR #135 review fixes
+  (issue #96) by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -189,6 +196,14 @@ the filter bar's zone dropdown, the edit form's required Campus Zone
 field, and a call to a `/zones` endpoint the backend never implemented)
 was removed, per the team's decision to drop the zone feature, since
 the unpopulatable required field was blocking every supplier edit.
+user-service admin endpoints (issue #96) — user list with search, role
+filter, sorting and fixed page sizes, promote/demote, and soft-delete
+removal, with their service, request DTO, URL-based role rules,
+and unit and Testcontainers integration tests, following rules decided
+by the team and recorded in `ai/usage-log.md`, plus the PR #135 review
+fixes (fail-closed /users security rules, shared caller-id,
+active-user lookup and problem+json handling, optimistic locking on
+users with a 409 on a lost race, per team decision); and the
 user-service soft delete and day-31 purge (issue #93) — `DELETE
 /users/me`, the shared `User.softDelete` entity method, the
 `AccountPurgeScheduler` with its purge repositories and

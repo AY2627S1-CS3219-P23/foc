@@ -7,6 +7,16 @@ Author review: Ryan validated correctness.
 keep their real status instead of a bare 403.
 2026-09-23 (Claude Code, Opus 5.5): /actuator/health permitted so container
 health checks work (PR #126 review).
+2026-09-26 (Claude Code, Opus 5.5), issue #96: URL rules restrict the admin
+endpoints (GET /users, PATCH and DELETE /users/{id}) to ADMIN/OWNER, so a
+non-admin gets 403 before the request is parsed; /users/me stays open to
+any signed-in user.
+2026-09-27 (Claude Code, Opus 5.5), PR #135 review: HEAD /users restricted
+like GET, since Spring MVC serves HEAD through the GET list handler.
+2026-09-27 (Claude Code, Opus 5.5), PR #135 review: /users rules rewritten to
+fail closed — only GET /users/* and DELETE /users/me are open to any
+signed-in user; every other method on /users and /users/* needs ADMIN/OWNER
+(replaces the per-method admin lines and the HEAD rule).
 
 */
 
@@ -14,6 +24,7 @@ package foc.user.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -42,6 +53,17 @@ public class SecurityConfig {
                 .requestMatchers("/auth/**", "/error").permitAll()
                 // health checks (compose depends_on / probes) carry no credentials
                 .requestMatchers("/actuator/health").permitAll()
+                // routes open to any signed-in user, each listed by method:
+                // own and public profile, and self-deletion. A new /users/me
+                // route (e.g. PATCH from #92) needs its own line here.
+                .requestMatchers(HttpMethod.GET, "/users/*").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/users/me").authenticated()
+                // everything else under /users, whatever the method, is an
+                // admin endpoint (#96). Method-less so unlisted methods (HEAD,
+                // OPTIONS, POST, ...) fail closed, and checked here rather
+                // than on the controller so a non-admin gets 403 before the
+                // path id or body is parsed (which would otherwise give a 400)
+                .requestMatchers("/users", "/users/*").hasAnyRole("ADMIN", "OWNER")
                 .anyRequest().authenticated()
             )
             .build();

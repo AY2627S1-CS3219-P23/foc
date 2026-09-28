@@ -11,6 +11,8 @@ Author review: Ryan reviewed and ensured tests run successfully.
        non-numeric principal (401) assertions added; 403 marked provisional.
 2026-09-27 (Claude Code, Fable 5), issue #93: DELETE /users/me cases added
        (soft delete, repeat delete 404, unauthenticated).
+2026-09-27 (Claude Code, Opus 5.5), PR #135: OWNER self-deletion case added
+       (owners may delete themselves via DELETE /users/me, team decision).
 */
 
 package foc.user.controller;
@@ -112,6 +114,20 @@ class ProfileControllerTest extends PostgresTestContainer {
         User reloaded = userRepository.findById(alex.getId()).orElseThrow();
         assertThat(reloaded.isActive()).isFalse();
         assertThat(reloaded.getDeletedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("DELETE /users/me should let an OWNER delete their own account")
+    void deleteOwnAccount_owner() throws Exception {
+        // team decision: owners self-delete like anyone else; a new owner
+        // can still be created through /auth/setup-owner
+        User owner = userRepository.save(
+            new User("owner@u.nus.edu", "the_owner", "hashed_password", Role.OWNER));
+
+        mockMvc.perform(delete("/users/me").with(user(owner.getId().toString()).roles("OWNER")))
+            .andExpect(status().isNoContent());
+
+        assertThat(userRepository.findById(owner.getId()).orElseThrow().isActive()).isFalse();
     }
 
     @Test

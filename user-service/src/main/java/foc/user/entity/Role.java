@@ -6,6 +6,8 @@
  * representation chosen by Leong Wei Zhi via options Q&A; OWNER kept
  * per the merged owner-bootstrap feature (issue #97, "admin-equivalent
  * super admin").
+ * 2026-09-27 (Claude Code, Opus 5.5), PR #135 review: noted that
+ * declaration order is rank order (AdminService sorts by it).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.user.entity;
@@ -15,6 +17,9 @@ package foc.user.entity;
  * constraint on {@code users.role} keeps the column in sync with
  * these constants. Requester/courier are modes of {@code USER}, not
  * roles.
+ * <p>
+ * Declaration order is rank order, lowest first: the admin user list
+ * sorts by it ({@code AdminService}), so a new role goes where it ranks.
  */
 public enum Role {
     USER,

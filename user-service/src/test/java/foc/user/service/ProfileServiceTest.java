@@ -10,6 +10,8 @@ Author review: Ryan reviewed and ensured tests run successfully.
 2026-09-27 (Claude Code, Fable 5), issue #93: deleteOwnAccount cases added
        (soft delete stamps deleted_at; missing/deleted account throws
        without saving).
+2026-09-27 (Claude Code, Opus 5.5), PR #135 review: the repository mock
+       calls real default methods, so getActiveUser uses the stubbed finder.
 */
 
 package foc.user.service;
@@ -21,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Answers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.ArgumentMatchers.any;
@@ -40,7 +43,8 @@ import foc.user.repository.UserRepository;
 @ExtendWith(MockitoExtension.class)
 class ProfileServiceTest {
 
-    @Mock
+    // runs real default methods (getActiveUser) against the stubbed finders
+    @Mock(answer = Answers.CALLS_REAL_METHODS)
     private UserRepository userRepository;
 
     @InjectMocks

@@ -168,6 +168,71 @@ Entry template:
   first pass missed (geolocation timeout, LIKE-wildcard escaping,
   sort-value validation, and this entry itself, added after review
   flagged the missing disclosure).
+## 2026-09-27 — Ryan Ang (PR #135 second review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, review
+- **Scope:** `SecurityConfig` /users rules rewritten to fail closed
+  (only `GET /users/*` and `DELETE /users/me` open to any signed-in
+  user; every other method on `/users` and `/users/*` needs
+  ADMIN/OWNER, replacing the per-method admin lines and the HEAD rule),
+  with an `AdminControllerTest` case; `UserRepository.getActiveUser`
+  shared by `AdminService` and `ProfileService` (their service tests'
+  repository mocks now call real default methods); `AdminService` role
+  rank taken from the `Role` enum's declaration order, noted on `Role`.
+- **Prompt(s):** Summary: Asked to go through the new PR #135 review
+  comments. The tool checked each against the code and noted that the
+  reviewer's suggested method-less `/users/*` admin rule would also
+  block the public profile (`GET /users/{id}`), and offered a rule set
+  that keeps it open. Per team decision: apply that rule set, share the
+  active-user lookup, and derive the role rank from the enum; the
+  problem+json consistency comments are handled separately.
+- **Author review:** The tool ran the full `./mvnw test` suite:
+  117/117 passed; the new security test failed before the rule change
+  (a USER's `PATCH /users/me` returned 400). Ryan to review via the PR.
+
+## 2026-09-27 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, review
+- **Scope:** PR #136 (issue #93) reviewed for gaps; after it merged,
+  `main` merged into the #96 branch (conflicts in `README.md`,
+  `ai/usage-log.md`, `user-service/README.md`, `UserRepository` and
+  `OwnerSetupControllerTest` resolved by keeping both sides), and
+  `AdminService.removeUser` switched to the shared `User.softDelete`.
+  Then, from the PR #135 review comments: `HEAD /users` given the same
+  ADMIN/OWNER rule as `GET /users` in `SecurityConfig`, with a test in
+  `AdminControllerTest`. The `callerId` parsing and the
+  `UserNotFoundException` handler, copied in `ProfileController` and
+  `AdminController`, moved to the new `CallerId` and
+  `ProblemDetailAdvice` in the controller package. The literal-`_`
+  search test switched from `"o_u"` to `"o_n"`, since a wildcard `_`
+  never matched `"o_u"` against the seeded users. Optimistic locking
+  on `users`: a `@Version` column on `User` (default 0 so `ddl-auto`
+  can add it to existing rows), a 409 problem+json handler in
+  `ProblemDetailAdvice`, `UserOptimisticLockTest` and
+  `ConflictResponseTest`. A `ProfileControllerTest` case pins that an
+  OWNER can delete their own account via `DELETE /users/me`.
+- **Prompt(s):** Summary: Asked for a review of PR #136 and which of
+  #135/#136 to merge first. The tool raised owner self-deletion via
+  `DELETE /users/me` and the wording of the #89 login note; both were
+  answered by the team. The tool suggested merging #136 first, then
+  asked to do the follow-up merge on the #96 branch. Then asked to go
+  through the PR #135 comments; the tool confirmed that a USER could
+  call `HEAD /users` and offered two fixes. Per team decision: add a
+  separate HEAD rule. Then asked to fix the duplicated caller-id and
+  404 handling that the review flagged now instead of with #91, and
+  to fix the underscore test. For the race between a role change and
+  a delete, the tool listed row locking, a version column,
+  changed-columns-only updates, or deferring. Per team decision:
+  optimistic locking with a version column, and a lost race returns
+  409 problem+json. The tool noted that `DELETE /users/me` lets an
+  OWNER delete themselves, against the earlier ownership-transfer
+  decision. Per team decision: owners may delete themselves via
+  `DELETE /users/me`, like any user.
+- **Author review:** The tool ran the full `./mvnw test` suite:
+  116/116 passed. The new HEAD test failed before the fix, the
+  underscore test failed with `_` escaping temporarily removed, and
+  the 5 locking/409 tests failed before `@Version` and the handler. Ryan
+  to review via the PR.
 
 ## 2026-09-27 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
@@ -192,6 +257,55 @@ Entry template:
 - **Author review:** All design decisions made by the author during the
   options Q&A; suite run with `./mvnw test` (49/49 green); code, tests,
   and disclosures reviewed via pull request (#136).
+
+## 2026-09-26 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, generate
+- **Scope:** issue #96 review follow-up: `UserRepository.countByRole`
+  removed (`OwnerSetupControllerTest` and `OwnerSetupServiceTest`
+  updated to match); the admin role check moved from `@PreAuthorize`
+  to URL rules in `SecurityConfig`; 12 test cases added to
+  `AdminControllerTest`.
+- **Prompt(s):** Summary: Asked whether `countByRole` was still used
+  and for a review of the #96 code for missing tests or anything else
+  missed. The tool reported that only tests used `countByRole`, listed
+  untested cases, and noted that non-admins got 400 instead of 403 for
+  bad input. Per team decision: remove `countByRole`, add the missing
+  tests plus out-of-range page sizes, and give non-admins 403 before
+  their input is checked. A removed user's token staying valid was
+  added to the deferred items.
+- **Author review:** The tool ran the full `./mvnw test` suite:
+  100/100 passed. Ryan to review via the PR.
+
+## 2026-09-26 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** user-service admin endpoints (issue #96): `AdminController`
+  (`GET /users`, `PATCH /users/{id}`, `DELETE /users/{id}`),
+  `AdminService`, `UpdateRoleRequest`; `UserRepository` gains
+  `JpaSpecificationExecutor`; `SecurityConfig` restricts the admin
+  routes to ADMIN/OWNER; `AdminServiceTest` (unit) and
+  `AdminControllerTest` (Testcontainers); user-service README status.
+- **Prompt(s):** Summary: Asked to start issue #96. The tool listed the
+  open questions, pointed to the relevant parts of the D2 design doc
+  (Part 1 §1, §3, §4, §6), and implemented the answers. Per team
+  decisions: build before #91 (JWT filter) and #93 (soft delete) land,
+  setting `deleted_at` directly for now; the caller's role comes from
+  the ADMIN/OWNER authorities that #91 maps from the token; admins and
+  owners can promote to ADMIN; admins can demote or remove other admins
+  and demote themselves (to be raised again in team discussion at PR
+  time); nobody can change or remove an OWNER, and OWNER is never
+  granted here; admins remove themselves only through `DELETE
+  /users/me`; PATCH for role change, 200 unchanged on a no-op, 403 for
+  blocked actions, 404 for missing or deleted users; the list includes
+  soft-deleted accounts, has partial case-insensitive search on
+  id/username/email, a role filter, sorting on any field in either
+  direction (role by rank), and page sizes of 20, 50 or 100 (default
+  100). Ownership transfer was deferred to #7. Double confirmation
+  stays in the frontend. A `deletedAt` field, an active/deleted filter
+  and stale-role handling were deferred.
+- **Author review:** The tool ran the full `./mvnw test` suite: 89/89
+  passed. Ryan to review via the PR.
 
 ## 2026-09-25 — Ryan Ang
 - **Tool:** Claude Code (Opus 5.5)
