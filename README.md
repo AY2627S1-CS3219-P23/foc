@@ -185,7 +185,15 @@ retention purge), and the unit, integration, and reuse-block tests,
 with the endpoint-confirmation, shared-path, and FK-cleanup choices
 made by the author via neutral-options Q&A and recorded in
 `ai/usage-log.md` (the 30-day reuse block itself needed no new code
-and was pinned with tests).
+and was pinned with tests); and the web Admin Dashboard user
+management (issue #113) — the Users section wired to the #96
+endpoints with debounced server-side search, a role filter and
+paging, a shared `Pagination` component, a dev-only in-memory mock
+behind `VITE_MOCK_ADMIN_API`, the Suppliers section reduced to a
+placeholder and the credit mock removed, the merge with PR #139's auth
+routes (with its `ProtectedRoute` lint fix and the 404 route moved
+outside it), the PR #140 review fixes, and the admin page tests, with
+the behaviour chosen by the team and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

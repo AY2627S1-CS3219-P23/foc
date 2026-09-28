@@ -80,8 +80,20 @@ Entry template:
   404 route moved back outside `ProtectedRoute` so the existing
   `app.test.tsx` 404 test passes; formatting-only changes to four
   supplier files reverted to `main`.
+  PR #140 review: the tool checked Copilot's comments against the code.
+  Fixed: `UsersSection.tsx` reloads the current query after a role
+  change (filter and counts stay right) and goes back a page when a
+  later page's last row is removed; the test double's search matches
+  ID and email too; `VITE_MOCK_ADMIN_API` documented in root
+  `.env.example`; README AI Use Summary updated. Per team decision
+  (admins cannot remove their own account through the admin endpoint,
+  which user-service already rejects), `adminApi.ts` gains
+  `getCurrentUser()` (`GET /users/me`, mocked as nus_courier_99) and
+  `UserTable.tsx` hides Remove on the signed-in admin's own row. Three
+  tests added. The unauthenticated-requests comment is left for #91.
 - **Author review:** Ryan reviewed the placeholder, credit removal and
   API wiring before the PR. Mock website reviewed by Ryan before PR.
+  PR fixes reviewed by Ryan.
 
 ## 2026-09-27 — Ryan Ang (PR #135 second review)
 - **Tool:** Claude Code (Opus 5.5)

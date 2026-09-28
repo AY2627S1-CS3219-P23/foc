@@ -59,7 +59,10 @@ function fakeListUsers(params: ListUsersParams): AdminUserPage {
   const matches = users.filter(
     (u) =>
       (!params.role || u.role === params.role) &&
-      (!search || u.username.toLowerCase().includes(search)),
+      (!search ||
+        String(u.id).includes(search) ||
+        u.username.toLowerCase().includes(search) ||
+        u.email.toLowerCase().includes(search)),
   )
   const start = params.page * params.size
   return {
@@ -137,6 +140,10 @@ beforeEach(() => {
   })
   vi.spyOn(adminUserApi, 'removeUser').mockImplementation(async (id) => {
     users = users.filter((u) => u.id !== id)
+  })
+  // Signed in as nus_courier_99 (an ADMIN in the seed data).
+  vi.spyOn(adminUserApi, 'getCurrentUser').mockResolvedValue({
+    ...seedUsers[2],
   })
 })
 
@@ -367,6 +374,80 @@ describe('Users section', () => {
     )
     expect(adminUserApi.removeUser).toHaveBeenCalledWith(4)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  test('the signed-in admin has no Remove on their own row', async () => {
+    renderAdmin()
+    const table = await findSectionTable('Users')
+
+    await waitFor(() =>
+      expect(
+        rowFor(table, 'nus_courier_99').queryByRole('button', {
+          name: 'Remove Account',
+        }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(
+      rowFor(table, 'nus_courier_99').getByRole('button', {
+        name: 'Demote to User',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      rowFor(table, 'student_alex').getByRole('button', {
+        name: 'Remove Account',
+      }),
+    ).toBeInTheDocument()
+  })
+
+  test('a role change reloads the list, so the filter still applies', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Filter by role' }),
+      'USER',
+    )
+    await waitFor(() =>
+      expect(
+        within(table).queryByText('nus_courier_99'),
+      ).not.toBeInTheDocument(),
+    )
+    await user.click(
+      rowFor(table, 'student_alex').getByRole('button', {
+        name: 'Promote to Admin',
+      }),
+    )
+
+    await waitFor(() =>
+      expect(within(table).queryByText('student_alex')).not.toBeInTheDocument(),
+    )
+    expect(within(table).getByText('utown_runner')).toBeInTheDocument()
+  })
+
+  test('removing the last user on a page goes back a page', async () => {
+    users = manyUsers(USERS_PAGE_SIZE + 1)
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+
+    await user.click(
+      within(section('Users').getByRole('navigation')).getByRole('button', {
+        name: 'Page 2',
+      }),
+    )
+    const last = nth(USERS_PAGE_SIZE + 1)
+    await within(table).findByText(last)
+    await user.click(
+      rowFor(table, last).getByRole('button', { name: 'Remove Account' }),
+    )
+    const dialog = within(
+      screen.getByRole('dialog', { name: 'Remove Account' }),
+    )
+    await user.click(dialog.getByRole('button', { name: 'Remove' }))
+
+    expect(await within(table).findByText(nth(1))).toBeInTheDocument()
+    expect(lastListParams()).toEqual({ page: 0, size: USERS_PAGE_SIZE })
   })
 
   test('cancelling removal keeps the user', async () => {

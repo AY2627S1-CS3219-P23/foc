@@ -4,7 +4,7 @@
 // state to <Navigate> during render, fixing the react-hooks
 // set-state-in-effect lint error; behaviour otherwise unchanged. The
 // component itself comes from PR #139.
-// Reviewed by: [pending]
+// Reviewed by: Ryan Ang
 
 import { Navigate, Outlet } from "react-router";
 import { useAuth } from "./useAuth";

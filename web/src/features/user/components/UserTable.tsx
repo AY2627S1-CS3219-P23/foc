@@ -1,9 +1,10 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113; revised
-// 2026-09-28 (Credits column and Add Credits removed).
+// 2026-09-28 (Credits column and Add Credits removed; Remove hidden on
+// the signed-in admin's own row).
 // Scope: admin users list — a table at md+ and stacked cards below,
 // per web/docs/wireframes/admin-dashboard.png (Users section).
-// Reviewed by: Ryan Ang
+// Reviewed by: [pending]
 
 import type { AdminUser, UserRole } from '../types'
 
@@ -15,13 +16,19 @@ const roleLabels: Record<UserRole, string> = {
 
 interface UserTableProps {
   users: AdminUser[]
+  // The signed-in admin; null while unknown.
+  currentUserId: number | null
   busyUserId: number | null
   onChangeRole: (user: AdminUser, role: UserRole) => void
   onRemove: (user: AdminUser) => void
 }
 
-type UserActionsProps = Omit<UserTableProps, 'users' | 'busyUserId'> & {
+type UserActionsProps = Omit<
+  UserTableProps,
+  'users' | 'currentUserId' | 'busyUserId'
+> & {
   user: AdminUser
+  isSelf: boolean
   busy: boolean
 }
 
@@ -30,8 +37,16 @@ const linkClass =
 
 // The owner account can't be promoted, demoted or removed here: it is
 // created once via setup-owner and is not managed from this screen.
-function UserActions({ user, busy, onChangeRole, onRemove }: UserActionsProps) {
-  const isOwner = user.role === 'OWNER'
+// Admins can't remove themselves here either (user-service rejects it;
+// own-account deletion is DELETE /users/me).
+function UserActions({
+  user,
+  isSelf,
+  busy,
+  onChangeRole,
+  onRemove,
+}: UserActionsProps) {
+  const canRemove = user.role !== 'OWNER' && !isSelf
 
   return (
     <div className="flex flex-wrap gap-x-3 gap-y-1">
@@ -55,7 +70,7 @@ function UserActions({ user, busy, onChangeRole, onRemove }: UserActionsProps) {
           Demote to User
         </button>
       )}
-      {!isOwner && (
+      {canRemove && (
         <button
           type="button"
           disabled={busy}
@@ -69,7 +84,12 @@ function UserActions({ user, busy, onChangeRole, onRemove }: UserActionsProps) {
   )
 }
 
-export function UserTable({ users, busyUserId, ...actions }: UserTableProps) {
+export function UserTable({
+  users,
+  currentUserId,
+  busyUserId,
+  ...actions
+}: UserTableProps) {
   return (
     <>
       {/* Desktop / tablet */}
@@ -105,6 +125,7 @@ export function UserTable({ users, busyUserId, ...actions }: UserTableProps) {
                   <div className="flex justify-end">
                     <UserActions
                       user={user}
+                      isSelf={user.id === currentUserId}
                       busy={busyUserId === user.id}
                       {...actions}
                     />
@@ -131,6 +152,7 @@ export function UserTable({ users, busyUserId, ...actions }: UserTableProps) {
             <div className="mt-3">
               <UserActions
                 user={user}
+                isSelf={user.id === currentUserId}
                 busy={busyUserId === user.id}
                 {...actions}
               />

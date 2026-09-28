@@ -1,11 +1,13 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113; revised
 // 2026-09-28 (in-memory mock replaced by the #96 endpoints; later that
-// day, a dev-only switch to adminApiMock.ts added).
+// day, a dev-only switch to adminApiMock.ts added; then GET /users/me
+// added so the page knows which row is the signed-in admin's own).
 // Scope: admin user endpoints of user-service — GET /users (search, role
 // filter, paging), PATCH /users/{id} (role change), DELETE /users/{id}
-// (soft delete) — through the shared apiFetch wrapper.
-// Reviewed by: Ryan Ang
+// (soft delete), GET /users/me (own profile) — through the shared
+// apiFetch wrapper.
+// Reviewed by: [pending]
 
 import { apiFetch } from '@/lib/api/http'
 import { mockAdminUserApi } from './adminApiMock'
@@ -40,6 +42,10 @@ const httpAdminUserApi = {
 
   removeUser(id: number): Promise<void> {
     return apiFetch<void>('user', `/users/${id}`, { method: 'DELETE' })
+  },
+
+  getCurrentUser(): Promise<AdminUser> {
+    return apiFetch<AdminUser>('user', '/users/me')
   },
 }
 

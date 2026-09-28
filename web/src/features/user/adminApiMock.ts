@@ -5,10 +5,12 @@
 // user-service exist. Same signatures as the real adminUserApi; used only
 // when VITE_MOCK_ADMIN_API=true (see adminApi.ts). Filters and pages like
 // GET /users: search matches id/username/email, page is 0-based.
+// Revised 2026-09-28: GET /users/me stand-in (signed in as
+// nus_courier_99), and self-removal rejected like user-service does.
 //
 // TEMPORARY: delete this file (and the switch in adminApi.ts) once the
 // real endpoints are reachable from the browser.
-// Reviewed by: Ryan Ang
+// Reviewed by: [pending]
 
 import type {
   AdminUser,
@@ -73,6 +75,9 @@ function delay() {
   return new Promise((resolve) => setTimeout(resolve, 150))
 }
 
+// The mock's signed-in admin: nus_courier_99 (an ADMIN in the seed data).
+const CURRENT_USER_ID = 3
+
 function findUser(id: number): AdminUser {
   const user = users.find((u) => u.id === id)
   if (!user) throw new Error('User not found.')
@@ -113,7 +118,14 @@ export const mockAdminUserApi = {
 
   async removeUser(id: number): Promise<void> {
     await delay()
+    if (id === CURRENT_USER_ID)
+      throw new Error('Use DELETE /users/me to delete your own account')
     findUser(id)
     users = users.filter((u) => u.id !== id)
+  },
+
+  async getCurrentUser(): Promise<AdminUser> {
+    await delay()
+    return { ...findUser(CURRENT_USER_ID) }
   },
 }

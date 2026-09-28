@@ -1,11 +1,13 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113; revised
 // 2026-09-28 (credit balances and Add Credits removed; wired to the #96
-// endpoints with server-side search, role filter and paging).
+// endpoints with server-side search, role filter and paging; PR #140
+// review: reload after a role change, step back a page when its last
+// row is removed, and GET /users/me so the own row has no Remove).
 // Scope: Admin Dashboard "Users" section — list, search, role filter,
 // paging, promote/demote, remove — per
 // web/docs/wireframes/admin-dashboard.png.
-// Reviewed by: Ryan Ang
+// Reviewed by: [pending]
 
 import { useEffect, useState } from 'react'
 
@@ -47,10 +49,28 @@ export function UsersSection() {
   const [search, setSearch] = useState('')
   const [role, setRole] = useState<UserRole | ''>('')
   const [page, setPage] = useState(1) // 1-based; the API is 0-based
+  // Bumped to reload the current query after a change on the server.
+  const [reloadCount, setReloadCount] = useState(0)
   const [result, setResult] = useState<LoadResult | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [busyUserId, setBusyUserId] = useState<number | null>(null)
   const [pendingRemove, setPendingRemove] = useState<AdminUser | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null)
+
+  // Only used to hide Remove on the admin's own row. If this fails, the
+  // button shows and user-service still rejects self-removal.
+  useEffect(() => {
+    let cancelled = false
+    adminUserApi.getCurrentUser().then(
+      (me) => {
+        if (!cancelled) setCurrentUserId(me.id)
+      },
+      () => {},
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Apply the search box to the query once typing pauses.
   useEffect(() => {
@@ -63,7 +83,7 @@ export function UsersSection() {
   }, [searchInput, search])
 
   const trimmedSearch = search.trim()
-  const queryKey = JSON.stringify([trimmedSearch, role, page])
+  const queryKey = JSON.stringify([trimmedSearch, role, page, reloadCount])
 
   useEffect(() => {
     let cancelled = false
@@ -122,6 +142,8 @@ export function UsersSection() {
       updateUsers((users) =>
         users.map((u) => (u.id === updated.id ? updated : u)),
       )
+      // The user may no longer match the role filter, and counts change.
+      setReloadCount((n) => n + 1)
     } catch (err) {
       setActionError(
         errorMessage(err, `Could not change ${user.username}'s role.`),
@@ -138,7 +160,14 @@ export function UsersSection() {
     setActionError(null)
     try {
       await adminUserApi.removeUser(target.id)
-      updateUsers((users) => users.filter((u) => u.id !== target.id))
+      // Removed rows aren't refetched: GET /users still returns
+      // soft-deleted accounts. Removing a later page's last row goes back
+      // a page instead of showing an empty one.
+      if (data?.content.length === 1 && page > 1) {
+        setPage(page - 1)
+      } else {
+        updateUsers((users) => users.filter((u) => u.id !== target.id))
+      }
     } catch (err) {
       setActionError(errorMessage(err, `Could not remove ${target.username}.`))
     } finally {
@@ -203,6 +232,7 @@ export function UsersSection() {
         <>
           <UserTable
             users={data.content}
+            currentUserId={currentUserId}
             busyUserId={busyUserId}
             onChangeRole={handleChangeRole}
             onRemove={setPendingRemove}
