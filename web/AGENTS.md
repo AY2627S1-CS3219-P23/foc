@@ -1,3 +1,14 @@
+<!--
+  AI-assisted (CS3219 AI Usage Policy disclosure):
+  Tool: Claude Code (Sonnet 5), 2026-09-27.
+  Scope: updated the suppliers.png wireframe description — team
+  decision to drop the zone feature means the image (still showing a
+  campus-zone filter) no longer matches what's being built; noted as
+  stale/directional rather than edited, since the underlying PNG itself
+  wasn't changed.
+  Reviewed by: [pending]
+-->
+
 # web/ — Frontend Agent Guide
 
 TypeScript + React frontend for Favours on Campus (FoC). Read the root
@@ -32,7 +43,7 @@ first**; they cost nothing to read, unlike Figma MCP calls:
 | `docs/wireframes/signup.png` | Sign Up — NUS email, username, password (live strength checklist), OTP verification step |
 | `docs/wireframes/login.png` | Login — username/email + password |
 | `docs/wireframes/dashboard.png` | Dashboard — credit balance, requester/courier mode toggle, quick actions, active requests with status chips, recent activity |
-| `docs/wireframes/suppliers.png` | Suppliers — search, category and campus-zone filters, supplier detail panel, empty state |
+| `docs/wireframes/suppliers.png` | Suppliers — search and category filters, supplier detail panel, empty state (wireframe image still shows a campus-zone filter; team dropped the zone feature, see `docs/supplier-service.md` D4 — the image is directional, not a spec, per this file's own note above) |
 | `docs/wireframes/profile.png` | Profile — account details, edit flows, delete-account modal |
 | `docs/wireframes/credit-history.png` | Credit history — balances and transaction list |
 | `docs/wireframes/order-history.png` | Order history — past/current orders |

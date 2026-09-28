@@ -27,6 +27,23 @@
   2026-09-25: AI Use Summary extended for the owner-setup change
   (setup no longer limited to one owner; a setup token expiry and a
   setup log line were added and then removed) by Claude Code (Opus 5.5).
+  2026-09-26: AI Use Summary extended for the supplier-service list
+  endpoint (issue #133 — search/filter/paging) and the accompanying
+  removal of the zone feature's remaining frontend wiring, by Claude
+  Code (Sonnet 5).
+  2026-09-27: AI Use Summary extended for the user-service soft delete
+  and day-31 purge (issue #93) by Claude Code (Fable 5), on PR #136
+  Copilot review.
+  2026-09-28: AI Use Summary extended for the "Nearest to Me" sort
+  fallback fix on PR #134 review (LeongWZ), by Claude Code (Sonnet 5);
+  and again for the supplier-service GET /suppliers sort-validation fix
+  on the same PR's review, also by Claude Code (Sonnet 5); and again to
+  add the 2026-09-27 "Nearest to Me" distance-sort feature itself
+  (PR #134), which PR #134 review (LeongWZ) flagged as missing from
+  both this summary and ai/usage-log.md — disclosed here retroactively,
+  by Claude Code (Sonnet 5); and again for the supplier image-URL
+  normalization fix (broken images from the seed CSV's GitHub blob
+  links), also by Claude Code (Sonnet 5).
   2026-09-26: AI Use Summary extended for the user-service admin
   endpoints (issue #96) by Claude Code (Opus 5.5).
   2026-09-27: AI Use Summary extended for the user-service soft delete
@@ -169,6 +186,16 @@ existing-owner check from user-service owner setup, decided by the
 author, with the matching test, comment, and `.env.example` updates;
 a setup token expiry and a setup log line were also built, then
 removed by the author, with expiry deferred to a later issue; and the
+supplier-service list endpoint (issue #133) — `GET /suppliers` with
+search-by-name, category filtering (joined against the
+`supplier_categories` table), paging, and sorting, plus the response
+DTOs and CORS configuration, with the default page size, sort field,
+and response-envelope shape chosen by the author; alongside this, the
+`web/` suppliers page's remaining zone-feature wiring (the `Zone` type,
+the filter bar's zone dropdown, the edit form's required Campus Zone
+field, and a call to a `/zones` endpoint the backend never implemented)
+was removed, per the team's decision to drop the zone feature, since
+the unpopulatable required field was blocking every supplier edit.
 user-service admin endpoints (issue #96) — user list with search, role
 filter, sorting and fixed page sizes, promote/demote, and soft-delete
 removal, with their service, request DTO, URL-based role rules,
@@ -185,8 +212,33 @@ retention purge), and the unit, integration, and reuse-block tests,
 with the endpoint-confirmation, shared-path, and FK-cleanup choices
 made by the author via neutral-options Q&A and recorded in
 `ai/usage-log.md` (the 30-day reuse block itself needed no new code
-and was pinned with tests); and the web Admin Dashboard user
-management (issue #113) — the Users section wired to the #96
+and was pinned with tests); and the 2026-09-27 "Nearest to Me" distance-sort feature (PR #134) —
+`SuppliersRepository.searchOrderedByDistance` (a native query, since
+the Haversine distance calculation needs trig functions JPQL doesn't
+expose), the controller's optional `lat`/`lng` params, the client-side
+`distance.ts` display formatting, the sort control UI, and a required-
+field asterisk added to the supplier form, with the query approach and
+the geolocation-denied/unavailable fallback (name-sort with a notice)
+decided by the author; the "Nearest to Me" sort fallback fix
+(PR #134 review, LeongWZ) — the render-phase guard falling back to
+name-sort on an unsupported browser only fired once (it self-gated on
+the notice it set), leaving the sort stuck and the supplier list frozen
+on any later filter change; fixed by rejecting the sort selection in
+the `onSortChange` handler instead, per the reviewer's suggested
+approach; and the supplier-service `GET /suppliers` sort-validation fix
+(same PR's review) — an unrecognized `sort` value threw an unhandled
+`PropertyReferenceException` (500) because Spring Data resolves Sort
+against the JPA entity, not the response DTO's field names, and the
+service had no error handler for it; fixed with an explicit sortable-
+property allow-list returning a 400 problem+json body instead, plus
+unit tests, per the reviewer's suggested approach; and a supplier
+image-URL fix — the seed CSV's `ImageURL` column points at GitHub's
+file-viewer page (`github.com/.../blob/...`), which serves an HTML
+page, not the image itself, so those supplier photos rendered as a
+broken image; since the course-provided CSV can't be edited, the fix
+rewrites the URL to its `raw.githubusercontent.com` equivalent at the
+API response boundary instead, with tests, verified live in-browser; and
+the web Admin Dashboard user management (issue #113) — the Users section wired to the #96
 endpoints with debounced server-side search, a role filter and
 paging, a shared `Pagination` component, a dev-only in-memory mock
 behind `VITE_MOCK_ADMIN_API`, the Suppliers section reduced to a

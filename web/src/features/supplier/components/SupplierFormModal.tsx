@@ -1,19 +1,25 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
-// Tool: Claude, 2026-09-22.
+// Tool: Claude, 2026-09-22; revised 2026-09-26 (Claude Code, Sonnet 5).
 // Scope: add/edit supplier form, per
 // web/docs/wireframes/add-edit-supplier.png. Implements F1.1.1
 // (create: name, location, categories, opening times, description)
 // and F1.1.2 (update).
+// 2026-09-26: removed the Campus Zone field — the team dropped the
+// zone feature, and with no zones to populate the (required) select,
+// the form could never pass HTML5 validation, blocking every edit.
+// 2026-09-27: added a red asterisk to each required field's label
+// (Name, Location, Opening/Close) so the `required` HTML5 validation
+// already in place is visible before a user hits Save, not just as a
+// browser-native error after the fact.
 // Reviewed by: [pending]
 
 import { useState, type FormEvent, type KeyboardEvent } from 'react'
 
 import { Modal } from '@/shared/components/Modal'
-import type { Supplier, SupplierInput, Zone } from '../types'
+import type { Supplier, SupplierInput } from '../types'
 
 interface SupplierFormModalProps {
   initial?: Supplier
-  zones: Zone[]
   onCancel: () => void
   onSave: (input: SupplierInput) => void
   saving?: boolean
@@ -21,14 +27,12 @@ interface SupplierFormModalProps {
 
 export function SupplierFormModal({
   initial,
-  zones,
   onCancel,
   onSave,
   saving,
 }: SupplierFormModalProps) {
   const [name, setName] = useState(initial?.name ?? '')
   const [location, setLocation] = useState(initial?.location ?? '')
-  const [zoneCode, setZoneCode] = useState(initial?.zoneCode ?? zones[0]?.code ?? '')
   const [categories, setCategories] = useState<string[]>(initial?.categories ?? [])
   const [categoryDraft, setCategoryDraft] = useState('')
   const [openingTime, setOpeningTime] = useState(initial?.openingTime ?? '09:00')
@@ -55,7 +59,6 @@ export function SupplierFormModal({
     onSave({
       name,
       location,
-      zoneCode,
       categories,
       openingTime,
       closingTime,
@@ -69,7 +72,9 @@ export function SupplierFormModal({
     <Modal title={initial ? 'Edit Supplier' : 'Add Supplier'} onClose={onCancel}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <label className="block text-sm">
-          <span className="font-medium text-gray-700">Supplier Name</span>
+          <span className="font-medium text-gray-700">
+            Supplier Name <span className="text-red-500">*</span>
+          </span>
           <input
             required
             value={name}
@@ -79,7 +84,9 @@ export function SupplierFormModal({
         </label>
 
         <label className="block text-sm">
-          <span className="font-medium text-gray-700">Location</span>
+          <span className="font-medium text-gray-700">
+            Location <span className="text-red-500">*</span>
+          </span>
           <input
             required
             value={location}
@@ -87,22 +94,6 @@ export function SupplierFormModal({
             placeholder="Building, unit"
             className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
           />
-        </label>
-
-        <label className="block text-sm">
-          <span className="font-medium text-gray-700">Campus Zone</span>
-          <select
-            required
-            value={zoneCode}
-            onChange={(e) => setZoneCode(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 focus:border-gray-400 focus:outline-none"
-          >
-            {zones.map((z) => (
-              <option key={z.code} value={z.code}>
-                {z.name}
-              </option>
-            ))}
-          </select>
         </label>
 
         <div className="text-sm">
@@ -137,7 +128,9 @@ export function SupplierFormModal({
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block text-sm">
-            <span className="font-medium text-gray-700">Opening Hours — Open</span>
+            <span className="font-medium text-gray-700">
+              Opening Hours — Open <span className="text-red-500">*</span>
+            </span>
             <input
               required
               type="time"
@@ -147,7 +140,9 @@ export function SupplierFormModal({
             />
           </label>
           <label className="block text-sm">
-            <span className="font-medium text-gray-700">Close</span>
+            <span className="font-medium text-gray-700">
+              Close <span className="text-red-500">*</span>
+            </span>
             <input
               required
               type="time"
