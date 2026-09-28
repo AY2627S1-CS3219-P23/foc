@@ -26,6 +26,24 @@ Entry template:
 ```
 
 ---
+## 2026-09-28 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** debug
+- **Scope:** `web/src/routes/suppliers.tsx` — "Nearest to Me" sort
+  fallback.
+- **Prompt(s):** Asked to explain a PR #134 review comment (LeongWZ)
+  identifying that the render-phase guard falling back to name-sort in a
+  browser without geolocation support only fires once (it self-gates on
+  `locationNotice`, which it also sets), so re-selecting "Nearest to Me"
+  leaves `sort` stuck at `'distance'` with `fetchCurrentPage` resolving
+  `null` forever — search/category changes then silently stop updating
+  the list. Then asked to apply the reviewer's suggested fix: reject the
+  selection in the sort-change handler itself instead of correcting
+  `sort` back after the fact during render.
+- **Author review:** The fix approach (handle in `onSortChange`, never
+  commit `sort = 'distance'` when unsupported) was the reviewer's, not
+  the tool's; the tool implemented it. Reviewed via pull request.
+
 ## 2026-09-26 — Alastair Tan
 - **Tool:** Claude Code (Sonnet 5)
 - **Mode:** generate (implementation), debug

@@ -34,6 +34,8 @@
   2026-09-27: AI Use Summary extended for the user-service soft delete
   and day-31 purge (issue #93) by Claude Code (Fable 5), on PR #136
   Copilot review.
+  2026-09-28: AI Use Summary extended for the "Nearest to Me" sort
+  fallback fix on PR #134 review (LeongWZ), by Claude Code (Sonnet 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -187,7 +189,13 @@ retention purge), and the unit, integration, and reuse-block tests,
 with the endpoint-confirmation, shared-path, and FK-cleanup choices
 made by the author via neutral-options Q&A and recorded in
 `ai/usage-log.md` (the 30-day reuse block itself needed no new code
-and was pinned with tests).
+and was pinned with tests); and the "Nearest to Me" sort fallback fix
+(PR #134 review, LeongWZ) — the render-phase guard falling back to
+name-sort on an unsupported browser only fired once (it self-gated on
+the notice it set), leaving the sort stuck and the supplier list frozen
+on any later filter change; fixed by rejecting the sort selection in
+the `onSortChange` handler instead, per the reviewer's suggested
+approach.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

@@ -82,6 +82,11 @@
 // bump `refreshKey`, an effect dependency with no other purpose, so
 // the refresh runs through the load effect itself and inherits its
 // existing guard and error handling instead of duplicating them.
+// 2026-09-28 (PR #134 review, LeongWZ): "Nearest to Me" could wedge the
+// page permanently in a browser without geolocation support — see the
+// comment above handleSortChange for the mechanism. Fixed by rejecting
+// the sort selection in that handler instead of correcting `sort` back
+// as a render-phase side effect.
 // Reviewed by: [pending]
 
 import { Fragment, useCallback, useEffect, useState } from 'react'
@@ -148,14 +153,25 @@ export function Suppliers() {
     setPage(0)
   }
 
-  // Geolocation support is a static browser capability, not something
-  // that changes — safe to check and adjust state during render
-  // (React's "adjust state during render" pattern) rather than in an
-  // effect, which would call setState synchronously as the effect's
-  // first action (flagged by react-hooks/set-state-in-effect).
-  if (sort === DISTANCE_SORT && !userLocation && !navigator.geolocation && !locationNotice) {
-    setLocationNotice('Location is not supported by this browser — showing suppliers sorted by name instead.')
-    setSort('name,asc')
+  // 2026-09-28 (PR #134 review, LeongWZ): checking geolocation support
+  // and correcting `sort` back to name-sort during render (the previous
+  // approach) only fires once, because it self-gates on `!locationNotice`
+  // — the very thing it sets. Selecting "Nearest to Me" again in a
+  // browser without geolocation support left `locationNotice` already
+  // set, so the guard's condition no longer matched and `sort` stayed
+  // stuck at 'distance' with `userLocation` never set, which wedges
+  // fetchCurrentPage() (below) into resolving null forever — the list
+  // stops updating on any further filter/search change, silently.
+  // Fixed by rejecting the selection in the change handler itself
+  // instead: 'distance' is only ever committed to `sort` when
+  // geolocation is actually supported, so this notice-setting can run
+  // every time the user picks "Nearest to Me", not just the first.
+  function handleSortChange(value: string) {
+    if (value === DISTANCE_SORT && !navigator.geolocation) {
+      setLocationNotice('Location is not supported by this browser — showing suppliers sorted by name instead.')
+      return
+    }
+    setSort(value)
   }
 
   // "Nearest to Me" needs a coordinate before it can fetch anything —
@@ -376,7 +392,7 @@ export function Suppliers() {
         onCategoryChange={setCategory}
         categories={categories}
         sort={sort}
-        onSortChange={setSort}
+        onSortChange={handleSortChange}
         locationNotice={locationNotice}
       />
 
