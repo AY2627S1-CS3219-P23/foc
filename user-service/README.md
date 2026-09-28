@@ -4,6 +4,16 @@
   Scope: service README written while scaffolding for issue #84.
   2026-09-23, Claude Code (Opus 5.5): status and test instructions updated
   for the first-owner bootstrap (issue #97, PR #126 review).
+  2026-09-23, Claude Code (Opus 5.5): status updated for the profile
+  endpoints (issue #95).
+  2026-09-25, Claude Code (Opus 5.5): stale "no DB wiring" sentence
+  replaced (PR #131 review).
+  2026-09-25, Claude Code (Opus 5.5): setup-owner no longer limited to
+  the first owner.
+  2026-09-26, Claude Code (Opus 5.5): status updated for the admin
+  endpoints (issue #96).
+  2026-09-27, Claude Code (Fable 5), issue #93: DELETE /users/me and the
+  soft-delete/purge section added.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -15,11 +25,28 @@ Backlog: issues #84–#98.
 
 Spring Boot 4 · Java 21 · Maven.
 
-Currently: actuator health endpoint and `POST /auth/setup-owner` (first
-OWNER bootstrap, #97), backed by Postgres via Spring Data JPA. There is
-no production datasource or compose/DB wiring yet (#85/#86), so
-`spring-boot:run` fails at startup until that lands; tests supply their
-own database.
+Currently: actuator health endpoint, `POST /auth/setup-owner` (creates an
+OWNER for any caller with the setup token, #97), `GET /users/me` /
+`GET /users/{id}` (own and public profile, #95), `DELETE /users/me`
+(self-deletion, #93), and the admin endpoints
+`GET /users` (list, search, role filter, sort, 20/50/100 page sizes),
+`PATCH /users/{id}` (promote/demote) and `DELETE /users/{id}` (soft
+delete) for ADMIN/OWNER callers (#96), backed by Postgres via
+Spring Data JPA. The root `compose.yaml` runs it with its own `user-db` (host port
+`${USER_SERVICE_PORT:-8087}`); `spring-boot:run` needs that database
+reachable (`USER_DB_*` env vars). Tests supply their own database.
+
+## Soft delete & day-31 purge (#93)
+
+`DELETE /users/me` (bearer only, no body) stamps `deleted_at` — the row
+stays, so the account's unique email/username remain reserved and the
+user can recover within 30 days (#94). Repeat deletion, like every other
+`/users/me` call on a deleted account, returns 404. A daily scheduler
+(`AccountPurgeScheduler`, default 03:00) hard-deletes accounts whose
+`deleted_at` is older than the retention window, together with their
+`otps`/`account_tokens` rows — that purge is what frees the identifiers.
+Configure via `USER_RETENTION_DAYS` (default 30) and `USER_PURGE_CRON`
+(Spring 6-field cron).
 
 ## Run
 

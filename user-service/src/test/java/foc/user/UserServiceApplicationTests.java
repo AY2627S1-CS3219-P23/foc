@@ -7,24 +7,17 @@
  * @ServiceConnection wiring added so the context has a datasource.
  * 2026-09-23, Claude Code (Opus 5.5): moved to the Testcontainers 2.x
  * PostgreSQLContainer (PR #126 review).
+ * 2026-09-25, Claude Code (Opus 5.5): container moved to the shared
+ * PostgresTestContainer base (PR #131 review).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.user;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @SpringBootTest
-@Testcontainers
-class UserServiceApplicationTests {
-
-	@Container
-	@ServiceConnection
-	static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17");
+class UserServiceApplicationTests extends PostgresTestContainer {
 
 	@Test
 	void contextLoads() {

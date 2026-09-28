@@ -20,7 +20,20 @@
   2026-09-21: AI Use Summary wording extended for the web/ SPA
   scaffold (issue #108).
   2026-09-23: AI Use Summary extended for the user-service first-owner
-  bootstrap (issue #97) by Claude Code (Opus 5.5).
+  bootstrap (issue #97) by Claude Code (Opus 5.5); and again for the
+  user-db infrastructure and user-service JPA schema (issues #85/#86)
+  by Claude Code (Fable 5); and again for the user-service profile
+  endpoints (issue #95) by Claude Code (Opus 5.5).
+  2026-09-25: AI Use Summary extended for the owner-setup change
+  (setup no longer limited to one owner; a setup token expiry and a
+  setup log line were added and then removed) by Claude Code (Opus 5.5).
+  2026-09-26: AI Use Summary extended for the user-service admin
+  endpoints (issue #96) by Claude Code (Opus 5.5).
+  2026-09-27: AI Use Summary extended for the user-service soft delete
+  and day-31 purge (issue #93) by Claude Code (Fable 5), on PR #136
+  Copilot review.
+  2026-09-27: AI Use Summary extended for the PR #135 review fixes
+  (issue #96) by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -134,7 +147,45 @@ neutral-options Q&A and recorded in `ai/usage-log.md`; and the
 user-service first-owner bootstrap (issue #97) — request/response DTOs,
 the `User` entity transcribed from the team's schema, repository,
 service, controller, setup-token gate, and its unit and Testcontainers
-integration tests, plus the fixes from the PR #126 review.
+integration tests, plus the fixes from the PR #126 review; and the
+user-db infrastructure and user-service JPA schema (issues #85/#86) —
+compose.yaml user-service/user-db wiring with the `.env.example`
+section and `AGENTS.md` port-table entry that went with it, datasource
+configuration, the `Otp`/`AccountToken`/`TokenDenylistEntry` entities
+transcribed from the team's design-doc erDiagram, the `Role` enum
+conversion of the merged String role column, and per-entity
+persistence round-trip tests, with the image-version, port,
+role-representation, FK-shape, and test-scope choices made by the
+author via neutral-options Q&A and recorded in `ai/usage-log.md`; and
+the user-service profile endpoints (issue #95) — `GET /users/me` and
+`GET /users/{id}`, their service, DTO, not-found exception, repository
+query, and unit and Testcontainers integration tests, with the paths,
+response fields, not-found behaviour, and caller-identity choices made
+by the author and recorded in `ai/usage-log.md`, plus the PR #131
+review fixes (guarded caller-id parse, problem+json 404, shared
+`UserResponse` mapping, shared Testcontainers base, and added test
+assertions), each chosen by the author; and the removal of the
+existing-owner check from user-service owner setup, decided by the
+author, with the matching test, comment, and `.env.example` updates;
+a setup token expiry and a setup log line were also built, then
+removed by the author, with expiry deferred to a later issue; and the
+user-service admin endpoints (issue #96) — user list with search, role
+filter, sorting and fixed page sizes, promote/demote, and soft-delete
+removal, with their service, request DTO, URL-based role rules,
+and unit and Testcontainers integration tests, following rules decided
+by the team and recorded in `ai/usage-log.md`, plus the PR #135 review
+fixes (fail-closed /users security rules, shared caller-id,
+active-user lookup and problem+json handling, optimistic locking on
+users with a 409 on a lost race, per team decision); and the
+user-service soft delete and day-31 purge (issue #93) — `DELETE
+/users/me`, the shared `User.softDelete` entity method, the
+`AccountPurgeScheduler` with its purge repositories and
+config/compose/`.env.example` wiring (mirroring the notification
+retention purge), and the unit, integration, and reuse-block tests,
+with the endpoint-confirmation, shared-path, and FK-cleanup choices
+made by the author via neutral-options Q&A and recorded in
+`ai/usage-log.md` (the 30-day reuse block itself needed no new code
+and was pinned with tests).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

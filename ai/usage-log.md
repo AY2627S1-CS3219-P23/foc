@@ -26,6 +26,348 @@ Entry template:
 ```
 
 ---
+## 2026-09-27 — Ryan Ang (PR #135 second review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, review
+- **Scope:** `SecurityConfig` /users rules rewritten to fail closed
+  (only `GET /users/*` and `DELETE /users/me` open to any signed-in
+  user; every other method on `/users` and `/users/*` needs
+  ADMIN/OWNER, replacing the per-method admin lines and the HEAD rule),
+  with an `AdminControllerTest` case; `UserRepository.getActiveUser`
+  shared by `AdminService` and `ProfileService` (their service tests'
+  repository mocks now call real default methods); `AdminService` role
+  rank taken from the `Role` enum's declaration order, noted on `Role`.
+- **Prompt(s):** Summary: Asked to go through the new PR #135 review
+  comments. The tool checked each against the code and noted that the
+  reviewer's suggested method-less `/users/*` admin rule would also
+  block the public profile (`GET /users/{id}`), and offered a rule set
+  that keeps it open. Per team decision: apply that rule set, share the
+  active-user lookup, and derive the role rank from the enum; the
+  problem+json consistency comments are handled separately.
+- **Author review:** The tool ran the full `./mvnw test` suite:
+  117/117 passed; the new security test failed before the rule change
+  (a USER's `PATCH /users/me` returned 400). Ryan to review via the PR.
+
+## 2026-09-27 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, review
+- **Scope:** PR #136 (issue #93) reviewed for gaps; after it merged,
+  `main` merged into the #96 branch (conflicts in `README.md`,
+  `ai/usage-log.md`, `user-service/README.md`, `UserRepository` and
+  `OwnerSetupControllerTest` resolved by keeping both sides), and
+  `AdminService.removeUser` switched to the shared `User.softDelete`.
+  Then, from the PR #135 review comments: `HEAD /users` given the same
+  ADMIN/OWNER rule as `GET /users` in `SecurityConfig`, with a test in
+  `AdminControllerTest`. The `callerId` parsing and the
+  `UserNotFoundException` handler, copied in `ProfileController` and
+  `AdminController`, moved to the new `CallerId` and
+  `ProblemDetailAdvice` in the controller package. The literal-`_`
+  search test switched from `"o_u"` to `"o_n"`, since a wildcard `_`
+  never matched `"o_u"` against the seeded users. Optimistic locking
+  on `users`: a `@Version` column on `User` (default 0 so `ddl-auto`
+  can add it to existing rows), a 409 problem+json handler in
+  `ProblemDetailAdvice`, `UserOptimisticLockTest` and
+  `ConflictResponseTest`. A `ProfileControllerTest` case pins that an
+  OWNER can delete their own account via `DELETE /users/me`.
+- **Prompt(s):** Summary: Asked for a review of PR #136 and which of
+  #135/#136 to merge first. The tool raised owner self-deletion via
+  `DELETE /users/me` and the wording of the #89 login note; both were
+  answered by the team. The tool suggested merging #136 first, then
+  asked to do the follow-up merge on the #96 branch. Then asked to go
+  through the PR #135 comments; the tool confirmed that a USER could
+  call `HEAD /users` and offered two fixes. Per team decision: add a
+  separate HEAD rule. Then asked to fix the duplicated caller-id and
+  404 handling that the review flagged now instead of with #91, and
+  to fix the underscore test. For the race between a role change and
+  a delete, the tool listed row locking, a version column,
+  changed-columns-only updates, or deferring. Per team decision:
+  optimistic locking with a version column, and a lost race returns
+  409 problem+json. The tool noted that `DELETE /users/me` lets an
+  OWNER delete themselves, against the earlier ownership-transfer
+  decision. Per team decision: owners may delete themselves via
+  `DELETE /users/me`, like any user.
+- **Author review:** The tool ran the full `./mvnw test` suite:
+  116/116 passed. The new HEAD test failed before the fix, the
+  underscore test failed with `_` escaping temporarily removed, and
+  the 5 locking/409 tests failed before `@Version` and the handler. Ryan
+  to review via the PR.
+
+## 2026-09-27 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** user-service issue #93 — soft delete (`DELETE /users/me`,
+  `User.softDelete`), the day-31 purge (`AccountPurgeScheduler`,
+  `OtpRepository`/`AccountTokenRepository` purge queries,
+  `user.retention.*` config, `@EnableScheduling`), reuse-block and
+  purge tests, README/.env.example updates.
+- **Prompt(s):** Asked to plan and implement issue #93 from the D2
+  design doc (§2: soft delete = reuse block, purge on day 31). Open
+  design points were decided by the author via neutral options Q&A:
+  `DELETE /users/me` needs the bearer token only (no password/OTP
+  re-check); the shared soft-delete path is an entity method
+  (`User.softDelete`), which admin removal (#96/PR #135) switches to
+  after merge; purge FK cleanup is bulk deletes inside the purge
+  transaction (over DB-level ON DELETE CASCADE). The scheduler follows
+  notification-service's retention purge pattern (cadence/window
+  env-overridable, defaults matching: 30 days, daily 03:00). The
+  30-day reuse block needed no new code — uniqueness checks already
+  include soft-deleted rows — so it was pinned with tests instead.
+- **Author review:** All design decisions made by the author during the
+  options Q&A; suite run with `./mvnw test` (49/49 green); code, tests,
+  and disclosures reviewed via pull request (#136).
+
+## 2026-09-26 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, generate
+- **Scope:** issue #96 review follow-up: `UserRepository.countByRole`
+  removed (`OwnerSetupControllerTest` and `OwnerSetupServiceTest`
+  updated to match); the admin role check moved from `@PreAuthorize`
+  to URL rules in `SecurityConfig`; 12 test cases added to
+  `AdminControllerTest`.
+- **Prompt(s):** Summary: Asked whether `countByRole` was still used
+  and for a review of the #96 code for missing tests or anything else
+  missed. The tool reported that only tests used `countByRole`, listed
+  untested cases, and noted that non-admins got 400 instead of 403 for
+  bad input. Per team decision: remove `countByRole`, add the missing
+  tests plus out-of-range page sizes, and give non-admins 403 before
+  their input is checked. A removed user's token staying valid was
+  added to the deferred items.
+- **Author review:** The tool ran the full `./mvnw test` suite:
+  100/100 passed. Ryan to review via the PR.
+
+## 2026-09-26 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** user-service admin endpoints (issue #96): `AdminController`
+  (`GET /users`, `PATCH /users/{id}`, `DELETE /users/{id}`),
+  `AdminService`, `UpdateRoleRequest`; `UserRepository` gains
+  `JpaSpecificationExecutor`; `SecurityConfig` restricts the admin
+  routes to ADMIN/OWNER; `AdminServiceTest` (unit) and
+  `AdminControllerTest` (Testcontainers); user-service README status.
+- **Prompt(s):** Summary: Asked to start issue #96. The tool listed the
+  open questions, pointed to the relevant parts of the D2 design doc
+  (Part 1 §1, §3, §4, §6), and implemented the answers. Per team
+  decisions: build before #91 (JWT filter) and #93 (soft delete) land,
+  setting `deleted_at` directly for now; the caller's role comes from
+  the ADMIN/OWNER authorities that #91 maps from the token; admins and
+  owners can promote to ADMIN; admins can demote or remove other admins
+  and demote themselves (to be raised again in team discussion at PR
+  time); nobody can change or remove an OWNER, and OWNER is never
+  granted here; admins remove themselves only through `DELETE
+  /users/me`; PATCH for role change, 200 unchanged on a no-op, 403 for
+  blocked actions, 404 for missing or deleted users; the list includes
+  soft-deleted accounts, has partial case-insensitive search on
+  id/username/email, a role filter, sorting on any field in either
+  direction (role by rank), and page sizes of 20, 50 or 100 (default
+  100). Ownership transfer was deferred to #7. Double confirmation
+  stays in the frontend. A `deletedAt` field, an active/deleted filter
+  and stale-role handling were deferred.
+- **Author review:** The tool ran the full `./mvnw test` suite: 89/89
+  passed. Ryan to review via the PR.
+
+## 2026-09-25 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor
+- **Scope:** user-service owner setup (PR #132): removed the setup
+  token expiry and the setup log line, leaving only the multi-owner
+  change. `OwnerSetupService`, `OwnerSetupController`, both test
+  classes, both `application.yaml` files, `.env.example`,
+  `compose.yaml` and the user-service README returned to their state in
+  the multi-owner commit (21a86fb).
+- **Prompt(s):** Summary: Token expiry is to be deferred to another issue in the future. The tool removed the
+  expiry code, config and tests (including the lock-wait recheck added
+  earlier the same day) and the log line with its test. The tool
+  moved password hashing before the setup lock in `OwnerSetupService`,
+  added a concurrent different-email test (two 201s, two OWNER rows) to
+  `OwnerSetupControllerTest` with the concurrent-request code shared
+  between both concurrency tests.
+- **Author review:** The tool ran the full `./mvnw test` suite: 40/40
+  passed. Ryan to review via the PR.
+
+## 2026-09-25 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** PR #132 review fixes in user-service owner setup:
+  `OwnerSetupService` re-checks the token expiry after taking the setup
+  lock; `OwnerSetupServiceTest` and `OwnerSetupControllerTest` gain a
+  lock-wait expiry case and a log-line assertion.
+- **Prompt(s):** Summary: Ryan asked the tool to review the PR #132
+  comments. The tool explained each one: the expiry could be passed
+  while a request waits on the lock; the removed zero-owner guard
+  conflicts with the text of issue #97 (a requirements update for the
+  team, not code); the setup log line had no test; and LeongWZ's
+  question about what happens after the expiry. Ryan chose to fix the
+  first and third. The tool implemented them.
+- **Author review:** The tool ran the full `./mvnw test` suite: 46/46
+  passed. Ryan to review via the PR.
+
+## 2026-09-25 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** user-service owner setup (issue #97): setup token expiry
+  and a setup log line. `OwnerSetupService` reads
+  `OWNER_SETUP_TOKEN_EXPIRES_AT`; `OwnerSetupController` logs each
+  successful setup. Tests added to `OwnerSetupServiceTest` and
+  `OwnerSetupControllerTest`; the variable added to `application.yaml`,
+  the test `application.yaml`, `.env.example` and `compose.yaml`; the
+  user-service README updated.
+- **Prompt(s):** Summary: Asked to add expiry to tokens and remove 1 owner restriction. Token still
+  set by the operator in `.env`; expiry only (no single use), given as
+  an ISO-8601 timestamp; setup disabled (503) when no expiry is set; an
+  expired token gets 403; and a log line on success with the new
+  owner's id, email and caller IP, never the token. Asked to add log lines for creating owners for audit.
+- **Author review:** The tool ran the full `./mvnw test` suite: 44/44
+  passed. Ryan reviewed before PR.
+
+## 2026-09-25 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor
+- **Scope:** user-service owner setup (`POST /auth/setup-owner`, issue
+  #97): removed the existing-owner check from `OwnerSetupService` and
+  deleted the now-unused `OwnerAlreadySetException`; updated
+  `OwnerSetupServiceTest` and `OwnerSetupControllerTest`; updated
+  comments in `UserRepository`, `application.yaml`, `.env.example` and
+  the user-service README.
+- **Prompt(s):** Summary: Ryan asked whether the one-owner rule could be
+  dropped, so an owner who loses both their password and email access
+  doesn't leave the system without a recoverable owner. The tool listed
+  the facts only: the backlog items and design-doc sections the change
+  conflicts with (F6.2.3, design doc §6, the course's bootstrap guide),
+  what it means for the setup token, and the questions left for the
+  team. It made no recommendation. Ryan then decided to drop the
+  "owner already exists" (409) check first. The tool removed it, kept
+  the advisory lock (it still serialises the email/username uniqueness
+  checks), changed the second-call test to expect another OWNER, and
+  changed the concurrency test to use the same email (one 201, one
+  400). Ryan then asked to rename `setupFirstOwner` to `setupOwner`; the
+  tool renamed the service and controller methods and the test method
+  prefixes.
+- **Author review:** The tool ran the full `./mvnw test` suite: 39/39
+  passed. Reviewed by Ryan before PR.
+
+## 2026-09-23 — Ko-Khan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** debug
+- **Scope:** `supplier-service/src/main/java/foc/supplier/seed/SuppliersSeeder.java`,
+  `supplier-service/src/main/java/foc/supplier/model/Suppliers.java` —
+  fixed a Maven `MojoFailureException` blocking both local build and the
+  Docker image build, then two further runtime bugs found while
+  verifying the seeder actually populates `supplier-db`.
+- **Prompt(s):** Author reported "I am getting a mojofailure" (no other
+  detail), then pasted the Docker build failure log. Asked to diagnose
+  and fix. Findings: (1) `SuppliersSeeder.java` used `FileReader`
+  without importing `java.io.FileReader` — compile error; (2) the CSV
+  path pointed at `resources/data/...` but the seed file lives at
+  `resources/csv/supplier-seed-data.csv` — confirmed with author before
+  changing; (3) after fixing (1), `docker build` still failed:
+  `CsvToBean.setType(Class)` does not exist in opencsv 5.9 (verified by
+  extracting and `javap`-ing the jar inside a throwaway Maven
+  container) — only `CsvToBeanBuilder.withType(...)` does, so the
+  seeder was rebuilt to use `CsvToBeanBuilder`; (4) while in there,
+  noticed the CSV header `Location Description` (has a space) would
+  silently fail to auto-map to the `locationDescription` field under
+  opencsv's default case-insensitive matching, so added an explicit
+  `@CsvBindByName` for that one column.
+  Separately, author reported a DBeaver "connection has been closed"
+  error; traced to `supplier-db`'s container having been recreated
+  (fresh `initdb`), invalidating DBeaver's open session — a client-side
+  reconnect, not a code issue. While checking, found the containerized
+  service was still failing to seed: (5) `FileNotFoundException` at
+  runtime, because the Dockerfile's final stage only copies the built
+  jar — `src/main/resources/csv/...` is packaged as a classpath
+  resource inside the jar, not a file on disk, so a relative filesystem
+  path can't resolve in the container even though it worked when run
+  locally from the source tree; switched to `ClassPathResource`. (6)
+  After that fix, seeding then failed with a `NOT NULL` violation on
+  `name`: opencsv's `HeaderColumnNameMappingStrategy` stops
+  auto-matching fields by name as soon as any field carries a
+  `@CsvBindByName` annotation, so the earlier fix (4), which annotated
+  only `locationDescription`, silently unbound every other field;
+  fixed by annotating all CSV-seeded fields explicitly.
+- **Author review:** No architecture, schema, or interface changes —
+  same fields, same CSV, same DB columns; only the CSV-parsing
+  implementation and file paths were corrected. Verified end-to-end by
+  running `docker compose build supplier-service` and
+  `docker compose up -d supplier-service` against the real
+  `supplier-db` and querying the resulting table (21 rows, all columns
+  including `location_description` populated correctly). Reviewed by
+  author via pull request.
+
+## 2026-09-23 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** issue #95 (user-service profile endpoints):
+  `ProfileController` (`GET /users/me`, `GET /users/{id}`),
+  `ProfileService`, `PublicProfileResponse`, `UserNotFoundException`,
+  `UserRepository.findByIdAndDeletedAtIsNull`, `ProfileServiceTest`,
+  `ProfileControllerTest`, and the `spring-boot-starter-security-test`
+  test dependency in `user-service/pom.xml`.
+- **Prompt(s):** Summary: The tool summarised F8.1/F8.1.1 from issue #9, the architecture
+  doc and the wireframes, and listed the open interface decisions
+  without choosing them. The implementation was based on these decisions:
+  "GET /users/me for own profile, GET /users/{id} for others profile, which should show name, joined
+  date for now, deleted users and unknown users should show user not
+  found. caller identity should carry id for now." The tool then
+  implemented exactly those decisions, reusing the existing
+  `UserResponse` for the own profile. Follow-up on the PR #131 Copilot
+  review: Ryan limited the public profile to the username (F8.1.1); the
+  tool dropped `createdAt` from `PublicProfileResponse` and updated the
+  service mapping and both test classes. Follow-up on the PR #131 review
+  by Leong Wei Zhi: the tool explained each finding and Ryan chose the
+  fix for each. Ryan decided that soft-deleted accounts keep their email
+  and username reserved during the 30-day recovery window, so the
+  repository's differing soft-delete filtering stays and is documented in
+  `UserRepository`. The tool then restored the PR #126 entry below with a
+  dated correction, guarded the principal-id parse in
+  `ProfileController` (non-numeric → 401), marked the unauthenticated
+  403 assertion as provisional until #91, added a controller-scoped
+  `ProblemDetail` handler for the 404, fixed a stale README sentence,
+  moved the `User` → `UserResponse` mapping into `UserResponse.from`
+  (also used by `OwnerSetupService`), moved the four Testcontainers
+  classes onto a shared `PostgresTestContainer` base, and added
+  `id`/`createdAt` assertions.
+- **Author review:** Ryan reviewed the code and ran the full
+  `./mvnw test` suite to ensure it all passed (38/38). After the PR #131
+  review fixes the tool ran the full suite: 39/39 passed, with one
+  shared Postgres container.
+
+## 2026-09-23 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate, refactor
+- **Scope:** issues #85 + #86 in one PR. Infra (#85): `compose.yaml`
+  user-service + user-db entries and volume, `.env.example` User
+  Service port/DB variables, `AGENTS.md` user-db port-table row,
+  `user-service/src/main/resources/application.yaml` datasource +
+  `ddl-auto: update` — all following the supplier-service rows.
+  Schema (#86): new entities `Otp`, `AccountToken`,
+  `TokenDenylistEntry` from the design doc's §2 erDiagram; `User.role`
+  converted from String to a new `Role` enum (USER/ADMIN/OWNER, stored
+  as text) with the design doc's CHECK constraint, updating PR #126's
+  usages (`UserRepository.countByRole`, `OwnerSetupService`, both test
+  classes; `UserResponse` JSON shape unchanged); new
+  `EntityMappingTest` round-trip tests (Testcontainers pattern).
+  README AI Use Summary extended for this work (PR #130 Copilot
+  review).
+- **Prompt(s):** Asked to read the D2 design doc's Task Allocation and
+  plan/implement user-service tasks #2 and #3 (issues #85/#86) in one
+  PR. Decisions were made by Leong Wei Zhi via neutral options Q&As:
+  postgres:17 image (matching the merged Testcontainers tests), host
+  ports 8087/5435 (8085/5433 reserved for the notification re-add),
+  Role as a Java enum with the CHECK added now, @ManyToOne FK
+  representation for `otps`/`account_tokens`, and round-trip test
+  scope. The OWNER value follows the merged owner-bootstrap feature
+  (issue #97): treated as admin-equivalent.
+- **Author review:** full suite green locally (28/28 incl. Ryan's
+  OwnerSetup tests, BUILD SUCCESS); `docker compose up --build
+  user-service user-db` from a fresh volume verified: health UP on
+  8087, all four tables present with the role CHECK, unique
+  email/username indexes and both FKs (inspected via psql), and
+  `POST /auth/setup-owner` exercised end-to-end (201 with role
+  "OWNER", 409 on the second call, BCrypt hash stored). An explicit
+  @Check was dropped during review: Hibernate 7 already generates the
+  role CHECK from the STRING enum mapping, and the duplicate showed up
+  in psql. Reviewed via pull request.
+
 ## 2026-09-23 — Ryan Ang
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (implementation + tests)
@@ -74,13 +416,16 @@ Entry template:
   `OwnerAlreadySetException`, and `src/test/resources/application.yaml`;
   existing headers extended in the other touched files; README AI Use
   Summary updated.
-- **Prompt(s):** "look at the pr comments on pr 126", then "fix the rest"
-  — i.e. apply every review finding except the two left for a team
+- **Prompt(s):** Asked the tool to review the PR #126 comments, then to
+  apply every review finding except the two left for a team
   decision (durable bootstrap-used marker; production datasource/schema
   strategy and compose wiring).
-- **Author review:** _to be completed by Ryan_. `OwnerSetupServiceTest`
+- **Author review:**  `OwnerSetupServiceTest`
   (9/9) passed locally, and all test sources compile; the Testcontainers
   controller/context tests were not run because Docker was not running.
+  (Corrected 2026-09-25: Ryan re-ran the full `./mvnw test` suite with
+  Docker running on the `feat/profile-endpoints` branch; all tests
+  passed.)
 
 ## 2026-09-22 — Ryan Ang
 - **Tool:** Claude Code (Sonnet 4.6)

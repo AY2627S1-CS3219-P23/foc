@@ -5,11 +5,28 @@
 # config arrives with issue #86.
 # 2026-09-23 (Ryan Ang, Claude Sonnet 4.6): owner.setup.token property added for
 # the owner-bootstrap setup-token gate (issue #97).
+# 2026-09-23, Claude Code (Fable 5), issue #86: datasource bound to the
+# service-owned user-db and JPA schema-from-entities, following the
+# supplier/notification pattern. Tests are unaffected: Testcontainers
+# @ServiceConnection overrides the datasource there.
+# 2026-09-25 (Ryan Ang, Claude Code (Opus 5.5)): owner.setup.token comment
+# updated; setup no longer stops after the first owner.
+# 2026-09-27, Claude Code (Fable 5), issue #93: user.retention bindings for
+# the day-31 account purge scheduler, mirroring notification-service's
+# retention config shape.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
   application:
     name: user-service
+  datasource:
+    url: jdbc:postgresql://${USER_DB_HOST:localhost}:${USER_DB_PORT:5432}/${USER_DB_NAME:user}
+    username: ${USER_DB_USER:user}
+    password: ${USER_DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
 
 management:
   endpoints:
@@ -17,9 +34,22 @@ management:
       exposure:
         include: health
 
+user:
+  retention:
+    # Soft-deleted accounts keep their row — and so their unique email/
+    # username — for this many days (design doc §2: 30-day reuse block).
+    # The purge scheduler hard-deletes them, with their otps and
+    # account_tokens rows, once deleted_at is older than this ("purge on
+    # day 31").
+    days: ${USER_RETENTION_DAYS:30}
+    # Cron schedule (Spring's 6-field format) controlling how often the
+    # purge sweep runs. Default: daily at 03:00 server time.
+    purge-cron: "${USER_PURGE_CRON:0 0 3 * * *}"
+
 owner:
   setup:
     # Shared secret required to call POST /auth/setup-owner. Must be set via
     # the OWNER_SETUP_TOKEN env var before first deploy. Setup is disabled
-    # (503) while it is unset, so the endpoint can't be reached.
+    # (503) while it is unset, so the endpoint can't be reached. Each call
+    # with the token creates another OWNER.
     token: ${OWNER_SETUP_TOKEN:}
