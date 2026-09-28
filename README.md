@@ -41,7 +41,9 @@
   add the 2026-09-27 "Nearest to Me" distance-sort feature itself
   (PR #134), which PR #134 review (LeongWZ) flagged as missing from
   both this summary and ai/usage-log.md — disclosed here retroactively,
-  by Claude Code (Sonnet 5).
+  by Claude Code (Sonnet 5); and again for the supplier image-URL
+  normalization fix (broken images from the seed CSV's GitHub blob
+  links), also by Claude Code (Sonnet 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -214,7 +216,13 @@ approach; and the supplier-service `GET /suppliers` sort-validation fix
 against the JPA entity, not the response DTO's field names, and the
 service had no error handler for it; fixed with an explicit sortable-
 property allow-list returning a 400 problem+json body instead, plus
-unit tests, per the reviewer's suggested approach.
+unit tests, per the reviewer's suggested approach; and a supplier
+image-URL fix — the seed CSV's `ImageURL` column points at GitHub's
+file-viewer page (`github.com/.../blob/...`), which serves an HTML
+page, not the image itself, so those supplier photos rendered as a
+broken image; since the course-provided CSV can't be edited, the fix
+rewrites the URL to its `raw.githubusercontent.com` equivalent at the
+API response boundary instead, with tests, verified live in-browser.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

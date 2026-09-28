@@ -29,6 +29,33 @@ Entry template:
 ## 2026-09-28 — Alastair Tan
 - **Tool:** Claude Code (Sonnet 5)
 - **Mode:** debug
+- **Scope:** `supplier-service` — `SupplierService.normalizeImageUrl`
+  and its tests in `SupplierServiceTest`.
+- **Prompt(s):** Asked why some supplier images didn't render in the
+  UI (broken-image icon) while others (with no image at all) showed
+  nothing. Diagnosed that the seed CSV's `ImageURL` column points at
+  GitHub's file-*viewer* page (`github.com/.../blob/<ref>/<path>`),
+  which serves `text/html`, not image bytes — only
+  `raw.githubusercontent.com/.../<ref>/<path>` (no `blob`) serves the
+  actual `image/jpeg`. Confirmed via `curl -I` on both URL forms. The
+  author said the seed CSV is course-provided data and can't be edited,
+  so asked for the fix to happen in code instead.
+- **Author review:** The constraint (CSV must stay untouched) and the
+  general fix location (normalize at the API response boundary, in
+  `SupplierService.toResponse`, so it also covers any future
+  admin-CRUD-created supplier with the same URL shape, not just the
+  CSV-seeded rows) were the author's; the tool implemented the
+  GitHub-blob-to-raw-URL regex and its tests. Verified live: rebuilt
+  and restarted the `supplier-service` container, confirmed
+  `GET /suppliers?search=Anna` now returns the raw-content URL, and
+  confirmed in a real (Playwright-driven) browser that the image
+  actually loads (200, non-zero `naturalWidth`) where it previously
+  showed a broken-image icon. `mvn test` passes (7/7). Reviewed via
+  pull request.
+
+## 2026-09-28 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** debug
 - **Scope:** `supplier-service` — `GET /suppliers` sort validation
   (`SupplierController`, `SupplierService`, new
   `exception/InvalidSortException`, new `SupplierServiceTest`).

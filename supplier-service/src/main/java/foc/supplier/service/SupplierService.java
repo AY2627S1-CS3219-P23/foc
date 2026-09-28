@@ -40,6 +40,16 @@
  * by validating against an explicit allow-list before the Sort ever
  * reaches the repository, throwing InvalidSortException (mapped to 400
  * in the controller) for anything else.
+ * 2026-09-28: the seed CSV's ImageURL column points at GitHub's file
+ * *viewer* page (github.com/.../blob/<ref>/<path>), which serves
+ * text/html, not the image itself — an <img> tag pointed at it shows a
+ * broken image. The seed CSV is the course-provided data and can't be
+ * edited, so the fix normalizes the URL here, at the API response
+ * boundary, to GitHub's raw-content host (raw.githubusercontent.com),
+ * which serves the actual image bytes. Applied at read time (not at
+ * seed time) so it also covers any supplier created/edited later
+ * through the admin CRUD API with the same kind of URL, not just the
+ * CSV-seeded rows.
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
@@ -54,6 +64,8 @@ import foc.supplier.repository.SuppliersRepository;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -115,7 +127,25 @@ public class SupplierService {
     private static SupplierResponse toResponse(Suppliers s, List<String> categories) {
         return new SupplierResponse(s.getId(), s.getName(), s.getBuilding(), s.getLocationDescription(),
                 s.getLatitude(), s.getLongitude(), categories, s.getStartingTime(), s.getClosingTime(),
-                s.getSupplierDescription(), s.getImageURL());
+                s.getSupplierDescription(), normalizeImageUrl(s.getImageURL()));
+    }
+
+    // Matches a GitHub file-viewer URL (github.com/<owner>/<repo>/blob/<ref>/<path>)
+    // and captures the three parts needed to rebuild it as a raw-content
+    // URL (raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>), which
+    // is what actually serves the image bytes an <img> tag needs.
+    private static final Pattern GITHUB_BLOB_URL =
+            Pattern.compile("^https://github\\.com/([^/]+)/([^/]+)/blob/(.+)$");
+
+    private static String normalizeImageUrl(String imageUrl) {
+        if (imageUrl == null || imageUrl.isBlank()) {
+            return imageUrl;
+        }
+        Matcher matcher = GITHUB_BLOB_URL.matcher(imageUrl);
+        if (!matcher.matches()) {
+            return imageUrl;
+        }
+        return "https://raw.githubusercontent.com/" + matcher.group(1) + "/" + matcher.group(2) + "/" + matcher.group(3);
     }
 
     private static void validateSort(Sort sort) {

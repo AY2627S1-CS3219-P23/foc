@@ -7,6 +7,12 @@
  * PropertyReferenceException/500. Tests use Mockito to isolate the
  * service from the database, following ProfileServiceTest's pattern
  * (user-service).
+ * 2026-09-28: added tests for normalizeImageUrl (via listSuppliers) —
+ * the seed CSV's ImageURL column points at GitHub's blob (file-viewer)
+ * URL, which doesn't serve raw image bytes; SupplierService rewrites it
+ * to the raw.githubusercontent.com equivalent at the API response
+ * boundary, since the CSV itself (course-provided data) can't be
+ * edited.
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
@@ -15,6 +21,7 @@ import foc.supplier.exception.InvalidSortException;
 import foc.supplier.model.Suppliers;
 import foc.supplier.repository.SupplierCategoriesRepository;
 import foc.supplier.repository.SuppliersRepository;
+import java.time.LocalTime;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,6 +34,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -78,5 +86,60 @@ class SupplierServiceTest {
 
         assertThatCode(() -> supplierService.listSuppliers(null, null, null, null, pageable))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("Should rewrite a GitHub blob (file-viewer) image URL to its raw-content equivalent")
+    void listSuppliers_normalizesGithubBlobImageUrl() {
+        Suppliers supplier = supplierWithImageUrl(
+                "https://github.com/CS3219-AY2627S1/FoC-Template/blob/main/data/images/ANNA.jpeg");
+        Pageable pageable = PageRequest.of(0, 20, Sort.by("name").ascending());
+        when(suppliersRepository.search(any(), any(), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(supplier)));
+        when(supplierCategoriesRepository.findBySupplier_IdIn(any())).thenReturn(List.of());
+
+        var response = supplierService.listSuppliers(null, null, null, null, pageable);
+
+        assertThat(response.getContent().get(0).getImageUrl())
+                .isEqualTo("https://raw.githubusercontent.com/CS3219-AY2627S1/FoC-Template/main/data/images/ANNA.jpeg");
+    }
+
+    @Test
+    @DisplayName("Should leave a non-GitHub-blob image URL unchanged")
+    void listSuppliers_leavesOtherImageUrlsUnchanged() {
+        Suppliers supplier = supplierWithImageUrl("https://example.com/anna.jpeg");
+        Pageable pageable = PageRequest.of(0, 20, Sort.by("name").ascending());
+        when(suppliersRepository.search(any(), any(), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(supplier)));
+        when(supplierCategoriesRepository.findBySupplier_IdIn(any())).thenReturn(List.of());
+
+        var response = supplierService.listSuppliers(null, null, null, null, pageable);
+
+        assertThat(response.getContent().get(0).getImageUrl()).isEqualTo("https://example.com/anna.jpeg");
+    }
+
+    @Test
+    @DisplayName("Should leave a missing image URL as-is (null/blank)")
+    void listSuppliers_leavesMissingImageUrlAsIs() {
+        Suppliers supplier = supplierWithImageUrl(null);
+        Pageable pageable = PageRequest.of(0, 20, Sort.by("name").ascending());
+        when(suppliersRepository.search(any(), any(), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(supplier)));
+        when(supplierCategoriesRepository.findBySupplier_IdIn(any())).thenReturn(List.of());
+
+        var response = supplierService.listSuppliers(null, null, null, null, pageable);
+
+        assertThat(response.getContent().get(0).getImageUrl()).isNull();
+    }
+
+    private static Suppliers supplierWithImageUrl(String imageUrl) {
+        Suppliers supplier = new Suppliers();
+        supplier.setId(1L);
+        supplier.setName("Anna's x Soup Union");
+        supplier.setCategory("Food");
+        supplier.setStartingTime(LocalTime.of(9, 0));
+        supplier.setClosingTime(LocalTime.of(18, 0));
+        supplier.setImageURL(imageUrl);
+        return supplier;
     }
 }
