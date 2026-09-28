@@ -113,6 +113,35 @@ Entry template:
   author via pull request.
 
 ---
+## 2026-09-27 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** generate (implementation)
+- **Scope:** "Nearest to Me" distance-sort feature, PR #134 — backend:
+  `SuppliersRepository.searchOrderedByDistance` (native Haversine
+  query), `SupplierController`'s optional `lat`/`lng` params,
+  `SupplierService.listSuppliers`'s lat/lng branch. Frontend:
+  `web/src/features/supplier/distance.ts` (client-side display-only
+  distance formatting), `SupplierFilterBar`'s `LabeledSelect` sort
+  control, `SupplierCard`'s `distanceLabel`, `suppliers.tsx`'s
+  geolocation-request effect and fallback-to-name-sort notice,
+  `api.ts`'s `sort`/lat/lng query params. Also added a required-field
+  asterisk to `SupplierFormModal` (Name, Location, Opening/Close).
+- **Prompt(s):** Asked to implement "sort suppliers by distance from
+  the user's current location" (team decision) end-to-end: request
+  browser geolocation, pass it to the backend, order results by
+  distance there (not client-side), and show a distance label per
+  card. Backend query approach (native SQL for the Haversine trig
+  functions JPQL doesn't expose) and the geolocation-denied/unavailable
+  fallback (drop to name-sort with a visible notice) were author
+  decisions.
+- **Author review:** Verified via `curl` with real lat/lng against the
+  seeded suppliers and manually in-browser (geolocation grant, deny,
+  and unavailable paths). Reviewed via pull request — see PR #134's
+  later review comments (2026-09-28 entries above) for the gaps this
+  first pass missed (geolocation timeout, LIKE-wildcard escaping,
+  sort-value validation, and this entry itself, added after review
+  flagged the missing disclosure).
+
 ## 2026-09-27 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate

@@ -2,9 +2,8 @@
  * AI-assisted (CS3219 AI Usage Policy disclosure):
  * Tool: Claude Code (Sonnet 5), 2026-09-26.
  * Scope: GET /suppliers list endpoint for issue #133 — search by name,
- * filter by category, paging + sorting. Default page size and sort
- * follow docs/supplier-service.md's D7 (indexed on name/category for
- * the NFR1.1 5-second bound); author decision on the default of 20.
+ * filter by category, paging + sorting. Default sort (name) and page
+ * size (20) are author decisions.
  * Revised same day: added GET /suppliers/categories — the frontend's
  * filter dropdown needs the full set of categories, independent of any
  * current search/filter, so it can't be derived from listSuppliers's
@@ -18,6 +17,13 @@
  * unrecognized `sort` value renders as a clean 400 problem+json body
  * instead of an unhandled 500, matching ProfileController's pattern in
  * user-service.
+ * 2026-09-28 (PR #134 review, LeongWZ): removed this header's original
+ * claim that the defaults follow D7's "indexed on name/category"
+ * rationale — D7 was revised the same day as this file was first
+ * written (2026-09-27, docs/supplier-service.md) to say indexing isn't
+ * required at the current 1,000-supplier NFR2.1 target, so that
+ * justification no longer holds; the defaults themselves are
+ * unchanged.
  * Reviewed by: [pending]
  */
 package foc.supplier.controller;

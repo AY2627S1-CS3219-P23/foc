@@ -37,7 +37,11 @@
   2026-09-28: AI Use Summary extended for the "Nearest to Me" sort
   fallback fix on PR #134 review (LeongWZ), by Claude Code (Sonnet 5);
   and again for the supplier-service GET /suppliers sort-validation fix
-  on the same PR's review, also by Claude Code (Sonnet 5).
+  on the same PR's review, also by Claude Code (Sonnet 5); and again to
+  add the 2026-09-27 "Nearest to Me" distance-sort feature itself
+  (PR #134), which PR #134 review (LeongWZ) flagged as missing from
+  both this summary and ai/usage-log.md — disclosed here retroactively,
+  by Claude Code (Sonnet 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -191,7 +195,14 @@ retention purge), and the unit, integration, and reuse-block tests,
 with the endpoint-confirmation, shared-path, and FK-cleanup choices
 made by the author via neutral-options Q&A and recorded in
 `ai/usage-log.md` (the 30-day reuse block itself needed no new code
-and was pinned with tests); and the "Nearest to Me" sort fallback fix
+and was pinned with tests); and the 2026-09-27 "Nearest to Me" distance-sort feature (PR #134) —
+`SuppliersRepository.searchOrderedByDistance` (a native query, since
+the Haversine distance calculation needs trig functions JPQL doesn't
+expose), the controller's optional `lat`/`lng` params, the client-side
+`distance.ts` display formatting, the sort control UI, and a required-
+field asterisk added to the supplier form, with the query approach and
+the geolocation-denied/unavailable fallback (name-sort with a notice)
+decided by the author; the "Nearest to Me" sort fallback fix
 (PR #134 review, LeongWZ) — the render-phase guard falling back to
 name-sort on an unsupported browser only fired once (it self-gated on
 the notice it set), leaving the sort stuck and the supplier list frozen
