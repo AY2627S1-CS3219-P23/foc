@@ -73,6 +73,13 @@ Entry template:
   hard-coded 20, then merged `main` (#139) into the branch: `/admin`
   moved inside #139's `ProtectedRoute` in `src/routes/index.tsx`, and
   the admin tests store a fake session under `"user"` in localStorage.
+  Then asked to fix what the merge brought in: #139's
+  `src/features/user/ProtectedRoute.tsx` now redirects with
+  `<Navigate>` during render instead of a `useEffect` + loading state
+  (fixes the `react-hooks/set-state-in-effect` lint error), and the `*`
+  404 route moved back outside `ProtectedRoute` so the existing
+  `app.test.tsx` 404 test passes; formatting-only changes to four
+  supplier files reverted to `main`.
 - **Author review:** Ryan reviewed the placeholder, credit removal and
   API wiring before the PR. Mock website reviewed by Ryan before PR.
 

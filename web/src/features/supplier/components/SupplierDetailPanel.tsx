@@ -27,12 +27,8 @@ export function SupplierDetailPanel({
 }: SupplierDetailPanelProps) {
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      <p className="text-xs font-medium text-gray-400">
-        Active supplier detail
-      </p>
-      <h2 className="mt-1 text-xl font-semibold text-gray-900">
-        {supplier.name}
-      </h2>
+      <p className="text-xs font-medium text-gray-400">Active supplier detail</p>
+      <h2 className="mt-1 text-xl font-semibold text-gray-900">{supplier.name}</h2>
 
       {supplier.imageUrl ? (
         <img
@@ -62,9 +58,7 @@ export function SupplierDetailPanel({
         </div>
         <div>
           <dt className="inline font-medium text-gray-900">Categories: </dt>
-          <dd className="inline text-gray-600">
-            {supplier.categories.join(', ')}
-          </dd>
+          <dd className="inline text-gray-600">{supplier.categories.join(', ')}</dd>
         </div>
       </dl>
 

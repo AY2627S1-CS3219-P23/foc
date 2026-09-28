@@ -12,11 +12,7 @@ interface SupplierCardProps {
   onSelect: () => void
 }
 
-export function SupplierCard({
-  supplier,
-  selected,
-  onSelect,
-}: SupplierCardProps) {
+export function SupplierCard({ supplier, selected, onSelect }: SupplierCardProps) {
   return (
     <button
       type="button"

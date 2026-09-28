@@ -3,6 +3,8 @@
 // Scope: the SPA's single route table — every page hangs off the
 // shared app shell here; 404 handling.
 // 2026-09-23, Claude Code (Opus 5.5): /admin route added (issue #113).
+// 2026-09-28, Claude Code (Opus 5.5): merged with PR #139's auth routes;
+// /admin placed inside ProtectedRoute, the 404 route moved back outside it.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import { createBrowserRouter, type RouteObject } from 'react-router'
@@ -33,9 +35,12 @@ export const routes: RouteObject[] = [
             children: [
             { path: 'suppliers', element: <Suppliers /> },
             { path: 'admin', element: <Admin /> },
-            { path: '*', element: <NotFound /> },
             ],
-          }
+          },
+          // Renders inside the shell, so the nav stays visible on
+          // unknown paths (including nav destinations not built yet).
+          // Outside ProtectedRoute: a 404 needs no login.
+          { path: '*', element: <NotFound /> },
         ]
       }
     ]
