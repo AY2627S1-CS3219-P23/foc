@@ -119,6 +119,24 @@ afterEach(() => {
   localStorage.clear()
 })
 
+// Clicks a row's Promote/Demote button, then confirms in the dialog.
+async function changeRole(
+  user: ReturnType<typeof userEvent.setup>,
+  table: HTMLElement,
+  username: string,
+  action: 'Promote to Admin' | 'Demote to User',
+) {
+  await user.click(
+    rowFor(table, username).getByRole('button', { name: action }),
+  )
+  const dialog = within(screen.getByRole('dialog', { name: action }))
+  await user.click(
+    dialog.getByRole('button', {
+      name: action === 'Promote to Admin' ? 'Promote' : 'Demote',
+    }),
+  )
+}
+
 function lastListParams() {
   return vi.mocked(adminUserApi.listUsers).mock.lastCall?.[0]
 }
@@ -334,21 +352,13 @@ describe('Users section', () => {
     renderAdmin()
     const table = await findSectionTable('Users')
 
-    await user.click(
-      rowFor(table, 'student_alex').getByRole('button', {
-        name: 'Promote to Admin',
-      }),
-    )
+    await changeRole(user, table, 'student_alex', 'Promote to Admin')
     expect(
       await rowFor(table, 'student_alex').findByText('Admin'),
     ).toBeInTheDocument()
     expect(adminUserApi.changeRole).toHaveBeenCalledWith(2, 'ADMIN')
 
-    await user.click(
-      rowFor(table, 'student_alex').getByRole('button', {
-        name: 'Demote to User',
-      }),
-    )
+    await changeRole(user, table, 'student_alex', 'Demote to User')
     expect(
       await rowFor(table, 'student_alex').findByText('User'),
     ).toBeInTheDocument()
@@ -375,6 +385,53 @@ describe('Users section', () => {
     )
     expect(adminUserApi.removeUser).toHaveBeenCalledWith(4)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  test('cancelling a role change keeps the role', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+
+    await user.click(
+      rowFor(table, 'student_alex').getByRole('button', {
+        name: 'Promote to Admin',
+      }),
+    )
+    const dialog = within(
+      screen.getByRole('dialog', { name: 'Promote to Admin' }),
+    )
+    expect(dialog.getByText('student_alex')).toBeInTheDocument()
+    await user.click(dialog.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(rowFor(table, 'student_alex').getByText('User')).toBeInTheDocument()
+    expect(adminUserApi.changeRole).not.toHaveBeenCalled()
+  })
+
+  test('demoting yourself warns about losing admin access', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+    // Wait until the page knows who is signed in.
+    await waitFor(() =>
+      expect(
+        rowFor(table, 'nus_courier_99').queryByRole('button', {
+          name: 'Remove Account',
+        }),
+      ).not.toBeInTheDocument(),
+    )
+
+    await user.click(
+      rowFor(table, 'nus_courier_99').getByRole('button', {
+        name: 'Demote to User',
+      }),
+    )
+
+    expect(
+      within(screen.getByRole('dialog', { name: 'Demote to User' })).getByText(
+        /You will lose access to the admin dashboard/,
+      ),
+    ).toBeInTheDocument()
   })
 
   test('the signed-in admin has no Remove on their own row', async () => {
@@ -414,11 +471,7 @@ describe('Users section', () => {
         within(table).queryByText('nus_courier_99'),
       ).not.toBeInTheDocument(),
     )
-    await user.click(
-      rowFor(table, 'student_alex').getByRole('button', {
-        name: 'Promote to Admin',
-      }),
-    )
+    await changeRole(user, table, 'student_alex', 'Promote to Admin')
 
     await waitFor(() =>
       expect(within(table).queryByText('student_alex')).not.toBeInTheDocument(),
@@ -476,11 +529,7 @@ describe('Users section', () => {
     renderAdmin()
     const table = await findSectionTable('Users')
 
-    await user.click(
-      rowFor(table, 'nus_courier_99').getByRole('button', {
-        name: 'Demote to User',
-      }),
-    )
+    await changeRole(user, table, 'nus_courier_99', 'Demote to User')
 
     expect(await section('Users').findByRole('alert')).toHaveTextContent(
       'You cannot change this user.',

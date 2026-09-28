@@ -3,11 +3,12 @@
 // 2026-09-28 (credit balances and Add Credits removed; wired to the #96
 // endpoints with server-side search, role filter and paging; PR #140
 // review: reload after a role change, step back a page when its last
-// row is removed, and GET /users/me so the own row has no Remove).
+// row is removed, and GET /users/me so the own row has no Remove;
+// promote/demote now asks for confirmation first).
 // Scope: Admin Dashboard "Users" section — list, search, role filter,
 // paging, promote/demote, remove — per
 // web/docs/wireframes/admin-dashboard.png.
-// Reviewed by: [pending]
+// Reviewed by: Ryan Ang
 
 import { useEffect, useState } from 'react'
 
@@ -15,6 +16,7 @@ import { ApiError } from '@/lib/api/http'
 import { Pagination } from '@/shared/components/Pagination'
 import { adminUserApi } from '../adminApi'
 import type { AdminUser, AdminUserPage, UserRole } from '../types'
+import { ChangeRoleModal } from './ChangeRoleModal'
 import { RemoveUserModal } from './RemoveUserModal'
 import { UserTable } from './UserTable'
 
@@ -55,6 +57,10 @@ export function UsersSection() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [busyUserId, setBusyUserId] = useState<number | null>(null)
   const [pendingRemove, setPendingRemove] = useState<AdminUser | null>(null)
+  const [pendingRoleChange, setPendingRoleChange] = useState<{
+    user: AdminUser
+    role: UserRole
+  } | null>(null)
   const [currentUserId, setCurrentUserId] = useState<number | null>(null)
 
   // Only used to hide Remove on the admin's own row. If this fails, the
@@ -134,7 +140,9 @@ export function UsersSection() {
     )
   }
 
-  async function handleChangeRole(user: AdminUser, newRole: UserRole) {
+  async function handleChangeRole() {
+    if (!pendingRoleChange) return
+    const { user, role: newRole } = pendingRoleChange
     setBusyUserId(user.id)
     setActionError(null)
     try {
@@ -149,6 +157,7 @@ export function UsersSection() {
         errorMessage(err, `Could not change ${user.username}'s role.`),
       )
     } finally {
+      setPendingRoleChange(null)
       setBusyUserId(null)
     }
   }
@@ -234,7 +243,9 @@ export function UsersSection() {
             users={data.content}
             currentUserId={currentUserId}
             busyUserId={busyUserId}
-            onChangeRole={handleChangeRole}
+            onChangeRole={(user, newRole) =>
+              setPendingRoleChange({ user, role: newRole })
+            }
             onRemove={setPendingRemove}
           />
           <Pagination
@@ -244,6 +255,17 @@ export function UsersSection() {
             disabled={loading}
           />
         </>
+      )}
+
+      {pendingRoleChange && (
+        <ChangeRoleModal
+          user={pendingRoleChange.user}
+          role={pendingRoleChange.role}
+          isSelf={pendingRoleChange.user.id === currentUserId}
+          onCancel={() => setPendingRoleChange(null)}
+          onConfirm={handleChangeRole}
+          saving={busyUserId === pendingRoleChange.user.id}
+        />
       )}
 
       {pendingRemove && (

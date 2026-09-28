@@ -94,6 +94,11 @@ Entry template:
   Then asked to show the ID in the users list since search matches it:
   `UserTable.tsx` gains an ID column (desktop) and "ID:" on the mobile
   cards, with an assertion in the list test.
+  Then asked for a confirmation step on promote/demote: new
+  `components/ChangeRoleModal.tsx` (following `RemoveUserModal`), shown
+  before `UsersSection.tsx` calls `changeRole`; it warns when an admin
+  demotes their own account. Tests now confirm through the dialog, with
+  new cases for cancelling and for the self-demotion warning.
 - **Author review:** Ryan reviewed the placeholder, credit removal and
   API wiring before the PR. Mock website reviewed by Ryan before PR.
   PR fixes reviewed by Ryan.
