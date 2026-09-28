@@ -12,6 +12,7 @@ import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
 import { adminUserApi } from '@/features/user/adminApi'
+import { USERS_PAGE_SIZE } from '@/features/user/components/UsersSection'
 import type {
   AdminUser,
   AdminUserPage,
@@ -72,11 +73,16 @@ function fakeListUsers(params: ListUsersParams): AdminUserPage {
   }
 }
 
+// Username of the n-th (1-based) user from manyUsers.
+function nth(n: number) {
+  return `user_${String(n).padStart(3, '0')}`
+}
+
 function manyUsers(count: number): AdminUser[] {
   return Array.from({ length: count }, (_, i) => ({
-    id: 100 + i,
+    id: 1000 + i,
     email: `e${1000000 + i}@u.nus.edu`,
-    username: `user_${String(i + 1).padStart(2, '0')}`,
+    username: nth(i + 1),
     role: 'USER',
     createdAt: '2026-09-20T00:00:00Z',
   }))
@@ -106,12 +112,19 @@ function rowFor(table: HTMLElement, text: string) {
   return within(row)
 }
 
+afterEach(() => {
+  localStorage.clear()
+})
+
 function lastListParams() {
   return vi.mocked(adminUserApi.listUsers).mock.lastCall?.[0]
 }
 
 beforeEach(() => {
   vi.restoreAllMocks()
+  // /admin sits behind ProtectedRoute, which only checks that
+  // AuthProvider found a stored session under "user".
+  localStorage.setItem('user', JSON.stringify({ sub: 'test-admin' }))
   users = seedUsers.map((u) => ({ ...u }))
   vi.spyOn(adminUserApi, 'listUsers').mockImplementation(async (params) =>
     fakeListUsers(params),
@@ -142,7 +155,7 @@ describe('Users section', () => {
     expect(rowFor(table, 'foc_owner').getByText('Owner')).toBeInTheDocument()
     expect(adminUserApi.listUsers).toHaveBeenCalledWith({
       page: 0,
-      size: 20,
+      size: USERS_PAGE_SIZE,
     })
   })
 
@@ -173,7 +186,11 @@ describe('Users section', () => {
     expect(within(table).getByText('student_alex')).toBeInTheDocument()
     // One request for the initial load, one for the finished word.
     expect(adminUserApi.listUsers).toHaveBeenCalledTimes(2)
-    expect(lastListParams()).toEqual({ search: 'alex', page: 0, size: 20 })
+    expect(lastListParams()).toEqual({
+      search: 'alex',
+      page: 0,
+      size: USERS_PAGE_SIZE,
+    })
   })
 
   test('role filter is sent to the server', async () => {
@@ -190,17 +207,21 @@ describe('Users section', () => {
       expect(within(table).queryByText('student_alex')).not.toBeInTheDocument(),
     )
     expect(within(table).getByText('nus_courier_99')).toBeInTheDocument()
-    expect(lastListParams()).toEqual({ role: 'ADMIN', page: 0, size: 20 })
+    expect(lastListParams()).toEqual({
+      role: 'ADMIN',
+      page: 0,
+      size: USERS_PAGE_SIZE,
+    })
   })
 
   test('next, previous and page numbers request that page', async () => {
-    users = manyUsers(45)
+    users = manyUsers(USERS_PAGE_SIZE * 2 + 5)
     const user = userEvent.setup()
     renderAdmin()
     const table = await findSectionTable('Users')
     const pager = within(section('Users').getByRole('navigation'))
 
-    expect(within(table).getByText('user_01')).toBeInTheDocument()
+    expect(within(table).getByText(nth(1))).toBeInTheDocument()
     expect(pager.getByRole('button', { name: 'Previous' })).toBeDisabled()
     expect(pager.getByRole('button', { name: 'Page 1' })).toHaveAttribute(
       'aria-current',
@@ -208,34 +229,49 @@ describe('Users section', () => {
     )
 
     await user.click(pager.getByRole('button', { name: 'Next' }))
-    expect(await within(table).findByText('user_21')).toBeInTheDocument()
-    expect(lastListParams()).toEqual({ page: 1, size: 20 })
+    expect(
+      await within(table).findByText(nth(USERS_PAGE_SIZE + 1)),
+    ).toBeInTheDocument()
+    expect(lastListParams()).toEqual({ page: 1, size: USERS_PAGE_SIZE })
 
     await user.click(pager.getByRole('button', { name: 'Page 3' }))
-    expect(await within(table).findByText('user_41')).toBeInTheDocument()
+    expect(
+      await within(table).findByText(nth(USERS_PAGE_SIZE * 2 + 1)),
+    ).toBeInTheDocument()
     expect(pager.getByRole('button', { name: 'Next' })).toBeDisabled()
 
     await user.click(pager.getByRole('button', { name: 'Previous' }))
-    expect(await within(table).findByText('user_21')).toBeInTheDocument()
-    expect(lastListParams()).toEqual({ page: 1, size: 20 })
+    expect(
+      await within(table).findByText(nth(USERS_PAGE_SIZE + 1)),
+    ).toBeInTheDocument()
+    expect(lastListParams()).toEqual({ page: 1, size: USERS_PAGE_SIZE })
   })
 
   test('changing the search or role filter goes back to page 1', async () => {
-    users = [...manyUsers(45), ...seedUsers.map((u) => ({ ...u }))]
+    users = [
+      ...manyUsers(USERS_PAGE_SIZE * 2 + 5),
+      ...seedUsers.map((u) => ({ ...u })),
+    ]
     const user = userEvent.setup()
     renderAdmin()
     const table = await findSectionTable('Users')
     const pager = within(section('Users').getByRole('navigation'))
 
     await user.click(pager.getByRole('button', { name: 'Page 2' }))
-    expect(await within(table).findByText('user_21')).toBeInTheDocument()
+    expect(
+      await within(table).findByText(nth(USERS_PAGE_SIZE + 1)),
+    ).toBeInTheDocument()
 
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Filter by role' }),
       'USER',
     )
     await waitFor(() =>
-      expect(lastListParams()).toEqual({ role: 'USER', page: 0, size: 20 }),
+      expect(lastListParams()).toEqual({
+        role: 'USER',
+        page: 0,
+        size: USERS_PAGE_SIZE,
+      }),
     )
 
     await user.click(
@@ -245,7 +281,11 @@ describe('Users section', () => {
       ),
     )
     await waitFor(() =>
-      expect(lastListParams()).toEqual({ role: 'USER', page: 1, size: 20 }),
+      expect(lastListParams()).toEqual({
+        role: 'USER',
+        page: 1,
+        size: USERS_PAGE_SIZE,
+      }),
     )
 
     await user.type(
@@ -259,7 +299,7 @@ describe('Users section', () => {
         search: 'user_0',
         role: 'USER',
         page: 0,
-        size: 20,
+        size: USERS_PAGE_SIZE,
       }),
     )
   })

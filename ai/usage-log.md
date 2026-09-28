@@ -68,7 +68,11 @@ Entry template:
   from the server; page size 100, also a constant. Finally asked for a
   mock to view the page in the browser before #91 (login) and
   user-service CORS exist, keeping the real calls in place for when
-  those land; the flag name was the tool's choice.
+  those land; the flag name was the tool's choice. On review, the tool
+  made the tests follow the exported `USERS_PAGE_SIZE` instead of a
+  hard-coded 20, then merged `main` (#139) into the branch: `/admin`
+  moved inside #139's `ProtectedRoute` in `src/routes/index.tsx`, and
+  the admin tests store a fake session under `"user"` in localStorage.
 - **Author review:** Ryan reviewed the placeholder, credit removal and
   API wiring before the PR. Mock website reviewed by Ryan before PR.
 

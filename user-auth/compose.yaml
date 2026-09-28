@@ -1,0 +1,8 @@
+services:
+    # builds docker file as user-auth
+    # use with other compose files to build with docker
+    user-auth:
+        build: .
+        # maps local port 8081 to container port 8081
+        ports:
+            - 8081:8081

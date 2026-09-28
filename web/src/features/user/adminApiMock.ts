@@ -57,15 +57,13 @@ const seedUsers: readonly AdminUser[] = [
     role: 'OWNER',
     createdAt: '2026-09-01T09:00:00Z',
   },
-  ...names.map(
-    (username, i): AdminUser => ({
-      id: i + 2,
-      email: `e${1000100 + i}@u.nus.edu`,
-      username,
-      role: i % 7 === 1 ? 'ADMIN' : 'USER',
-      createdAt: new Date(Date.UTC(2026, 8, 2 + (i % 25), 8)).toISOString(),
-    }),
-  ),
+  ...names.map((username, i): AdminUser => ({
+    id: i + 2,
+    email: `e${1000100 + i}@u.nus.edu`,
+    username,
+    role: i % 7 === 1 ? 'ADMIN' : 'USER',
+    createdAt: new Date(Date.UTC(2026, 8, 2 + (i % 25), 8)).toISOString(),
+  })),
 ]
 
 let users: AdminUser[] = seedUsers.map((u) => ({ ...u }))

@@ -19,7 +19,7 @@ import { UserTable } from './UserTable'
 // Wait this long after the last keystroke before searching.
 const SEARCH_DEBOUNCE_MS = 300
 // user-service accepts 20, 50 or 100.
-const USERS_PAGE_SIZE = 100
+export const USERS_PAGE_SIZE = 100
 
 const roleOptions: { value: UserRole | ''; label: string }[] = [
   { value: '', label: 'All roles' },
