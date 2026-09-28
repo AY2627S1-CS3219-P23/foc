@@ -22,6 +22,8 @@ the day-31 purge scheduler (bulk @Modifying query, following the
 notification-service purge pattern from PR #81).
 2026-09-27 (Claude Code, Opus 5.5), PR #135 review: getActiveUser added so
 AdminService and ProfileService share one active-user lookup.
+2026-09-29 (Claude Code, Opus 5.5), issue #89: findByUsername added for
+username-or-email login.
 */
 
 package foc.user.repository;
@@ -52,6 +54,10 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     boolean existsByUsername(String username);
 
     Optional<User> findByEmail(String email);
+
+    // also includes soft-deleted users: login recovers them within the
+    // retention window (AuthService)
+    Optional<User> findByUsername(String username);
 
     // active (not soft-deleted) user by id
     Optional<User> findByIdAndDeletedAtIsNull(Long id);

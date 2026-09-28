@@ -237,7 +237,13 @@ file-viewer page (`github.com/.../blob/...`), which serves an HTML
 page, not the image itself, so those supplier photos rendered as a
 broken image; since the course-provided CSV can't be edited, the fix
 rewrites the URL to its `raw.githubusercontent.com` equivalent at the
-API response boundary instead, with tests, verified live in-browser.
+API response boundary instead, with tests, verified live in-browser;
+and user-service sign-up, login and JWT issuance (issues #87, #89, #90)
+— `POST /auth/signup`, `POST /auth/login` with the 5-failure lockout,
+HS256 token minting, CORS, their tests, the removal of PR #139's
+separate `user-auth` server and the login/register pages pointed at
+user-service, with auth placement, OTP deferral and response shapes
+decided by the team and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

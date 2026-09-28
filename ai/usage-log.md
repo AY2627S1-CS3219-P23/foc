@@ -26,6 +26,39 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Ryan Ang (#87/#89/#90 sign-up, login, JWT in user-service)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `user-service`: `POST /auth/signup` and `POST /auth/login`
+  (`AuthController`, `AuthService`, `SignupRequest`, `LoginRequest`,
+  `LoginResponse`, `LoginFailedException`, `UserRepository.findByUsername`),
+  JWT minting (`security/JwtIssuer`, jjwt 0.13.0 in `pom.xml`), CORS in
+  `SecurityConfig`, `user.jwt.*` / `user.web-allowed-origin` in both
+  `application.yaml`s; `compose.yaml` and `.env.example` wiring
+  (`JWT_SECRET`, `JWT_ACCESS_TOKEN_TTL`, `WEB_ALLOWED_ORIGIN`,
+  `VITE_USER_SERVICE_URL`); `AuthServiceTest`, `JwtIssuerTest`,
+  `AuthControllerTest`; user-service README. PR #139's `user-auth/`
+  server deleted; `web/src/features/user/login.tsx` and `register.tsx`
+  pointed at user-service (email field added, server error shown).
+- **Prompt(s):** Summary: Asked to convert PR #139's Node `user-auth`
+  server to Spring Boot with the RDBMS instead of `users.json`. The tool
+  noted AGENTS.md and issues #87/#89/#90 already place auth in
+  user-service. Team decisions: auth goes into user-service, not a separate
+  service; both login and register; the account is inserted only after
+  OTP verification, but OTP is deferred, so sign-up inserts directly for
+  now; JWT minting (#90) built now; sign-up returns the account (201) and
+  the page sends the user to log in; camelCase login response; CORS in
+  this PR; keep #139's frontend, changing it only where it broke. Rules
+  otherwise follow design doc §3 (routes, claims, 1 h expiry, 5-failure
+  15-minute lockout, non-revealing failures, exact 400 reasons) and the
+  earlier team decision that logging in within 30 days recovers a
+  soft-deleted account. Implementation choices by the tool, to confirm
+  in review: request field `usernameOrEmail`; a locked account gets the
+  same 401 as a wrong password; validation reasons joined in one
+  `detail`; CORS reuses `WEB_ALLOWED_ORIGIN`. 
+- **Author review:** Full `./mvnw test`
+  suite passes, including the Docker-backed `AuthControllerTest`.
+
 ## 2026-09-28 — Alastair Tan
 - **Tool:** Claude Code (Sonnet 5)
 - **Mode:** debug

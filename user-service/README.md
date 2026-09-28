@@ -14,6 +14,9 @@
   endpoints (issue #96).
   2026-09-27, Claude Code (Fable 5), issue #93: DELETE /users/me and the
   soft-delete/purge section added.
+  2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: sign-up, login,
+  JWT issuance and CORS added to the status; new "Sign-up & login"
+  section.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -25,7 +28,9 @@ Backlog: issues #84–#98.
 
 Spring Boot 4 · Java 21 · Maven.
 
-Currently: actuator health endpoint, `POST /auth/setup-owner` (creates an
+Currently: actuator health endpoint, `POST /auth/signup` and
+`POST /auth/login` (#87/#89, JWT issuance #90 — see below),
+`POST /auth/setup-owner` (creates an
 OWNER for any caller with the setup token, #97), `GET /users/me` /
 `GET /users/{id}` (own and public profile, #95), `DELETE /users/me`
 (self-deletion, #93), and the admin endpoints
@@ -34,7 +39,30 @@ OWNER for any caller with the setup token, #97), `GET /users/me` /
 delete) for ADMIN/OWNER callers (#96), backed by Postgres via
 Spring Data JPA. The root `compose.yaml` runs it with its own `user-db` (host port
 `${USER_SERVICE_PORT:-8087}`); `spring-boot:run` needs that database
-reachable (`USER_DB_*` env vars). Tests supply their own database.
+reachable (`USER_DB_*` env vars) and `JWT_SECRET` set. Tests supply
+their own database. CORS allows the web origin in `WEB_ALLOWED_ORIGIN`
+(default `http://localhost:5173`).
+
+## Sign-up & login (#87, #89, #90)
+
+These replace PR #139's separate `user-auth` server; auth lives here.
+
+- `POST /auth/signup` `{ email, username, password }` → 201 with the
+  account (no token). Same rules as owner setup: `eXXXXXXX@u.nus.edu`,
+  username 3–30 of `[A-Za-z0-9_]`, password 10–50 with upper, lower and
+  a digit; email and username unique (soft-deleted accounts included).
+  Failures are 400 problem+json with the exact reason. OTP verification
+  is deferred: once it lands, the account is inserted only after
+  `POST /auth/signup/verify` (design doc §3); today sign-up inserts it.
+- `POST /auth/login` `{ usernameOrEmail, password }` → 200
+  `{ accessToken, tokenType: "Bearer", expiresIn }`. Every failure —
+  unknown account, wrong password, locked, deleted past the window — is
+  the same 401 problem+json. Five failures in a row lock the account
+  for 15 minutes; a success clears the counters. Logging in within the
+  30-day window recovers a soft-deleted account.
+- Tokens are HS256 with the shared `JWT_SECRET` (≥ 32 bytes, checked at
+  startup): `sub` = user id, `role`, `jti`, `exp` = 1 h
+  (`JWT_ACCESS_TOKEN_TTL`). Checking tokens on incoming requests is #91.
 
 ## Soft delete & day-31 purge (#93)
 

@@ -19,6 +19,10 @@
   notification-service used for the same purpose).
   2026-09-23, Claude Code (Opus 5.5), issue #95: spring-boot-starter-security-test
   added so the profile controller tests can supply a mock caller.
+  2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: jjwt (api, impl,
+  gson) for minting login tokens, same version and modules as
+  notification-service's verifier so minted tokens pass it (jjwt-gson
+  for the same Jackson 3 reason recorded in that pom).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -50,6 +54,8 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
+		<!-- Not managed by the Boot BOM; pinned to notification-service's version. -->
+		<jjwt.version>0.13.0</jjwt.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -71,6 +77,23 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-api</artifactId>
+			<version>${jjwt.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<version>${jjwt.version}</version>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-gson</artifactId>
+			<version>${jjwt.version}</version>
+			<scope>runtime</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.postgresql</groupId>

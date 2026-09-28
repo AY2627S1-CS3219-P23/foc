@@ -38,6 +38,9 @@
 # scheduler, mirroring the notification retention pair (added on PR
 # #136 Copilot review — the vars were documented in .env.example but
 # not passed to the container).
+# 2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: JWT_SECRET,
+# JWT_ACCESS_TOKEN_TTL and WEB_ALLOWED_ORIGIN passed to the user service
+# for login token signing and CORS.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -209,6 +212,12 @@ services:
       # (issue #93, day-31 purge scheduler).
       USER_RETENTION_DAYS: ${USER_RETENTION_DAYS:-30}
       USER_PURGE_CRON: "${USER_PURGE_CRON:-0 0 3 * * *}"
+      # Signs login tokens (issue #90); the same secret the other services
+      # verify with.
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
+      JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-1h}
+      # Browser origin allowed by CORS, shared with supplier-service.
+      WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
     depends_on:
       user-db:
         condition: service_healthy

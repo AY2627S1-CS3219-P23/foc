@@ -14,6 +14,9 @@
 # 2026-09-27, Claude Code (Fable 5), issue #93: user.retention bindings for
 # the day-31 account purge scheduler, mirroring notification-service's
 # retention config shape.
+# 2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: user.jwt (login
+# token signing, design doc §3) and user.web-allowed-origin (CORS, reusing
+# supplier-service's WEB_ALLOWED_ORIGIN variable).
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -45,6 +48,15 @@ user:
     # Cron schedule (Spring's 6-field format) controlling how often the
     # purge sweep runs. Default: daily at 03:00 server time.
     purge-cron: "${USER_PURGE_CRON:0 0 3 * * *}"
+  jwt:
+    # Shared HS256 secret (at least 32 bytes) that every service verifies
+    # tokens with. Empty default: startup fails with a clear message
+    # until JWT_SECRET is set.
+    secret: ${JWT_SECRET:}
+    # Login token lifetime (design doc §3: exp = 1 hour after issue).
+    access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:1h}
+  # Browser origin allowed by CORS (the web SPA).
+  web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
 
 owner:
   setup:

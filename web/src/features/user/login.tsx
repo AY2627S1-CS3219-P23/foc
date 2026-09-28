@@ -1,5 +1,13 @@
+// AI-assisted (CS3219 AI Usage Policy disclosure):
+// Tool: Claude Code (Opus 5.5), 2026-09-29, issues #87/#89.
+// Scope: login now calls user-service's POST /auth/login (replacing
+// PR #139's user-auth server on port 8081) with usernameOrEmail, and
+// shows the server's error message. The page itself comes from PR #139.
+// Reviewed by: Ryan Ang
+
 import React, { useState } from "react";
 import axios from "axios";
+import { serviceBaseUrls } from "@/lib/api/config";
 import { router } from "../../routes/index";
 import { useAuth } from "./useAuth";
 
@@ -17,8 +25,8 @@ export function Login() {
   const login = async (event: React.SyntheticEvent) => {
     event.preventDefault();
     try {
-        const response = await axios.post("http://localhost:8081/api/auth/login", {
-        username,
+      const response = await axios.post(`${serviceBaseUrls.user}/auth/login`, {
+        usernameOrEmail: username,
         password,
       });
 
@@ -30,7 +38,11 @@ export function Login() {
       router.navigate("/");
       console.log("login successful");
     } catch (error: unknown) {
-      if (error instanceof Error) {
+      // user-service replies with problem+json; show its reason
+      if (axios.isAxiosError(error) && error.response?.data?.detail) {
+        setError(error.response.data.detail);
+      } else if (error instanceof Error) {
+        setError("Could not log in. Try again.");
         console.error(error.message); 
       } else {
         console.error("An unexpected error occurred:", error);
@@ -44,7 +56,7 @@ export function Login() {
       {error && <p style={styles.error}>{error}</p>}
       <form onSubmit={login} className="flex flex-col items-center">
         <label className ="mb-[10px] text-left">
-          Username:
+          Username or email:
           <input
             type="text"
             value={username}

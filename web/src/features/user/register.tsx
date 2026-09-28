@@ -1,31 +1,44 @@
+// AI-assisted (CS3219 AI Usage Policy disclosure):
+// Tool: Claude Code (Opus 5.5), 2026-09-29, issues #87/#89.
+// Scope: registration now calls user-service's POST /auth/signup (replacing
+// PR #139's user-auth server on port 8081) with the NUS email it
+// requires, then sends you to log in (sign-up returns the account, not
+// a token); shows the server's error message. The page itself comes from PR #139.
+// Reviewed by: Ryan Ang
+
 import React, { useState } from "react";
 import axios from "axios";
 import { router } from "../../routes/index";
-import { useAuth } from "./useAuth";
+import { serviceBaseUrls } from "@/lib/api/config";
 
 export function Register() {
+  const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const data = useAuth();
 
   const register = async (event: React.SyntheticEvent) => {
     event.preventDefault();
     try {
-      const response = await axios.post("http://localhost:8081/api/auth/register", {
+      const response = await axios.post(`${serviceBaseUrls.user}/auth/signup`, {
+        email,
         username,
         password,
       });
 
       console.log("response", response);
-      await data.login(response.data);
       setError("");
+      setEmail("");
       setUsername("");
       setPassword("");
-      router.navigate("/");
+      router.navigate("/login");
       console.log("Registration successful");
     } catch (error: unknown) {
-      if (error instanceof Error) {
+      // user-service replies with problem+json; show its exact reason
+      if (axios.isAxiosError(error) && error.response?.data?.detail) {
+        setError(error.response.data.detail);
+      } else if (error instanceof Error) {
+        setError("Could not register. Try again.");
         console.error(error.message); 
       } else {
         console.error("An unexpected error occurred:", error);
@@ -38,6 +51,17 @@ export function Register() {
       <h2 style={styles.heading}>User Registration</h2>
       {error && <p style={styles.error}>{error}</p>}
       <form onSubmit={register} className="flex flex-col items-center">
+        <label className ="mb-[10px] text-left">
+          NUS email:
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="e1234567@u.nus.edu"
+            className = "ml-[10px] w-[200px] p-[5px] bg-white border border-gray-300"
+          />
+        </label>
+        <br />
         <label className ="mb-[10px] text-left">
           Username:
           <input
