@@ -15,6 +15,9 @@ Scope: Generated controller tests for the admin endpoints (issue #96)
        case added (USER gets 403, admin gets 200); the literal _ search
        switched to "o_n", which a wildcard _ would match.
 Author review: Ryan reviewed and ensured tests run successfully.
+       2026-09-29 (Claude Code, Opus 5.5), PR #140 review: GET /users now
+       hides soft-deleted accounts (team decision); list expectations
+       updated and a case added that a deleted account is left out.
 */
 
 package foc.user.controller;
@@ -187,13 +190,13 @@ class AdminControllerTest extends PostgresTestContainer {
     // list
 
     @Test
-    @DisplayName("GET /users should list every account, soft-deleted included, sorted by id by default")
+    @DisplayName("GET /users should list every active account, sorted by id by default")
     void list_all() throws Exception {
         mockMvc.perform(get("/users").with(as(admin)))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.content.length()").value(5))
+            .andExpect(jsonPath("$.content.length()").value(4))
             .andExpect(jsonPath("$.content[0].id").value(owner.getId()))
-            .andExpect(jsonPath("$.content[4].id").value(deleted.getId()))
+            .andExpect(jsonPath("$.content[3].id").value(alex.getId()))
             .andExpect(jsonPath("$.content[0].username").value("the_owner"))
             .andExpect(jsonPath("$.content[0].email").value("owner@u.nus.edu"))
             .andExpect(jsonPath("$.content[0].role").value("OWNER"))
@@ -201,8 +204,17 @@ class AdminControllerTest extends PostgresTestContainer {
             .andExpect(jsonPath("$.content[0].passwordHash").doesNotExist())
             .andExpect(jsonPath("$.page.size").value(100))
             .andExpect(jsonPath("$.page.number").value(0))
-            .andExpect(jsonPath("$.page.totalElements").value(5))
+            .andExpect(jsonPath("$.page.totalElements").value(4))
             .andExpect(jsonPath("$.page.totalPages").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /users should leave out soft-deleted accounts, even when searched for")
+    void list_hidesSoftDeleted() throws Exception {
+        mockMvc.perform(get("/users").param("search", "gone_user").with(as(admin)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content.length()").value(0))
+            .andExpect(jsonPath("$.page.totalElements").value(0));
     }
 
     @Test
@@ -210,7 +222,7 @@ class AdminControllerTest extends PostgresTestContainer {
     void list_owner() throws Exception {
         mockMvc.perform(get("/users").with(as(owner)))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.page.totalElements").value(5));
+            .andExpect(jsonPath("$.page.totalElements").value(4));
     }
 
     @Test
@@ -291,12 +303,11 @@ class AdminControllerTest extends PostgresTestContainer {
             .andExpect(jsonPath("$.content[0].role").value("OWNER"))
             .andExpect(jsonPath("$.content[1].id").value(admin.getId()))
             .andExpect(jsonPath("$.content[2].id").value(otherAdmin.getId()))
-            .andExpect(jsonPath("$.content[3].id").value(alex.getId()))
-            .andExpect(jsonPath("$.content[4].id").value(deleted.getId()));
+            .andExpect(jsonPath("$.content[3].id").value(alex.getId()));
 
         mockMvc.perform(get("/users").param("sort", "role").with(as(admin)))
             .andExpect(jsonPath("$.content[0].role").value("USER"))
-            .andExpect(jsonPath("$.content[4].role").value("OWNER"));
+            .andExpect(jsonPath("$.content[3].role").value("OWNER"));
     }
 
     @Test
@@ -305,10 +316,10 @@ class AdminControllerTest extends PostgresTestContainer {
         mockMvc.perform(get("/users").param("sort", "username,desc").with(as(admin)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.content[0].username").value("zed_admin"))
-            .andExpect(jsonPath("$.content[4].username").value("an_admin"));
+            .andExpect(jsonPath("$.content[3].username").value("an_admin"));
 
         mockMvc.perform(get("/users").param("sort", "id,desc").with(as(admin)))
-            .andExpect(jsonPath("$.content[0].id").value(deleted.getId()));
+            .andExpect(jsonPath("$.content[0].id").value(alex.getId()));
     }
 
     @Test
@@ -317,7 +328,7 @@ class AdminControllerTest extends PostgresTestContainer {
         mockMvc.perform(get("/users").param("sort", "email").with(as(admin)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.content[0].email").value("admin@u.nus.edu"))
-            .andExpect(jsonPath("$.content[4].email").value("zed@u.nus.edu"));
+            .andExpect(jsonPath("$.content[3].email").value("zed@u.nus.edu"));
 
         // seeded users can share a timestamp, so check the order rather than ids
         String body = mockMvc.perform(get("/users").param("sort", "createdAt,DESC").with(as(admin)))
@@ -325,7 +336,7 @@ class AdminControllerTest extends PostgresTestContainer {
             .andReturn().getResponse().getContentAsString();
         List<Instant> createdAt = JsonPath.<List<String>>read(body, "$.content[*].createdAt")
             .stream().map(Instant::parse).toList();
-        assertThat(createdAt).hasSize(5).isSortedAccordingTo(Comparator.reverseOrder());
+        assertThat(createdAt).hasSize(4).isSortedAccordingTo(Comparator.reverseOrder());
     }
 
     @Test
@@ -337,10 +348,10 @@ class AdminControllerTest extends PostgresTestContainer {
 
         mockMvc.perform(get("/users").param("size", "20").param("page", "1").with(as(admin)))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.content.length()").value(6))
+            .andExpect(jsonPath("$.content.length()").value(5))
             .andExpect(jsonPath("$.page.size").value(20))
             .andExpect(jsonPath("$.page.number").value(1))
-            .andExpect(jsonPath("$.page.totalElements").value(26))
+            .andExpect(jsonPath("$.page.totalElements").value(25))
             .andExpect(jsonPath("$.page.totalPages").value(2));
     }
 
@@ -350,7 +361,7 @@ class AdminControllerTest extends PostgresTestContainer {
         mockMvc.perform(get("/users").param("size", "50").with(as(admin)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.page.size").value(50))
-            .andExpect(jsonPath("$.content.length()").value(5));
+            .andExpect(jsonPath("$.content.length()").value(4));
     }
 
     @Test
@@ -520,8 +531,8 @@ class AdminControllerTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("A removed user should drop out of profile lookups but stay in the admin list")
-    void remove_visibleOnlyToAdminList() throws Exception {
+    @DisplayName("A removed user should drop out of profile lookups and the admin list")
+    void remove_hiddenEverywhere() throws Exception {
         mockMvc.perform(delete("/users/{id}", alex.getId()).with(as(admin)))
             .andExpect(status().isNoContent());
 
@@ -530,8 +541,7 @@ class AdminControllerTest extends PostgresTestContainer {
         mockMvc.perform(get("/users/me").with(as(alex)))
             .andExpect(status().isNotFound());
         mockMvc.perform(get("/users").param("search", "student_alex").with(as(admin)))
-            .andExpect(jsonPath("$.content.length()").value(1))
-            .andExpect(jsonPath("$.content[0].id").value(alex.getId()));
+            .andExpect(jsonPath("$.content.length()").value(0));
     }
 
     @Test

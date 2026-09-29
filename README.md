@@ -237,7 +237,15 @@ file-viewer page (`github.com/.../blob/...`), which serves an HTML
 page, not the image itself, so those supplier photos rendered as a
 broken image; since the course-provided CSV can't be edited, the fix
 rewrites the URL to its `raw.githubusercontent.com` equivalent at the
-API response boundary instead, with tests, verified live in-browser;
+API response boundary instead, with tests, verified live in-browser; and
+the web Admin Dashboard user management (issue #113) — the Users section wired to the #96
+endpoints with debounced server-side search, a role filter and
+paging, a shared `Pagination` component, a dev-only in-memory mock
+behind `VITE_MOCK_ADMIN_API`, the Suppliers section reduced to a
+placeholder and the credit mock removed, the merge with PR #139's auth
+routes (with its `ProtectedRoute` lint fix and the 404 route moved
+outside it), the PR #140 review fixes, and the admin page tests, with
+the behaviour chosen by the team and recorded in `ai/usage-log.md`;
 and user-service sign-up, login and JWT issuance (issues #87, #89, #90)
 — `POST /auth/signup`, `POST /auth/login` with the 5-failure lockout,
 HS256 token minting, CORS, their tests, the removal of PR #139's

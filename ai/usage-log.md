@@ -63,6 +63,109 @@ Entry template:
 - **Author review:** Full `./mvnw test`
   suite passes, including the Docker-backed `AuthControllerTest`.
 
+## 2026-09-29 — Ryan Ang (#113 PR #140 second review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, generate (tests)
+- **Scope:** PR #140 review fixes. `user-service`: `AdminService.listUsers`
+  leaves out soft-deleted accounts, with `AdminControllerTest` list
+  expectations updated and a hidden-when-searched case added. `web`:
+  `UsersSection.tsx` reloads after a removal, moves to the last page when
+  a reload lands past the end (role change or removal), clears the error
+  banner when the search, filter or page changes, trims search before
+  debouncing, and lists the fetch effect's inputs directly;
+  `ChangeRoleModal.tsx` shows a general self-demotion warning when the
+  signed-in admin is unknown (`GET /users/me` failure is now logged);
+  `adminApi.ts` honours `VITE_MOCK_ADMIN_API` only on the dev server and
+  imports the mock lazily, so production bundles exclude it (checked in
+  the built bundle); `ProtectedRoute.tsx` and `routes/index.tsx`
+  formatted with the repo's Prettier config; `.env.example` mock comment
+  corrected; four `admin.test.tsx` cases added.
+- **Prompt(s):** Summary: Asked to recheck new PR #140 comments (a
+  reviewer's change request and Copilot) against PR #141. The tool noted
+  #141 already sets `VITE_USER_SERVICE_URL` and adds user-service CORS
+  with preflights allowed on the admin routes. The duplicate supplier pager is
+  left for a follow-up issue, as `routes/suppliers.tsx` is the supplier
+  domain's.
+- **Author review:** Reviewed by Ryan before PR. `./mvnw test` passes
+  (0 failures); web: 25 tests pass, lint and type-check clean.
+
+## 2026-09-28 — Ryan Ang (#113 admin user management)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, generate (implementation + tests)
+- **Scope:** `web/` Admin Dashboard (issue #113):
+  - Suppliers section reduced to a "coming soon" placeholder inside
+    `src/routes/admin.tsx`; `src/features/supplier/components/`
+    `SuppliersAdminSection.tsx` and `SupplierTable.tsx` deleted.
+  - Credit mock removed: `src/features/credit/` (`adminCreditApi.ts`,
+    `types.ts`, `components/AddCreditsModal.tsx`) deleted; the Credits
+    column and Add Credits action dropped from `UserTable.tsx` and
+    `UsersSection.tsx`.
+  - `src/features/user/adminApi.ts` in-memory mock replaced by
+    `apiFetch('user', ...)` calls to `GET /users`, `PATCH /users/{id}`
+    and `DELETE /users/{id}`; `types.ts` gains `AdminUserPage` (Spring
+    PagedModel body) and `ListUsersParams`.
+  - `UsersSection.tsx` sends search (debounced, `SEARCH_DEBOUNCE_MS` =
+    300) and a new role filter to the server, pages with
+    `USERS_PAGE_SIZE` = 100, and resets to page 1 when either changes;
+    new shared `src/shared/components/Pagination.tsx` (Previous / page
+    numbers / Next).
+  - New `src/features/user/adminApiMock.ts` (in-memory stand-in with the
+    same signatures, 30 demo users, filters and pages like `GET /users`);
+    `adminApi.ts` uses it only when `VITE_MOCK_ADMIN_API=true`, set in
+    the git-ignored `web/.env.local`.
+  - `src/test/admin.test.tsx` rewritten against a fake `adminUserApi`:
+    supplier and credit tests replaced by one placeholder test, owner-row
+    test changed to "owner has no actions", search, role filter, paging
+    and page-reset cases added.
+- **Prompt(s):** Summary: Asked whether the admin page could show
+  suppliers once PR #134 merges. The tool noted that #134 removes
+  `listZones`/`Zone` and changes `listSuppliers` to a paged response,
+  which would break the section, and that no PR yet adds the supplier
+  create/update/delete endpoints. Per team decision, the section becomes
+  a placeholder for now; who builds the admin supplier display is left
+  to the team. Then asked to remove the credit mock as well. Then asked
+  which files change now that #96 is merged, and to connect the Users
+  section to it: search goes to the server with a ~300 ms debounce kept
+  as an editable constant; paging with Previous/Next and page numbers;
+  typing a search or choosing a role filter resets to page 1 and reloads
+  from the server; page size 100, also a constant. Finally asked for a
+  mock to view the page in the browser before #91 (login) and
+  user-service CORS exist, keeping the real calls in place for when
+  those land; the flag name was the tool's choice. On review, the tool
+  made the tests follow the exported `USERS_PAGE_SIZE` instead of a
+  hard-coded 20, then merged `main` (#139) into the branch: `/admin`
+  moved inside #139's `ProtectedRoute` in `src/routes/index.tsx`, and
+  the admin tests store a fake session under `"user"` in localStorage.
+  Then asked to fix what the merge brought in: #139's
+  `src/features/user/ProtectedRoute.tsx` now redirects with
+  `<Navigate>` during render instead of a `useEffect` + loading state
+  (fixes the `react-hooks/set-state-in-effect` lint error), and the `*`
+  404 route moved back outside `ProtectedRoute` so the existing
+  `app.test.tsx` 404 test passes; formatting-only changes to four
+  supplier files reverted to `main`.
+  PR #140 review: the tool checked Copilot's comments against the code.
+  Fixed: `UsersSection.tsx` reloads the current query after a role
+  change (filter and counts stay right) and goes back a page when a
+  later page's last row is removed; the test double's search matches
+  ID and email too; `VITE_MOCK_ADMIN_API` documented in root
+  `.env.example`; README AI Use Summary updated. Per team decision
+  (admins cannot remove their own account through the admin endpoint,
+  which user-service already rejects), `adminApi.ts` gains
+  `getCurrentUser()` (`GET /users/me`, mocked as nus_courier_99) and
+  `UserTable.tsx` hides Remove on the signed-in admin's own row. Three
+  tests added. The unauthenticated-requests comment is left for #91.
+  Then asked to show the ID in the users list since search matches it:
+  `UserTable.tsx` gains an ID column (desktop) and "ID:" on the mobile
+  cards, with an assertion in the list test.
+  Then asked for a confirmation step on promote/demote: new
+  `components/ChangeRoleModal.tsx` (following `RemoveUserModal`), shown
+  before `UsersSection.tsx` calls `changeRole`; it warns when an admin
+  demotes their own account. Tests now confirm through the dialog, with
+  new cases for cancelling and for the self-demotion warning.
+- **Author review:** Ryan reviewed the placeholder, credit removal and
+  API wiring before the PR. Mock website reviewed by Ryan before PR.
+  PR fixes reviewed by Ryan.
+
 ## 2026-09-28 — Alastair Tan
 - **Tool:** Claude Code (Sonnet 5)
 - **Mode:** debug
@@ -205,6 +308,7 @@ Entry template:
   first pass missed (geolocation timeout, LIKE-wildcard escaping,
   sort-value validation, and this entry itself, added after review
   flagged the missing disclosure).
+
 ## 2026-09-27 — Ryan Ang (PR #135 second review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor, review
@@ -547,6 +651,33 @@ Entry template:
   role CHECK from the STRING enum mapping, and the duplicate showed up
   in psql. Reviewed via pull request.
 
+## 2026-09-23 — Ryan Ang
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `web/` Admin Dashboard (issue #113), built to match
+  `web/docs/wireframes/admin-dashboard.png`: `src/routes/admin.tsx` (+
+  one `/admin` entry in `src/routes/index.tsx`); Users section in
+  `src/features/user/` (`types.ts`, `adminApi.ts` in-memory mock,
+  `components/UsersSection.tsx`, `UserTable.tsx`, `RemoveUserModal.tsx`);
+  Credits column + Add Credits in `src/features/credit/` (`types.ts`,
+  `adminCreditApi.ts` in-memory mock, `components/AddCreditsModal.tsx`);
+  Suppliers section as two new files in `src/features/supplier/components/`
+  (`SuppliersAdminSection.tsx`, `SupplierTable.tsx`) reusing the existing
+  supplier `api.ts` and form/delete modals, with no existing supplier code
+  changed; `src/test/admin.test.tsx` (15 cases).
+- **Prompt(s):** "create a new branch and lets work on the UI", "cant i
+  just create the ui and wire it up later", then "can you make it so that
+  it matches wireframe?". Users and credits run on in-memory mocks because
+  #96 and credit-service have not defined their APIs; no endpoint paths
+  were chosen. The Suppliers section calls the real supplier api and shows
+  its error state until supplier-service serves data. Defaults applied and
+  stated to the author: route without a nav item, USER/ADMIN/OWNER roles
+  matching the PR #126 entity, owner row limited to Add Credits.
+- **Author review:** Vitest 18/18, tsc, eslint
+  and prettier clean on the new files; checked at desktop (1280/1920px)
+  and mobile (390px) widths in the browser.
+
+---
 ## 2026-09-23 — Ryan Ang
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor, debug, generate (tests), docs
