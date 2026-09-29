@@ -4,25 +4,27 @@
 // when logged out) instead of jose's JWTPayload, which login() was
 // typed as but never actually received. The hook itself comes from
 // PR #139.
+// 2026-09-29, Claude Code (Opus 5.5), issue #147: Prettier formatting
+// only.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
-import { createContext, useContext } from "react";
-import type { LoginResponse } from "./types";
+import { createContext, useContext } from 'react'
+import type { LoginResponse } from './types'
 
 export interface AuthData {
-  token: LoginResponse | null;
-  login(session: LoginResponse): Promise<void>;
-  logout(): void;
+  token: LoginResponse | null
+  login(session: LoginResponse): Promise<void>
+  logout(): void
 }
 
-export const AuthContext = createContext<AuthData | null>(null);
+export const AuthContext = createContext<AuthData | null>(null)
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
+  const context = useContext(AuthContext)
 
   if (context === null) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useAuth must be used within an AuthProvider')
   }
 
-  return context;
-};
+  return context
+}

@@ -8,9 +8,9 @@
 // Revised 2026-09-28: GET /users/me stand-in (signed in as
 // nus_courier_99), and self-removal rejected like user-service does.
 //
-// TEMPORARY: delete this file (and the switch in adminApi.ts) once the
-// real endpoints are reachable from the browser.
-// Reviewed by: [pending]
+// TEMPORARY: the real endpoints are now reachable from the browser; the
+// team decides when to delete this file (and the switch in adminApi.ts).
+// Reviewed by: Ryan Ang
 
 import type {
   AdminUser,

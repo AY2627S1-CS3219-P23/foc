@@ -273,7 +273,11 @@ to `ROLE_*` authorities, stateless sessions, problem+json 401/403
 responses, and their unit and integration tests, following design doc
 §3, with the skipped routes (`/auth/**` except `/auth/logout`, and
 `/actuator/health`) and the denylist deferral decided by the author and
-recorded in `ai/usage-log.md`.
+recorded in `ai/usage-log.md`; and the issue #147 clean-up — a shared
+`errorMessage` helper and `ConfirmModal`, the suppliers page on the
+shared `Pagination`, `axios` removed, Prettier on the auth pages,
+review headers and the admin mock comment updated, and login/sign-up
+page tests, recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

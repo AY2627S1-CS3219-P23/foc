@@ -2,9 +2,11 @@
 // Tool: Claude, 2026-09-22.
 // Scope: delete confirmation, per
 // web/docs/wireframes/add-edit-supplier.png. Implements F1.1.3.
+// 2026-09-29 (Claude Code, Opus 5.5, issue #147): built on the shared
+// ConfirmModal; text and behaviour unchanged.
 // Reviewed by: [pending]
 
-import { Modal } from '@/shared/components/Modal'
+import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import type { Supplier } from '../types'
 
 interface DeleteSupplierModalProps {
@@ -21,28 +23,19 @@ export function DeleteSupplierModal({
   deleting,
 }: DeleteSupplierModalProps) {
   return (
-    <Modal title="Delete Supplier" onClose={onCancel}>
+    <ConfirmModal
+      title="Delete Supplier"
+      confirmLabel="Delete"
+      busyLabel="Deleting..."
+      busy={deleting}
+      danger
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    >
       <p className="text-sm text-gray-600">
         Are you sure you want to delete <strong>{supplier.name}</strong>? This
         action cannot be undone.
       </p>
-      <div className="mt-5 flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={onConfirm}
-          disabled={deleting}
-          className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
-        >
-          {deleting ? 'Deleting...' : 'Delete'}
-        </button>
-      </div>
-    </Modal>
+    </ConfirmModal>
   )
 }

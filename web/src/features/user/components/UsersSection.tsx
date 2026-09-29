@@ -9,6 +9,8 @@
 // the end moves to the last page, the error banner clears on a new query,
 // search is trimmed before debouncing, the fetch lists its inputs, and an
 // unknown signed-in user gets a general self-demotion warning).
+// 2026-09-29 (issue #147): errorMessage moved to lib/api/http, so a
+// network failure now shows the fallback instead of "Failed to fetch".
 // Scope: Admin Dashboard "Users" section — list, search, role filter,
 // paging, promote/demote, remove — per
 // web/docs/wireframes/admin-dashboard.png.
@@ -16,7 +18,7 @@
 
 import { useEffect, useState } from 'react'
 
-import { ApiError } from '@/lib/api/http'
+import { errorMessage } from '@/lib/api/http'
 import { Pagination } from '@/shared/components/Pagination'
 import { adminUserApi } from '../adminApi'
 import type { AdminUser, AdminUserPage, UserRole } from '../types'
@@ -35,12 +37,6 @@ const roleOptions: { value: UserRole | ''; label: string }[] = [
   { value: 'ADMIN', label: 'Admin' },
   { value: 'OWNER', label: 'Owner' },
 ]
-
-function errorMessage(err: unknown, fallback: string) {
-  if (err instanceof ApiError) return err.message
-  if (err instanceof Error && err.message) return err.message
-  return fallback
-}
 
 // Identifies one list request, so a newer query shows as loading until its
 // own result arrives.

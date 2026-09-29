@@ -26,6 +26,32 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Ryan Ang (#147 housekeeping and duplicated code)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, generate (tests)
+- **Scope:** `web/`: `errorMessage` moved into `src/lib/api/http.ts`
+  and used by `UsersSection.tsx`, `login.tsx`, `register.tsx` and
+  `routes/suppliers.tsx`; new `src/shared/components/ConfirmModal.tsx`,
+  with `RemoveUserModal`, `ChangeRoleModal` and `DeleteSupplierModal`
+  built on it; `routes/suppliers.tsx`'s Previous/Next pager replaced by
+  the shared `Pagination`; `UserTable.tsx`'s `UserActionsProps` spelled
+  out and its handlers passed by name; `axios` removed from
+  `package.json`; Prettier run on `login.tsx`, `register.tsx`,
+  `AuthProvider.tsx`, `useAuth.tsx` and `useLocalStorage.tsx`; review
+  headers filled in on `adminApiMock.ts` and `UserTable.tsx`; the
+  `VITE_MOCK_ADMIN_API` comment in `.env.example` updated; new
+  `src/test/auth.test.tsx` (7 login and sign-up page tests).
+- **Prompt(s):** Summary: Asked to do the housekeeping and duplicated-code
+  items of issue #147 (open review items from PRs #140 and #141), leaving
+  the items that need a team decision. Implementation choices by the
+  tool, to confirm in review: the shared `errorMessage` shows the
+  fallback text for a network failure (a `TypeError`), so the admin Users
+  section no longer shows "Failed to fetch"; `ConfirmModal`'s props;
+  the supplier pager gains page numbers and keeps its "Page X of Y · N
+  suppliers" label.
+- **Author review:** Ryan to review via the PR. Web: 32 tests pass;
+  type-check, lint and build clean.
+
 ## 2026-09-29 — Ryan Ang (#91 Spring Security filter chain in user-service)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (implementation + tests)

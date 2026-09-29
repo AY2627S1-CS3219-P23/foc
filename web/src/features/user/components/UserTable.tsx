@@ -2,10 +2,12 @@
 // Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113; revised
 // 2026-09-28 (Credits column and Add Credits removed; Remove hidden on
 // the signed-in admin's own row; ID column added, since search matches
-// IDs).
+// IDs); 2026-09-29 (issue #147): UserActionsProps spelled out instead of
+// derived from UserTableProps, and the handlers passed by name rather
+// than rest-spread, so new table props don't leak into it.
 // Scope: admin users list — a table at md+ and stacked cards below,
 // per web/docs/wireframes/admin-dashboard.png (Users section).
-// Reviewed by: [pending]
+// Reviewed by: Ryan Ang
 
 import type { AdminUser, UserRole } from '../types'
 
@@ -24,13 +26,12 @@ interface UserTableProps {
   onRemove: (user: AdminUser) => void
 }
 
-type UserActionsProps = Omit<
-  UserTableProps,
-  'users' | 'currentUserId' | 'busyUserId'
-> & {
+interface UserActionsProps {
   user: AdminUser
   isSelf: boolean
   busy: boolean
+  onChangeRole: (user: AdminUser, role: UserRole) => void
+  onRemove: (user: AdminUser) => void
 }
 
 const linkClass =
@@ -89,7 +90,8 @@ export function UserTable({
   users,
   currentUserId,
   busyUserId,
-  ...actions
+  onChangeRole,
+  onRemove,
 }: UserTableProps) {
   return (
     <>
@@ -134,7 +136,8 @@ export function UserTable({
                       user={user}
                       isSelf={user.id === currentUserId}
                       busy={busyUserId === user.id}
-                      {...actions}
+                      onChangeRole={onChangeRole}
+                      onRemove={onRemove}
                     />
                   </div>
                 </td>
@@ -161,7 +164,8 @@ export function UserTable({
                 user={user}
                 isSelf={user.id === currentUserId}
                 busy={busyUserId === user.id}
-                {...actions}
+                onChangeRole={onChangeRole}
+                onRemove={onRemove}
               />
             </div>
           </li>

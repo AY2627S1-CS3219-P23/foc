@@ -5,9 +5,10 @@
 // review): when the signed-in admin is unknown, every demotion carries a
 // general warning, so a failed GET /users/me can't hide the self-demotion
 // one.
+// 2026-09-29 (issue #147): built on the shared ConfirmModal.
 // Reviewed by: Ryan Ang
 
-import { Modal } from '@/shared/components/Modal'
+import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import type { AdminUser, UserRole } from '../types'
 
 interface ChangeRoleModalProps {
@@ -31,9 +32,13 @@ export function ChangeRoleModal({
   const promoting = role === 'ADMIN'
 
   return (
-    <Modal
+    <ConfirmModal
       title={promoting ? 'Promote to Admin' : 'Demote to User'}
-      onClose={onCancel}
+      confirmLabel={promoting ? 'Promote' : 'Demote'}
+      busyLabel="Saving..."
+      busy={saving}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
     >
       <p className="text-sm text-gray-600">
         {promoting
@@ -53,23 +58,6 @@ export function ChangeRoleModal({
           dashboard.
         </p>
       )}
-      <div className="mt-5 flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={onConfirm}
-          disabled={saving}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-        >
-          {saving ? 'Saving...' : promoting ? 'Promote' : 'Demote'}
-        </button>
-      </div>
-    </Modal>
+    </ConfirmModal>
   )
 }
