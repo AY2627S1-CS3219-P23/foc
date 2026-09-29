@@ -8,6 +8,7 @@
 // error banner clearing on a new query, and whitespace-only search edits.
 // 2026-09-29 (issue #147): the fake soft-deletes like user-service, and
 // cases for the "Show removed accounts" toggle (team decision).
+// 2026-09-29 (issue #147): cases for the admin-only route guard.
 // Scope: tests for the Admin Dashboard page — Users section, plus the
 // Suppliers placeholder.
 // Reviewed by: Ryan Ang
@@ -109,10 +110,16 @@ function section(name: 'Users' | 'Suppliers') {
   return within(screen.getByRole('region', { name }))
 }
 
+// The page appears once the admin route guard's role check resolves, so
+// the first query of a test waits for its section.
+async function findSection(name: 'Users' | 'Suppliers') {
+  return within(await screen.findByRole('region', { name }))
+}
+
 // Each section renders both a table (md+) and cards (mobile); jsdom
 // applies no media queries, so scope queries to a section's table.
-function findSectionTable(name: 'Users') {
-  return section(name).findByRole('table')
+async function findSectionTable(name: 'Users') {
+  return (await findSection(name)).findByRole('table')
 }
 
 function rowFor(table: HTMLElement, text: string) {
@@ -596,9 +603,10 @@ describe('Users section', () => {
 
   test('an unknown signed-in admin gets a general warning when demoting', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    vi.mocked(adminUserApi.getCurrentUser).mockRejectedValue(
-      new Error('Unauthorized'),
-    )
+    // the route guard's check succeeds; the Users section's own one fails
+    vi.mocked(adminUserApi.getCurrentUser)
+      .mockResolvedValueOnce({ ...seedUsers[2] })
+      .mockRejectedValue(new Error('Unauthorized'))
     const user = userEvent.setup()
     renderAdmin()
     const table = await findSectionTable('Users')
@@ -625,9 +633,9 @@ describe('Users section', () => {
     const table = await findSectionTable('Users')
 
     await changeRole(user, table, 'student_alex', 'Promote to Admin')
-    expect(await section('Users').findByRole('alert')).toHaveTextContent(
-      'You cannot change this user.',
-    )
+    expect(
+      await (await findSection('Users')).findByRole('alert'),
+    ).toHaveTextContent('You cannot change this user.')
 
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Filter by role' }),
@@ -694,9 +702,9 @@ describe('Users section', () => {
 
     await changeRole(user, table, 'nus_courier_99', 'Demote to User')
 
-    expect(await section('Users').findByRole('alert')).toHaveTextContent(
-      'You cannot change this user.',
-    )
+    expect(
+      await (await findSection('Users')).findByRole('alert'),
+    ).toHaveTextContent('You cannot change this user.')
     expect(
       rowFor(table, 'nus_courier_99').getByText('Admin'),
     ).toBeInTheDocument()
@@ -708,9 +716,9 @@ describe('Users section', () => {
     )
     renderAdmin()
 
-    expect(await section('Users').findByRole('alert')).toHaveTextContent(
-      'Network down',
-    )
+    expect(
+      await (await findSection('Users')).findByRole('alert'),
+    ).toHaveTextContent('Network down')
   })
 })
 
@@ -719,9 +727,51 @@ describe('Suppliers section', () => {
     renderAdmin()
 
     expect(
-      await section('Suppliers').findByText(
-        'Supplier management is coming soon.',
-      ),
+      await (
+        await findSection('Suppliers')
+      ).findByText('Supplier management is coming soon.'),
     ).toBeInTheDocument()
+  })
+})
+
+describe('Admin route guard', () => {
+  test('a USER is sent to the home page', async () => {
+    vi.mocked(adminUserApi.getCurrentUser).mockResolvedValue({
+      ...seedUsers[1],
+    })
+    renderAdmin()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Welcome Back!' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Admin Dashboard' }),
+    ).not.toBeInTheDocument()
+    expect(adminUserApi.listUsers).not.toHaveBeenCalled()
+  })
+
+  test('an OWNER sees the dashboard', async () => {
+    vi.mocked(adminUserApi.getCurrentUser).mockResolvedValue({
+      ...seedUsers[0],
+    })
+    renderAdmin()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Admin Dashboard' }),
+    ).toBeInTheDocument()
+  })
+
+  test('shows a message when the role check fails', async () => {
+    vi.mocked(adminUserApi.getCurrentUser).mockRejectedValue(
+      new TypeError('Failed to fetch'),
+    )
+    renderAdmin()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not check your access. Try again.',
+    )
+    expect(
+      screen.queryByRole('heading', { name: 'Admin Dashboard' }),
+    ).not.toBeInTheDocument()
   })
 })

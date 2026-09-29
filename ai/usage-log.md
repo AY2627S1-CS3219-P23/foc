@@ -26,6 +26,25 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Ryan Ang (#147 admin route guard)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `web/`: new `src/features/user/AdminRoute.tsx` (asks
+  `GET /users/me` for the signed-in user's role; ADMIN and OWNER see the
+  page, anyone else is redirected to the home page; a failed check shows
+  an error message); `src/routes/index.tsx` puts `/admin` behind it;
+  `src/test/admin.test.tsx` waits for the guarded page and gains three
+  guard cases (USER redirected, OWNER allowed, failed check).
+- **Prompt(s):** Summary: Asked how to keep normal users off `/admin`;
+  the tool noted user-service already rejects them (403) and listed
+  where the web app could get the role from. Team decision: a route
+  guard that asks `GET /users/me`. Implementation choices by the tool, to
+  confirm in review: non-admins are redirected to the home page; the
+  "Checking access..." and "Could not check your access. Try again."
+  texts; the guard re-checks when the session token changes.
+- **Author review:** Ryan to review via the PR. Web: 39 tests pass;
+  type-check and lint clean.
+
 ## 2026-09-29 — Ryan Ang (#147 team-decision items)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (implementation + tests), refactor
