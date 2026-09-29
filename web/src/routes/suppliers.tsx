@@ -10,8 +10,11 @@
 // (issue #106) already rejects a non-admin's CRUD calls server-side,
 // but this page showed Add/Edit/Delete to everyone regardless, so a
 // regular user could click into a control that was always going to
-// 403. Now those controls only render for role === 'ADMIN', matching
-// exactly what the backend enforces (hasRole("ADMIN"), not OWNER).
+// 403. Now those controls only render for role === 'ADMIN'.
+// PR #143 review (LeongWZ): OWNER can't do supplier CRUD as written —
+// Role.OWNER (issue #97) is the platform's admin-equivalent super
+// admin, so the backend gate now allows ADMIN or OWNER; this check
+// updated to match (isAdmin renders for either role).
 //
 // 2026-09-26 (issue #133): wired to the real, now-paginated
 // GET /suppliers. Removed the `listZones()` call — the backend has no
@@ -122,7 +125,7 @@ interface Coordinates {
 
 export function Suppliers() {
   const { role } = useAuth()
-  const isAdmin = role === 'ADMIN'
+  const isAdmin = role === 'ADMIN' || role === 'OWNER'
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [categories, setCategories] = useState<string[]>([])

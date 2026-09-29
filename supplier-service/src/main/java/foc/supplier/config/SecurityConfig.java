@@ -11,6 +11,11 @@
  * CorsConfig (WebMvcConfigurer), replacing it — wired into the filter
  * chain so browser preflights pass before the fail-closed rules
  * (mirrors user-service PR #141's CORS-in-Security-chain fix).
+ * PR #143 review (LeongWZ): admin CRUD gate changed from ADMIN-only to
+ * ADMIN-or-OWNER — team decision (author, 2026-09-29): OWNER is the
+ * platform's admin-equivalent super admin (issue #97) and should have
+ * every ADMIN capability, supplier CRUD included, mirroring
+ * user-service's own hasAnyRole("ADMIN", "OWNER") pattern.
  * Reviewed by: [pending]
  */
 package foc.supplier.config;
@@ -71,8 +76,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/suppliers", "/suppliers/**").authenticated()
                         // everything else under /suppliers, whatever the method, is an
                         // admin CRUD endpoint (D2, #6). Method-less so unlisted methods
-                        // fail closed.
-                        .requestMatchers("/suppliers", "/suppliers/**").hasRole("ADMIN")
+                        // fail closed. OWNER included: PR #143 review (LeongWZ) —
+                        // Role.OWNER (issue #97) is the platform's admin-equivalent
+                        // super admin and user-service's own SecurityConfig treats it
+                        // as such everywhere (hasAnyRole("ADMIN", "OWNER")); ADMIN-only
+                        // here had no basis in design doc D2.
+                        .requestMatchers("/suppliers", "/suppliers/**").hasAnyRole("ADMIN", "OWNER")
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(restAuthEntryPoint)

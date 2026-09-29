@@ -11,7 +11,10 @@
  * pinning the JwtAuthenticationFilter fix for an empty token after
  * "Bearer " (jjwt throws IllegalArgumentException, not JwtException,
  * for that case — was escaping the filter's catch and surfacing as an
- * unhandled 500 instead of a 401).
+ * unhandled 500 instead of a 401). Also added
+ * ownerPassesTheRoleGateOnWriteMethods, pinning the ADMIN-or-OWNER gate
+ * change (same review): OWNER is the platform's admin-equivalent super
+ * admin and should pass this gate too, not just ADMIN.
  * Reviewed by: [pending]
  */
 package foc.supplier.config;
@@ -99,6 +102,12 @@ class SecurityConfigTest {
         // no POST /suppliers handler exists yet (#6): reaching the
         // dispatcher (405, not 403) proves the role gate let it through.
         mockMvc.perform(post("/suppliers").header("Authorization", "Bearer " + token("ADMIN")))
+                .andExpect(status().isMethodNotAllowed());
+    }
+
+    @Test
+    void ownerPassesTheRoleGateOnWriteMethods() throws Exception {
+        mockMvc.perform(post("/suppliers").header("Authorization", "Bearer " + token("OWNER")))
                 .andExpect(status().isMethodNotAllowed());
     }
 }
