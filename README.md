@@ -308,6 +308,10 @@ minutes left and repeats them in `Retry-After`, with their tests and the
 first tests for the web login page, the wording and the trade-off (login
 now reveals whether an account exists, reversing #89's non-revealing
 failures) chosen by the author via neutral-options Q&A and recorded in
+`ai/usage-log.md`; and an
+opt-in demo-account seeder for user-service (`USER_SEED_DEMO`: 1
+owner, 3 admins, 100 users), with the mechanism, the off-by-default
+flag and per-role passwords decided by the team and recorded in
 `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
