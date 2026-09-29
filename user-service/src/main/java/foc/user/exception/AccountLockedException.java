@@ -10,6 +10,9 @@ Scope: distinct lockout failure for login (PR #142, issue #145 decided
        computed from the lockout's own end rather than a hard-coded
        "15 minutes" that could drift from AuthService.LOCKOUT, and is
        exposed for the Retry-After header (author's wording choice).
+       PR #148 Copilot review: the seconds are rounded up before the
+       minutes are, so a fraction of a second can't be dropped twice and
+       quote a wait shorter than the lock.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -19,22 +22,33 @@ import java.time.Duration;
 
 public class AccountLockedException extends RuntimeException {
 
-    private final Duration retryAfter;
+    private final long retryAfterSeconds;
 
     public AccountLockedException(Duration retryAfter) {
+        this(seconds(retryAfter));
+    }
+
+    private AccountLockedException(long retryAfterSeconds) {
         super("Your account is locked due to too many failed login attempts. Try again in "
-            + wait(retryAfter) + ".");
-        this.retryAfter = retryAfter;
+            + minutes(retryAfterSeconds) + ".");
+        this.retryAfterSeconds = retryAfterSeconds;
     }
 
-    public Duration retryAfter() {
-        return retryAfter;
+    // what Retry-After reports, and what the message is phrased from, so
+    // the header and the sentence can't disagree
+    public long retryAfterSeconds() {
+        return retryAfterSeconds;
     }
 
-    // whole minutes, rounded up and never zero: a lock with 30 s left is
-    // still a minute the user has to wait
-    private static String wait(Duration retryAfter) {
-        long minutes = Math.max(1, (retryAfter.toSeconds() + 59) / 60);
+    // rounded up: part of a second is still a second to wait, and a lock
+    // with milliseconds left still asks for a pause rather than none
+    private static long seconds(Duration retryAfter) {
+        return Math.max(1, retryAfter.plusNanos(999_999_999L).getSeconds());
+    }
+
+    // whole minutes, rounded up from the rounded-up seconds
+    private static String minutes(long retryAfterSeconds) {
+        long minutes = (retryAfterSeconds + 59) / 60;
         return minutes == 1 ? "1 minute" : minutes + " minutes";
     }
 }

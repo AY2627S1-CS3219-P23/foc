@@ -58,8 +58,15 @@ Entry template:
   lock state. Because the messages state which failure happened, the
   decoy password hash that made an unknown account answer as slowly as a
   wrong password no longer hid anything and was removed.
+  PR #148 Copilot review: the lockout's seconds are rounded up before its
+  minutes are (a part-second could otherwise be dropped twice and quote a
+  wait shorter than the lock, with `Retry-After` a second early), and the
+  retention-window check moved ahead of the lock and password checks, so
+  an account past the window answers as gone whatever password is typed
+  instead of only when the password happened to be right — a wrong one
+  used to get the countdown and count towards a lock.
 - **Author review:** Leong Wei Zhi to review via the PR.
-  user-service 188/188 tests pass; web 29/29 tests pass, lint clean,
+  user-service 191/191 tests pass; web 29/29 tests pass, lint clean,
   build succeeds; the three messages verified live against a running
   stack and in-browser on `/login`.
 

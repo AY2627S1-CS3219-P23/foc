@@ -9,7 +9,9 @@ Scope: unit tests for AuthService (issues #87/#89): sign-up normalisation
        2026-09-29, Claude Code (Opus 5), issue #146: the non-revealing
        assertion is replaced by one per cause, and the login failures now
        pin the author's wording — the attempts countdown and the lockout's
-       remaining minutes.
+       remaining minutes. PR #148 Copilot review: cases for part-second
+       rounding and for an account past the retention window answering as
+       gone whatever password (or lock) it carries.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -243,7 +245,7 @@ class AuthServiceTest {
         assertThat(thrown).isInstanceOf(AccountLockedException.class)
             .hasMessage("Your account is locked due to too many failed login attempts."
                 + " Try again in 15 minutes.");
-        assertThat(((AccountLockedException) thrown).retryAfter()).isEqualTo(Duration.ofMinutes(15));
+        assertThat(((AccountLockedException) thrown).retryAfterSeconds()).isEqualTo(900);
         assertThat(user.getLockedUntil()).isEqualTo(NOW.plus(Duration.ofMinutes(15)));
         assertThat(user.getFailedLoginAttempts()).isZero();
     }
@@ -273,8 +275,7 @@ class AuthServiceTest {
 
         assertThat(thrown).hasMessage("Your account is locked due to too many failed login"
             + " attempts. Try again in 12 minutes.");
-        assertThat(((AccountLockedException) thrown).retryAfter())
-            .isEqualTo(Duration.ofSeconds(11 * 60 + 30));
+        assertThat(((AccountLockedException) thrown).retryAfterSeconds()).isEqualTo(11 * 60 + 30);
     }
 
     @Test
@@ -286,6 +287,20 @@ class AuthServiceTest {
         assertThatThrownBy(() -> login(PASSWORD))
             .hasMessage("Your account is locked due to too many failed login attempts."
                 + " Try again in 1 minute.");
+    }
+
+    @Test
+    @DisplayName("Part of a second left is rounded up before the minutes are")
+    void login_lockedRoundsUpPartSeconds() {
+        userFoundByUsername();
+        // 60.5s: a wait quoted as 1 minute would run out before the lock does
+        user.setLockedUntil(NOW.plusSeconds(60).plusMillis(500));
+
+        Throwable thrown = catchThrowable(() -> login(PASSWORD));
+
+        assertThat(thrown).hasMessage("Your account is locked due to too many failed login"
+            + " attempts. Try again in 2 minutes.");
+        assertThat(((AccountLockedException) thrown).retryAfterSeconds()).isEqualTo(61);
     }
 
     @Test
@@ -319,5 +334,32 @@ class AuthServiceTest {
             .isInstanceOf(LoginFailedException.class)
             .hasMessage("No account found for that username or email.");
         assertThat(user.isActive()).isFalse();
+    }
+
+    @Test
+    @DisplayName("An account past the window answers as gone whatever password is typed")
+    void login_deletedPastWindowIgnoresPassword() {
+        userFoundByUsername();
+        user.softDelete(NOW.minus(Duration.ofDays(31)));
+
+        assertThatThrownBy(() -> login("WrongPassword123"))
+            .isInstanceOf(LoginFailedException.class)
+            .hasMessage("No account found for that username or email.");
+
+        // nothing is counted against a row that is on its way out
+        assertThat(user.getFailedLoginAttempts()).isZero();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("A lock on an account past the window doesn't outrank the purge")
+    void login_deletedPastWindowBeatsLock() {
+        userFoundByUsername();
+        user.softDelete(NOW.minus(Duration.ofDays(31)));
+        user.setLockedUntil(NOW.plusSeconds(600));
+
+        assertThatThrownBy(() -> login(PASSWORD))
+            .isInstanceOf(LoginFailedException.class)
+            .hasMessage("No account found for that username or email.");
     }
 }

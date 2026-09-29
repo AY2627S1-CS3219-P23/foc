@@ -25,6 +25,10 @@ Scope: sign-up (issue #87) and login (issue #89), replacing PR #139's
        The timing-equalisation hash that made an unknown account answer as
        slowly as a wrong password went with it: the messages now say which
        happened, so equal timing hid nothing.
+       PR #148 Copilot review: the retention-window check moved ahead of
+       the lock and password checks, so an account past the window answers
+       as gone whatever password is typed, instead of only when the
+       password happened to be right.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -119,6 +123,15 @@ public class AuthService {
         User user = found.get();
         Instant now = clock.instant();
 
+        // past the recovery window the account is waiting for the purge, so
+        // it answers as if it were already gone — before the lock and the
+        // password, so every attempt on it gets that one answer and none of
+        // them count against a row that is on its way out
+        if (!user.isActive()
+                && user.getDeletedAt().isBefore(now.minus(retentionDays, ChronoUnit.DAYS))) {
+            throw LoginFailedException.unknownAccount();
+        }
+
         // locked: refused without counting the attempt, and told how long
         // is left rather than the full lockout
         if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(now)) {
@@ -133,13 +146,6 @@ public class AuthService {
                 throw new AccountLockedException(LOCKOUT);
             }
             throw LoginFailedException.wrongPassword(MAX_FAILED_ATTEMPTS - failures);
-        }
-
-        // past the recovery window the account is waiting for the purge, so
-        // it answers as if it were already gone
-        if (!user.isActive()
-                && user.getDeletedAt().isBefore(now.minus(retentionDays, ChronoUnit.DAYS))) {
-            throw LoginFailedException.unknownAccount();
         }
 
         // only write when something changes: an unconditional save bumps the

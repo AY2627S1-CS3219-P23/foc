@@ -84,12 +84,12 @@ public class AuthController {
 
     // 429, not 401: the lockout is deliberately distinguishable (issue
     // #145 decision) so the UI can show the lockout message. Retry-After
-    // repeats the wait in the header the standard defines for it, never
-    // below 1 s so a lock with milliseconds left still asks for a pause
+    // repeats the same wait the message is phrased from, in the header
+    // the standard defines for it
     @ExceptionHandler(AccountLockedException.class)
     public ResponseEntity<ProblemDetail> handleAccountLocked(AccountLockedException e) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-            .header(HttpHeaders.RETRY_AFTER, Long.toString(Math.max(1, e.retryAfter().toSeconds())))
+            .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
             .body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage()));
     }
 
