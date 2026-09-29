@@ -54,7 +54,15 @@ Entry template:
   typed as jose's `JWTPayload` but never held one), and the
   Authorization header was verified present on a live `/users` request
   in-browser. Server-side JWT validation does not exist yet, so
-  authenticated endpoints still 403 — tracked separately.
+  authenticated endpoints still 403 — tracked separately. Also on this
+  PR, deciding issue #145 as "wireframe wins" (author's call, accepting
+  that a locked account is revealed to exist): user-service's lockout
+  now raises `AccountLockedException` — thrown when a login hits a
+  locked account and on the attempt that trips the lock — mapped in
+  `AuthController` to a 429 problem+json with the wireframe's "Too many
+  failed attempts. Login disabled for 15 minutes."; the login page
+  displays it with no frontend change. Unit/integration tests updated
+  (156/156 pass) and the flow verified live in-browser.
 - **Prompt(s):** Asked to fix the UI discrepancy in the login and
   sign-up pages; the author chose "match the wireframes" and "include
   the password checklist" (omitting forgot-password and the OTP modal,

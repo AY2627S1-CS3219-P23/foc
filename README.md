@@ -260,7 +260,10 @@ stacked labels, error alert boxes, a live password checklist mirroring
 the server's password rules, the `react-router-dom`-to-`react-router`
 import cleanup, the JWT wiring into the shared `apiFetch` (the stored
 session's access token now sent as the Authorization header, with the
-session types corrected), and the PR's Copilot-review accessibility
+session types corrected), the distinct 429 lockout response in
+user-service (issue #145, decided by the author: the wireframe's
+lockout message wins over fully non-revealing login failures), and the
+PR's Copilot-review accessibility
 fixes, with
 the wireframe target and checklist scope chosen by the author via
 neutral-options Q&A and recorded in `ai/usage-log.md`.
