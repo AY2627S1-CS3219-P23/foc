@@ -254,7 +254,19 @@ user-service, plus the PR #141 review fixes (shared sign-up and
 owner-setup rules, case-insensitive usernames, the token lifetime unit,
 login-only race handling, `apiFetch` on the login and register pages),
 with auth placement, OTP deferral, username case and response shapes
-decided by the team and recorded in `ai/usage-log.md`.
+decided by the team and recorded in `ai/usage-log.md`; and the
+supplier-service JWT verification + role gate (issue #106) — a Spring
+Security filter chain (`JwtVerifier` mirroring notification-service's,
+a `JwtAuthenticationFilter`, and problem+json 401/403 handlers) gating
+`GET /suppliers*` on any authenticated user and every other method on
+ADMIN, per the team's design doc D2, with the JWT `role` claim's
+name/shape confirmed against user-service's already-merged token
+issuer rather than invented, and the GET-authentication requirement
+(which breaks browser supplier-browsing until the frontend's separate
+auth-wiring task lands) confirmed with the author before implementing,
+each per AGENTS.md's restriction on agents making interface/design
+decisions; tested live against running containers and recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
