@@ -4,9 +4,11 @@
 // when logged out) instead of jose's JWTPayload, which login() was
 // typed as but never actually received. The hook itself comes from
 // PR #139.
-// 2026-09-29, Claude Code (Opus 5.5), issue #147: Prettier formatting
-// only.
-// 2026-09-29, Claude Code (Opus 5.5), issue #147: `me`, the signed-in
+// 2026-09-29, Claude Code (Sonnet 5): added `role`, decoded from the
+// token by AuthProvider — lets pages hide admin-only controls (e.g.
+// routes/suppliers.tsx's IS_ADMIN) for the caller's actual role.
+// 2026-09-29, Claude Code (Opus 5.5), issue #147: Prettier formatting;
+// `me`, the signed-in
 // user's account from GET /users/me, shared by the /admin guard and the
 // nav bar's Admin Dashboard link (one request per login).
 // Reviewed by: Leong Wei Zhi (via pull request).
@@ -30,6 +32,9 @@ export function isAdmin(me: CurrentUser | null): boolean {
 
 export interface AuthData {
   token: LoginResponse | null
+  // decoded from the token (display-only, see jwt.ts)
+  role: UserRole | null
+  // GET /users/me for this session
   me: CurrentUser | null
   login(session: LoginResponse): Promise<void>
   logout(): void

@@ -255,18 +255,31 @@ owner-setup rules, case-insensitive usernames, the token lifetime unit,
 login-only race handling, `apiFetch` on the login and register pages),
 with auth placement, OTP deferral, username case and response shapes
 decided by the team and recorded in `ai/usage-log.md`; and the
-login/sign-up page restyle to the wireframes (PR #142) — card layout,
-stacked labels, error alert boxes, a live password checklist mirroring
-the server's password rules, the `react-router-dom`-to-`react-router`
-import cleanup, the JWT wiring into the shared `apiFetch` (the stored
-session's access token now sent as the Authorization header, with the
-session types corrected), the distinct 429 lockout response in
-user-service (issue #145, decided by the author: the wireframe's
-lockout message wins over fully non-revealing login failures), and the
-PR's Copilot-review accessibility
-fixes, with
-the wireframe target and checklist scope chosen by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`; and the
+supplier-service JWT verification + role gate (issue #106) — a Spring
+Security filter chain (`JwtVerifier` mirroring notification-service's,
+a `JwtAuthenticationFilter`, and problem+json 401/403 handlers) gating
+`GET /suppliers*` on any authenticated user and every other method on
+ADMIN or OWNER, per the team's design doc D2, with the JWT `role`
+claim's name/shape confirmed against user-service's already-merged
+token issuer rather than invented, the GET-authentication requirement
+(which breaks browser supplier-browsing until the frontend's separate
+auth-wiring task lands) confirmed with the author before implementing,
+and OWNER's inclusion in the gate (PR #143 review, LeongWZ) decided by
+the author to match user-service's own admin-equivalent treatment of
+OWNER — each per AGENTS.md's restriction on agents making
+interface/design decisions; tested live against running containers and
+recorded in `ai/usage-log.md`; and the login/sign-up page restyle to the
+wireframes (PR #142) — card layout, stacked labels, error alert boxes,
+a live password checklist mirroring the server's password rules, the
+`react-router-dom`-to-`react-router` import cleanup, the JWT wiring
+into the shared `apiFetch` (the stored session's access token now sent
+as the Authorization header, with the session types corrected), the
+distinct 429 lockout response in user-service (issue #145, decided by
+the author: the wireframe's lockout message wins over fully
+non-revealing login failures), and the PR's Copilot-review
+accessibility fixes, with the wireframe target and checklist scope
+chosen by the author via neutral-options Q&A and recorded in
+`ai/usage-log.md`; and the
 user-service Spring Security filter chain (issue #91) — bearer JWT
 verification mirroring notification-service's `JwtVerifier`, role claim
 to `ROLE_*` authorities, stateless sessions, problem+json 401/403
@@ -286,7 +299,15 @@ with row-locked login counters, an "account created" notice, and an
 admin-only route guard on `/admin` that checks the role with
 `GET /users/me`, an Admin Dashboard nav link shown to admins and
 owners only, fixes to the admin Users section's reload after an
-action, and a read-only supplier list on the admin dashboard, with the behaviour decided by the team and recorded in
+action, and a read-only supplier list on the admin dashboard, with the
+behaviour decided by the team and recorded in `ai/usage-log.md`; and
+the login errors that name their
+cause (issue #146) — an unknown account, a wrong password with the
+attempts left before the lock, and a lockout that counts down the
+minutes left and repeats them in `Retry-After`, with their tests and the
+first tests for the web login page, the wording and the trade-off (login
+now reveals whether an account exists, reversing #89's non-revealing
+failures) chosen by the author via neutral-options Q&A and recorded in
 `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through

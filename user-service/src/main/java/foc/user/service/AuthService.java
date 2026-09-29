@@ -23,7 +23,20 @@ Scope: sign-up (issue #87) and login (issue #89), replacing PR #139's
        generic failure — issue #145 decided by the author: the wireframe's
        lockout box wins over fully non-revealing failures, accepting that
        a locked account is thereby revealed to exist.
-Author review: Ryan to review via the PR.
+       2026-09-29, Claude Code (Opus 5), issue #146: each login failure
+       now raises its own message (unknown account / wrong password with
+       the attempts left / locked with the time left), the author's call.
+       The timing-equalisation hash that made an unknown account answer as
+       slowly as a wrong password went with it: the messages now say which
+       happened, so equal timing hid nothing.
+       PR #148 Copilot review: the retention-window check moved ahead of
+       the lock and password checks, so an account past the window answers
+       as gone whatever password is typed, instead of only when the
+       password happened to be right.
+       Merged with issue #147's LoginAttempts (2026-09-29, Claude Code,
+       Opus 5.5): #146's messages now come from the outcome LoginAttempts
+       records under the row lock (attempts left, time left, gone).
+Author review: Leong Wei Zhi to review via the PR.
 */
 
 package foc.user.service;
@@ -62,9 +75,6 @@ public class AuthService {
     private final JwtIssuer jwtIssuer;
     private final LoginAttempts loginAttempts;
     private final Clock clock;
-    // compared against when no account matches, so an unknown username or
-    // email takes as long as a wrong password
-    private final String unknownAccountHash;
 
     @Autowired
     public AuthService(
@@ -86,7 +96,6 @@ public class AuthService {
         this.jwtIssuer = jwtIssuer;
         this.loginAttempts = loginAttempts;
         this.clock = clock;
-        this.unknownAccountHash = passwordEncoder.encode("no-such-account");
     }
 
     // creates a USER account. OTP verification will sit before the insert
@@ -114,26 +123,39 @@ public class AuthService {
     public LoginResponse login(LoginRequest request) {
         Optional<User> found = findAccount(request.usernameOrEmail());
         if (found.isEmpty()) {
-            passwordEncoder.matches(request.password(), unknownAccountHash);
-            throw new LoginFailedException();
+            throw LoginFailedException.unknownAccount();
         }
 
         User user = found.get();
         Instant now = clock.instant();
 
-        // locked: refused without counting the attempt. The password is
-        // still hashed so a locked account answers as slowly as any other
-        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(now)) {
-            passwordEncoder.matches(request.password(), unknownAccountHash);
-            throw new AccountLockedException();
+        // past the recovery window the account is waiting for the purge, so
+        // it answers as if it were already gone — before the lock and the
+        // password, so every attempt on it gets that one answer and none of
+        // them count against a row that is on its way out
+        if (loginAttempts.pastRetention(user, now)) {
+            throw LoginFailedException.unknownAccount();
         }
 
+        // locked: refused without counting the attempt, and told how long
+        // is left rather than the full lockout
+        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(now)) {
+            throw new AccountLockedException(Duration.between(now, user.getLockedUntil()));
+        }
+
+        // bcrypt, outside any transaction; LoginAttempts then counts the
+        // attempt with the row locked, re-checking the lock a parallel
+        // attempt may have set meanwhile
         boolean matched = passwordEncoder.matches(request.password(), user.getPasswordHash());
         LoginAttempts.Result result = loginAttempts.record(user.getId(), matched, now);
         return switch (result.outcome()) {
             case SUCCESS -> LoginResponse.bearer(jwtIssuer.issue(result.user()), jwtIssuer.ttl().toSeconds());
-            case LOCKED -> throw new AccountLockedException();
-            case FAILED -> throw new LoginFailedException();
+            // the attempt that trips the lock reports the lockout too, so
+            // the user learns immediately rather than on the next try
+            case LOCKED -> throw new AccountLockedException(result.retryAfter());
+            case FAILED -> throw LoginFailedException.wrongPassword(result.attemptsLeft());
+            // purged since the lookup
+            case GONE -> throw LoginFailedException.unknownAccount();
         };
     }
 

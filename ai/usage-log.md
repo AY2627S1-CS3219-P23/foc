@@ -26,6 +26,26 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Ryan Ang (merging main into fix/user-issues)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (merge conflict resolution)
+- **Scope:** `user-service`: `AuthService` / `LoginAttempts` combine
+  issue #146's per-cause login messages and earlier retention check (PR
+  #148) with #147's row-locked counter update — `LoginAttempts.Result`
+  now carries the attempts left and the lock's remaining time, and
+  `pastRetention` runs before the lock and password checks;
+  `AuthController`, `AuthControllerTest`, `AuthServiceTest` and the
+  user-service README keep both sides. `web/`: `AuthProvider` and
+  `useAuth` expose both PR #143's token-decoded `role` (used by the
+  Suppliers page) and #147's `me` from `GET /users/me` (used by the
+  `/admin` guard and the nav link); `routes/suppliers.tsx` keeps both
+  sides' imports.
+- **Prompt(s):** Summary: Asked to merge `main` and fix the conflicts.
+  Nothing was dropped from either side; the two role sources in the web
+  app are left side by side for the team to decide whether to unify.
+- **Author review:** Ryan to review via the PR. user-service: 198 tests
+  pass; web: 52 tests pass, type-check and lint clean.
+
 ## 2026-09-29 — Ryan Ang (#147 admin Suppliers list)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (implementation + tests)
@@ -182,6 +202,77 @@ Entry template:
 - **Author review:** Ryan to review via the PR. Web: 32 tests pass;
   type-check, lint and build clean.
 
+## 2026-09-29 — Alastair Tan (#106 JWT verification + role gate in supplier-service)
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `supplier-service`: JWT verification (`security/JwtVerifier`,
+  jjwt 0.13.0, mirroring `notification-service`'s `JwtVerifier`), the
+  authentication filter (`security/JwtAuthenticationFilter`), problem+json
+  401/403 handlers (`security/RestAuthEntryPoint`,
+  `security/RestAccessDeniedHandler`), and the Spring Security filter
+  chain (`config/SecurityConfig`, replacing the old `CorsConfig` per
+  design doc D2: GET open to any authenticated user, everything else
+  under `/suppliers` needs `ROLE_ADMIN`); `spring-boot-starter-security`
+  and jjwt added to `pom.xml`; `supplier.jwt.secret` in both
+  `application.yaml`s; `compose.yaml` passes `JWT_SECRET`;
+  `JwtVerifierTest`, `SecurityConfigTest`.
+- **Prompt(s):** Asked to implement issue #106 ("mirror JwtVerifier"),
+  scoped to supplier-service only. The JWT `role` claim's name/shape was
+  confirmed against user-service's already-merged `JwtIssuer` (PR #141)
+  rather than invented, per AGENTS.md's restriction on agents making
+  interface/schema decisions; the GET-endpoint auth requirement (design
+  doc D2) was confirmed with the author before implementing, since it
+  temporarily breaks browser access to supplier browsing until the
+  frontend's separate auth-wiring task lands.
+- **Author review:** Tested live end-to-end against running
+  user-service + supplier-service containers (signup, login, then
+  GET/POST /suppliers with no/invalid/valid tokens and non-admin/admin
+  roles); `./mvnw test` passes (21/21). Reviewed by: [pending].
+## 2026-09-29 — Leong Wei Zhi (#146 login errors that name their cause)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** generate (implementation + tests + docs)
+- **Scope:** `user-service`: `exception/LoginFailedException` (one
+  message per cause, via `unknownAccount()` / `wrongPassword(remaining)`
+  / `wrongPassword()`), `exception/AccountLockedException` (the wait
+  computed from the lockout's end instead of a hard-coded "15 minutes",
+  and exposed for `Retry-After`), `service/AuthService` (each failure
+  throws its own message; `recordFailure` returns the running count; the
+  timing-equalisation hash removed), `controller/AuthController`
+  (`Retry-After` on the 429; the lost-race path answers with the
+  wrong-password message); `AuthServiceTest`, `AuthControllerTest`,
+  `ConflictResponseTest` updated; `web/src/test/login.test.tsx` (new —
+  the login page had no tests); user-service and root READMEs.
+- **Prompt(s):** Asked to plan and resolve issue #146 (split the generic
+  login failure into unknown-account and incorrect-password), then to
+  consider adding an attempts-remaining countdown and a lockout message
+  that counts down the minutes left. The author chose, via
+  neutral-options Q&A: the exact wording of all three messages; the
+  countdown shown on every wrong-password failure; the lockout time
+  computed dynamically with a `Retry-After` header; both 401s keeping
+  their status (no 404, no problem `type` URI), so the web page needed
+  no source change; an account deleted past the retention window
+  answering as unknown and the concurrent-login race loser answering as
+  a wrong password; and docs-only handling of the wireframe, which still
+  shows the old single error box. The accepted trade-off — login now
+  reveals whether an account exists, reversing #89's non-revealing
+  failures — is the author's call, noted because sign-up's "already
+  taken" 400s already reveal it and #145 already accepted revealing the
+  lock state. Because the messages state which failure happened, the
+  decoy password hash that made an unknown account answer as slowly as a
+  wrong password no longer hid anything and was removed.
+  PR #148 Copilot review: the lockout's seconds are rounded up before its
+  minutes are (a part-second could otherwise be dropped twice and quote a
+  wait shorter than the lock, with `Retry-After` a second early), and the
+  retention-window check moved ahead of the lock and password checks, so
+  an account past the window answers as gone whatever password is typed
+  instead of only when the password happened to be right — a wrong one
+  used to get the countdown and count towards a lock.
+- **Author review:** Leong Wei Zhi to review via the PR.
+  user-service 191/191 tests pass; web 29/29 tests pass, lint clean,
+  build succeeds; the three messages verified live against a running
+  stack and in-browser on `/login`.
+
+---
 ## 2026-09-29 — Ryan Ang (#91 Spring Security filter chain in user-service)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (implementation + tests)

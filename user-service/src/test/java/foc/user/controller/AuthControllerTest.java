@@ -9,7 +9,10 @@ Scope: integration tests for POST /auth/signup and POST /auth/login
        (team decision).
        Issue #147: parallel wrong passwords still trip the lockout, and the
        database itself rejects usernames differing only in case.
-Author review: Ryan to review via the PR.
+       2026-09-29, Claude Code (Opus 5), issue #146: the 401s are no longer
+       non-revealing — they name the cause — so the tests pin one detail per
+       cause, the countdown as it runs down, and the 429's Retry-After.
+Author review: Leong Wei Zhi to review via the PR.
 */
 
 package foc.user.controller;
@@ -65,8 +68,15 @@ class AuthControllerTest extends PostgresTestContainer {
     private static final String JWT_SECRET = "test-jwt-secret-that-is-at-least-32-bytes-long";
     private static final String WEB_ORIGIN = "http://localhost:5173";
     private static final String PASSWORD = "ValidPassword123";
-    private static final String LOGIN_FAILED = "Incorrect username/email or password";
-    private static final String LOCKED = "Too many failed attempts. Login disabled for 15 minutes.";
+    private static final String UNKNOWN_ACCOUNT = "No account found for that username or email.";
+    private static final String LOCKED = "Your account is locked due to too many failed login"
+        + " attempts. Try again in 15 minutes.";
+
+    // the countdown the server quotes after the n-th consecutive failure
+    private static String wrongPassword(int remaining) {
+        return "Incorrect password. " + (remaining == 1 ? "1 attempt" : remaining + " attempts")
+            + " remaining before your account is temporarily locked.";
+    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -270,16 +280,19 @@ class AuthControllerTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("Unknown account and wrong password get the same 401 problem+json")
-    void login_nonRevealing() throws Exception {
+    @DisplayName("An unknown account and a wrong password get different 401 problem+json details")
+    void login_namesTheFailure() throws Exception {
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isCreated());
 
-        for (String identifier : new String[] { "student_alex", "nobody" }) {
-            login(identifier, "WrongPassword123")
-                .andExpect(status().isUnauthorized())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.detail").value(LOGIN_FAILED));
-        }
+        login("nobody", "WrongPassword123")
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.detail").value(UNKNOWN_ACCOUNT));
+
+        login("student_alex", "WrongPassword123")
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.detail").value(wrongPassword(4)));
     }
 
     @Test
@@ -287,18 +300,23 @@ class AuthControllerTest extends PostgresTestContainer {
     void login_lockout() throws Exception {
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isCreated());
 
-        for (int i = 0; i < 4; i++) {
-            login("student_alex", "WrongPassword123").andExpect(status().isUnauthorized());
+        // the countdown runs down to the singular on the last attempt
+        for (int remaining = 4; remaining > 0; remaining--) {
+            login("student_alex", "WrongPassword123")
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.detail").value(wrongPassword(remaining)));
         }
         // the fifth failure trips the lock and already says so (issue #145:
         // the lockout is deliberately distinguishable, as a 429)
         login("student_alex", "WrongPassword123")
             .andExpect(status().isTooManyRequests())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(header().string(HttpHeaders.RETRY_AFTER, "900"))
             .andExpect(jsonPath("$.detail").value(LOCKED));
 
         login("student_alex", PASSWORD)
             .andExpect(status().isTooManyRequests())
+            .andExpect(header().exists(HttpHeaders.RETRY_AFTER))
             .andExpect(jsonPath("$.detail").value(LOCKED));
         assertThat(userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow().getLockedUntil()).isNotNull();
     }

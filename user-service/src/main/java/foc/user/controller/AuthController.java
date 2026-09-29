@@ -14,15 +14,21 @@ Scope: POST /auth/signup (issue #87) and POST /auth/login (issues #89/#90),
        2026-09-29, Claude Code (Fable 5), PR #142: AccountLockedException
        mapped to 429 problem+json (issue #145 decided by the author — the
        lockout is deliberately distinguishable from other failures).
-Author review: Ryan to review via the PR.
+       2026-09-29, Claude Code (Opus 5), issue #146: the 429 carries a
+       Retry-After header, and the lost-race path now answers with the
+       wrong-password message (the mapping used to exist to hide that the
+       account exists, which the new messages no longer do).
+Author review: Leong Wei Zhi to review via the PR.
 */
 
 package foc.user.controller;
 
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -62,10 +68,11 @@ public class AuthController {
             return authService.login(request);
         } catch (OptimisticLockingFailureException e) {
             // two logins to one account at once: the loser's counter update
-            // fails the @Version check at commit. Answered like any failed
-            // login, not ProblemDetailAdvice's 409, which would reveal that
-            // the account exists
-            throw new LoginFailedException();
+            // fails the @Version check at commit. Answered as a failed
+            // login, not ProblemDetailAdvice's 409, which is no answer to
+            // give someone typing a password. The count it lost is the
+            // count it can't quote, so this one carries no tally
+            throw LoginFailedException.wrongPassword();
         }
     }
 
@@ -75,10 +82,14 @@ public class AuthController {
     }
 
     // 429, not 401: the lockout is deliberately distinguishable (issue
-    // #145 decision) so the UI can show the wireframe's lockout message
+    // #145 decision) so the UI can show the lockout message. Retry-After
+    // repeats the same wait the message is phrased from, in the header
+    // the standard defines for it
     @ExceptionHandler(AccountLockedException.class)
-    public ProblemDetail handleAccountLocked(AccountLockedException e) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
+    public ResponseEntity<ProblemDetail> handleAccountLocked(AccountLockedException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
+            .body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage()));
     }
 
     @ExceptionHandler(ResponseStatusException.class)

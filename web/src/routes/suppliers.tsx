@@ -4,10 +4,17 @@
 // web/docs/wireframes/suppliers.png and add-edit-supplier.png.
 // Implements F1.2, F1.2.1, F2.1, F2.2, F2.2.1, F1.1-F1.1.4.
 //
-// TEMPORARY: admin gating is a hardcoded constant below because
-// src/shared/auth/ doesn't exist yet (see its README). Replace
-// IS_ADMIN with the real role check once User Service auth lands —
-// search this file for "TEMPORARY" when that happens.
+// 2026-09-29, Claude Code (Sonnet 5): the hardcoded IS_ADMIN constant
+// (a TEMPORARY stand-in noted here since auth didn't exist yet) is
+// replaced with useAuth()'s real role — supplier-service's role gate
+// (issue #106) already rejects a non-admin's CRUD calls server-side,
+// but this page showed Add/Edit/Delete to everyone regardless, so a
+// regular user could click into a control that was always going to
+// 403. Now those controls only render for role === 'ADMIN'.
+// PR #143 review (LeongWZ): OWNER can't do supplier CRUD as written —
+// Role.OWNER (issue #97) is the platform's admin-equivalent super
+// admin, so the backend gate now allows ADMIN or OWNER; this check
+// updated to match (isAdmin renders for either role).
 //
 // 2026-09-26 (issue #133): wired to the real, now-paginated
 // GET /suppliers. Removed the `listZones()` call — the backend has no
@@ -112,9 +119,7 @@ import { formatDistance, haversineDistanceMeters } from '@/features/supplier/dis
 import type { Supplier, SupplierInput } from '@/features/supplier/types'
 import { errorMessage } from '@/lib/api/http'
 import { Pagination } from '@/shared/components/Pagination'
-
-// TEMPORARY — see file header.
-const IS_ADMIN = true
+import { useAuth } from '@/features/user/useAuth'
 
 const PAGE_SIZE = 10
 const DISTANCE_SORT = 'distance'
@@ -125,6 +130,9 @@ interface Coordinates {
 }
 
 export function Suppliers() {
+  const { role } = useAuth()
+  const isAdmin = role === 'ADMIN' || role === 'OWNER'
+
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -376,7 +384,7 @@ export function Suppliers() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-semibold text-gray-900">Active Campus Suppliers</h1>
-        {IS_ADMIN && (
+        {isAdmin && (
           <button
             type="button"
             onClick={() => setFormOpenFor('new')}
@@ -449,7 +457,7 @@ export function Suppliers() {
                     <div className="col-span-full lg:hidden">
                       <SupplierDetailPanel
                         supplier={selected}
-                        isAdmin={IS_ADMIN}
+                        isAdmin={isAdmin}
                         onEdit={() => setFormOpenFor(selected)}
                         onDelete={() => setPendingDelete(selected)}
                       />
@@ -481,7 +489,7 @@ export function Suppliers() {
           <div className="hidden lg:block">
             <SupplierDetailPanel
               supplier={selected}
-              isAdmin={IS_ADMIN}
+              isAdmin={isAdmin}
               onEdit={() => setFormOpenFor(selected)}
               onDelete={() => setPendingDelete(selected)}
             />

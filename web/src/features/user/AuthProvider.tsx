@@ -7,11 +7,15 @@
 // accessToken is now fed to apiFetch via setTokenSource, so every API
 // call carries the Authorization header (getToken was hardcoded to
 // null); the session is typed as the LoginResponse it actually is.
-// 2026-09-29, Claude Code (Opus 5.5), issue #147: Prettier formatting
-// only.
-// 2026-09-29, Claude Code (Opus 5.5), issue #147: asks GET /users/me once
-// per session and shares the answer as `me` (the /admin guard and the
-// nav bar's Admin Dashboard link both need the role).
+// 2026-09-29, Claude Code (Sonnet 5): exposes `role`, decoded from the
+// token's claims (display-only — see jwt.ts), so pages can hide
+// admin-only controls for non-admin callers instead of showing them
+// and letting the server's role gate (supplier-service #106) reject
+// the action after the fact.
+// 2026-09-29, Claude Code (Opus 5.5), issue #147: Prettier formatting;
+// also asks GET /users/me once per session and shares the answer as
+// `me` (the /admin guard and the nav bar's Admin Dashboard link use it,
+// team decision). Merged with `role` above: both are exposed.
 // Reviewed by: Ryan Ang
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
@@ -20,6 +24,7 @@ import { AuthContext } from './useAuth'
 import { useLocalStorage } from './useLocalStorage'
 import { errorMessage, setTokenSource } from '@/lib/api/http'
 import { adminUserApi } from './adminApi'
+import { decodeJwtRole } from './jwt'
 import type { LoginResponse } from './types'
 import type { CurrentUser } from './useAuth'
 
@@ -74,6 +79,11 @@ export const AuthProvider = () => {
       ? meCheck.me
       : LOADING
 
+  const role = useMemo(
+    () => (token ? decodeJwtRole(token.accessToken) : null),
+    [token],
+  )
+
   const value = useMemo(() => {
     // call this function to set login values
     const login = async (session: LoginResponse) => {
@@ -87,8 +97,8 @@ export const AuthProvider = () => {
       navigate('/', { replace: true })
     }
 
-    return { token, me, login, logout }
-  }, [token, me, navigate, setToken])
+    return { token, role, me, login, logout }
+  }, [token, role, me, navigate, setToken])
 
   return (
     <AuthContext.Provider value={value}>

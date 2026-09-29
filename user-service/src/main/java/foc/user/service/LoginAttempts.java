@@ -8,11 +8,15 @@ Scope: issue #147. The database write for a login attempt, split out of
        while the counter is read and updated, so the lockout can no longer
        be skipped by sending guesses at once (the version-check race).
        Lockout, recovery and retention rules unchanged from AuthService.
+       Merged with issue #146 (PR #148): the outcome carries the attempts
+       left and the lock's remaining time for its messages, and the
+       retention check runs before anything else (pastRetention).
 Author review: Ryan to review via the PR.
 */
 
 package foc.user.service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
@@ -29,12 +33,25 @@ import jakarta.persistence.LockModeType;
 @Component
 public class LoginAttempts {
 
-    public enum Outcome { SUCCESS, FAILED, LOCKED }
+    public enum Outcome { SUCCESS, FAILED, LOCKED, GONE }
 
-    // the account as it stands after the attempt; null unless SUCCESS
-    public record Result(Outcome outcome, User user) {
-        static Result of(Outcome outcome) {
-            return new Result(outcome, null);
+    // user: the account after a SUCCESS; retryAfter: the lock's time left
+    // (LOCKED); attemptsLeft: failures left before the lock (FAILED)
+    public record Result(Outcome outcome, User user, Duration retryAfter, int attemptsLeft) {
+        static Result success(User user) {
+            return new Result(Outcome.SUCCESS, user, null, 0);
+        }
+
+        static Result failed(int attemptsLeft) {
+            return new Result(Outcome.FAILED, null, null, attemptsLeft);
+        }
+
+        static Result locked(Duration retryAfter) {
+            return new Result(Outcome.LOCKED, null, retryAfter, 0);
+        }
+
+        static Result gone() {
+            return new Result(Outcome.GONE, null, null, 0);
         }
     }
 
@@ -62,7 +79,7 @@ public class LoginAttempts {
         User user = entityManager.find(User.class, userId);
         if (user == null) {
             // purged between the lookup and now
-            return Result.of(Outcome.FAILED);
+            return Result.gone();
         }
         try {
             // lock the row (SELECT ... FOR UPDATE) and re-read it: find() may
@@ -70,24 +87,19 @@ public class LoginAttempts {
             // would miss a parallel attempt's count
             entityManager.refresh(user, LockModeType.PESSIMISTIC_WRITE);
         } catch (EntityNotFoundException e) {
-            return Result.of(Outcome.FAILED);
+            return Result.gone();
         }
 
         // locked by a parallel attempt since the lookup: not counted
         if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(now)) {
-            return Result.of(Outcome.LOCKED);
+            return Result.locked(Duration.between(now, user.getLockedUntil()));
         }
 
         if (!passwordMatched) {
-            // the attempt that trips the lock reports the lockout too, so
-            // the user learns immediately rather than on the next try
-            return Result.of(recordFailure(user, now) ? Outcome.LOCKED : Outcome.FAILED);
-        }
-
-        // past the recovery window the account is waiting for the purge
-        if (!user.isActive()
-                && user.getDeletedAt().isBefore(now.minus(retentionDays, ChronoUnit.DAYS))) {
-            return Result.of(Outcome.FAILED);
+            int failures = recordFailure(user, now);
+            return failures >= AuthService.MAX_FAILED_ATTEMPTS
+                ? Result.locked(AuthService.LOCKOUT)
+                : Result.failed(AuthService.MAX_FAILED_ATTEMPTS - failures);
         }
 
         // only write when something changes: an unconditional save bumps the
@@ -99,14 +111,21 @@ public class LoginAttempts {
             user.setDeletedAt(null);
             userRepository.save(user);
         }
-        return new Result(Outcome.SUCCESS, user);
+        return Result.success(user);
     }
 
-    // returns whether this failure started the lockout
-    private boolean recordFailure(User user, Instant now) {
+    // past the recovery window the account is waiting for the purge, so
+    // login answers as if it were already gone, before any other check
+    boolean pastRetention(User user, Instant now) {
+        return !user.isActive()
+            && user.getDeletedAt().isBefore(now.minus(retentionDays, ChronoUnit.DAYS));
+    }
+
+    // returns the running failure count this attempt made;
+    // MAX_FAILED_ATTEMPTS means it just locked
+    private int recordFailure(User user, Instant now) {
         int failures = user.getFailedLoginAttempts() + 1;
-        boolean locks = failures >= AuthService.MAX_FAILED_ATTEMPTS;
-        if (locks) {
+        if (failures >= AuthService.MAX_FAILED_ATTEMPTS) {
             // start the lockout and a fresh count for after it ends
             user.setLockedUntil(now.plus(AuthService.LOCKOUT));
             user.setFailedLoginAttempts(0);
@@ -114,6 +133,6 @@ public class LoginAttempts {
             user.setFailedLoginAttempts(failures);
         }
         userRepository.save(user);
-        return locks;
+        return failures;
     }
 }
