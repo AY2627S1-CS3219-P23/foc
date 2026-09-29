@@ -110,10 +110,10 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
     @DisplayName("Should sweep expired pending sign-ups and keep live ones")
     void sweepsExpiredPendingSignups() {
         pendingSignupRepository.save(new PendingSignup("e4444444@u.nus.edu", "expired_pending",
-            "password_hash", "code_hash", Instant.now().minusSeconds(60)));
+            "password_hash", "code_hash", Instant.now().minusSeconds(660), Instant.now().minusSeconds(60)));
         PendingSignup live = pendingSignupRepository.save(
             new PendingSignup("e5555555@u.nus.edu", "live_pending",
-                "password_hash", "code_hash", Instant.now().plusSeconds(600)));
+                "password_hash", "code_hash", Instant.now(), Instant.now().plusSeconds(600)));
         pendingSignupRepository.flush();
 
         scheduler.purgeExpiredDeletedAccounts();

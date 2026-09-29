@@ -9,6 +9,8 @@
 # call the purge method directly).
 # 2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: fixed JWT secret
 # and TTL for the auth tests, and the CORS origin.
+# 2026-09-29, Claude Code (Opus 5), PR #150 review: otp.resend-cooldown
+# added (0s here — see the comment on it).
 # 2026-09-29, Claude Code (Fable 5), issue #88: mail/otp values so the
 # context builds with spring-boot-starter-mail on the classpath (this file
 # fully shadows the main yaml). The JavaMailSender bean never connects in
@@ -47,3 +49,8 @@ user:
   otp:
     ttl: 10m
     max-attempts: 5
+    # off here: the sign-up tests resend back to back, and no clock they
+    # can advance sits between the two calls. The cooldown itself is
+    # covered by AuthServiceTest (fixed clock) and SignupResendCooldownTest
+    # (which overrides this to the real default).
+    resend-cooldown: 0s

@@ -22,6 +22,9 @@
 # container; Gmail SMTP (the chosen provider) is switched on via the
 # MAIL_* values documented in .env.example. PR #150 Copilot review:
 # finite SMTP timeouts so a stalled endpoint can't pin request threads.
+# PR #150 author review: user.otp.resend-cooldown, the gap enforced
+# between two codes for one pending sign-up (chosen by Leong Wei Zhi via
+# options Q&A).
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -95,8 +98,13 @@ user:
     # bare number is seconds (OTP_TTL=600 is 10 min).
     ttl: ${OTP_TTL:10m}
     # Wrong codes allowed before the pending sign-up is discarded and a
-    # fresh sign-up is required (mirrors the login lockout's 5).
+    # fresh sign-up is required (mirrors the login lockout's 5). Counted
+    # per pending sign-up, resends included.
     max-attempts: ${OTP_MAX_ATTEMPTS:5}
+    # Shortest gap between two codes for the same pending sign-up; a
+    # repeat inside it is a 429 with Retry-After. Caps both inbox flooding
+    # and how fast fresh codes can be cycled. 0 disables it.
+    resend-cooldown: ${OTP_RESEND_COOLDOWN:60s}
 
 owner:
   setup:

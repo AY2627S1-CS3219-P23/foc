@@ -41,6 +41,22 @@ Scope: sign-up (issue #87) and login (issue #89), replacing PR #139's
        guesses can't lose attempt increments; an unknown email pays the
        same BCrypt cost as a wrong code so timing doesn't reveal a
        pending sign-up; a code expiring exactly now is expired.
+       PR #150 author review (both calls made by Leong Wei Zhi via
+       options Q&A). A repeat sign-up used to overwrite the pending row's
+       username and password hash, so whoever received the code verified
+       it into an account holding someone else's password; a live pending
+       row is now only advanced by a repeat of its own details (same
+       username, password matching the stored hash), anything else is a
+       409, and an expired row — dead already — may be taken over by any
+       sign-up. Ordering it the other way round (first request wins, later
+       ones merely resend) was tried and dropped: it only reverses who has
+       to move first, since a planted pending row would then be what the
+       real student's sign-up completed into.
+       Also: a repeat inside the resend cooldown is a 429 (Retry-After),
+       the attempt count now survives a resend so the limit caps guesses
+       per pending sign-up rather than per code, and the insert-race loser
+       answers with the same 409 as the check above instead of a 400 whose
+       wording was a near-duplicate of it.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -74,6 +90,7 @@ import foc.user.entity.User;
 import foc.user.exception.AccountLockedException;
 import foc.user.exception.LoginFailedException;
 import foc.user.exception.OtpAttemptsExceededException;
+import foc.user.exception.OtpResendTooSoonException;
 import foc.user.exception.OtpVerificationException;
 import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
@@ -84,6 +101,13 @@ public class AuthService {
 
     static final int MAX_FAILED_ATTEMPTS = 5;
     static final Duration LOCKOUT = Duration.ofMinutes(15);
+
+    // the one answer for "this email already has a live pending sign-up
+    // that isn't yours", whether that row was found or only collided with
+    // on insert: the remedy is the same either way
+    static final String SIGNUP_IN_PROGRESS =
+        "A sign-up for this email is already in progress; check your inbox for the code,"
+            + " or try again once it expires";
 
     private final UserRepository userRepository;
     private final PendingSignupRepository pendingSignupRepository;
@@ -140,38 +164,80 @@ public class AuthService {
         String username = NewAccountDetails.normalizeUsername(request.username());
         NewAccountDetails.ensureUnique(userRepository, email, username);
 
-        String code = otpService.generateCode();
-        String passwordHash = passwordEncoder.encode(request.password());
-        Instant expiresAt = clock.instant().plus(otpService.ttl());
-
-        // one pending row per email: a repeat sign-up renews it with a
-        // fresh code — which is also how a lost code is resent
+        // one pending row per email, and while it is live it belongs to
+        // the request that created it (PR #150 review, shape chosen by
+        // Leong Wei Zhi via options Q&A). Merging a later request into it
+        // was a hijack either way round: whoever received the code then
+        // verified it into an account holding someone else's password
         PendingSignup pending = pendingSignupRepository.findByEmail(email).orElse(null);
+        Instant now = clock.instant();
+        // an expired row is dead — verify rejects it on sight — so it
+        // guards nothing and any sign-up may take it over
+        boolean expired = pending != null && !pending.getExpiresAt().isAfter(now);
+
+        if (pending != null && !expired && !isSameRequest(request, username, pending)) {
+            // refused, not merged, and not silently replaced: only the
+            // request that pended this email can move it along, and it
+            // proves that by repeating its own details
+            throw new ResponseStatusException(HttpStatus.CONFLICT, SIGNUP_IN_PROGRESS);
+        }
+        if (pending != null) {
+            // one code per cooldown: without it a resend could flood the
+            // inbox, and codes could be cycled fast enough to make the
+            // attempt limit meaningless
+            Instant nextSendAllowed = pending.getLastSentAt().plus(otpService.resendCooldown());
+            if (nextSendAllowed.isAfter(now)) {
+                throw new OtpResendTooSoonException(Duration.between(now, nextSendAllowed));
+            }
+        }
+
+        String code = otpService.generateCode();
+        String codeHash = otpService.hash(code);
+        Instant expiresAt = now.plus(otpService.ttl());
         if (pending == null) {
-            pending = new PendingSignup(email, username, passwordHash,
-                otpService.hash(code), expiresAt);
+            pending = new PendingSignup(email, username, passwordEncoder.encode(request.password()),
+                codeHash, now, expiresAt);
+        } else if (expired) {
+            pending.replaceExpired(username, passwordEncoder.encode(request.password()),
+                codeHash, now, expiresAt);
         } else {
-            pending.renew(username, passwordHash, otpService.hash(code), expiresAt);
+            // the resend: a fresh code for the details already stored,
+            // with the attempt count carried over, so the limit caps
+            // guesses per pending sign-up rather than per code
+            pending.renewCode(codeHash, now, expiresAt);
         }
         try {
             pendingSignupRepository.saveAndFlush(pending);
         } catch (DataIntegrityViolationException e) {
             // two first sign-ups for one email at once: the loser's insert
-            // hits the unique index after its empty findByEmail
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "A sign-up for this email is already in progress; try again");
+            // hits the unique index after its empty findByEmail. Answered
+            // as the same 409 as a pending row found up front — it is the
+            // same situation, half a millisecond earlier
+            throw new ResponseStatusException(HttpStatus.CONFLICT, SIGNUP_IN_PROGRESS);
         }
 
         try {
             otpEmailSender.sendSignupCode(email, code, otpService.ttl());
         } catch (MailException e) {
             // rolls the pending row back too: no orphan row holding a code
-            // nobody received, and a retry is a clean fresh sign-up
+            // nobody received, and a retry is a clean fresh sign-up — for
+            // a resend the rollback restores the previous code, which is
+            // still the live one as far as the caller's inbox knows
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                 "Could not send the verification email; try again later");
         }
 
         return new SignupResponse(email, otpService.ttl().toSeconds());
+    }
+
+    // Is this repeat the very request that pended the email? Same
+    // username (matched the way sign-up matches them, ignoring case) and
+    // a password matching the stored hash — which nobody but that
+    // requester can produce, so it is what stands in for "the same
+    // person" without a token to carry between the two calls
+    private boolean isSameRequest(SignupRequest request, String username, PendingSignup pending) {
+        return pending.getUsername().equalsIgnoreCase(username)
+            && passwordEncoder.matches(request.password(), pending.getPasswordHash());
     }
 
     // noRollbackFor: a wrong code must still commit its attempt counter,

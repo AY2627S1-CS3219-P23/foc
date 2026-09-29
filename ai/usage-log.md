@@ -48,6 +48,37 @@ Entry template:
   Mailpit inbox, verify 201, login token issued. Reviewed via pull
   request.
 
+## 2026-09-29 — Leong Wei Zhi (PR #150 review: repeat sign-ups can't hijack a pending sign-up)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** fix
+- **Scope:** `user-service/` — the review of #88 found that a repeat
+  `POST /auth/signup` overwrote the pending row's username and password
+  hash, so whoever received the code verified it into an account holding
+  someone else's password. A live `pending_signups` row is now only
+  advanced by a repeat of its own details (same username, password
+  matching the stored hash) — `renewCode`; anything else is a 409; an
+  expired row is dead and any sign-up may take it over
+  (`replaceExpired`). Added with it: a resend cooldown
+  (`OTP_RESEND_COOLDOWN`, default 60s → 429 + `Retry-After` via the new
+  `OtpResendTooSoonException`), wrong-code attempts that survive a
+  resend (so the limit caps guesses per pending sign-up, not per code),
+  a `last_sent_at` column, and the insert-race loser answering with the
+  same 409 as the up-front check instead of a near-identically worded
+  400. Tests: reworked sign-up cases in `AuthServiceTest`/
+  `AuthControllerTest` (including the hijack as a regression case) and a
+  new `SignupResendCooldownTest` at the real 60s default.
+- **Prompt(s):** Asked to resolve the review comments on PR #150. The
+  first Q&A round picked "first pending sign-up wins"; checking that
+  shape against the threat model showed it only reversed who had to move
+  first (a planted pending row would be what the real student's sign-up
+  completed into), which was reported back, and the author then chose
+  the match-to-resend rule above via a second options round, along with
+  carrying attempts over plus the 60s cooldown. The author also chose to
+  leave the web code-entry screen to issue #109 rather than build it in
+  this PR.
+- **Author review:** Full suite green (222 tests, up from 213). Reviewed
+  via pull request.
+
 ## 2026-09-29 — Leong Wei Zhi (architecture docs: resolved TBDs struck)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** docs

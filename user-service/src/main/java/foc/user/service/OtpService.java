@@ -9,6 +9,9 @@ Scope: OTP code policy for issue #88: generation, hashing and the
        space falls to offline brute force instantly on a DB leak, while
        BCrypt's work factor outlasts the code's lifetime; it also
        reuses the existing PasswordEncoder bean.
+       PR #150 review: resend-cooldown knob added (the cooldown itself
+       was chosen by Leong Wei Zhi via options Q&A); zero disables it,
+       which is what the integration tests resend under.
 Reviewed by: Leong Wei Zhi (via pull request).
 */
 
@@ -37,21 +40,28 @@ public class OtpService {
     private final PasswordEncoder passwordEncoder;
     private final Duration ttl;
     private final int maxAttempts;
+    private final Duration resendCooldown;
 
     public OtpService(
             PasswordEncoder passwordEncoder,
             // a bare number is seconds (OTP_TTL=600 is 10 min)
             @Value("${user.otp.ttl}") @DurationUnit(ChronoUnit.SECONDS) Duration ttl,
-            @Value("${user.otp.max-attempts}") int maxAttempts) {
+            @Value("${user.otp.max-attempts}") int maxAttempts,
+            // a bare number is seconds (OTP_RESEND_COOLDOWN=60 is 1 min)
+            @Value("${user.otp.resend-cooldown}") @DurationUnit(ChronoUnit.SECONDS) Duration resendCooldown) {
         if (ttl == null || ttl.isNegative() || ttl.isZero()) {
             throw new IllegalStateException("OTP_TTL must be positive");
         }
         if (maxAttempts < 1) {
             throw new IllegalStateException("OTP_MAX_ATTEMPTS must be at least 1");
         }
+        if (resendCooldown == null || resendCooldown.isNegative()) {
+            throw new IllegalStateException("OTP_RESEND_COOLDOWN must not be negative");
+        }
         this.passwordEncoder = passwordEncoder;
         this.ttl = ttl;
         this.maxAttempts = maxAttempts;
+        this.resendCooldown = resendCooldown;
     }
 
     /** A fresh 6-digit code, zero-padded, from a CSPRNG. */
@@ -73,5 +83,14 @@ public class OtpService {
 
     public int maxAttempts() {
         return maxAttempts;
+    }
+
+    /**
+     * How long a pending sign-up must wait between codes. Caps both the
+     * emails a repeat sign-up can send to someone's inbox and how fast
+     * fresh codes can be requested; zero turns it off.
+     */
+    public Duration resendCooldown() {
+        return resendCooldown;
     }
 }

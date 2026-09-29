@@ -236,6 +236,7 @@ services:
       MAIL_FROM: ${MAIL_FROM:-no-reply@foc.local}
       OTP_TTL: ${OTP_TTL:-10m}
       OTP_MAX_ATTEMPTS: ${OTP_MAX_ATTEMPTS:-5}
+      OTP_RESEND_COOLDOWN: ${OTP_RESEND_COOLDOWN:-60s}
     depends_on:
       user-db:
         condition: service_healthy

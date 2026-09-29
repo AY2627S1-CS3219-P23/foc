@@ -17,6 +17,13 @@ Scope: integration tests for POST /auth/signup and POST /auth/login
        GreenMail on purpose: no new dependency, and the SMTP layer has its
        own unit test + the manual Mailpit check), and the login cases
        create their accounts through the full flow.
+       2026-09-29, Claude Code (Opus 5), PR #150 author review: the
+       repeat-sign-up cases follow the reworked rule — only a repeat of
+       the same request resends, other details are a 409, and the account
+       verify creates is the one the first request asked for (the hijack
+       the review found). Attempts are asserted to survive a resend. The
+       resend cooldown is 0s here (test yaml) so these can resend back to
+       back; SignupResendCooldownTest runs the real default.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -129,6 +136,11 @@ class AuthControllerTest extends PostgresTestContainer {
         return code.getValue();
     }
 
+    // a six-digit code that is certainly not the live one
+    private String notTheCode(String email) {
+        return "000000".equals(emailedCode(email)) ? "111111" : "000000";
+    }
+
     // full sign-up flow: request, code off the mocked sender, verify
     private void createAccount(String email, String username) throws Exception {
         signup(email, username, PASSWORD).andExpect(status().isAccepted());
@@ -214,7 +226,7 @@ class AuthControllerTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("A repeat sign-up resends: the new code wins, the old one no longer counts")
+    @DisplayName("A repeat of the same request resends: the new code wins, the old one no longer counts")
     void signup_repeatResends() throws Exception {
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isAccepted());
         String first = emailedCode("e1234567@u.nus.edu");
@@ -227,6 +239,49 @@ class AuthControllerTest extends PostgresTestContainer {
                 .andExpect(status().isBadRequest());
         }
         verifySignup("e1234567@u.nus.edu", second).andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("A repeat with other details is a 409, and the account stays the first request's")
+    void signup_repeatWithOtherDetailsIsConflict() throws Exception {
+        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isAccepted());
+
+        // the hijack: someone else pending the same email with their own
+        // password used to rewrite the row, so the code the student
+        // received created an account holding that password
+        signup("e1234567@u.nus.edu", "attacker_x", "AttackerPass123")
+            .andExpect(status().isConflict())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.detail").value("A sign-up for this email is already in progress;"
+                + " check your inbox for the code, or try again once it expires"));
+
+        // the first request's code still works, and makes the first
+        // request's account: its username, and its password logs in
+        verifySignup("e1234567@u.nus.edu", emailedCode("e1234567@u.nus.edu"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.username").value("student_alex"));
+        login("e1234567@u.nus.edu", PASSWORD).andExpect(status().isOk());
+        login("e1234567@u.nus.edu", "AttackerPass123").andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Attempts survive a resend: the fifth wrong code across two codes still exhausts")
+    void signup_attemptsSurviveResend() throws Exception {
+        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isAccepted());
+
+        for (int i = 0; i < 4; i++) {
+            verifySignup("e1234567@u.nus.edu", notTheCode("e1234567@u.nus.edu"))
+                .andExpect(status().isBadRequest());
+        }
+        // a fresh code must not hand out a fresh attempt budget, or the
+        // limit would cap guesses per code instead of per sign-up
+        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isAccepted());
+
+        verifySignup("e1234567@u.nus.edu", notTheCode("e1234567@u.nus.edu"))
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.detail").value(
+                "Too many incorrect codes; sign up again to get a new code"));
+        assertThat(pendingSignupRepository.findByEmail("e1234567@u.nus.edu")).isEmpty();
     }
 
     @Test

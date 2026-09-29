@@ -21,6 +21,11 @@ Scope: POST /auth/signup (issue #87) and POST /auth/login (issues #89/#90),
        verify flow. Wrong/expired codes are 400, exhausted attempts 429
        (no Retry-After: there is no wait, the remedy is a fresh sign-up).
        Both routes sit under the /auth/** permit in SecurityConfig.
+       2026-09-29, Claude Code (Opus 5), PR #150 author review: sign-up
+       gained two refusals from the review of repeat sign-ups — 409 when
+       the email has a live pending sign-up that isn't the caller's own
+       request (which used to be silently merged, a hijack), and 429 with
+       Retry-After when a resend is inside the cooldown.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -53,6 +58,7 @@ import foc.user.dto.UserResponse;
 import foc.user.exception.AccountLockedException;
 import foc.user.exception.LoginFailedException;
 import foc.user.exception.OtpAttemptsExceededException;
+import foc.user.exception.OtpResendTooSoonException;
 import foc.user.exception.OtpVerificationException;
 import foc.user.service.AuthService;
 import jakarta.validation.Valid;
@@ -123,6 +129,15 @@ public class AuthController {
     @ExceptionHandler(OtpAttemptsExceededException.class)
     public ProblemDetail handleOtpAttemptsExceeded(OtpAttemptsExceededException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
+    }
+
+    // 429 with Retry-After, the lockout's shape: here waiting is exactly
+    // the remedy, and the wait is seconds, so the SPA can count it down
+    @ExceptionHandler(OtpResendTooSoonException.class)
+    public ResponseEntity<ProblemDetail> handleOtpResendTooSoon(OtpResendTooSoonException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
+            .body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage()));
     }
 
     @ExceptionHandler(ResponseStatusException.class)

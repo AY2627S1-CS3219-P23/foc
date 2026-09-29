@@ -4,6 +4,8 @@ Tool: Claude Code (Fable 5), date: 2026-09-29
 Scope: unit tests for issue #88's OtpService: code format, hash/match
        round-trip through the injected encoder, the config accessors,
        and the fail-loud guards on nonsense config.
+       PR #150 review: the resend-cooldown knob is covered too — zero is
+       legal (it disables the cooldown), negative is not.
 Reviewed by: Leong Wei Zhi (via pull request).
 */
 
@@ -32,7 +34,7 @@ class OtpServiceTest {
     };
 
     private final OtpService otpService =
-        new OtpService(PLAIN_ENCODER, Duration.ofMinutes(10), 5);
+        new OtpService(PLAIN_ENCODER, Duration.ofMinutes(10), 5, Duration.ofSeconds(60));
 
     @Test
     @DisplayName("Codes are exactly six digits, zero-padded")
@@ -54,20 +56,32 @@ class OtpServiceTest {
     }
 
     @Test
-    @DisplayName("The configured ttl and attempt limit are what the accessors return")
+    @DisplayName("The configured ttl, attempt limit and cooldown are what the accessors return")
     void configAccessors() {
         assertThat(otpService.ttl()).isEqualTo(Duration.ofMinutes(10));
         assertThat(otpService.maxAttempts()).isEqualTo(5);
+        assertThat(otpService.resendCooldown()).isEqualTo(Duration.ofSeconds(60));
     }
 
     @Test
     @DisplayName("Nonsense config fails at construction, not on the first sign-up")
     void invalidConfigRejected() {
-        assertThatThrownBy(() -> new OtpService(PLAIN_ENCODER, Duration.ZERO, 5))
+        assertThatThrownBy(() -> new OtpService(PLAIN_ENCODER, Duration.ZERO, 5, Duration.ZERO))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("OTP_TTL");
-        assertThatThrownBy(() -> new OtpService(PLAIN_ENCODER, Duration.ofMinutes(10), 0))
+        assertThatThrownBy(() -> new OtpService(PLAIN_ENCODER, Duration.ofMinutes(10), 0, Duration.ZERO))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("OTP_MAX_ATTEMPTS");
+        assertThatThrownBy(() -> new OtpService(
+                PLAIN_ENCODER, Duration.ofMinutes(10), 5, Duration.ofSeconds(-1)))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("OTP_RESEND_COOLDOWN");
+    }
+
+    @Test
+    @DisplayName("A zero cooldown is legal: it turns the resend gap off")
+    void zeroCooldownAllowed() {
+        assertThat(new OtpService(PLAIN_ENCODER, Duration.ofMinutes(10), 5, Duration.ZERO)
+            .resendCooldown()).isZero();
     }
 }
