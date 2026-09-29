@@ -6,7 +6,11 @@ Scope: unit tests for AuthService (issues #87/#89): sign-up normalisation
        non-revealing failures and recovery within the retention window.
        Fixed clock and a plain-text password encoder keep them fast.
        PR #141 review: username lookups ignore case (team decision).
-Author review: Ryan to review via the PR.
+       2026-09-29, Claude Code (Opus 5), issue #146: the non-revealing
+       assertion is replaced by one per cause, and the login failures now
+       pin the author's wording — the attempts countdown and the lockout's
+       remaining minutes.
+Author review: Leong Wei Zhi to review via the PR.
 */
 
 package foc.user.service;
@@ -190,29 +194,41 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Unknown account and wrong password fail with the same message")
-    void login_failuresAreNonRevealing() {
+    @DisplayName("An unknown account says so instead of blaming the password")
+    void login_unknownAccountNamed() {
         when(userRepository.findByUsernameIgnoreCase("nobody")).thenReturn(Optional.empty());
-        userFoundByUsername();
 
-        Throwable unknown = catchThrowable(() -> authService.login(new LoginRequest("nobody", PASSWORD)));
-        Throwable wrongPassword = catchThrowable(() -> login("WrongPassword123"));
+        Throwable thrown = catchThrowable(() -> authService.login(new LoginRequest("nobody", PASSWORD)));
 
-        assertThat(unknown).isInstanceOf(LoginFailedException.class);
-        assertThat(wrongPassword).isInstanceOf(LoginFailedException.class);
-        assertThat(unknown.getMessage()).isEqualTo(wrongPassword.getMessage());
+        assertThat(thrown).isInstanceOf(LoginFailedException.class)
+            .hasMessage("No account found for that username or email.");
     }
 
     @Test
-    @DisplayName("A wrong password counts one failed attempt")
+    @DisplayName("A wrong password counts one failed attempt and says how many are left")
     void login_wrongPasswordCounts() {
         userFoundByUsername();
 
-        assertThatThrownBy(() -> login("WrongPassword123")).isInstanceOf(LoginFailedException.class);
+        assertThatThrownBy(() -> login("WrongPassword123"))
+            .isInstanceOf(LoginFailedException.class)
+            .hasMessage("Incorrect password. 4 attempts remaining"
+                + " before your account is temporarily locked.");
 
         assertThat(user.getFailedLoginAttempts()).isEqualTo(1);
         assertThat(user.getLockedUntil()).isNull();
         verify(userRepository).save(user);
+    }
+
+    @Test
+    @DisplayName("The last attempt before the lock is counted in the singular")
+    void login_countdownReachesOneAttempt() {
+        userFoundByUsername();
+        user.setFailedLoginAttempts(3);
+
+        assertThatThrownBy(() -> login("WrongPassword123"))
+            .isInstanceOf(LoginFailedException.class)
+            .hasMessage("Incorrect password. 1 attempt remaining"
+                + " before your account is temporarily locked.");
     }
 
     @Test
@@ -222,8 +238,12 @@ class AuthServiceTest {
         user.setFailedLoginAttempts(4);
 
         // the tripping attempt already reports the lockout (issue #145)
-        assertThatThrownBy(() -> login("WrongPassword123")).isInstanceOf(AccountLockedException.class);
+        Throwable thrown = catchThrowable(() -> login("WrongPassword123"));
 
+        assertThat(thrown).isInstanceOf(AccountLockedException.class)
+            .hasMessage("Your account is locked due to too many failed login attempts."
+                + " Try again in 15 minutes.");
+        assertThat(((AccountLockedException) thrown).retryAfter()).isEqualTo(Duration.ofMinutes(15));
         assertThat(user.getLockedUntil()).isEqualTo(NOW.plus(Duration.ofMinutes(15)));
         assertThat(user.getFailedLoginAttempts()).isZero();
     }
@@ -234,10 +254,38 @@ class AuthServiceTest {
         userFoundByUsername();
         user.setLockedUntil(NOW.plusSeconds(60));
 
-        assertThatThrownBy(() -> login(PASSWORD)).isInstanceOf(AccountLockedException.class);
+        Throwable thrown = catchThrowable(() -> login(PASSWORD));
 
+        assertThat(thrown).isInstanceOf(AccountLockedException.class)
+            .hasMessage("Your account is locked due to too many failed login attempts."
+                + " Try again in 1 minute.");
         assertThat(user.getFailedLoginAttempts()).isZero();
         verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("A locked account reports the time left, rounded up to whole minutes")
+    void login_lockedReportsTimeLeft() {
+        userFoundByUsername();
+        user.setLockedUntil(NOW.plusSeconds(11 * 60 + 30));
+
+        Throwable thrown = catchThrowable(() -> login(PASSWORD));
+
+        assertThat(thrown).hasMessage("Your account is locked due to too many failed login"
+            + " attempts. Try again in 12 minutes.");
+        assertThat(((AccountLockedException) thrown).retryAfter())
+            .isEqualTo(Duration.ofSeconds(11 * 60 + 30));
+    }
+
+    @Test
+    @DisplayName("A lock with seconds left still asks for a full minute")
+    void login_lockedRoundsUpFromSeconds() {
+        userFoundByUsername();
+        user.setLockedUntil(NOW.plusSeconds(5));
+
+        assertThatThrownBy(() -> login(PASSWORD))
+            .hasMessage("Your account is locked due to too many failed login attempts."
+                + " Try again in 1 minute.");
     }
 
     @Test
@@ -266,7 +314,10 @@ class AuthServiceTest {
         userFoundByUsername();
         user.softDelete(NOW.minus(Duration.ofDays(31)));
 
-        assertThatThrownBy(() -> login(PASSWORD)).isInstanceOf(LoginFailedException.class);
+        // past the window it is waiting for the purge, so it answers as gone
+        assertThatThrownBy(() -> login(PASSWORD))
+            .isInstanceOf(LoginFailedException.class)
+            .hasMessage("No account found for that username or email.");
         assertThat(user.isActive()).isFalse();
     }
 }

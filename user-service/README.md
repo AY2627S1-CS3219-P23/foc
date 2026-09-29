@@ -59,11 +59,19 @@ These replace PR #139's separate `user-auth` server; auth lives here.
   is deferred: once it lands, the account is inserted only after
   `POST /auth/signup/verify` (design doc §3); today sign-up inserts it.
 - `POST /auth/login` `{ usernameOrEmail, password }` → 200
-  `{ accessToken, tokenType: "Bearer", expiresIn }`. Every failure —
-  unknown account, wrong password, locked, deleted past the window — is
-  the same 401 problem+json. Five failures in a row lock the account
-  for 15 minutes; a success clears the counters. Logging in within the
-  30-day window recovers a soft-deleted account.
+  `{ accessToken, tokenType: "Bearer", expiresIn }`. A failure names its
+  cause (#146): 401 problem+json "No account found for that username or
+  email." — also for an account deleted past the window, which is only
+  waiting for the purge — or 401 "Incorrect password. N attempts
+  remaining before your account is temporarily locked.". Five failures
+  in a row lock the account for 15 minutes; from the attempt that trips
+  the lock onwards it is 429 problem+json "Your account is locked due to
+  too many failed login attempts. Try again in M minutes." (rounded up,
+  repeated in `Retry-After` seconds). A success clears the counters, and
+  logging in within the 30-day window recovers a soft-deleted account.
+  Login therefore tells a caller whether an account exists — the author
+  chose that over the non-revealing failures of #89, as sign-up's
+  "already taken" 400s reveal the same thing.
 - Tokens are HS256 with the shared `JWT_SECRET` (≥ 32 bytes, checked at
   startup): `sub` = user id, `role`, `jti`, `exp` = 1 h
   (`JWT_ACCESS_TOKEN_TTL`, e.g. `1h`; a bare number is seconds). Checking tokens on incoming requests is #91 (below).
