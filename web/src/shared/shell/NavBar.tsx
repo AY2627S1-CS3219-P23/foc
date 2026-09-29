@@ -3,21 +3,27 @@
 // Scope: top bar — brand, desktop nav links, and the always-visible
 // credits + notification slots (per web/docs/wireframes/; mobile
 // navigation is the bottom TabBar, not a menu here).
+// 2026-09-29, Claude Code (Opus 5.5), issue #147: Admin Dashboard link
+// after Profile, for ADMIN and OWNER only.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import { Link, NavLink } from 'react-router'
 import { CreditsBadge } from './CreditsBadge'
 import { NotificationBell } from './NotificationBell'
-import { navItems } from './navigation'
+import { adminNavItem, navItems } from './navigation'
 import { router } from '../../routes/index'
-import { useAuth } from '../../features/user/useAuth'
+import { isAdmin, useAuth } from '../../features/user/useAuth'
 
 export function NavBar() {
-  const data = useAuth();
+  const data = useAuth()
+
+  // the admin link joins the others only for ADMIN and OWNER; the /admin
+  // route guard and user-service still check the role themselves
+  const items = isAdmin(data.me) ? [...navItems, adminNavItem] : navItems
 
   const toLogin = () => {
-    router.navigate("/login");
-  };
+    router.navigate('/login')
+  }
 
   return (
     <header className="border-b border-gray-200 bg-white">
@@ -31,7 +37,7 @@ export function NavBar() {
 
         {/* Desktop links; on mobile the TabBar carries these destinations */}
         <div className="ml-6 hidden items-center gap-1 md:flex">
-          {navItems.map((item) => (
+          {items.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -54,12 +60,18 @@ export function NavBar() {
         </div>
 
         {!data?.token ? ( // Conditionally render login and logout based on user state
-          <button onClick={toLogin} className="text-inherit no-underline rounded-md border border-gray-5=800 bg-white px-3 py-1 text-sm font-medium whitespace-nowrap cursor-pointer">
+          <button
+            onClick={toLogin}
+            className="text-inherit no-underline rounded-md border border-gray-5=800 bg-white px-3 py-1 text-sm font-medium whitespace-nowrap cursor-pointer"
+          >
             Log In
           </button>
         ) : (
-          <button className="text-inherit no-underline rounded-md border border-gray-5=800 bg-white px-3 py-1 text-sm font-medium whitespace-nowrap cursor-pointer"
-            onClick={data.logout}>Logout
+          <button
+            className="text-inherit no-underline rounded-md border border-gray-5=800 bg-white px-3 py-1 text-sm font-medium whitespace-nowrap cursor-pointer"
+            onClick={data.logout}
+          >
+            Logout
           </button>
         )}
       </nav>

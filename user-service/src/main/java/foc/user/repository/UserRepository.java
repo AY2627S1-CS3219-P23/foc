@@ -27,6 +27,8 @@ username-or-email login.
 2026-09-29 (Claude Code, Opus 5.5), PR #141 review: username lookups ignore
 case (team decision): existsByUsernameIgnoreCase / findByUsernameIgnoreCase
 replace the exact-match versions.
+2026-09-29 (Claude Code, Opus 5.5), issue #147: the username lookups compare
+lower(username), matching the V2 migration's unique index.
 */
 
 package foc.user.repository;
@@ -54,14 +56,17 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
     boolean existsByEmail(String email);
 
-    // usernames are unique ignoring case; emails are stored lowercased
-    boolean existsByUsernameIgnoreCase(String username);
+    // usernames are unique ignoring case (the lower(username) unique index,
+    // Flyway V2); emails are stored lowercased
+    @Query("select count(u) > 0 from User u where lower(u.username) = lower(:username)")
+    boolean existsByUsernameIgnoreCase(@Param("username") String username);
 
     Optional<User> findByEmail(String email);
 
     // also includes soft-deleted users: login recovers them within the
     // retention window (AuthService)
-    Optional<User> findByUsernameIgnoreCase(String username);
+    @Query("select u from User u where lower(u.username) = lower(:username)")
+    Optional<User> findByUsernameIgnoreCase(@Param("username") String username);
 
     // active (not soft-deleted) user by id
     Optional<User> findByIdAndDeletedAtIsNull(Long id);

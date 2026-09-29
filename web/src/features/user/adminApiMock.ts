@@ -7,10 +7,12 @@
 // GET /users: search matches id/username/email, page is 0-based.
 // Revised 2026-09-28: GET /users/me stand-in (signed in as
 // nus_courier_99), and self-removal rejected like user-service does.
+// 2026-09-29 (issue #147): removal soft-deletes (sets deletedAt) and the
+// list hides removed accounts unless includeDeleted, like user-service.
 //
-// TEMPORARY: delete this file (and the switch in adminApi.ts) once the
-// real endpoints are reachable from the browser.
-// Reviewed by: [pending]
+// TEMPORARY: the real endpoints are now reachable from the browser; the
+// team decides when to delete this file (and the switch in adminApi.ts).
+// Reviewed by: Ryan Ang
 
 import type {
   AdminUser,
@@ -68,7 +70,7 @@ const seedUsers: readonly AdminUser[] = [
   })),
 ]
 
-let users: AdminUser[] = seedUsers.map((u) => ({ ...u }))
+const users: AdminUser[] = seedUsers.map((u) => ({ ...u }))
 
 // Small delay so loading/busy states are visible during development.
 function delay() {
@@ -78,8 +80,9 @@ function delay() {
 // The mock's signed-in admin: nus_courier_99 (an ADMIN in the seed data).
 const CURRENT_USER_ID = 3
 
+// removed accounts count as missing, like user-service's getActiveUser
 function findUser(id: number): AdminUser {
-  const user = users.find((u) => u.id === id)
+  const user = users.find((u) => u.id === id && !u.deletedAt)
   if (!user) throw new Error('User not found.')
   return user
 }
@@ -90,6 +93,7 @@ export const mockAdminUserApi = {
     const search = params.search?.trim().toLowerCase()
     const matches = users.filter(
       (u) =>
+        (params.includeDeleted || !u.deletedAt) &&
         (!params.role || u.role === params.role) &&
         (!search ||
           String(u.id).includes(search) ||
@@ -120,8 +124,7 @@ export const mockAdminUserApi = {
     await delay()
     if (id === CURRENT_USER_ID)
       throw new Error('Use DELETE /users/me to delete your own account')
-    findUser(id)
-    users = users.filter((u) => u.id !== id)
+    findUser(id).deletedAt = new Date().toISOString()
   },
 
   async getCurrentUser(): Promise<AdminUser> {

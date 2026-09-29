@@ -12,6 +12,10 @@ Author review: Ryan reviewed to ensure it follows the team's decisions.
 2026-09-27 (Claude Code, Opus 5.5), PR #135 review: callerId and the
 UserNotFoundException handler moved to CallerId / ProblemDetailAdvice,
 shared with ProfileController.
+2026-09-29 (Claude Code, Opus 5.5), issue #147: includeDeleted query
+parameter on GET /users (team decision); invalid bodies now get
+ProblemDetailAdvice's per-field reasons like every other controller (team
+decision), so only the query-parameter type mismatch stays here.
 */
 
 package foc.user.controller;
@@ -20,9 +24,7 @@ import org.springframework.data.web.PagedModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
-import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -59,8 +61,9 @@ public class AdminController {
             @RequestParam(required = false) Role role,
             @RequestParam(required = false) String sort,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "" + AdminService.DEFAULT_PAGE_SIZE) int size) {
-        return new PagedModel<>(adminService.listUsers(search, role, sort, page, size));
+            @RequestParam(defaultValue = "" + AdminService.DEFAULT_PAGE_SIZE) int size,
+            @RequestParam(defaultValue = "false") boolean includeDeleted) {
+        return new PagedModel<>(adminService.listUsers(search, role, sort, page, size, includeDeleted));
     }
 
     @PatchMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
@@ -83,13 +86,10 @@ public class AdminController {
         return e.getBody();
     }
 
-    // unknown role in the query or body, non-numeric id, missing role in the body
-    @ExceptionHandler({
-        MethodArgumentTypeMismatchException.class,
-        HttpMessageNotReadableException.class,
-        MethodArgumentNotValidException.class
-    })
-    public ProblemDetail handleBadInput(Exception e) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid request parameter or body");
+    // unknown role or non-boolean includeDeleted in the query, non-numeric
+    // id. Body problems (unknown or missing role) are ProblemDetailAdvice's
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ProblemDetail handleBadParameter(MethodArgumentTypeMismatchException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid request parameter");
     }
 }

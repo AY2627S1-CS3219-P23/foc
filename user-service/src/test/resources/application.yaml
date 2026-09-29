@@ -9,13 +9,16 @@
 # call the purge method directly).
 # 2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: fixed JWT secret
 # and TTL for the auth tests, and the CORS origin.
+# 2026-09-29, Claude Code (Opus 5.5), issue #147: ddl-auto none, so the
+# Testcontainers database gets its schema from the Flyway migrations.
 
 spring:
   application:
     name: user-service
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      # schema from the Flyway migrations, as in production
+      ddl-auto: none
 
 owner:
   setup:
