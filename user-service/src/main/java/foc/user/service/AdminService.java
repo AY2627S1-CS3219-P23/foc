@@ -13,6 +13,9 @@ Author review: Ryan reviewed to ensure it follows the team's decisions.
 User.softDelete from #93 after PR #136 merged.
 2026-09-27 (Claude Code, Opus 5.5), PR #135 review: lookups use the shared
 UserRepository.getActiveUser; role rank taken from the Role enum order.
+2026-09-29 (Claude Code, Opus 5.5), PR #140 review: GET /users leaves out
+soft-deleted accounts (team decision, replacing "soft-deleted included"):
+removed users no longer come back on the admin page's next reload.
 */
 
 package foc.user.service;
@@ -56,7 +59,8 @@ public class AdminService {
         this.userRepository = userRepository;
     }
 
-    // all accounts, soft-deleted ones included. sort is "field" or "field,asc|desc";
+    // active accounts only: soft-deleted ones are hidden until they recover or
+    // are purged. sort is "field" or "field,asc|desc";
     // null sorts by id ascending
     @Transactional(readOnly = true)
     public Page<UserResponse> listUsers(String search, Role role, String sort, int page, int size) {
@@ -141,6 +145,8 @@ public class AdminService {
     private static Specification<User> matching(String search, Role role, SortOrder order) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
+
+            predicates.add(cb.isNull(root.get("deletedAt")));
 
             if (role != null) {
                 predicates.add(cb.equal(root.get("role"), role));
