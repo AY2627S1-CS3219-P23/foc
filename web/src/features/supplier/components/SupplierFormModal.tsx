@@ -20,6 +20,12 @@
 // same native-HTML5-validation approach already used for the other
 // required fields) — backend also validates the same range
 // (SupplierRequest).
+// PR #104 review (Copilot): the form has no imageUrl field, so every
+// edit sent it as undefined and SupplierService.applyRequest blindly
+// overwrote the existing image with null — round-tripping
+// initial?.imageUrl on save so editing a supplier no longer erases its
+// seed/existing image. No UI for clearing an image exists, so there's
+// no case where omission should mean "remove it."
 // Reviewed by: [pending]
 
 import { useState, type FormEvent, type KeyboardEvent } from 'react'
@@ -76,6 +82,7 @@ export function SupplierFormModal({
       description,
       latitude: Number(latitude),
       longitude: Number(longitude),
+      imageUrl: initial?.imageUrl,
     })
   }
 
