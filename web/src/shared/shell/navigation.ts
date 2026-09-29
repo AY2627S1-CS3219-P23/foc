@@ -2,12 +2,17 @@
 // Tool: Claude Code (Fable 5), 2026-09-21, issue #108.
 // Scope: the shell's five nav destinations (per web/docs/wireframes/),
 // shared by the desktop nav bar and the mobile tab bar.
+// 2026-09-29, Claude Code (Opus 5.5), issue #147: adminNavItem, the Admin
+// Dashboard destination shown after Profile to ADMIN and OWNER only;
+// shortLabel for the narrow mobile tab.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 // SVG path data (24×24 viewBox, stroked) for the mobile tab icons.
 export interface NavItem {
   to: string
   label: string
+  // shown on the mobile tab instead of label, where space is tight
+  shortLabel?: string
   iconPaths: readonly string[]
 }
 
@@ -44,3 +49,11 @@ export const navItems: readonly NavItem[] = [
     ],
   },
 ]
+
+// Shown after Profile, only to ADMIN and OWNER (see isAdmin).
+export const adminNavItem: NavItem = {
+  to: '/admin',
+  label: 'Admin Dashboard',
+  shortLabel: 'Admin',
+  iconPaths: ['M4 4h7v7H4z', 'M13 4h7v7h-7z', 'M4 13h7v7H4z', 'M13 13h7v7h-7z'],
+}

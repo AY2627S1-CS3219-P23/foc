@@ -1,6 +1,8 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Fable 5), 2026-09-21, issue #108.
 // Scope: example shell/router tests for teammates to copy.
+// 2026-09-29, Claude Code (Opus 5.5), issue #147: no Admin Dashboard link
+// when logged out.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import { render, screen } from '@testing-library/react'
@@ -50,4 +52,12 @@ test('unknown path shows the 404 page inside the shell', () => {
   ).toBeInTheDocument()
   // The nav is still present — the 404 renders inside the app shell.
   expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument()
+})
+
+test('no Admin Dashboard link when logged out', () => {
+  renderApp('/')
+
+  expect(
+    screen.queryByRole('link', { name: 'Admin Dashboard' }),
+  ).not.toBeInTheDocument()
 })

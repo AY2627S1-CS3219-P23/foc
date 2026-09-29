@@ -4,7 +4,8 @@
 // day, a dev-only switch to adminApiMock.ts added; then GET /users/me
 // added so the page knows which row is the signed-in admin's own; PR #140
 // review: the mock switch only works in dev builds, and the mock is
-// loaded lazily so it isn't bundled into production).
+// loaded lazily so it isn't bundled into production). 2026-09-29 (issue
+// #147): includeDeleted passed through to GET /users (team decision).
 // Scope: admin user endpoints of user-service — GET /users (search, role
 // filter, paging), PATCH /users/{id} (role change), DELETE /users/{id}
 // (soft delete), GET /users/me (own profile) — through the shared
@@ -24,6 +25,7 @@ function toQuery(params: ListUsersParams): string {
   const search = params.search?.trim()
   if (search) query.set('search', search)
   if (params.role) query.set('role', params.role)
+  if (params.includeDeleted) query.set('includeDeleted', 'true')
   query.set('page', String(params.page))
   query.set('size', String(params.size))
   return `?${query}`

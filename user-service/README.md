@@ -19,6 +19,9 @@
   section.
   2026-09-29, Claude Code (Opus 5.5), issue #91: "Checking tokens" section
   for the JWT filter chain.
+  2026-09-29, Claude Code (Opus 5.5), issue #147: Flyway schema, the
+  includeDeleted list filter, the shared 400 format, and the login
+  section's lockout (429) and row-locked counters.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -36,10 +39,11 @@ Currently: actuator health endpoint, `POST /auth/signup` and
 OWNER for any caller with the setup token, #97), `GET /users/me` /
 `GET /users/{id}` (own and public profile, #95), `DELETE /users/me`
 (self-deletion, #93), and the admin endpoints
-`GET /users` (list, search, role filter, sort, 20/50/100 page sizes),
+`GET /users` (list, search, role filter, sort, 20/50/100 page sizes,
+`includeDeleted=true` to list removed accounts with their `deletedAt`),
 `PATCH /users/{id}` (promote/demote) and `DELETE /users/{id}` (soft
 delete) for ADMIN/OWNER callers (#96), backed by Postgres via
-Spring Data JPA. The root `compose.yaml` runs it with its own `user-db` (host port
+Spring Data JPA, with the schema managed by Flyway (see below). The root `compose.yaml` runs it with its own `user-db` (host port
 `${USER_SERVICE_PORT:-8087}`); `spring-boot:run` needs that database
 reachable (`USER_DB_*` env vars) and `JWT_SECRET` set. Tests supply
 their own database. CORS allows the web origin in `WEB_ALLOWED_ORIGIN`
@@ -72,6 +76,9 @@ These replace PR #139's separate `user-auth` server; auth lives here.
   Login therefore tells a caller whether an account exists — the author
   chose that over the non-revealing failures of #89, as sign-up's
   "already taken" 400s reveal the same thing.
+  Wrong passwords sent at once each count: the counter is updated with
+  the row locked, after the password check (which holds no database
+  connection).
 - Tokens are HS256 with the shared `JWT_SECRET` (≥ 32 bytes, checked at
   startup): `sub` = user id, `role`, `jti`, `exp` = 1 h
   (`JWT_ACCESS_TOKEN_TTL`, e.g. `1h`; a bare number is seconds). Checking tokens on incoming requests is #91 (below).
@@ -96,6 +103,28 @@ These replace PR #139's separate `user-auth` server; auth lives here.
   in `SecurityConfig`.
 - No sessions: each request stands on its own token. The logout
   denylist (`token_denylist`) isn't checked yet (deferred).
+
+## Errors
+
+Every error body is RFC 9457 problem+json. A request body that breaks
+validation rules gets 400 with one sentence per broken rule, sorted by
+field (e.g. `"Email is required. Password is required."`), from
+`ProblemDetailAdvice`, on every endpoint. A missing or unreadable body
+(bad JSON, an unknown role) gets 400 `"Request body is missing or
+malformed"`; a query parameter of the wrong type gets 400 `"Invalid
+request parameter"`.
+
+## Schema (Flyway)
+
+Flyway owns the schema (`src/main/resources/db/migration`); Hibernate's
+`ddl-auto` is `none`. `V1__baseline` is the schema `ddl-auto` used to
+generate; a database built that way is recorded as V1 on first start
+(`baseline-on-migrate`) and only gets the later migrations.
+`V2__username_unique_ignoring_case` renames usernames that differ only
+in case (the oldest keeps its name, later ones get `_2`, `_3`, …) and
+replaces the username constraint with a unique index on
+`lower(username)`. Schema changes go in a new `V<n>__<name>.sql`, never
+by editing an applied one.
 
 ## Soft delete & day-31 purge (#93)
 

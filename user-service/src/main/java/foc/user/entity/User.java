@@ -16,6 +16,10 @@ Q&A); admin removal (#96) switches to it when both are merged.
 2026-09-27 (Claude Code, Opus 5.5), PR #135 review: @Version column added
 for optimistic locking (team decision), so a role change racing a delete
 can't write deleted_at back to null.
+2026-09-29 (Claude Code, Opus 5.5), issue #147: Flyway now owns the schema
+(team decision; ddl-auto none), so these annotations no longer create
+anything. The username index annotation is gone: V2 replaced that
+constraint with a unique index on lower(username), which JPA can't express.
 */
 
 package foc.user.entity;
@@ -39,8 +43,8 @@ import org.hibernate.annotations.ColumnDefault;
 @Table(
     name = "users",
     indexes = {
-        @Index(name = "idx_users_email", columnList = "email", unique = true),
-        @Index(name = "idx_users_username", columnList = "username", unique = true)
+        @Index(name = "idx_users_email", columnList = "email", unique = true)
+        // username: unique ignoring case via idx_users_username_lower (Flyway V2)
     }
 )
 public class User {

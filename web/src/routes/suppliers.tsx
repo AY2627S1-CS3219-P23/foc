@@ -98,7 +98,13 @@
 // comment above handleSortChange for the mechanism. Fixed by rejecting
 // the sort selection in that handler instead of correcting `sort` back
 // as a render-phase side effect.
-// Reviewed by: [pending]
+// 2026-09-29 (Claude Code, Opus 5.5, issue #147): the hand-rolled
+// Previous/Next pager replaced by the shared Pagination component (so it
+// gains page numbers and aria-current), keeping the "Page X of Y · N
+// suppliers" label beside it; load/save/delete errors use the shared
+// errorMessage helper.
+// Reviewed by: Ryan Ang (the 2026-09-29 issue #147 changes above); the
+// original supplier code's review is still pending with its author.
 
 import { Fragment, useCallback, useEffect, useState } from 'react'
 
@@ -116,7 +122,8 @@ import { SupplierFilterBar } from '@/features/supplier/components/SupplierFilter
 import { SupplierFormModal } from '@/features/supplier/components/SupplierFormModal'
 import { formatDistance, haversineDistanceMeters } from '@/features/supplier/distance'
 import type { Supplier, SupplierInput } from '@/features/supplier/types'
-import { ApiError } from '@/lib/api/http'
+import { errorMessage } from '@/lib/api/http'
+import { Pagination } from '@/shared/components/Pagination'
 import { useAuth } from '@/features/user/useAuth'
 
 const PAGE_SIZE = 10
@@ -294,11 +301,7 @@ export function Suppliers() {
         setTotalElements(result.totalElements)
       } catch (err) {
         if (cancelled) return
-        setError(
-          err instanceof ApiError
-            ? err.message
-            : 'Could not load suppliers. Try again.',
-        )
+        setError(errorMessage(err, 'Could not load suppliers. Try again.'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -498,26 +501,17 @@ export function Suppliers() {
           )}
 
           {!loading && !waitingForLocation && totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="rounded-md border border-gray-200 px-3 py-1.5 font-medium hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                Previous
-              </button>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
               <span>
                 Page {page + 1} of {totalPages} · {totalElements} suppliers
               </span>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                className="rounded-md border border-gray-200 px-3 py-1.5 font-medium hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                Next
-              </button>
+              {/* The shared pager is 1-based; this page's state is 0-based
+                  like the API. */}
+              <Pagination
+                page={page + 1}
+                totalPages={totalPages}
+                onPageChange={(p) => setPage(p - 1)}
+              />
             </div>
           )}
         </div>
