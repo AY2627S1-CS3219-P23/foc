@@ -1,16 +1,13 @@
-/* 
+/*
 AI Assistance Disclosure:
-Tool: Claude (Sonnet 5), date: 2026-09-22
-Scope: Generated boilerplate code for email, password and username fields. Also generated regex for email, username and passwords.
-Author review: Ryan validated correctness and edited error messages.
-2026-09-23 (Claude Code, Opus 5.5): email pattern made case-insensitive and
-whitespace-tolerant (redundant @Email dropped, as it rejects
-padded input and the pattern already fixes the format); password size message now states both bounds (PR #126 review).
-2026-09-29 (Claude Code, Opus 5.5), PR #141 review: rules and messages
-moved to AccountRules, shared with SignupRequest (unchanged).
-
+Tool: Claude Code (Opus 5.5), date: 2026-09-29
+Scope: sign-up request body (issue #87). Same field rules and messages as
+       SetupOwnerRequest (NUS email, username format, password policy), so
+       both account-creation routes validate alike.
+       PR #141 review: the rules now come from AccountRules, shared with
+       SetupOwnerRequest.
+Author review: Ryan to review via the PR.
 */
-
 
 package foc.user.dto;
 
@@ -20,7 +17,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-public record SetupOwnerRequest(
+public record SignupRequest(
     @NotBlank(message = EMAIL_REQUIRED)
     @Pattern(regexp = EMAIL_PATTERN, message = EMAIL_MESSAGE)
     String email,

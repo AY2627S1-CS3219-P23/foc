@@ -15,6 +15,8 @@ Author review: Ryan validated test assertions to match intended behaviour.
 2026-09-26 (Claude Code, Opus 5.5), issue #96: UserRepository.countByRole
        removed; the existing-owners test now checks setup makes only the
        uniqueness, lock and save calls.
+2026-09-29 (Claude Code, Opus 5.5), PR #141 review: username checks use
+       existsByUsernameIgnoreCase (usernames now ignore case, team decision).
 */
 
 package foc.user.service;
@@ -64,7 +66,7 @@ class OwnerSetupServiceTest {
     void setUpDefaultStubs() {
         ReflectionTestUtils.setField(ownerSetupService, "expectedSetupToken", VALID_SETUP_TOKEN);
         lenient().when(userRepository.existsByEmail(anyString())).thenReturn(false);
-        lenient().when(userRepository.existsByUsername(anyString())).thenReturn(false);
+        lenient().when(userRepository.existsByUsernameIgnoreCase(anyString())).thenReturn(false);
         lenient().when(passwordEncoder.encode(anyString())).thenReturn("hashed_password");
     }
 
@@ -132,7 +134,7 @@ class OwnerSetupServiceTest {
 
         assertThat(response.role()).isEqualTo("OWNER");
         verify(userRepository).existsByEmail("e1234567@u.nus.edu");
-        verify(userRepository).existsByUsername("owner_user");
+        verify(userRepository).existsByUsernameIgnoreCase("owner_user");
         verify(userRepository).acquireSetupLock();
         verify(userRepository).save(any(User.class));
         verifyNoMoreInteractions(userRepository);
@@ -160,7 +162,7 @@ class OwnerSetupServiceTest {
     @Test
     @DisplayName("Should throw 400 when username is already taken")
     void setupOwner_throwsBadRequestOnDuplicateUsername() {
-        when(userRepository.existsByUsername("owner_user")).thenReturn(true);
+        when(userRepository.existsByUsernameIgnoreCase("owner_user")).thenReturn(true);
 
         SetupOwnerRequest request = new SetupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"

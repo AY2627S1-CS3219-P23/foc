@@ -22,6 +22,11 @@ the day-31 purge scheduler (bulk @Modifying query, following the
 notification-service purge pattern from PR #81).
 2026-09-27 (Claude Code, Opus 5.5), PR #135 review: getActiveUser added so
 AdminService and ProfileService share one active-user lookup.
+2026-09-29 (Claude Code, Opus 5.5), issue #89: findByUsername added for
+username-or-email login.
+2026-09-29 (Claude Code, Opus 5.5), PR #141 review: username lookups ignore
+case (team decision): existsByUsernameIgnoreCase / findByUsernameIgnoreCase
+replace the exact-match versions.
 */
 
 package foc.user.repository;
@@ -43,15 +48,20 @@ import foc.user.exception.UserNotFoundException;
 public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificationExecutor<User> {
 
     // Soft-deleted users stay in the table for the 30-day recovery window.
-    // Uniqueness checks (existsByEmail/existsByUsername) and findByEmail
+    // Uniqueness checks (existsByEmail/existsByUsernameIgnoreCase) and findByEmail
     // deliberately include them, so a deleted account's email and username
     // stay reserved. Profile and admin lookups use getActiveUser.
 
     boolean existsByEmail(String email);
 
-    boolean existsByUsername(String username);
+    // usernames are unique ignoring case; emails are stored lowercased
+    boolean existsByUsernameIgnoreCase(String username);
 
     Optional<User> findByEmail(String email);
+
+    // also includes soft-deleted users: login recovers them within the
+    // retention window (AuthService)
+    Optional<User> findByUsernameIgnoreCase(String username);
 
     // active (not soft-deleted) user by id
     Optional<User> findByIdAndDeletedAtIsNull(Long id);

@@ -26,6 +26,65 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Ryan Ang (#87/#89/#90 sign-up, login, JWT in user-service)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `user-service`: `POST /auth/signup` and `POST /auth/login`
+  (`AuthController`, `AuthService`, `SignupRequest`, `LoginRequest`,
+  `LoginResponse`, `LoginFailedException`, `UserRepository.findByUsername`),
+  JWT minting (`security/JwtIssuer`, jjwt 0.13.0 in `pom.xml`), CORS in
+  `SecurityConfig`, `user.jwt.*` / `user.web-allowed-origin` in both
+  `application.yaml`s; `compose.yaml` and `.env.example` wiring
+  (`JWT_SECRET`, `JWT_ACCESS_TOKEN_TTL`, `WEB_ALLOWED_ORIGIN`,
+  `VITE_USER_SERVICE_URL`); `AuthServiceTest`, `JwtIssuerTest`,
+  `AuthControllerTest`; user-service README. PR #139's `user-auth/`
+  server deleted; `web/src/features/user/login.tsx` and `register.tsx`
+  pointed at user-service (email field added, server error shown).
+- **Prompt(s):** Summary: Asked to convert PR #139's Node `user-auth`
+  server to Spring Boot with the RDBMS instead of `users.json`. The tool
+  noted AGENTS.md and issues #87/#89/#90 already place auth in
+  user-service. Team decisions: auth goes into user-service, not a separate
+  service; both login and register; the account is inserted only after
+  OTP verification, but OTP is deferred, so sign-up inserts directly for
+  now; JWT minting (#90) built now; sign-up returns the account (201) and
+  the page sends the user to log in; camelCase login response; CORS in
+  this PR; keep #139's frontend, changing it only where it broke. Rules
+  otherwise follow design doc §3 (routes, claims, 1 h expiry, 5-failure
+  15-minute lockout, non-revealing failures, exact 400 reasons) and the
+  earlier team decision that logging in within 30 days recovers a
+  soft-deleted account. Implementation choices by the tool, to confirm
+  in review: request field `usernameOrEmail`; a locked account gets the
+  same 401 as a wrong password; validation reasons joined in one
+  `detail`; CORS reuses `WEB_ALLOWED_ORIGIN`. 
+  PR #141 Copilot review: `login.tsx` and `register.tsx` no longer log the
+  response (the login one now holds the access token); the #90 logout
+  denylist stays deferred, per the design doc's "defer for now" on logout
+  revocation, with #90 kept open.
+  Second PR #141 review (after merging `main`, which brought in PR #140):
+  the tool sorted a reviewer's findings into implementation fixes and
+  ones needing a team decision. Team decision: usernames are matched
+  ignoring case (stored as typed), so `UserRepository` gains
+  `existsByUsernameIgnoreCase` / `findByUsernameIgnoreCase` in place of
+  the exact-match methods. Fixed: `SignupRequest` and `SetupOwnerRequest`
+  share their rules through new `dto/AccountRules.java`, and sign-up and
+  owner setup share normalising and uniqueness checks through new
+  `service/NewAccountDetails.java`; `JwtIssuer` reads a unit-less TTL as
+  seconds (`@DurationUnit`), documented in `.env.example` and the
+  README; `AuthController` maps a lost optimistic-locking race to 401 for
+  login only, so other `/auth` routes keep the 409; `login.tsx` and
+  `register.tsx` call `apiFetch` instead of axios and drop their success
+  logs; `AuthProvider.tsx` navigates to `/` (not the missing `/home`)
+  and is the only navigation after login. Tests: case-insensitive
+  sign-up and login, the login/sign-up race responses in
+  `ConflictResponseTest`, and the TTL unit in `JwtIssuerTest`. Left for
+  the team: holding a DB connection through bcrypt, the service-wide
+  validation error format, token storage and expiry on the web side,
+  and the post-sign-up message.
+- **Author review:** Full `./mvnw test`
+  suite passes, including the Docker-backed `AuthControllerTest`
+  (156 tests after the second review). Web: 25 tests pass, lint and
+  type-check clean.
+
 ## 2026-09-29 — Ryan Ang (#113 PR #140 second review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor, generate (tests)

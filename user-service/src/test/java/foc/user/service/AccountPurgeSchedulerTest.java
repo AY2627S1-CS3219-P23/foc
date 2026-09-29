@@ -7,6 +7,8 @@ Scope: integration test for issue #93's day-31 purge, following
        seeded with backdated deleted_at values (the column is updatable, so
        no JPQL backdating is needed).
 Reviewed by: Leong Wei Zhi (via pull request).
+2026-09-29 (Claude Code, Opus 5.5), PR #141 review: username checks use
+       existsByUsernameIgnoreCase (usernames now ignore case, team decision).
 */
 
 package foc.user.service;
@@ -99,7 +101,7 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
         // the reuse block is the row itself (unique indexes span all rows);
         // purging it is what frees the identifiers
         assertThat(userRepository.existsByEmail("e3333333@u.nus.edu")).isFalse();
-        assertThat(userRepository.existsByUsername("expired_deleted")).isFalse();
+        assertThat(userRepository.existsByUsernameIgnoreCase("expired_deleted")).isFalse();
         userRepository.save(
             new User("e3333333@u.nus.edu", "expired_deleted", "hashed_password", Role.USER));
         userRepository.flush();

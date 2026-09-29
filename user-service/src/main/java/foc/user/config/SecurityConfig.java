@@ -17,19 +17,30 @@ like GET, since Spring MVC serves HEAD through the GET list handler.
 fail closed — only GET /users/* and DELETE /users/me are open to any
 signed-in user; every other method on /users and /users/* needs ADMIN/OWNER
 (replaces the per-method admin lines and the HEAD rule).
+2026-09-29 (Claude Code, Opus 5.5), issues #87/#89: CORS for the web origin
+(WEB_ALLOWED_ORIGIN, the variable supplier-service already uses), applied in
+the filter chain so browser preflights pass before the fail-closed rules.
+CORS in this PR per team decision.
 
 */
 
 package foc.user.config;
 
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 public class SecurityConfig {
@@ -39,11 +50,27 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    // the SPA calls this service directly from the browser (no gateway)
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource(
+            @Value("${user.web-allowed-origin}") String webAllowedOrigin) {
+        CorsConfiguration cors = new CorsConfiguration();
+        cors.setAllowedOrigins(List.of(webAllowedOrigin));
+        cors.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
+        cors.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", cors);
+        return source;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         // Permit /auth/** while security is being built
         return http
             .csrf(AbstractHttpConfigurer::disable)
+            // uses the corsConfigurationSource bean; answers preflights
+            // before the authorization rules below
+            .cors(Customizer.withDefaults())
             .authorizeHttpRequests(auth -> auth
                 // /error must stay open: any exception thrown from a
                 // permitAll route (e.g. /auth/**) makes the container

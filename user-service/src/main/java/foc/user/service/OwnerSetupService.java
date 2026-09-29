@@ -16,6 +16,9 @@ Scope: Generated owner bootstrap logic (advisory lock, owner guard,
        removed again (deferred by Ryan); the setup token does not expire.
        2026-09-25 (Claude Code, Opus 5.5), PR #132 review: password hashed
        before the setup lock is taken, so the lock no longer covers BCrypt.
+       2026-09-29 (Claude Code, Opus 5.5), PR #141 review: normalising and
+       uniqueness checks moved to NewAccountDetails, shared with sign-up;
+       usernames now compared ignoring case (team decision).
 Author review: Ryan validated that the endpoint logic matches the feature design.
 */
 
@@ -58,14 +61,14 @@ public class OwnerSetupService {
     public UserResponse setupOwner(SetupOwnerRequest request, String providedSetupToken) {
         ensureValidSetupToken(providedSetupToken);
 
-        String email = normalizeEmail(request.email());
-        String username = normalizeUsername(request.username());
+        String email = NewAccountDetails.normalizeEmail(request.email());
+        String username = NewAccountDetails.normalizeUsername(request.username());
         // hashed before the lock: BCrypt is slow and only depends on the request
         String passwordHash = passwordEncoder.encode(request.password());
 
         userRepository.acquireSetupLock();
 
-        ensureUserDetailsAreUnique(email, username);
+        NewAccountDetails.ensureUnique(userRepository, email, username);
 
         User owner = createOwner(email, username, passwordHash);
 
@@ -92,33 +95,6 @@ public class OwnerSetupService {
         }
     }
 
-    private String normalizeEmail(String email) {
-        return email.trim().toLowerCase();
-    }    
-
-
-    private String normalizeUsername(String username) {
-        return username.trim();
-    }
-
-    private void ensureUserDetailsAreUnique(String email, String username) {
-
-        if (userRepository.existsByEmail(email)) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Email is already registered"
-            );
-        }
-
-        if (userRepository.existsByUsername(username)) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Username is already taken"
-            );
-        }
-    }  
-    
-    
     private User createOwner(String email, String username, String passwordHash) {
         User owner = new User();
 

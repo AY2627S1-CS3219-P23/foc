@@ -7,6 +7,8 @@
 # 2026-09-27, Claude Code (Fable 5), issue #93: user.retention values for
 # the purge scheduler bean (30-day window; cron irrelevant in tests, which
 # call the purge method directly).
+# 2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: fixed JWT secret
+# and TTL for the auth tests, and the CORS origin.
 
 spring:
   application:
@@ -23,3 +25,7 @@ user:
   retention:
     days: 30
     purge-cron: "0 0 3 * * *"
+  jwt:
+    secret: test-jwt-secret-that-is-at-least-32-bytes-long
+    access-token-ttl: 1h
+  web-allowed-origin: http://localhost:5173

@@ -1,7 +1,33 @@
+// AI-assisted (CS3219 AI Usage Policy disclosure):
+// Tool: Claude Code (Opus 5.5), 2026-09-29, issues #87/#89.
+// Scope: login now calls user-service's POST /auth/login (replacing
+// PR #139's user-auth server on port 8081) with usernameOrEmail, and
+// shows the server's error message; the response is no longer logged,
+// as it now holds the access token (PR #141 review). Second PR #141
+// review: calls go through apiFetch, so a missing VITE_USER_SERVICE_URL
+// shows as such; AuthProvider does the one navigation after login; no
+// success log. The page itself comes from PR #139.
+// Reviewed by: Ryan Ang
+
 import React, { useState } from "react";
-import axios from "axios";
+import { ApiError, apiFetch } from "@/lib/api/http";
 import { router } from "../../routes/index";
 import { useAuth } from "./useAuth";
+
+// POST /auth/login's body
+type LoginResponse = {
+  accessToken: string;
+  tokenType: string;
+  expiresIn: number;
+};
+
+// ApiError carries user-service's problem+json reason, and apiFetch's own
+// Error names a missing VITE_USER_SERVICE_URL; a TypeError is the network
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error && !(error instanceof TypeError)) return error.message;
+  return fallback;
+}
 
 export function Login() {
   const [username, setUsername] = useState("");
@@ -17,24 +43,18 @@ export function Login() {
   const login = async (event: React.SyntheticEvent) => {
     event.preventDefault();
     try {
-        const response = await axios.post("http://localhost:8081/api/auth/login", {
-        username,
-        password,
+      const response = await apiFetch<LoginResponse>("user", "/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ usernameOrEmail: username, password }),
       });
 
-      console.log("response", response);
-      await data.login(response.data);
       setError("");
       setUsername("");
       setPassword("");
-      router.navigate("/");
-      console.log("login successful");
+      // navigates to the home page
+      await data.login(response);
     } catch (error: unknown) {
-      if (error instanceof Error) {
-        console.error(error.message); 
-      } else {
-        console.error("An unexpected error occurred:", error);
-      }
+      setError(errorMessage(error, "Could not log in. Try again."));
     }
   };
 
@@ -44,7 +64,7 @@ export function Login() {
       {error && <p style={styles.error}>{error}</p>}
       <form onSubmit={login} className="flex flex-col items-center">
         <label className ="mb-[10px] text-left">
-          Username:
+          Username or email:
           <input
             type="text"
             value={username}
