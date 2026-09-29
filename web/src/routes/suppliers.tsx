@@ -15,6 +15,10 @@
 // Role.OWNER (issue #97) is the platform's admin-equivalent super
 // admin, so the backend gate now allows ADMIN or OWNER; this check
 // updated to match (isAdmin renders for either role).
+// 2026-09-29, Claude Code (Sonnet 5), issue #104: added a green success
+// banner (create/update/delete), matching the existing red error
+// banner's style, auto-dismissed after 4s; mutually exclusive with the
+// error banner (each clears the other on set).
 //
 // 2026-09-26 (issue #133): wired to the real, now-paginated
 // GET /suppliers. Removed the `listZones()` call — the backend has no
@@ -138,6 +142,7 @@ export function Suppliers() {
   const [categories, setCategories] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('')
@@ -328,6 +333,15 @@ export function Suppliers() {
     }
   }, [])
 
+  // Auto-dismisses a create/update/delete success banner after a few
+  // seconds — errors stay until the next action, but a success message
+  // that lingers just clutters the page once the user has moved on.
+  useEffect(() => {
+    if (!successMessage) return
+    const timeout = window.setTimeout(() => setSuccessMessage(null), 4000)
+    return () => window.clearTimeout(timeout)
+  }, [successMessage])
+
   const selected = suppliers.find((s) => s.id === selectedId) ?? null
 
   // Derived, not stored — while true, fetchCurrentPage resolves to
@@ -337,6 +351,7 @@ export function Suppliers() {
   const waitingForLocation = sort === DISTANCE_SORT && !userLocation
 
   async function handleSave(input: SupplierInput) {
+    const isEdit = formOpenFor !== 'new'
     setSaving(true)
     try {
       if (formOpenFor && formOpenFor !== 'new') {
@@ -345,12 +360,19 @@ export function Suppliers() {
         await createSupplier(input)
       }
       setFormOpenFor(null)
+      setError(null)
+      setSuccessMessage(
+        isEdit
+          ? `Successfully updated Supplier "${input.name}".`
+          : `Successfully created Supplier "${input.name}".`,
+      )
       // Trigger the load effect rather than fetching and setting state
       // here directly — see that effect's comment for why (staleness
       // guard, and not misattributing a refetch failure as "the save
       // failed").
       setRefreshKey((k) => k + 1)
     } catch (err) {
+      setSuccessMessage(null)
       setError(errorMessage(err, 'Could not save supplier.'))
     } finally {
       setSaving(false)
@@ -364,6 +386,8 @@ export function Suppliers() {
       await deleteSupplier(pendingDelete.id)
       if (selectedId === pendingDelete.id) setSelectedId(null)
       setPendingDelete(null)
+      setError(null)
+      setSuccessMessage(`Successfully deleted Supplier "${pendingDelete.name}".`)
       // Deleting the last item on the last page would otherwise leave
       // `page` pointing past the new totalPages — step back a page
       // first when that happens; `page` is already one of
@@ -375,6 +399,7 @@ export function Suppliers() {
         setRefreshKey((k) => k + 1)
       }
     } catch (err) {
+      setSuccessMessage(null)
       setError(errorMessage(err, 'Could not delete supplier.'))
     } finally {
       setSaving(false)
@@ -406,6 +431,12 @@ export function Suppliers() {
         onSortChange={handleSortChange}
         locationNotice={locationNotice}
       />
+
+      {successMessage && (
+        <p className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+          {successMessage}
+        </p>
+      )}
 
       {error && (
         <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

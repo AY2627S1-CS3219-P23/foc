@@ -15,6 +15,15 @@
  * ownerPassesTheRoleGateOnWriteMethods, pinning the ADMIN-or-OWNER gate
  * change (same review): OWNER is the platform's admin-equivalent super
  * admin and should pass this gate too, not just ADMIN.
+ * 2026-09-29, issue #104: adminPassesTheRoleGateOnWriteMethods and
+ * ownerPassesTheRoleGateOnWriteMethods updated from asserting 405
+ * (their original point: no CRUD handler existed yet, so reaching the
+ * dispatcher at all proved the role gate let them through) to 415 on
+ * an empty body/no Content-Type — the real POST /suppliers handler now
+ * exists; getting *past* the role gate to Spring's media-type check is
+ * what these two now demonstrate. Full CRUD correctness (valid bodies,
+ * 400/404 on bad input) is covered separately in
+ * SupplierControllerCrudTest.
  * Reviewed by: [pending]
  */
 package foc.supplier.config;
@@ -99,15 +108,16 @@ class SecurityConfigTest {
 
     @Test
     void adminPassesTheRoleGateOnWriteMethods() throws Exception {
-        // no POST /suppliers handler exists yet (#6): reaching the
-        // dispatcher (405, not 403) proves the role gate let it through.
+        // no Content-Type/body at all: Spring checks the media type
+        // before the handler ever runs, so this is 415, not 403 — still
+        // proof the role gate let it through to that point.
         mockMvc.perform(post("/suppliers").header("Authorization", "Bearer " + token("ADMIN")))
-                .andExpect(status().isMethodNotAllowed());
+                .andExpect(status().isUnsupportedMediaType());
     }
 
     @Test
     void ownerPassesTheRoleGateOnWriteMethods() throws Exception {
         mockMvc.perform(post("/suppliers").header("Authorization", "Bearer " + token("OWNER")))
-                .andExpect(status().isMethodNotAllowed());
+                .andExpect(status().isUnsupportedMediaType());
     }
 }
