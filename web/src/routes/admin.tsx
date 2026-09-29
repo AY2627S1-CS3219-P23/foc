@@ -4,13 +4,13 @@
 // Scope: Admin Dashboard page, per web/docs/wireframes/admin-dashboard.png:
 // a Suppliers section and a Users section.
 //
-// TEMPORARY: the Suppliers section is a placeholder. Supplier management
-// belongs to the supplier domain (web/AGENTS.md) and waits on the
-// supplier-service list endpoint (PR #134) and its admin CRUD endpoints.
-// TEMPORARY: there is no admin role gate because src/shared/auth/
-// doesn't exist yet (see its README).
+// 2026-09-29 (issue #147): the Suppliers section lists suppliers
+// (read-only, team decision); its Add/Edit/Delete wait on
+// supplier-service's CRUD endpoints (#104). The page is ADMIN/OWNER-only
+// through AdminRoute (routes/index.tsx).
 // Reviewed by: Ryan Ang.
 
+import { SuppliersAdminSection } from '@/features/supplier/components/SuppliersAdminSection'
 import { UsersSection } from '@/features/user/components/UsersSection'
 
 export function Admin() {
@@ -26,19 +26,7 @@ export function Admin() {
         </p>
       </div>
 
-      <section className="space-y-4" aria-labelledby="suppliers-heading">
-        <h2
-          id="suppliers-heading"
-          className="text-lg font-semibold text-gray-900"
-        >
-          Suppliers
-        </h2>
-        <div className="rounded-lg border border-dashed border-gray-300 bg-white py-10 text-center">
-          <p className="font-medium text-gray-900">
-            Supplier management is coming soon.
-          </p>
-        </div>
-      </section>
+      <SuppliersAdminSection />
 
       <UsersSection />
     </div>

@@ -2,6 +2,9 @@
 // Tool: Claude Code (Fable 5), 2026-09-21, issue #108.
 // Scope: shared fetch wrapper all domains use for REST calls.
 // Reviewed by: Leong Wei Zhi (via pull request).
+// 2026-09-29, Claude Code (Opus 5.5), issue #147: errorMessage added, the
+// one error-to-text helper for every feature (was copied in the admin
+// Users section, login, register and the suppliers page).
 
 import { serviceBaseUrls, type ServiceName } from './config'
 
@@ -33,6 +36,18 @@ export class ApiError extends Error {
     this.status = status
     this.problem = problem
   }
+}
+
+// Text to show for an apiFetch failure: the server's problem+json reason
+// (ApiError), or apiFetch's own error (e.g. a missing base URL). A
+// TypeError is fetch's network failure, whose message ("Failed to fetch")
+// means nothing to users, so it gets the fallback.
+export function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) return err.message
+  if (err instanceof Error && !(err instanceof TypeError) && err.message) {
+    return err.message
+  }
+  return fallback
 }
 
 export async function apiFetch<T>(

@@ -6,14 +6,25 @@
 // 2026-09-29 (second PR #140 review): cases for a role change emptying a
 // later page, the general warning when the signed-in admin is unknown, the
 // error banner clearing on a new query, and whitespace-only search edits.
-// Scope: tests for the Admin Dashboard page — Users section, plus the
-// Suppliers placeholder.
+// 2026-09-29 (issue #147): the fake soft-deletes like user-service, and
+// cases for the "Show removed accounts" toggle (team decision).
+// 2026-09-29 (issue #147): cases for the admin-only route guard.
+// Nav-bar and tab-bar Admin Dashboard link shown to ADMIN/OWNER only.
+// Bug fixes: one GET /users per action, no fetch of an emptied page, and
+// actions off while the list reloads. PR #152 review: one GET /users/me per page (the
+// unknown-admin fallback case can no longer happen, so its test went). The Suppliers section's read-only
+// list (team decision) against a faked listSuppliers.
+// Scope: tests for the Admin Dashboard page — Users and Suppliers
+// sections, the route guard and the nav link.
 // Reviewed by: Ryan Ang
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
+import { listSuppliers } from '@/features/supplier/api'
+import { ADMIN_SUPPLIERS_PAGE_SIZE } from '@/features/supplier/components/SuppliersAdminSection'
+import type { PagedResponse, Supplier } from '@/features/supplier/types'
 import { adminUserApi } from '@/features/user/adminApi'
 import { USERS_PAGE_SIZE } from '@/features/user/components/UsersSection'
 import type {
@@ -22,6 +33,51 @@ import type {
   ListUsersParams,
 } from '@/features/user/types'
 import { routes } from '../routes'
+
+// the Suppliers section's only call; faked per test
+vi.mock('@/features/supplier/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/supplier/api')>()),
+  listSuppliers: vi.fn(),
+}))
+
+const seedSuppliers: Supplier[] = [
+  {
+    id: 's1',
+    name: 'CoffeeBean@Com3',
+    location: 'COM3-01-01',
+    latitude: 1.29,
+    longitude: 103.77,
+    categories: ['Food', 'Beverage'],
+    openingTime: '08:00',
+    closingTime: '18:00',
+    description: '',
+  },
+  {
+    id: 's2',
+    name: 'Fine Foods UTown',
+    location: 'Plaza Level 1',
+    latitude: 1.3,
+    longitude: 103.77,
+    categories: ['Food'],
+    openingTime: '07:00',
+    closingTime: '22:00',
+    description: '',
+  },
+]
+
+function supplierPage(
+  content: Supplier[],
+  page = 0,
+  totalPages = content.length ? 1 : 0,
+): PagedResponse<Supplier> {
+  return {
+    content,
+    page,
+    size: ADMIN_SUPPLIERS_PAGE_SIZE,
+    totalElements: content.length,
+    totalPages,
+  }
+}
 
 const seedUsers: readonly AdminUser[] = [
   {
@@ -61,6 +117,7 @@ function fakeListUsers(params: ListUsersParams): AdminUserPage {
   const search = params.search?.toLowerCase()
   const matches = users.filter(
     (u) =>
+      (params.includeDeleted || !u.deletedAt) &&
       (!params.role || u.role === params.role) &&
       (!search ||
         String(u.id).includes(search) ||
@@ -106,10 +163,16 @@ function section(name: 'Users' | 'Suppliers') {
   return within(screen.getByRole('region', { name }))
 }
 
+// The page appears once the admin route guard's role check resolves, so
+// the first query of a test waits for its section.
+async function findSection(name: 'Users' | 'Suppliers') {
+  return within(await screen.findByRole('region', { name }))
+}
+
 // Each section renders both a table (md+) and cards (mobile); jsdom
 // applies no media queries, so scope queries to a section's table.
-function findSectionTable(name: 'Users') {
-  return section(name).findByRole('table')
+async function findSectionTable(name: 'Users') {
+  return (await findSection(name)).findByRole('table')
 }
 
 function rowFor(table: HTMLElement, text: string) {
@@ -146,6 +209,9 @@ function lastListParams() {
 
 beforeEach(() => {
   vi.restoreAllMocks()
+  vi.mocked(listSuppliers)
+    .mockReset()
+    .mockResolvedValue(supplierPage(seedSuppliers))
   // /admin sits behind ProtectedRoute, which only checks that
   // AuthProvider found a stored session under "user".
   localStorage.setItem('user', JSON.stringify({ sub: 'test-admin' }))
@@ -159,8 +225,11 @@ beforeEach(() => {
     user.role = role
     return { ...user }
   })
+  // soft delete, like user-service
   vi.spyOn(adminUserApi, 'removeUser').mockImplementation(async (id) => {
-    users = users.filter((u) => u.id !== id)
+    users = users.map((u) =>
+      u.id === id ? { ...u, deletedAt: '2026-09-29T08:00:00Z' } : u,
+    )
   })
   // Signed in as nus_courier_99 (an ADMIN in the seed data).
   vi.spyOn(adminUserApi, 'getCurrentUser').mockResolvedValue({
@@ -368,6 +437,59 @@ describe('Users section', () => {
     expect(adminUserApi.changeRole).toHaveBeenLastCalledWith(2, 'USER')
   })
 
+  test('removed accounts are hidden until "Show removed accounts" is ticked', async () => {
+    users.push({
+      id: 99,
+      email: 'e0999000@u.nus.edu',
+      username: 'left_already',
+      role: 'USER',
+      createdAt: '2026-09-01T00:00:00Z',
+      deletedAt: '2026-09-20T08:00:00Z',
+    })
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+    expect(within(table).queryByText('left_already')).not.toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Show removed accounts' }),
+    )
+
+    await waitFor(() => expect(lastListParams()?.includeDeleted).toBe(true))
+    const row = rowFor(await findSectionTable('Users'), 'left_already')
+    expect(row.getByText('Removed 20 September 2026')).toBeInTheDocument()
+    // view only: no actions on a removed account
+    expect(row.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  test('removing a user while removed accounts are shown greys the row', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    await findSectionTable('Users')
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Show removed accounts' }),
+    )
+    const table = await findSectionTable('Users')
+
+    await user.click(
+      rowFor(table, 'utown_runner').getByRole('button', {
+        name: 'Remove Account',
+      }),
+    )
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Remove Account' })).getByRole(
+        'button',
+        { name: 'Remove' },
+      ),
+    )
+
+    await waitFor(() =>
+      expect(
+        rowFor(table, 'utown_runner').getByText('Removed 29 September 2026'),
+      ).toBeInTheDocument(),
+    )
+  })
+
   test('remove asks for confirmation, then removes the user', async () => {
     const user = userEvent.setup()
     renderAdmin()
@@ -501,10 +623,63 @@ describe('Users section', () => {
     const dialog = within(
       screen.getByRole('dialog', { name: 'Remove Account' }),
     )
+    const callsBefore = vi.mocked(adminUserApi.listUsers).mock.calls.length
     await user.click(dialog.getByRole('button', { name: 'Remove' }))
 
     expect(await within(table).findByText(nth(1))).toBeInTheDocument()
     expect(lastListParams()).toEqual({ page: 0, size: USERS_PAGE_SIZE })
+    // straight to page 1: the emptied page 2 is never fetched
+    const after = vi
+      .mocked(adminUserApi.listUsers)
+      .mock.calls.slice(callsBefore)
+    expect(after.map(([params]) => params.page)).toEqual([0])
+  })
+
+  test('a role change fetches the list once and shows the new role', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+    const callsBefore = vi.mocked(adminUserApi.listUsers).mock.calls.length
+
+    await changeRole(user, table, 'student_alex', 'Promote to Admin')
+
+    await waitFor(() =>
+      expect(
+        rowFor(table, 'student_alex').getByRole('button', {
+          name: 'Demote to User',
+        }),
+      ).toBeInTheDocument(),
+    )
+    expect(vi.mocked(adminUserApi.listUsers).mock.calls.length).toBe(
+      callsBefore + 1,
+    )
+  })
+
+  test('actions and confirm are off while the list reloads', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+    await user.click(
+      rowFor(table, 'utown_runner').getByRole('button', {
+        name: 'Remove Account',
+      }),
+    )
+    // a reload that hasn't answered yet
+    vi.mocked(adminUserApi.listUsers).mockReturnValue(new Promise(() => {}))
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Filter by role' }),
+      'USER',
+    )
+
+    const dialog = within(
+      screen.getByRole('dialog', { name: 'Remove Account' }),
+    )
+    expect(dialog.getByRole('button', { name: 'Remove' })).toBeDisabled()
+    expect(
+      rowFor(table, 'student_alex').getByRole('button', {
+        name: 'Promote to Admin',
+      }),
+    ).toBeDisabled()
   })
 
   test('a role change that empties a later page goes back a page', async () => {
@@ -535,26 +710,17 @@ describe('Users section', () => {
     })
   })
 
-  test('an unknown signed-in admin gets a general warning when demoting', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    vi.mocked(adminUserApi.getCurrentUser).mockRejectedValue(
-      new Error('Unauthorized'),
-    )
-    const user = userEvent.setup()
+  test('the page asks GET /users/me once, shared by the guard and the list', async () => {
     renderAdmin()
     const table = await findSectionTable('Users')
 
-    await user.click(
-      rowFor(table, 'nus_courier_99').getByRole('button', {
-        name: 'Demote to User',
-      }),
-    )
-
+    // the signed-in admin's own row still has no Remove
     expect(
-      within(screen.getByRole('dialog', { name: 'Demote to User' })).getByText(
-        /If this is your own account, you will lose access/,
-      ),
-    ).toBeInTheDocument()
+      rowFor(table, 'nus_courier_99').queryByRole('button', {
+        name: 'Remove Account',
+      }),
+    ).not.toBeInTheDocument()
+    expect(adminUserApi.getCurrentUser).toHaveBeenCalledTimes(1)
   })
 
   test('a new search or filter clears the last action error', async () => {
@@ -566,9 +732,9 @@ describe('Users section', () => {
     const table = await findSectionTable('Users')
 
     await changeRole(user, table, 'student_alex', 'Promote to Admin')
-    expect(await section('Users').findByRole('alert')).toHaveTextContent(
-      'You cannot change this user.',
-    )
+    expect(
+      await (await findSection('Users')).findByRole('alert'),
+    ).toHaveTextContent('You cannot change this user.')
 
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Filter by role' }),
@@ -635,9 +801,9 @@ describe('Users section', () => {
 
     await changeRole(user, table, 'nus_courier_99', 'Demote to User')
 
-    expect(await section('Users').findByRole('alert')).toHaveTextContent(
-      'You cannot change this user.',
-    )
+    expect(
+      await (await findSection('Users')).findByRole('alert'),
+    ).toHaveTextContent('You cannot change this user.')
     expect(
       rowFor(table, 'nus_courier_99').getByText('Admin'),
     ).toBeInTheDocument()
@@ -649,20 +815,154 @@ describe('Users section', () => {
     )
     renderAdmin()
 
-    expect(await section('Users').findByRole('alert')).toHaveTextContent(
-      'Network down',
-    )
+    expect(
+      await (await findSection('Users')).findByRole('alert'),
+    ).toHaveTextContent('Network down')
   })
 })
 
 describe('Suppliers section', () => {
-  test('shows a placeholder', async () => {
+  test('lists suppliers with category, location and hours', async () => {
+    renderAdmin()
+
+    const table = await (await findSection('Suppliers')).findByRole('table')
+    const row = rowFor(table, 'CoffeeBean@Com3')
+    expect(row.getByText('Food, Beverage')).toBeInTheDocument()
+    expect(row.getByText('COM3-01-01')).toBeInTheDocument()
+    expect(row.getByText('08:00–18:00')).toBeInTheDocument()
+    expect(within(table).getByText('Fine Foods UTown')).toBeInTheDocument()
+    expect(listSuppliers).toHaveBeenCalledWith({
+      page: 0,
+      size: ADMIN_SUPPLIERS_PAGE_SIZE,
+    })
+  })
+
+  test('is read-only for now', async () => {
+    renderAdmin()
+
+    const table = await (await findSection('Suppliers')).findByRole('table')
+    expect(within(table).queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  test('pages through suppliers', async () => {
+    vi.mocked(listSuppliers).mockImplementation(async (params = {}) =>
+      supplierPage(
+        params.page === 1 ? [seedSuppliers[1]] : [seedSuppliers[0]],
+        params.page,
+        2,
+      ),
+    )
+    const user = userEvent.setup()
+    renderAdmin()
+    const suppliers = await findSection('Suppliers')
+    const table = await suppliers.findByRole('table')
+    await within(table).findByText('CoffeeBean@Com3')
+
+    await user.click(
+      within(suppliers.getByRole('navigation')).getByRole('button', {
+        name: 'Page 2',
+      }),
+    )
+
+    expect(
+      await within(table).findByText('Fine Foods UTown'),
+    ).toBeInTheDocument()
+    expect(vi.mocked(listSuppliers).mock.lastCall?.[0]).toEqual({
+      page: 1,
+      size: ADMIN_SUPPLIERS_PAGE_SIZE,
+    })
+  })
+
+  test('shows an empty state', async () => {
+    vi.mocked(listSuppliers).mockResolvedValue(supplierPage([]))
     renderAdmin()
 
     expect(
-      await section('Suppliers').findByText(
-        'Supplier management is coming soon.',
-      ),
+      await (await findSection('Suppliers')).findByText('No suppliers yet.'),
     ).toBeInTheDocument()
+  })
+
+  test('shows an error when suppliers fail to load', async () => {
+    vi.mocked(listSuppliers).mockRejectedValue(new TypeError('Failed to fetch'))
+    renderAdmin()
+
+    expect(
+      await (await findSection('Suppliers')).findByRole('alert'),
+    ).toHaveTextContent('Could not load suppliers. Try again.')
+  })
+})
+
+describe('Admin route guard', () => {
+  test('a USER is sent to the home page', async () => {
+    vi.mocked(adminUserApi.getCurrentUser).mockResolvedValue({
+      ...seedUsers[1],
+    })
+    renderAdmin()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Welcome Back!' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Admin Dashboard' }),
+    ).not.toBeInTheDocument()
+    expect(adminUserApi.listUsers).not.toHaveBeenCalled()
+  })
+
+  test('an OWNER sees the dashboard', async () => {
+    vi.mocked(adminUserApi.getCurrentUser).mockResolvedValue({
+      ...seedUsers[0],
+    })
+    renderAdmin()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Admin Dashboard' }),
+    ).toBeInTheDocument()
+  })
+
+  test('shows a message when the role check fails', async () => {
+    vi.mocked(adminUserApi.getCurrentUser).mockRejectedValue(
+      new TypeError('Failed to fetch'),
+    )
+    renderAdmin()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not check your access. Try again.',
+    )
+    expect(
+      screen.queryByRole('heading', { name: 'Admin Dashboard' }),
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('Admin Dashboard nav link', () => {
+  test('an ADMIN sees it in the nav bar and the tab bar', async () => {
+    renderAdmin()
+    await findSectionTable('Users')
+
+    const nav = within(screen.getByRole('navigation', { name: 'Main' }))
+    expect(nav.getByRole('link', { name: 'Admin Dashboard' })).toHaveAttribute(
+      'href',
+      '/admin',
+    )
+    const tabs = within(screen.getByRole('navigation', { name: 'Main tabs' }))
+    expect(tabs.getByRole('link', { name: 'Admin' })).toHaveAttribute(
+      'href',
+      '/admin',
+    )
+  })
+
+  test('a USER does not see it', async () => {
+    vi.mocked(adminUserApi.getCurrentUser).mockResolvedValue({
+      ...seedUsers[1],
+    })
+    renderAdmin()
+    await screen.findByRole('heading', { name: 'Welcome Back!' })
+
+    expect(
+      screen.queryByRole('link', { name: 'Admin Dashboard' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Admin' }),
+    ).not.toBeInTheDocument()
   })
 })

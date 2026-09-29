@@ -17,6 +17,9 @@
 # 2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: user.jwt (login
 # token signing, design doc §3) and user.web-allowed-origin (CORS, reusing
 # supplier-service's WEB_ALLOWED_ORIGIN variable).
+# 2026-09-29, Claude Code (Opus 5.5), issue #147: Flyway owns the schema
+# (team decision): ddl-auto none, and databases that ddl-auto built are
+# baselined at V1.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -28,8 +31,14 @@ spring:
     password: ${USER_DB_PASSWORD:}
   jpa:
     hibernate:
-      ddl-auto: update
+      # Flyway (db/migration) owns the schema; Hibernate never changes it
+      ddl-auto: none
     open-in-view: false
+  flyway:
+    # a database ddl-auto built before Flyway has tables but no history:
+    # record it as V1 (the baseline script's schema) and apply V2 onward
+    baseline-on-migrate: true
+    baseline-version: 1
 
 management:
   endpoints:

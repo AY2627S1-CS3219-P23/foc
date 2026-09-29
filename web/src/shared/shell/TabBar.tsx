@@ -3,20 +3,27 @@
 // Scope: mobile bottom tab bar with the five nav destinations
 // (per web/docs/wireframes/ — the mobile frames use a tab bar,
 // not a hamburger menu).
+// 2026-09-29, Claude Code (Opus 5.5), issue #147: a sixth "Admin" tab
+// for ADMIN and OWNER only.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import { NavLink } from 'react-router'
 
-import { navItems } from './navigation'
+import { isAdmin, useAuth } from '../../features/user/useAuth'
+import { adminNavItem, navItems } from './navigation'
 
 export function TabBar() {
+  const items = isAdmin(useAuth().me) ? [...navItems, adminNavItem] : navItems
+
   return (
     <nav
       aria-label="Main tabs"
       className="fixed inset-x-0 bottom-0 border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      <div className="grid grid-cols-5">
-        {navItems.map((item) => (
+      <div
+        className={`grid ${items.length > 5 ? 'grid-cols-6' : 'grid-cols-5'}`}
+      >
+        {items.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -41,7 +48,7 @@ export function TabBar() {
                 <path key={d} d={d} />
               ))}
             </svg>
-            {item.label}
+            {item.shortLabel ?? item.label}
           </NavLink>
         ))}
       </div>

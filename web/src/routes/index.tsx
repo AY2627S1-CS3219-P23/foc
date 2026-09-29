@@ -5,6 +5,8 @@
 // 2026-09-23, Claude Code (Opus 5.5): /admin route added (issue #113).
 // 2026-09-28, Claude Code (Opus 5.5): merged with PR #139's auth routes;
 // /admin placed inside ProtectedRoute, the 404 route moved back outside it.
+// 2026-09-29, Claude Code (Opus 5.5), issue #147: /admin also behind
+// AdminRoute (ADMIN or OWNER only, role from GET /users/me).
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import { createBrowserRouter, type RouteObject } from 'react-router'
@@ -14,6 +16,7 @@ import { NotFound } from '@/shared/shell/NotFound'
 import { Admin } from './admin'
 import { Home } from './home'
 import { Suppliers } from './suppliers'
+import { AdminRoute } from '../features/user/AdminRoute'
 import { ProtectedRoute } from '../features/user/ProtectedRoute'
 import { Login } from '../features/user/login'
 import { Register } from '../features/user/register'
@@ -35,7 +38,10 @@ export const routes: RouteObject[] = [
             Component: ProtectedRoute,
             children: [
               { path: 'suppliers', element: <Suppliers /> },
-              { path: 'admin', element: <Admin /> },
+              {
+                Component: AdminRoute,
+                children: [{ path: 'admin', element: <Admin /> }],
+              },
             ],
           },
           // Renders inside the shell, so the nav stays visible on
