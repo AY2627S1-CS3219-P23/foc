@@ -286,7 +286,14 @@ to `ROLE_*` authorities, stateless sessions, problem+json 401/403
 responses, and their unit and integration tests, following design doc
 §3, with the skipped routes (`/auth/**` except `/auth/logout`, and
 `/actuator/health`) and the denylist deferral decided by the author and
-recorded in `ai/usage-log.md`.
+recorded in `ai/usage-log.md`; and the login errors that name their
+cause (issue #146) — an unknown account, a wrong password with the
+attempts left before the lock, and a lockout that counts down the
+minutes left and repeats them in `Retry-After`, with their tests and the
+first tests for the web login page, the wording and the trade-off (login
+now reveals whether an account exists, reversing #89's non-revealing
+failures) chosen by the author via neutral-options Q&A and recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

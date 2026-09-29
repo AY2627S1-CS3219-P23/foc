@@ -19,7 +19,17 @@ Scope: sign-up (issue #87) and login (issue #89), replacing PR #139's
        generic failure — issue #145 decided by the author: the wireframe's
        lockout box wins over fully non-revealing failures, accepting that
        a locked account is thereby revealed to exist.
-Author review: Ryan to review via the PR.
+       2026-09-29, Claude Code (Opus 5), issue #146: each login failure
+       now raises its own message (unknown account / wrong password with
+       the attempts left / locked with the time left), the author's call.
+       The timing-equalisation hash that made an unknown account answer as
+       slowly as a wrong password went with it: the messages now say which
+       happened, so equal timing hid nothing.
+       PR #148 Copilot review: the retention-window check moved ahead of
+       the lock and password checks, so an account past the window answers
+       as gone whatever password is typed, instead of only when the
+       password happened to be right.
+Author review: Leong Wei Zhi to review via the PR.
 */
 
 package foc.user.service;
@@ -61,9 +71,6 @@ public class AuthService {
     private final JwtIssuer jwtIssuer;
     private final int retentionDays;
     private final Clock clock;
-    // compared against when no account matches, so an unknown username or
-    // email takes as long as a wrong password
-    private final String unknownAccountHash;
 
     @Autowired
     public AuthService(
@@ -85,7 +92,6 @@ public class AuthService {
         this.jwtIssuer = jwtIssuer;
         this.retentionDays = retentionDays;
         this.clock = clock;
-        this.unknownAccountHash = passwordEncoder.encode("no-such-account");
     }
 
     // creates a USER account. OTP verification will sit before the insert
@@ -111,33 +117,35 @@ public class AuthService {
     public LoginResponse login(LoginRequest request) {
         Optional<User> found = findAccount(request.usernameOrEmail());
         if (found.isEmpty()) {
-            passwordEncoder.matches(request.password(), unknownAccountHash);
-            throw new LoginFailedException();
+            throw LoginFailedException.unknownAccount();
         }
 
         User user = found.get();
         Instant now = clock.instant();
 
-        // locked: refused without counting the attempt. The password is
-        // still hashed so a locked account answers as slowly as any other
+        // past the recovery window the account is waiting for the purge, so
+        // it answers as if it were already gone — before the lock and the
+        // password, so every attempt on it gets that one answer and none of
+        // them count against a row that is on its way out
+        if (!user.isActive()
+                && user.getDeletedAt().isBefore(now.minus(retentionDays, ChronoUnit.DAYS))) {
+            throw LoginFailedException.unknownAccount();
+        }
+
+        // locked: refused without counting the attempt, and told how long
+        // is left rather than the full lockout
         if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(now)) {
-            passwordEncoder.matches(request.password(), unknownAccountHash);
-            throw new AccountLockedException();
+            throw new AccountLockedException(Duration.between(now, user.getLockedUntil()));
         }
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            int failures = recordFailure(user, now);
             // the attempt that trips the lock reports the lockout too, so
             // the user learns immediately rather than on the next try
-            if (recordFailure(user, now)) {
-                throw new AccountLockedException();
+            if (failures >= MAX_FAILED_ATTEMPTS) {
+                throw new AccountLockedException(LOCKOUT);
             }
-            throw new LoginFailedException();
-        }
-
-        // past the recovery window the account is waiting for the purge
-        if (!user.isActive()
-                && user.getDeletedAt().isBefore(now.minus(retentionDays, ChronoUnit.DAYS))) {
-            throw new LoginFailedException();
+            throw LoginFailedException.wrongPassword(MAX_FAILED_ATTEMPTS - failures);
         }
 
         // only write when something changes: an unconditional save bumps the
@@ -161,11 +169,11 @@ public class AuthService {
             : userRepository.findByUsernameIgnoreCase(identifier);
     }
 
-    // returns whether this failure started the lockout
-    private boolean recordFailure(User user, Instant now) {
+    // returns the running failure count this attempt made, so the caller
+    // can say how many are left; MAX_FAILED_ATTEMPTS means it just locked
+    private int recordFailure(User user, Instant now) {
         int failures = user.getFailedLoginAttempts() + 1;
-        boolean locks = failures >= MAX_FAILED_ATTEMPTS;
-        if (locks) {
+        if (failures >= MAX_FAILED_ATTEMPTS) {
             // start the lockout and a fresh count for after it ends
             user.setLockedUntil(now.plus(LOCKOUT));
             user.setFailedLoginAttempts(0);
@@ -173,6 +181,6 @@ public class AuthService {
             user.setFailedLoginAttempts(failures);
         }
         userRepository.save(user);
-        return locks;
+        return failures;
     }
 }
