@@ -14,6 +14,11 @@ Scope: sign-up (issue #87) and login (issue #89), replacing PR #139's
        PR #141 review: sign-up's normalising and uniqueness checks shared
        with owner setup (NewAccountDetails); usernames match ignoring case
        at sign-up and login (team decision).
+       2026-09-29, Claude Code (Fable 5), PR #142: lockout now raises
+       AccountLockedException (a distinct message/status) instead of the
+       generic failure — issue #145 decided by the author: the wireframe's
+       lockout box wins over fully non-revealing failures, accepting that
+       a locked account is thereby revealed to exist.
 Author review: Ryan to review via the PR.
 */
 
@@ -40,6 +45,7 @@ import foc.user.dto.SignupRequest;
 import foc.user.dto.UserResponse;
 import foc.user.entity.Role;
 import foc.user.entity.User;
+import foc.user.exception.AccountLockedException;
 import foc.user.exception.LoginFailedException;
 import foc.user.repository.UserRepository;
 import foc.user.security.JwtIssuer;
@@ -101,7 +107,7 @@ public class AuthService {
     }
 
     // noRollbackFor: a failed attempt must still commit its counter update
-    @Transactional(noRollbackFor = LoginFailedException.class)
+    @Transactional(noRollbackFor = {LoginFailedException.class, AccountLockedException.class})
     public LoginResponse login(LoginRequest request) {
         Optional<User> found = findAccount(request.usernameOrEmail());
         if (found.isEmpty()) {
@@ -116,11 +122,15 @@ public class AuthService {
         // still hashed so a locked account answers as slowly as any other
         if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(now)) {
             passwordEncoder.matches(request.password(), unknownAccountHash);
-            throw new LoginFailedException();
+            throw new AccountLockedException();
         }
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            recordFailure(user, now);
+            // the attempt that trips the lock reports the lockout too, so
+            // the user learns immediately rather than on the next try
+            if (recordFailure(user, now)) {
+                throw new AccountLockedException();
+            }
             throw new LoginFailedException();
         }
 
@@ -151,9 +161,11 @@ public class AuthService {
             : userRepository.findByUsernameIgnoreCase(identifier);
     }
 
-    private void recordFailure(User user, Instant now) {
+    // returns whether this failure started the lockout
+    private boolean recordFailure(User user, Instant now) {
         int failures = user.getFailedLoginAttempts() + 1;
-        if (failures >= MAX_FAILED_ATTEMPTS) {
+        boolean locks = failures >= MAX_FAILED_ATTEMPTS;
+        if (locks) {
             // start the lockout and a fresh count for after it ends
             user.setLockedUntil(now.plus(LOCKOUT));
             user.setFailedLoginAttempts(0);
@@ -161,5 +173,6 @@ public class AuthService {
             user.setFailedLoginAttempts(failures);
         }
         userRepository.save(user);
+        return locks;
     }
 }

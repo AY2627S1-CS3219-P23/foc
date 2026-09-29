@@ -43,6 +43,7 @@ import foc.user.dto.SignupRequest;
 import foc.user.dto.UserResponse;
 import foc.user.entity.Role;
 import foc.user.entity.User;
+import foc.user.exception.AccountLockedException;
 import foc.user.exception.LoginFailedException;
 import foc.user.repository.UserRepository;
 import foc.user.security.JwtIssuer;
@@ -220,7 +221,8 @@ class AuthServiceTest {
         userFoundByUsername();
         user.setFailedLoginAttempts(4);
 
-        assertThatThrownBy(() -> login("WrongPassword123")).isInstanceOf(LoginFailedException.class);
+        // the tripping attempt already reports the lockout (issue #145)
+        assertThatThrownBy(() -> login("WrongPassword123")).isInstanceOf(AccountLockedException.class);
 
         assertThat(user.getLockedUntil()).isEqualTo(NOW.plus(Duration.ofMinutes(15)));
         assertThat(user.getFailedLoginAttempts()).isZero();
@@ -232,7 +234,7 @@ class AuthServiceTest {
         userFoundByUsername();
         user.setLockedUntil(NOW.plusSeconds(60));
 
-        assertThatThrownBy(() -> login(PASSWORD)).isInstanceOf(LoginFailedException.class);
+        assertThatThrownBy(() -> login(PASSWORD)).isInstanceOf(AccountLockedException.class);
 
         assertThat(user.getFailedLoginAttempts()).isZero();
         verify(userRepository, never()).save(any());

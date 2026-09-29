@@ -7,19 +7,18 @@
 // review: calls go through apiFetch, so a missing VITE_USER_SERVICE_URL
 // shows as such; AuthProvider does the one navigation after login; no
 // success log. The page itself comes from PR #139.
+// 2026-09-29, Claude Code (Fable 5): restyled to the login wireframe
+// (web/docs/wireframes/login.png) — centered card, stacked labels,
+// error alert box — using the app's Tailwind conventions; logic unchanged.
+// PR #142 Copilot review: role="alert" on the error message so screen
+// readers announce failed logins.
 // Reviewed by: Ryan Ang
 
 import React, { useState } from "react";
 import { ApiError, apiFetch } from "@/lib/api/http";
 import { router } from "../../routes/index";
 import { useAuth } from "./useAuth";
-
-// POST /auth/login's body
-type LoginResponse = {
-  accessToken: string;
-  tokenType: string;
-  expiresIn: number;
-};
+import type { LoginResponse } from "./types";
 
 // ApiError carries user-service's problem+json reason, and apiFetch's own
 // Error names a missing VITE_USER_SERVICE_URL; a TypeError is the network
@@ -38,7 +37,6 @@ export function Login() {
   const toRegister = () => {
     router.navigate("/register");
   };
-
 
   const login = async (event: React.SyntheticEvent) => {
     event.preventDefault();
@@ -59,107 +57,53 @@ export function Login() {
   };
 
   return (
-    <div className="mt-[100px] text-center">
-      <h2 style={styles.heading}>Login Page</h2>
-      {error && <p style={styles.error}>{error}</p>}
-      <form onSubmit={login} className="flex flex-col items-center">
-        <label className ="mb-[10px] text-left">
-          Username or email:
+    <div className="mx-auto mt-16 w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 className="text-2xl font-semibold text-gray-900">Log In</h2>
+      <p className="mt-1 text-sm text-gray-500">Access your student errand portal.</p>
+      {error && (
+        <p
+          role="alert"
+          className="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
+          {error}
+        </p>
+      )}
+      <form onSubmit={login} className="mt-4 space-y-4">
+        <label className="block text-sm font-medium text-gray-700">
+          Username or Email
           <input
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className = "ml-[10px] w-[200px] p-[5px] bg-white border border-gray-300"
+            placeholder="Enter NUS email or username"
+            className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 font-normal placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
           />
         </label>
-        <br />
-        <label className ="mb-[10px] text-left">
-          Password:
+        <label className="block text-sm font-medium text-gray-700">
+          Password
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className = "ml-[10px] w-[200px] p-[5px] bg-white border border-gray-300"
+            className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 font-normal focus:border-gray-400 focus:outline-none"
           />
         </label>
-        <br />
-        <button style={styles.button} type="submit">
-          Login
+        <button
+          type="submit"
+          className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+        >
+          Log In
         </button>
       </form>
-      <p>
-        Don't have an account?
-        <button onClick={toRegister} className="text-[#007bff] no-underline cursor-pointer">
-          Register
-        </button>.
+      <p className="mt-4 text-center text-sm text-gray-600">
+        Don't have an account?{" "}
+        <button
+          onClick={toRegister}
+          className="font-medium text-gray-900 underline cursor-pointer"
+        >
+          Sign up
+        </button>
       </p>
     </div>
   );
-};
-
-const styles = {
-  heading: {
-    fontSize: "24px",
-    color: "#333",
-  },
-  error: {
-    color: "red",
-  },
-  input: {
-    width: "200px",
-    padding: "5px",
-  },
-  button: {
-    width: "100px",
-    padding: "10px",
-    backgroundColor: "#007BFF",
-    color: "white",
-    border: "none",
-    cursor: "pointer",
-  }
-};
-
-/*
-export const Login = () => {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const data = useAuth();
-
-  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    // Here you would usually send a request to your backend to authenticate the user
-    // For the sake of this example, we're using a mock authentication
-    if (username === "user" && password === "password" && data?.login) {
-      // Replace with actual authentication logic
-      await data.login(username);
-    } else {
-      alert("Invalid username or password");
-    }
-  };
-
-  return (
-    <div>
-      <form onSubmit={handleLogin}>
-        <div>
-          <label htmlFor='username'>Username:</label>
-          <input
-            id='username'
-            type='text'
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          />
-        </div>
-        <div>
-          <label htmlFor='password'>Password:</label>
-          <input
-            id='password'
-            type='password'
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        <button type='submit'>Login</button>
-      </form>
-    </div>
-  );
-};*/
+}
