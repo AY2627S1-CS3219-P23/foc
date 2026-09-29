@@ -1,9 +1,21 @@
-import { Outlet } from "react-router-dom";
+// AI-assisted (CS3219 AI Usage Policy disclosure):
+// Tool: Claude Code (Fable 5), 2026-09-29, PR #142.
+// Scope: Outlet import switched from react-router-dom to react-router,
+// dropping the stray v6 react-router-dom dependency (react-router v8
+// exports Outlet directly). Header added on PR #142 Copilot review;
+// the page itself predates this change (PR #139).
+// Also on PR #142: logged-in state now comes from useAuth() instead of
+// a raw localStorage read — the raw read never re-rendered on logout,
+// leaving the logged-in view up while the NavBar already showed Log In.
+// Reviewed by: Leong Wei Zhi (via pull request).
+
+import { Outlet } from "react-router";
 import {router} from "./index";
+import { useAuth } from "../features/user/useAuth";
 
 export function Home() {
-  const isLoginTrue = localStorage.getItem("user");
-  
+  const { token } = useAuth();
+
   const toLogin = () => {
     router.navigate("/login");
   };
@@ -38,11 +50,7 @@ export function Home() {
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      {isLoginTrue == "undefined" || isLoginTrue == "null" ? (
-        <>{userNotLogin()}</>
-      ) : (
-        <>{userLoggedIn()}</>
-      )}
+      {!token ? <>{userNotLogin()}</> : <>{userLoggedIn()}</>}
     </div>
   );
 };

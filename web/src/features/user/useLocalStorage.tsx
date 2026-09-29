@@ -1,11 +1,17 @@
+// AI-assisted (CS3219 AI Usage Policy disclosure):
+// Tool: Claude Code (Fable 5), 2026-09-29, PR #142 (JWT wiring into
+// apiFetch). Scope: the return type is now the stored T | null instead
+// of jose's JWTPayload, which the hook never actually produced; storage
+// behaviour unchanged. The hook itself comes from PR #139.
+// Reviewed by: Leong Wei Zhi (via pull request).
+
 import { useState } from "react";
-import type { JWTPayload } from "jose";
 
 export const useLocalStorage = <T,>(
   keyName: string,
-  defaultValue = null as T
-): [JWTPayload, (value: T) => void] => {
-  const [storedValue, setStoredValue] = useState(() => {
+  defaultValue: T | null = null
+): [T | null, (value: T | null) => void] => {
+  const [storedValue, setStoredValue] = useState<T | null>(() => {
     try {
       const value = window.localStorage.getItem(keyName);
       if (value) {
@@ -22,7 +28,7 @@ export const useLocalStorage = <T,>(
     }
   });
 
-  const setValue = (newValue: T) => {
+  const setValue = (newValue: T | null) => {
     try {
       window.localStorage.setItem(keyName, JSON.stringify(newValue));
     } catch (err) {

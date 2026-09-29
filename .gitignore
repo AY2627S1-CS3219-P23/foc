@@ -17,5 +17,8 @@ out/
 .DS_Store
 Thumbs.db
 
+# IDE
+.idea/
+
 # Agent tooling scratch (playwright MCP snapshots/screenshots)
 .playwright-mcp/

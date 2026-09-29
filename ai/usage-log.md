@@ -53,6 +53,55 @@ Entry template:
   GET/POST /suppliers with no/invalid/valid tokens and non-admin/admin
   roles); `./mvnw test` passes (21/21). Reviewed by: [pending].
 
+## 2026-09-29 — Leong Wei Zhi (PR #142 login/sign-up wireframe restyle)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (UI restyle) + generate (password checklist)
+- **Scope:** `web/src/features/user/login.tsx` and `register.tsx`
+  restyled to the wireframes (`web/docs/wireframes/login.png`,
+  `signup.png`) using the app's existing Tailwind conventions — centered
+  card, stacked labels, dark full-width button, error alert box — plus a
+  live password checklist on sign-up mirroring user-service's
+  `AccountRules` (display-only; the server stays the validator);
+  `web/src/routes/home.tsx` Outlet import switched from
+  `react-router-dom` to `react-router` and the stray v6
+  `react-router-dom` dependency removed from `web/package.json`;
+  `.idea/` added to `.gitignore`. PR #142 Copilot review fixes:
+  `role="alert"` on both error messages, the checklist moved outside the
+  password `<label>`, and these disclosure updates. Follow-up fix
+  reported by the author: `home.tsx` kept showing the logged-in view
+  after logout because it read `localStorage` directly (a raw read
+  React never re-renders on); it now takes the logged-in state from
+  `useAuth()`, the same source the NavBar uses — reproduced and
+  verified fixed in-browser (login → logout resets the page). Also on
+  this PR, at the author's request: JWT wired into `apiFetch` —
+  `AuthProvider` now feeds the stored session's `accessToken` to
+  `setTokenSource` (a layout effect, so it is set before any page's
+  mount-time fetch), the session is typed as the `LoginResponse` it
+  actually is (shared via `types.ts`; `useAuth`/`useLocalStorage` were
+  typed as jose's `JWTPayload` but never held one), and the
+  Authorization header was verified present on a live `/users` request
+  in-browser. Server-side JWT validation does not exist yet, so
+  authenticated endpoints still 403 — tracked separately. Also on this
+  PR, deciding issue #145 as "wireframe wins" (author's call, accepting
+  that a locked account is revealed to exist): user-service's lockout
+  now raises `AccountLockedException` — thrown when a login hits a
+  locked account and on the attempt that trips the lock — mapped in
+  `AuthController` to a 429 problem+json with the wireframe's "Too many
+  failed attempts. Login disabled for 15 minutes."; the login page
+  displays it with no frontend change. Unit/integration tests updated
+  (156/156 pass) and the flow verified live in-browser.
+- **Prompt(s):** Asked to fix the UI discrepancy in the login and
+  sign-up pages; the author chose "match the wireframes" and "include
+  the password checklist" (omitting forgot-password and the OTP modal,
+  which have no backend yet) via neutral-options Q&A; then asked to
+  switch back from react-router-dom to react-router and to resolve the
+  Copilot review comments.
+- **Author review:** Wireframe target and checklist scope chosen by the
+  author via options Q&A; verified in-browser against the wireframe
+  PNGs (checklist flips live while typing, error box renders on a
+  failed login), with lint, tests, and build green; reviewed via pull
+  request.
+
 ## 2026-09-29 — Ryan Ang (#87/#89/#90 sign-up, login, JWT in user-service)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (implementation + tests)
