@@ -5,8 +5,8 @@
 // a Suppliers section and a Users section.
 //
 // 2026-09-29 (issue #147): the Suppliers section lists suppliers
-// (read-only, team decision); its Add/Edit/Delete wait on
-// supplier-service's CRUD endpoints (#104). The page is ADMIN/OWNER-only
+// (read-only first, team decision); 2026-09-30: its Add/Edit/Delete added
+// now that supplier-service's CRUD endpoints (#104) have merged. The page is ADMIN/OWNER-only
 // through AdminRoute (routes/index.tsx).
 // Reviewed by: Ryan Ang.
 

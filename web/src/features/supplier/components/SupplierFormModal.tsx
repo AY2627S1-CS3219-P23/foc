@@ -33,6 +33,9 @@
 // GitHub-hosted images, not uploaded files, so this needs no backend
 // change). Optional, like Description; clearing it now intentionally
 // removes the image, which the round-trip approach couldn't do.
+// 2026-09-30, Claude Code (Opus 5.5): a click outside the form no longer
+// closes it (Modal closeOnBackdrop={false}); only Cancel or ✕ do, so a
+// half-filled supplier isn't lost to a stray click.
 // Reviewed by: [pending]
 
 import { useState, type FormEvent, type KeyboardEvent } from 'react'
@@ -95,7 +98,11 @@ export function SupplierFormModal({
   }
 
   return (
-    <Modal title={initial ? 'Edit Supplier' : 'Add Supplier'} onClose={onCancel}>
+    <Modal
+      title={initial ? 'Edit Supplier' : 'Add Supplier'}
+      onClose={onCancel}
+      closeOnBackdrop={false}
+    >
       <form onSubmit={handleSubmit} className="space-y-4">
         <label className="block text-sm">
           <span className="font-medium text-gray-700">

@@ -1,11 +1,16 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Opus 5.5), 2026-09-29, issue #147.
 // Scope: the Admin Dashboard's Suppliers section, per
-// web/docs/wireframes/admin-dashboard.png — a read-only list for now
-// (team decision): name, categories, location and hours, as a table at
-// md+ and cards below, paged with the shared Pagination. The wireframe's
-// Zone column is left out (zones were dropped, docs/supplier-service.md
-// D4); Add/Edit/Delete wait on supplier-service's CRUD endpoints (#104).
+// web/docs/wireframes/admin-dashboard.png — name, categories, location
+// and hours, as a table at md+ and cards below, paged with the shared
+// Pagination. The wireframe's Zone column is left out (zones were
+// dropped, docs/supplier-service.md D4).
+// 2026-09-30: Add / Edit / Delete now that supplier-service's CRUD
+// endpoints (#104, PR #153) have merged (team decision: list first, CRUD
+// once the endpoints exist). Reuses the Suppliers page's
+// SupplierFormModal and DeleteSupplierModal and the same api.ts calls;
+// success is announced in a status line, failures in the alert. A failed
+// load now offers "Try again" instead of leaving only the error (#154).
 // Supplier-domain UI: flag changes to its owners.
 // Author review: Ryan to review via the PR.
 
@@ -13,13 +18,26 @@ import { useEffect, useState } from 'react'
 
 import { errorMessage } from '@/lib/api/http'
 import { Pagination } from '@/shared/components/Pagination'
-import { listSuppliers } from '../api'
-import type { PagedResponse, Supplier } from '../types'
+import {
+  createSupplier,
+  deleteSupplier,
+  listSuppliers,
+  updateSupplier,
+} from '../api'
+import type { PagedResponse, Supplier, SupplierInput } from '../types'
+import { DeleteSupplierModal } from './DeleteSupplierModal'
+import { SupplierFormModal } from './SupplierFormModal'
 
 export const ADMIN_SUPPLIERS_PAGE_SIZE = 20
 
+// Identifies one list request, so a newer one shows as loading until its
+// own result arrives.
+function queryKeyOf(page: number, reloadCount: number) {
+  return `${page}:${reloadCount}`
+}
+
 interface LoadResult {
-  page: number
+  key: string
   data: PagedResponse<Supplier> | null
   error: string | null
 }
@@ -28,52 +46,196 @@ function hours(supplier: Supplier) {
   return `${supplier.openingTime}–${supplier.closingTime}`
 }
 
+const linkClass =
+  'text-sm font-medium text-gray-900 hover:underline disabled:cursor-not-allowed disabled:opacity-50'
+const deleteClass =
+  'text-sm font-medium text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50'
+
 export function SuppliersAdminSection() {
   const [page, setPage] = useState(1) // 1-based; the API is 0-based
+  // bumped to reload the current page after a change or a failed load
+  const [reloadCount, setReloadCount] = useState(0)
   const [result, setResult] = useState<LoadResult | null>(null)
+  // the last page that loaded, kept on screen when a reload fails
+  const [lastData, setLastData] = useState<PagedResponse<Supplier> | null>(null)
+  const [formOpenFor, setFormOpenFor] = useState<Supplier | 'new' | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
+    const key = queryKeyOf(page, reloadCount)
     listSuppliers({ page: page - 1, size: ADMIN_SUPPLIERS_PAGE_SIZE }).then(
       (data) => {
-        if (!cancelled) setResult({ page, data, error: null })
+        if (cancelled) return
+        // past the last page (a delete emptied it): go to the last page
+        const lastPage = Math.max(1, data.totalPages)
+        if (page > lastPage) {
+          setPage(lastPage)
+          return
+        }
+        setResult({ key, data, error: null })
+        setLastData(data)
       },
       (err: unknown) => {
         if (!cancelled)
           setResult({
-            page,
+            key,
             data: null,
-            error: errorMessage(err, 'Could not load suppliers. Try again.'),
+            error: errorMessage(err, 'Could not load suppliers.'),
           })
       },
     )
     return () => {
       cancelled = true
     }
-  }, [page])
+  }, [page, reloadCount])
 
-  // a newer page shows as loading until its own result arrives; the
-  // previous rows stay on screen meanwhile
-  const loading = result?.page !== page
-  const data = result?.data ?? null
-  const error = loading ? null : (result?.error ?? null)
+  // a newer request shows as loading until its own result arrives; the
+  // previous rows stay on screen meanwhile, and after a failed reload
+  const loading = result?.key !== queryKeyOf(page, reloadCount)
+  const data = result?.data ?? lastData
+  const loadError = loading ? null : (result?.error ?? null)
+
+  function handlePageChange(value: number) {
+    setPage(value)
+    setActionError(null)
+  }
+
+  function reload() {
+    setReloadCount((n) => n + 1)
+  }
+
+  async function handleSave(input: SupplierInput) {
+    const editing = formOpenFor !== 'new' ? formOpenFor : null
+    setSaving(true)
+    setActionError(null)
+    setSuccess(null)
+    try {
+      if (editing) {
+        await updateSupplier(editing.id, input)
+      } else {
+        await createSupplier(input)
+      }
+      setFormOpenFor(null)
+      setSuccess(
+        editing
+          ? `Updated supplier "${input.name}".`
+          : `Added supplier "${input.name}".`,
+      )
+      reload()
+    } catch (err) {
+      setActionError(
+        errorMessage(
+          err,
+          editing
+            ? 'Could not update the supplier.'
+            : 'Could not add the supplier.',
+        ),
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!pendingDelete) return
+    const target = pendingDelete
+    setSaving(true)
+    setActionError(null)
+    setSuccess(null)
+    try {
+      await deleteSupplier(target.id)
+      setPendingDelete(null)
+      setSuccess(`Deleted supplier "${target.name}".`)
+      // the page's only row, on a later page: go straight to the previous
+      // page instead of fetching the emptied one. `data` is current:
+      // actions are disabled while loading
+      if (page > 1 && data?.content.length === 1) {
+        setPage(page - 1)
+      } else {
+        reload()
+      }
+    } catch (err) {
+      setActionError(errorMessage(err, `Could not delete "${target.name}".`))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const actionsDisabled = loading || saving
+
+  function rowActions(supplier: Supplier) {
+    return (
+      <div className="flex gap-3">
+        <button
+          type="button"
+          disabled={actionsDisabled}
+          onClick={() => setFormOpenFor(supplier)}
+          className={linkClass}
+          aria-label={`Edit ${supplier.name}`}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          disabled={actionsDisabled}
+          onClick={() => setPendingDelete(supplier)}
+          className={deleteClass}
+          aria-label={`Delete ${supplier.name}`}
+        >
+          Delete
+        </button>
+      </div>
+    )
+  }
 
   return (
     <section className="space-y-4" aria-labelledby="suppliers-heading">
-      <h2
-        id="suppliers-heading"
-        className="text-lg font-semibold text-gray-900"
-      >
-        Suppliers
-      </h2>
-
-      {error && (
-        <p
-          role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+      <div className="flex items-center justify-between gap-3">
+        <h2
+          id="suppliers-heading"
+          className="text-lg font-semibold text-gray-900"
         >
-          {error}
+          Suppliers
+        </h2>
+        <button
+          type="button"
+          onClick={() => setFormOpenFor('new')}
+          disabled={saving}
+          className="rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        >
+          + Add Supplier
+        </button>
+      </div>
+
+      {success && (
+        <p
+          role="status"
+          className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700"
+        >
+          {success}
         </p>
+      )}
+
+      {(actionError || loadError) && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
+          <span>{actionError ?? loadError}</span>
+          {!actionError && loadError && (
+            <button
+              type="button"
+              onClick={reload}
+              className="shrink-0 font-medium underline"
+            >
+              Try again
+            </button>
+          )}
+        </div>
       )}
 
       {!data ? (
@@ -101,6 +263,9 @@ export function SuppliersAdminSection() {
                   <th scope="col" className="px-4 py-3">
                     Hours
                   </th>
+                  <th scope="col" className="px-4 py-3 text-right">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -117,6 +282,11 @@ export function SuppliersAdminSection() {
                     </td>
                     <td className="px-4 py-3 tabular-nums text-gray-600">
                       {hours(supplier)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end">
+                        {rowActions(supplier)}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -138,6 +308,7 @@ export function SuppliersAdminSection() {
                 <p className="text-xs text-gray-400">
                   {supplier.categories.join(' · ')}
                 </p>
+                <div className="mt-3">{rowActions(supplier)}</div>
               </li>
             ))}
           </ul>
@@ -145,10 +316,28 @@ export function SuppliersAdminSection() {
           <Pagination
             page={page}
             totalPages={data.totalPages}
-            onPageChange={setPage}
+            onPageChange={handlePageChange}
             disabled={loading}
           />
         </>
+      )}
+
+      {formOpenFor && (
+        <SupplierFormModal
+          initial={formOpenFor === 'new' ? undefined : formOpenFor}
+          onCancel={() => setFormOpenFor(null)}
+          onSave={handleSave}
+          saving={saving}
+        />
+      )}
+
+      {pendingDelete && (
+        <DeleteSupplierModal
+          supplier={pendingDelete}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={handleDelete}
+          deleting={saving}
+        />
       )}
     </section>
   )

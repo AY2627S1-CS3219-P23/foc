@@ -13,7 +13,8 @@
 // Bug fixes: one GET /users per action, no fetch of an emptied page, and
 // actions off while the list reloads. PR #152 review: one GET /users/me per page (the
 // unknown-admin fallback case can no longer happen, so its test went). The Suppliers section's read-only
-// list (team decision) against a faked listSuppliers.
+// list (team decision) against a faked listSuppliers; 2026-09-30: its
+// Add / Edit / Delete and "Try again" against the faked supplier API.
 // Scope: tests for the Admin Dashboard page — Users and Suppliers
 // sections, the route guard and the nav link.
 // Reviewed by: Ryan Ang
@@ -22,7 +23,12 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
-import { listSuppliers } from '@/features/supplier/api'
+import {
+  createSupplier,
+  deleteSupplier,
+  listSuppliers,
+  updateSupplier,
+} from '@/features/supplier/api'
 import { ADMIN_SUPPLIERS_PAGE_SIZE } from '@/features/supplier/components/SuppliersAdminSection'
 import type { PagedResponse, Supplier } from '@/features/supplier/types'
 import { adminUserApi } from '@/features/user/adminApi'
@@ -34,10 +40,13 @@ import type {
 } from '@/features/user/types'
 import { routes } from '../routes'
 
-// the Suppliers section's only call; faked per test
+// the Suppliers section's calls; faked per test
 vi.mock('@/features/supplier/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/features/supplier/api')>()),
   listSuppliers: vi.fn(),
+  createSupplier: vi.fn(),
+  updateSupplier: vi.fn(),
+  deleteSupplier: vi.fn(),
 }))
 
 const seedSuppliers: Supplier[] = [
@@ -212,6 +221,13 @@ beforeEach(() => {
   vi.mocked(listSuppliers)
     .mockReset()
     .mockResolvedValue(supplierPage(seedSuppliers))
+  vi.mocked(createSupplier)
+    .mockReset()
+    .mockImplementation(async (input) => ({ id: 'new', ...input }))
+  vi.mocked(updateSupplier)
+    .mockReset()
+    .mockImplementation(async (id, input) => ({ id, ...input }))
+  vi.mocked(deleteSupplier).mockReset().mockResolvedValue(undefined)
   // /admin sits behind ProtectedRoute, which only checks that
   // AuthProvider found a stored session under "user".
   localStorage.setItem('user', JSON.stringify({ sub: 'test-admin' }))
@@ -837,11 +853,186 @@ describe('Suppliers section', () => {
     })
   })
 
-  test('is read-only for now', async () => {
+  test('adds a supplier through the form', async () => {
+    const user = userEvent.setup()
     renderAdmin()
+    const suppliers = await findSection('Suppliers')
+    await suppliers.findByRole('table')
+    const loadsBefore = vi.mocked(listSuppliers).mock.calls.length
 
+    await user.click(suppliers.getByRole('button', { name: '+ Add Supplier' }))
+    const form = within(screen.getByRole('dialog', { name: 'Add Supplier' }))
+    await user.type(form.getByLabelText(/Supplier Name/), 'Techno Cafe')
+    await user.type(form.getByLabelText(/Location/), 'E3-01')
+    await user.type(form.getByLabelText(/Latitude/), '1.2998')
+    await user.type(form.getByLabelText(/Longitude/), '103.7713')
+    await user.click(form.getByRole('button', { name: 'Save Supplier' }))
+
+    expect(await suppliers.findByRole('status')).toHaveTextContent(
+      'Added supplier "Techno Cafe".',
+    )
+    expect(createSupplier).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Techno Cafe',
+        location: 'E3-01',
+        latitude: 1.2998,
+        longitude: 103.7713,
+      }),
+    )
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // the list reloads to show it
+    await waitFor(() =>
+      expect(vi.mocked(listSuppliers).mock.calls.length).toBe(loadsBefore + 1),
+    )
+  })
+
+  test('the supplier form closes only with Cancel or ✕, not a click outside', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    const suppliers = await findSection('Suppliers')
+    await suppliers.findByRole('table')
+    const openForm = async () => {
+      await user.click(
+        suppliers.getByRole('button', { name: '+ Add Supplier' }),
+      )
+      return screen.getByRole('dialog', { name: 'Add Supplier' })
+    }
+
+    const dialog = await openForm()
+    await user.type(
+      within(dialog).getByLabelText(/Supplier Name/),
+      'Half-filled',
+    )
+    // the darkened backdrop around the form
+    await user.click(dialog.parentElement as HTMLElement)
+    expect(
+      screen.getByRole('dialog', { name: 'Add Supplier' }),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(/Supplier Name/)).toHaveValue(
+      'Half-filled',
+    )
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    const again = await openForm()
+    await user.click(within(again).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  test('the delete confirmation still closes on a click outside', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
     const table = await (await findSection('Suppliers')).findByRole('table')
-    expect(within(table).queryByRole('button')).not.toBeInTheDocument()
+
+    await user.click(
+      rowFor(table, 'Fine Foods UTown').getByRole('button', {
+        name: 'Delete Fine Foods UTown',
+      }),
+    )
+    const dialog = screen.getByRole('dialog', { name: 'Delete Supplier' })
+    await user.click(dialog.parentElement as HTMLElement)
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(deleteSupplier).not.toHaveBeenCalled()
+  })
+
+  test('edits a supplier, starting from its current details', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    const suppliers = await findSection('Suppliers')
+    const table = await suppliers.findByRole('table')
+
+    await user.click(
+      rowFor(table, 'CoffeeBean@Com3').getByRole('button', {
+        name: 'Edit CoffeeBean@Com3',
+      }),
+    )
+    const form = within(screen.getByRole('dialog', { name: 'Edit Supplier' }))
+    const name = form.getByLabelText(/Supplier Name/)
+    expect(name).toHaveValue('CoffeeBean@Com3')
+    await user.clear(name)
+    await user.type(name, 'CoffeeBean Com3')
+    await user.click(form.getByRole('button', { name: 'Save Supplier' }))
+
+    expect(await suppliers.findByRole('status')).toHaveTextContent(
+      'Updated supplier "CoffeeBean Com3".',
+    )
+    expect(updateSupplier).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({
+        name: 'CoffeeBean Com3',
+        location: 'COM3-01-01',
+      }),
+    )
+  })
+
+  test('deletes a supplier after confirming', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    const suppliers = await findSection('Suppliers')
+    const table = await suppliers.findByRole('table')
+
+    await user.click(
+      rowFor(table, 'Fine Foods UTown').getByRole('button', {
+        name: 'Delete Fine Foods UTown',
+      }),
+    )
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Delete Supplier' })).getByRole(
+        'button',
+        { name: 'Delete' },
+      ),
+    )
+
+    expect(await suppliers.findByRole('status')).toHaveTextContent(
+      'Deleted supplier "Fine Foods UTown".',
+    )
+    expect(deleteSupplier).toHaveBeenCalledWith('s2')
+  })
+
+  test('shows the reason when a delete fails', async () => {
+    vi.mocked(deleteSupplier).mockRejectedValue(new Error('Supplier not found'))
+    const user = userEvent.setup()
+    renderAdmin()
+    const suppliers = await findSection('Suppliers')
+    const table = await suppliers.findByRole('table')
+
+    await user.click(
+      rowFor(table, 'Fine Foods UTown').getByRole('button', {
+        name: 'Delete Fine Foods UTown',
+      }),
+    )
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Delete Supplier' })).getByRole(
+        'button',
+        { name: 'Delete' },
+      ),
+    )
+
+    expect(await suppliers.findByRole('alert')).toHaveTextContent(
+      'Supplier not found',
+    )
+    expect(suppliers.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  test('"Try again" reloads after a failed load', async () => {
+    vi.mocked(listSuppliers)
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValue(supplierPage(seedSuppliers))
+    const user = userEvent.setup()
+    renderAdmin()
+    const suppliers = await findSection('Suppliers')
+
+    await user.click(
+      within(await suppliers.findByRole('alert')).getByRole('button', {
+        name: 'Try again',
+      }),
+    )
+
+    const table = await suppliers.findByRole('table')
+    expect(within(table).getByText('CoffeeBean@Com3')).toBeInTheDocument()
+    expect(suppliers.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   test('pages through suppliers', async () => {
@@ -888,7 +1079,7 @@ describe('Suppliers section', () => {
 
     expect(
       await (await findSection('Suppliers')).findByRole('alert'),
-    ).toHaveTextContent('Could not load suppliers. Try again.')
+    ).toHaveTextContent('Could not load suppliers.')
   })
 })
 

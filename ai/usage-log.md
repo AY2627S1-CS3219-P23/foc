@@ -26,6 +26,38 @@ Entry template:
 ```
 
 ---
+## 2026-09-30 — Ryan Ang (admin dashboard supplier CRUD)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `web/`:
+  `src/features/supplier/components/SuppliersAdminSection.tsx` gains
+  "+ Add Supplier", per-row Edit / Delete (with the supplier's name in
+  each button's accessible name), a success status line and an error
+  alert, reusing the Suppliers page's `SupplierFormModal`,
+  `DeleteSupplierModal` and the `createSupplier` / `updateSupplier` /
+  `deleteSupplier` calls; the list reloads after each change, deleting
+  the only row of a later page goes to the previous page, and actions
+  are disabled while the list loads or a save runs. A failed load keeps
+  the last rows on screen and offers "Try again" (issue #154).
+  `src/routes/admin.tsx` comment updated; `src/test/admin.test.tsx`
+  fakes the supplier write calls and adds five cases (add, edit, delete,
+  failed delete, retry after a failed load), replacing the read-only one.
+  Then, at the author's request: the shared `Modal` gains
+  `closeOnBackdrop` (default true), and `SupplierFormModal` turns it off,
+  so the add/edit supplier form closes only with Cancel or ✕ (here and
+  on the Suppliers page); two more cases (the form ignores a click
+  outside; the delete confirmation still closes on one).
+- **Prompt(s):** Summary: Team decision (earlier) to list suppliers on
+  the admin dashboard first and add CRUD once supplier-service's
+  endpoints (#104, PR #153) existed; now merged, asked to add it on
+  `feat/admin-supplier-crud`. Implementation choices by the tool, to
+  confirm in review: reusing the Suppliers page's form and delete
+  dialogs; the "+ Add Supplier" / Edit / Delete placement from the
+  wireframe; the success texts ("Added supplier …", "Updated supplier
+  …", "Deleted supplier …"); folding in the #154 retry fix.
+- **Author review:** Ryan to review via the PR. Web: 58 tests pass;
+  type-check and lint clean.
+
 ## 2026-09-29 — Ryan Ang (PR #152 Copilot review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor

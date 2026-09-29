@@ -3,6 +3,8 @@
 // Scope: shared modal primitive — first one built in this folder, per
 // src/shared/components/README.md ("whoever needs one first builds it
 // here"). Needed by the supplier add/edit and delete-confirm dialogs.
+// 2026-09-30, Claude Code (Opus 5.5): closeOnBackdrop, so a form can opt
+// out of closing on a click outside it (only its Cancel / ✕ close it).
 // Reviewed by: [pending]
 
 import type { ReactNode } from 'react'
@@ -11,13 +13,21 @@ interface ModalProps {
   title: string
   onClose: () => void
   children: ReactNode
+  // false: a click on the backdrop does nothing, so a half-filled form
+  // isn't lost to a stray click; the ✕ (and the caller's Cancel) still close
+  closeOnBackdrop?: boolean
 }
 
-export function Modal({ title, onClose, children }: ModalProps) {
+export function Modal({
+  title,
+  onClose,
+  children,
+  closeOnBackdrop = true,
+}: ModalProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4"
-      onClick={onClose}
+      onClick={closeOnBackdrop ? onClose : undefined}
     >
       <div
         role="dialog"
