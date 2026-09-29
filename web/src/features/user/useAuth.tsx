@@ -6,13 +6,31 @@
 // PR #139.
 // 2026-09-29, Claude Code (Opus 5.5), issue #147: Prettier formatting
 // only.
+// 2026-09-29, Claude Code (Opus 5.5), issue #147: `me`, the signed-in
+// user's account from GET /users/me, shared by the /admin guard and the
+// nav bar's Admin Dashboard link (one request per login).
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import { createContext, useContext } from 'react'
-import type { LoginResponse } from './types'
+import type { AdminUser, LoginResponse, UserRole } from './types'
+
+// GET /users/me for the current session: null while logged out
+export type CurrentUser =
+  | { status: 'loading' }
+  | { status: 'ready'; user: AdminUser }
+  | { status: 'error'; message: string }
+
+// roles that may use the admin dashboard (user-service's
+// hasAnyRole("ADMIN", "OWNER") on the admin endpoints)
+export const ADMIN_ROLES: readonly UserRole[] = ['ADMIN', 'OWNER']
+
+export function isAdmin(me: CurrentUser | null): boolean {
+  return me?.status === 'ready' && ADMIN_ROLES.includes(me.user.role)
+}
 
 export interface AuthData {
   token: LoginResponse | null
+  me: CurrentUser | null
   login(session: LoginResponse): Promise<void>
   logout(): void
 }

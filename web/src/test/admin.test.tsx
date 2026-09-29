@@ -9,6 +9,7 @@
 // 2026-09-29 (issue #147): the fake soft-deletes like user-service, and
 // cases for the "Show removed accounts" toggle (team decision).
 // 2026-09-29 (issue #147): cases for the admin-only route guard.
+// Nav-bar and tab-bar Admin Dashboard link shown to ADMIN/OWNER only.
 // Scope: tests for the Admin Dashboard page — Users section, plus the
 // Suppliers placeholder.
 // Reviewed by: Ryan Ang
@@ -772,6 +773,39 @@ describe('Admin route guard', () => {
     )
     expect(
       screen.queryByRole('heading', { name: 'Admin Dashboard' }),
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('Admin Dashboard nav link', () => {
+  test('an ADMIN sees it in the nav bar and the tab bar', async () => {
+    renderAdmin()
+    await findSectionTable('Users')
+
+    const nav = within(screen.getByRole('navigation', { name: 'Main' }))
+    expect(nav.getByRole('link', { name: 'Admin Dashboard' })).toHaveAttribute(
+      'href',
+      '/admin',
+    )
+    const tabs = within(screen.getByRole('navigation', { name: 'Main tabs' }))
+    expect(tabs.getByRole('link', { name: 'Admin' })).toHaveAttribute(
+      'href',
+      '/admin',
+    )
+  })
+
+  test('a USER does not see it', async () => {
+    vi.mocked(adminUserApi.getCurrentUser).mockResolvedValue({
+      ...seedUsers[1],
+    })
+    renderAdmin()
+    await screen.findByRole('heading', { name: 'Welcome Back!' })
+
+    expect(
+      screen.queryByRole('link', { name: 'Admin Dashboard' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Admin' }),
     ).not.toBeInTheDocument()
   })
 })

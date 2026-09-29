@@ -26,6 +26,28 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Ryan Ang (#147 Admin Dashboard nav link)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests), refactor
+- **Scope:** `web/`: `AuthProvider.tsx` asks `GET /users/me` once per
+  session and shares it as `me` (`useAuth.tsx` gains the `CurrentUser`
+  type, `ADMIN_ROLES` and `isAdmin`); `AdminRoute.tsx` uses `me` instead
+  of its own request; `shared/shell/navigation.ts` gains `adminNavItem`
+  (label "Admin Dashboard", mobile tab "Admin"); `NavBar.tsx` and
+  `TabBar.tsx` show it after Profile for ADMIN and OWNER only (the tab
+  bar widens to six columns); `NavBar.tsx` Prettier-formatted; tests in
+  `admin.test.tsx` (link shown to an ADMIN, hidden from a USER),
+  `app.test.tsx` (hidden when logged out) and `auth.test.tsx` (login now
+  also fetches `/users/me` with the new token).
+- **Prompt(s):** Summary: Asked for an Admin Dashboard button beside
+  Profile in the nav bar, routing to `/admin` and shown only to ADMIN and
+  OWNER. Implementation choices by the tool, to confirm in review: the
+  role comes from the same `GET /users/me` answer the `/admin` guard
+  uses, fetched once in `AuthProvider`; the link also appears in the
+  mobile tab bar (as "Admin") so admins on phones can reach the page.
+- **Author review:** Ryan to review via the PR. Web: 42 tests pass;
+  type-check and lint clean.
+
 ## 2026-09-29 — Ryan Ang (#147 admin route guard)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (implementation + tests)

@@ -34,11 +34,16 @@ function problem(status: number, detail: string) {
   return reply(status, { status, detail })
 }
 
-// the method, URL and parsed body of the one request sent
+// the method, URL and parsed body of the n-th request sent
+function requestAt(n: number) {
+  const [url, init] = fetchMock.mock.calls[n] as [string, RequestInit]
+  return { url, method: init.method, body: JSON.parse(String(init.body)) }
+}
+
+// the one request sent
 function sentRequest() {
   expect(fetchMock).toHaveBeenCalledTimes(1)
-  const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-  return { url, method: init.method, body: JSON.parse(String(init.body)) }
+  return requestAt(0)
 }
 
 // the page's own submit button; the nav bar has a "Log In" button too
@@ -81,7 +86,18 @@ async function logIn(identifier: string, password: string) {
 
 describe('login page', () => {
   test('sends usernameOrEmail and password, stores the session and leaves the page', async () => {
-    fetchMock.mockResolvedValue(reply(200, session))
+    fetchMock
+      .mockResolvedValueOnce(reply(200, session))
+      // GET /users/me, asked once the session is stored
+      .mockResolvedValue(
+        reply(200, {
+          id: 1,
+          email: 'e1234567@u.nus.edu',
+          username: 'student_alex',
+          role: 'USER',
+          createdAt: '2026-09-01T00:00:00Z',
+        }),
+      )
 
     await logIn('student_alex', 'Password1234')
 
@@ -90,12 +106,17 @@ describe('login page', () => {
         screen.queryByRole('heading', { name: 'Log In' }),
       ).not.toBeInTheDocument(),
     )
-    expect(sentRequest()).toEqual({
+    expect(requestAt(0)).toEqual({
       url: 'http://user.test/auth/login',
       method: 'POST',
       body: { usernameOrEmail: 'student_alex', password: 'Password1234' },
     })
     expect(JSON.parse(localStorage.getItem('user') ?? 'null')).toEqual(session)
+    // then the account, with the new token
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    const [meUrl, meInit] = fetchMock.mock.calls[1] as [string, RequestInit]
+    expect(meUrl).toBe('http://user.test/users/me')
+    expect(new Headers(meInit.headers).get('Authorization')).toBe('Bearer jwt')
   })
 
   test("shows the server's reason for a failed login", async () => {

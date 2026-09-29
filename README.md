@@ -284,7 +284,8 @@ filter with a "Show removed accounts" toggle, one validation error
 format across user-service, bcrypt outside the database transaction
 with row-locked login counters, an "account created" notice, and an
 admin-only route guard on `/admin` that checks the role with
-`GET /users/me`, with the behaviour decided by the team and recorded in
+`GET /users/me` and an Admin Dashboard nav link shown to admins and
+owners only, with the behaviour decided by the team and recorded in
 `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
