@@ -254,7 +254,13 @@ user-service, plus the PR #141 review fixes (shared sign-up and
 owner-setup rules, case-insensitive usernames, the token lifetime unit,
 login-only race handling, `apiFetch` on the login and register pages),
 with auth placement, OTP deferral, username case and response shapes
-decided by the team and recorded in `ai/usage-log.md`.
+decided by the team and recorded in `ai/usage-log.md`; and the
+login/sign-up page restyle to the wireframes (PR #142) — card layout,
+stacked labels, error alert boxes, a live password checklist mirroring
+the server's password rules, the `react-router-dom`-to-`react-router`
+import cleanup, and the PR's Copilot-review accessibility fixes, with
+the wireframe target and checklist scope chosen by the author via
+neutral-options Q&A and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

@@ -11,6 +11,9 @@
 // (web/docs/wireframes/signup.png) — centered card, stacked labels, error
 // alert box, live password checklist mirroring user-service's AccountRules
 // (display-only; the server still validates) — logic otherwise unchanged.
+// PR #142 Copilot review: role="alert" on the error message; checklist
+// moved outside the password <label> (a ul is not phrasing content and
+// was polluting the field's accessible name).
 // Reviewed by: Ryan Ang
 
 import React, { useState } from "react";
@@ -86,7 +89,10 @@ export function Register() {
       <h2 className="text-2xl font-semibold text-gray-900">Create Account</h2>
       <p className="mt-1 text-sm text-gray-500">Join NUS peer-to-peer errand network.</p>
       {error && (
-        <p className="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          role="alert"
+          className="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
           {error}
         </p>
       )}
@@ -110,16 +116,18 @@ export function Register() {
             className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 font-normal focus:border-gray-400 focus:outline-none"
           />
         </label>
-        <label className="block text-sm font-medium text-gray-700">
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 font-normal focus:border-gray-400 focus:outline-none"
-          />
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 font-normal focus:border-gray-400 focus:outline-none"
+            />
+          </label>
           <PasswordChecklist password={password} />
-        </label>
+        </div>
         <button
           type="submit"
           className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"

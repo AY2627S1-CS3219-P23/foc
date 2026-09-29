@@ -26,6 +26,33 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Leong Wei Zhi (PR #142 login/sign-up wireframe restyle)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (UI restyle) + generate (password checklist)
+- **Scope:** `web/src/features/user/login.tsx` and `register.tsx`
+  restyled to the wireframes (`web/docs/wireframes/login.png`,
+  `signup.png`) using the app's existing Tailwind conventions — centered
+  card, stacked labels, dark full-width button, error alert box — plus a
+  live password checklist on sign-up mirroring user-service's
+  `AccountRules` (display-only; the server stays the validator);
+  `web/src/routes/home.tsx` Outlet import switched from
+  `react-router-dom` to `react-router` and the stray v6
+  `react-router-dom` dependency removed from `web/package.json`;
+  `.idea/` added to `.gitignore`. PR #142 Copilot review fixes:
+  `role="alert"` on both error messages, the checklist moved outside the
+  password `<label>`, and these disclosure updates.
+- **Prompt(s):** Asked to fix the UI discrepancy in the login and
+  sign-up pages; the author chose "match the wireframes" and "include
+  the password checklist" (omitting forgot-password and the OTP modal,
+  which have no backend yet) via neutral-options Q&A; then asked to
+  switch back from react-router-dom to react-router and to resolve the
+  Copilot review comments.
+- **Author review:** Wireframe target and checklist scope chosen by the
+  author via options Q&A; verified in-browser against the wireframe
+  PNGs (checklist flips live while typing, error box renders on a
+  failed login), with lint, tests, and build green; reviewed via pull
+  request.
+
 ## 2026-09-29 — Ryan Ang (#87/#89/#90 sign-up, login, JWT in user-service)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (implementation + tests)

@@ -10,6 +10,8 @@
 // 2026-09-29, Claude Code (Fable 5): restyled to the login wireframe
 // (web/docs/wireframes/login.png) — centered card, stacked labels,
 // error alert box — using the app's Tailwind conventions; logic unchanged.
+// PR #142 Copilot review: role="alert" on the error message so screen
+// readers announce failed logins.
 // Reviewed by: Ryan Ang
 
 import React, { useState } from "react";
@@ -65,7 +67,10 @@ export function Login() {
       <h2 className="text-2xl font-semibold text-gray-900">Log In</h2>
       <p className="mt-1 text-sm text-gray-500">Access your student errand portal.</p>
       {error && (
-        <p className="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          role="alert"
+          className="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
           {error}
         </p>
       )}

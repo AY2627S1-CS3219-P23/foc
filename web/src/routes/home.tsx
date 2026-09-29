@@ -1,3 +1,11 @@
+// AI-assisted (CS3219 AI Usage Policy disclosure):
+// Tool: Claude Code (Fable 5), 2026-09-29, PR #142.
+// Scope: Outlet import switched from react-router-dom to react-router,
+// dropping the stray v6 react-router-dom dependency (react-router v8
+// exports Outlet directly). Header added on PR #142 Copilot review;
+// the page itself predates this change (PR #139).
+// Reviewed by: Leong Wei Zhi (via pull request).
+
 import { Outlet } from "react-router";
 import {router} from "./index";
 
