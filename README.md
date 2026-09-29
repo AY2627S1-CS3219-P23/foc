@@ -254,7 +254,14 @@ user-service, plus the PR #141 review fixes (shared sign-up and
 owner-setup rules, case-insensitive usernames, the token lifetime unit,
 login-only race handling, `apiFetch` on the login and register pages),
 with auth placement, OTP deferral, username case and response shapes
-decided by the team and recorded in `ai/usage-log.md`.
+decided by the team and recorded in `ai/usage-log.md`; and the
+user-service Spring Security filter chain (issue #91) — bearer JWT
+verification mirroring notification-service's `JwtVerifier`, role claim
+to `ROLE_*` authorities, stateless sessions, problem+json 401/403
+responses, and their unit and integration tests, following design doc
+§3, with the skipped routes (`/auth/**` except `/auth/logout`, and
+`/actuator/health`) and the denylist deferral decided by the author and
+recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

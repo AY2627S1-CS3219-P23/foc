@@ -13,6 +13,9 @@ Author review: Ryan reviewed and ensured tests run successfully.
        (soft delete, repeat delete 404, unauthenticated).
 2026-09-27 (Claude Code, Opus 5.5), PR #135: OWNER self-deletion case added
        (owners may delete themselves via DELETE /users/me, team decision).
+2026-09-29 (Claude Code, Opus 5.5), issue #91: requests without credentials
+       now get 401 problem+json from the JWT entry point (was a provisional
+       403).
 */
 
 package foc.user.controller;
@@ -26,10 +29,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -81,10 +86,10 @@ class ProfileControllerTest extends PostgresTestContainer {
     @Test
     @DisplayName("GET /users/me should be rejected without credentials")
     void getOwnProfile_unauthenticated() throws Exception {
-        // provisional: 403 is Spring Security's default with no entry point
-        // configured; expected to become 401 once JWT auth (#91) adds one
         mockMvc.perform(get("/users/me"))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.detail").value("Authentication required"));
     }
 
     @Test
@@ -144,10 +149,8 @@ class ProfileControllerTest extends PostgresTestContainer {
     @Test
     @DisplayName("DELETE /users/me should be rejected without credentials")
     void deleteOwnAccount_unauthenticated() throws Exception {
-        // provisional: 403 is Spring Security's default with no entry point
-        // configured; expected to become 401 once JWT auth (#91) adds one
         mockMvc.perform(delete("/users/me"))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isUnauthorized());
 
         assertThat(userRepository.findById(alex.getId()).orElseThrow().isActive()).isTrue();
     }
