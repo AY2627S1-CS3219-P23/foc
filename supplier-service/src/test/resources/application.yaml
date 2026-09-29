@@ -3,6 +3,9 @@
 # Scope: test configuration scaffolded following the notification-service
 # pattern (in-memory H2 so `./mvnw test` needs no running PostgreSQL).
 # Reviewed by: Ko-Khan (via pull request).
+# 2026-09-29, issue #106: a fixed test JWT secret (32+ bytes, mirrors
+# notification-service's test setup) so the context loads without
+# JWT_SECRET set in the environment.
 
 spring:
   datasource:
@@ -12,3 +15,8 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+
+supplier:
+  web-allowed-origin: http://localhost:5173
+  jwt:
+    secret: test-secret-0123456789abcdef0123456789abcdef

@@ -95,6 +95,33 @@ Entry template:
   was made earlier by its owner (provider via options Q&A in the #88
   PR; engines with the DB wiring PRs). Reviewed via pull request.
 
+## 2026-09-29 — Alastair Tan (#106 JWT verification + role gate in supplier-service)
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `supplier-service`: JWT verification (`security/JwtVerifier`,
+  jjwt 0.13.0, mirroring `notification-service`'s `JwtVerifier`), the
+  authentication filter (`security/JwtAuthenticationFilter`), problem+json
+  401/403 handlers (`security/RestAuthEntryPoint`,
+  `security/RestAccessDeniedHandler`), and the Spring Security filter
+  chain (`config/SecurityConfig`, replacing the old `CorsConfig` per
+  design doc D2: GET open to any authenticated user, everything else
+  under `/suppliers` needs `ROLE_ADMIN`); `spring-boot-starter-security`
+  and jjwt added to `pom.xml`; `supplier.jwt.secret` in both
+  `application.yaml`s; `compose.yaml` passes `JWT_SECRET`;
+  `JwtVerifierTest`, `SecurityConfigTest`.
+- **Prompt(s):** Asked to implement issue #106 ("mirror JwtVerifier"),
+  scoped to supplier-service only. The JWT `role` claim's name/shape was
+  confirmed against user-service's already-merged `JwtIssuer` (PR #141)
+  rather than invented, per AGENTS.md's restriction on agents making
+  interface/schema decisions; the GET-endpoint auth requirement (design
+  doc D2) was confirmed with the author before implementing, since it
+  temporarily breaks browser access to supplier browsing until the
+  frontend's separate auth-wiring task lands.
+- **Author review:** Tested live end-to-end against running
+  user-service + supplier-service containers (signup, login, then
+  GET/POST /suppliers with no/invalid/valid tokens and non-admin/admin
+  roles); `./mvnw test` passes (21/21). Reviewed by: [pending].
+
 ## 2026-09-29 — Leong Wei Zhi (#146 login errors that name their cause)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** generate (implementation + tests + docs)

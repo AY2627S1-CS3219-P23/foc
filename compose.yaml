@@ -41,6 +41,10 @@
 # 2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: JWT_SECRET,
 # JWT_ACCESS_TOKEN_TTL and WEB_ALLOWED_ORIGIN passed to the user service
 # for login token signing and CORS.
+# 2026-09-29, Claude Code (Sonnet 5), issue #106: JWT_SECRET passed to
+# supplier-service for its new JWT verification + role gate filter
+# chain (the shared platform secret, same var already used by
+# notification-service and user-service).
 # 2026-09-29, Claude Code (Fable 5), issue #88: mailpit container added as
 # the default SMTP target for OTP emails, and the MAIL_*/OTP_* vars passed
 # to the user service (Gmail SMTP chosen as the real provider, Mailpit for
@@ -169,6 +173,7 @@ services:
       SUPPLIER_DB_USER: ${SUPPLIER_DB_USER:-supplier}
       SUPPLIER_DB_PASSWORD: ${SUPPLIER_DB_PASSWORD:?set in .env}
       WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
     depends_on:
       supplier-db:
         condition: service_healthy
