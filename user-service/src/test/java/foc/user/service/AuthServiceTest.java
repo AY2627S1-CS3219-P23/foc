@@ -18,6 +18,9 @@ Scope: unit tests for AuthService (issues #87/#89): sign-up normalisation
        match, attempt counting, expiry, exhaustion and the verify-time
        uniqueness re-check. A real OtpService (plain encoder) keeps the
        code round-trip honest; only the email sender is mocked.
+       PR #150 Copilot review: verify stubs moved to the locked finder,
+       and the expiry case pins the boundary (a code expiring exactly
+       now is expired).
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -234,7 +237,7 @@ class AuthServiceTest {
     private PendingSignup pendingWithCode(String code) {
         PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
             "hashed:" + PASSWORD, "hashed:" + code, NOW.plus(OTP_TTL));
-        when(pendingSignupRepository.findByEmail("e1234567@u.nus.edu"))
+        when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(pending));
         return pending;
     }
@@ -281,7 +284,7 @@ class AuthServiceTest {
     @Test
     @DisplayName("An email with no pending sign-up answers exactly like a wrong code")
     void verify_unknownEmail() {
-        when(pendingSignupRepository.findByEmail("e1234567@u.nus.edu"))
+        when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> verifyCode("123456"))
@@ -290,11 +293,12 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("An expired code discards the pending sign-up and says to sign up again")
+    @DisplayName("A code expiring exactly now is already expired and discards the pending sign-up")
     void verify_expired() {
+        // the boundary case: expires_at == now must reject, not accept
         PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
-            "hashed:" + PASSWORD, "hashed:123456", NOW.minusSeconds(1));
-        when(pendingSignupRepository.findByEmail("e1234567@u.nus.edu"))
+            "hashed:" + PASSWORD, "hashed:123456", NOW);
+        when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(pending));
 
         assertThatThrownBy(() -> verifyCode("123456"))

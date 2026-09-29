@@ -5,6 +5,8 @@ Scope: unit test for issue #88's SmtpOtpEmailSender: the composed
        message's addressing and that the body carries the code and its
        lifetime. The JavaMailSender is mocked — real SMTP is exercised
        manually against the compose Mailpit container.
+       PR #150 Copilot review: a sub-minute TTL case pins the seconds
+       wording (30s must not read as "0 minutes").
 Reviewed by: Leong Wei Zhi (via pull request).
 */
 
@@ -44,5 +46,19 @@ class SmtpOtpEmailSenderTest {
         assertThat(message.getValue().getText())
             .contains("042042")
             .contains("10 minutes");
+    }
+
+    @Test
+    @DisplayName("A sub-minute lifetime is quoted in seconds, never truncated to 0 minutes")
+    void sendSignupCode_subMinuteLifetime() {
+        SmtpOtpEmailSender sender = new SmtpOtpEmailSender(mailSender, "no-reply@foc.local");
+
+        sender.sendSignupCode("e1234567@u.nus.edu", "042042", Duration.ofSeconds(30));
+
+        ArgumentCaptor<SimpleMailMessage> message = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(mailSender).send(message.capture());
+        assertThat(message.getValue().getText())
+            .contains("30 seconds")
+            .doesNotContain("0 minutes");
     }
 }

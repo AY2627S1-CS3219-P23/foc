@@ -8,6 +8,9 @@ Scope: SMTP OtpEmailSender for issue #88, resolving the design doc's
        JavaMailSender code path either way — .env decides the target.
        Failures propagate as MailException; AuthService turns them into
        a 502 and rolls the pending sign-up back.
+       PR #150 Copilot review: the lifetime wording keeps sub-minute
+       TTLs honest (seconds when not whole minutes) instead of
+       truncating 30s to "0 minutes".
 Reviewed by: Leong Wei Zhi (via pull request).
 */
 
@@ -38,8 +41,19 @@ class SmtpOtpEmailSender implements OtpEmailSender {
         message.setTo(toEmail);
         message.setSubject("Your FoC verification code");
         message.setText("Your FoC sign-up verification code is " + code + ".\n\n"
-            + "It expires in " + validity.toMinutes() + " minutes.\n\n"
+            + "It expires in " + describe(validity) + ".\n\n"
             + "If you didn't sign up for FoC, you can ignore this email.");
         mailSender.send(message);
+    }
+
+    // whole minutes read naturally; anything else is quoted in seconds
+    // so a sub-minute TTL never truncates to "0 minutes"
+    private static String describe(Duration validity) {
+        long seconds = validity.toSeconds();
+        if (seconds % 60 == 0) {
+            long minutes = validity.toMinutes();
+            return minutes == 1 ? "1 minute" : minutes + " minutes";
+        }
+        return seconds == 1 ? "1 second" : seconds + " seconds";
     }
 }

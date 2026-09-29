@@ -37,6 +37,10 @@ Scope: sign-up (issue #87) and login (issue #89), replacing PR #139's
        is a 502 and rolls the pending row back; wrong codes count attempts
        like login failures do, and exhausting them discards the pending
        sign-up. Flow decisions chosen by Leong Wei Zhi via options Q&A.
+       PR #150 Copilot review: verify locks the pending row so racing
+       guesses can't lose attempt increments; an unknown email pays the
+       same BCrypt cost as a wrong code so timing doesn't reveal a
+       pending sign-up; a code expiring exactly now is expired.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -89,6 +93,10 @@ public class AuthService {
     private final OtpEmailSender otpEmailSender;
     private final int retentionDays;
     private final Clock clock;
+    // matched against when no pending sign-up exists, so an unknown
+    // email takes as long to verify as a wrong code (same trick login
+    // used before #146 made its messages revealing; these stay identical)
+    private final String unknownPendingCodeHash;
 
     @Autowired
     public AuthService(
@@ -120,6 +128,7 @@ public class AuthService {
         this.otpEmailSender = otpEmailSender;
         this.retentionDays = retentionDays;
         this.clock = clock;
+        this.unknownPendingCodeHash = otpService.hash("no-pending-signup");
     }
 
     // parks the request in pending_signups and emails a code; the users
@@ -171,12 +180,18 @@ public class AuthService {
     @Transactional(noRollbackFor = {OtpVerificationException.class, OtpAttemptsExceededException.class})
     public UserResponse verifySignup(SignupVerifyRequest request) {
         String email = NewAccountDetails.normalizeEmail(request.email());
-        // no pending row answers exactly like a wrong code: there is
-        // nothing to count an attempt against, so nothing to reveal
-        PendingSignup pending = pendingSignupRepository.findByEmail(email)
-            .orElseThrow(OtpVerificationException::new);
+        // the row lock serializes concurrent guesses at one pending
+        // sign-up, so every wrong code's attempt increment lands
+        Optional<PendingSignup> found = pendingSignupRepository.findWithLockByEmail(email);
+        if (found.isEmpty()) {
+            // no pending row answers exactly like a wrong code — same
+            // message, and the same BCrypt cost so timing reveals nothing
+            otpService.matches(request.code(), unknownPendingCodeHash);
+            throw new OtpVerificationException();
+        }
+        PendingSignup pending = found.get();
 
-        if (pending.getExpiresAt().isBefore(clock.instant())) {
+        if (!pending.getExpiresAt().isAfter(clock.instant())) {
             pendingSignupRepository.delete(pending);
             throw new OtpVerificationException("Code has expired; sign up again to get a new code");
         }

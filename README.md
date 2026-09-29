@@ -51,6 +51,10 @@
   Copilot review.
   2026-09-27: AI Use Summary extended for the PR #135 review fixes
   (issue #96) by Claude Code (Opus 5.5).
+  2026-09-29: AI Use Summary extended for the user-service OTP email
+  sending (issue #88 — insert-after-verify sign-up, Gmail SMTP/Mailpit,
+  pending_signups replacing the otps table) by Claude Code (Fable 5),
+  on PR #150 Copilot review (the summary had missed the change).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -280,7 +284,19 @@ minutes left and repeats them in `Retry-After`, with their tests and the
 first tests for the web login page, the wording and the trade-off (login
 now reveals whether an account exists, reversing #89's non-revealing
 failures) chosen by the author via neutral-options Q&A and recorded in
-`ai/usage-log.md`.
+`ai/usage-log.md`; and user-service OTP email sending (issue #88, PR
+#150) — sign-up reworked to the design doc's insert-after-verify shape
+(`POST /auth/signup` now parks a `pending_signups` row and emails a
+6-digit code, new `POST /auth/signup/verify` creates the account), the
+generic `otps` table removed for per-operation pending tables, an
+`OtpService`/`OtpEmailSender` pair sending over SMTP (Gmail SMTP as the
+provider, a pinned Mailpit compose container as the local target), the
+purge scheduler's expired-pending sweep, their unit and integration
+tests, and the PR #150 Copilot-review fixes (locked verify reads,
+timing-equalized unknown emails, expiry boundary, sub-minute TTL
+wording, finite SMTP timeouts), with the provider, scope, local-mail
+and pending-tables decisions made by the author via neutral-options
+Q&A and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

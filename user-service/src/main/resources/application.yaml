@@ -20,7 +20,8 @@
 # 2026-09-29, Claude Code (Fable 5), issue #88: spring.mail + user.mail/
 # user.otp for OTP email sending. Defaults target the compose Mailpit
 # container; Gmail SMTP (the chosen provider) is switched on via the
-# MAIL_* values documented in .env.example.
+# MAIL_* values documented in .env.example. PR #150 Copilot review:
+# finite SMTP timeouts so a stalled endpoint can't pin request threads.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -47,6 +48,12 @@ spring:
     properties:
       "mail.smtp.auth": ${MAIL_SMTP_AUTH:false}
       "mail.smtp.starttls.enable": ${MAIL_SMTP_STARTTLS:false}
+      # Finite timeouts (ms): the send runs inside the signup request,
+      # so a stalled SMTP endpoint must fail (502) rather than hold the
+      # request thread and its DB connection open indefinitely.
+      "mail.smtp.connectiontimeout": "5000"
+      "mail.smtp.timeout": "10000"
+      "mail.smtp.writetimeout": "10000"
 
 management:
   endpoints:

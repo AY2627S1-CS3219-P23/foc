@@ -45,7 +45,8 @@
 # the default SMTP target for OTP emails, and the MAIL_*/OTP_* vars passed
 # to the user service (Gmail SMTP chosen as the real provider, Mailpit for
 # local dev/demo — Leong Wei Zhi via options Q&A). Setting the Gmail
-# values in .env redirects delivery without compose edits.
+# values in .env redirects delivery without compose edits. PR #150
+# Copilot review: the mailpit image pinned to a tested minor version.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -272,7 +273,9 @@ services:
   # in-memory on purpose — a dev inbox has nothing worth persisting.
   # Both ports loopback-bound like the DBs: this machine only.
   mailpit:
-    image: axllent/mailpit
+    # Minor-pinned like the DB images (PR #150 Copilot review), so a
+    # future Mailpit release can't change the demo stack unannounced.
+    image: axllent/mailpit:v1.31
     ports:
       - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
       - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
