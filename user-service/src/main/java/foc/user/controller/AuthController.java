@@ -8,6 +8,9 @@ Scope: POST /auth/signup (issue #87) and POST /auth/login (issues #89/#90),
        controller, so other controllers' error bodies are unchanged (#138).
        PR #141 review: the lost-race-to-401 mapping now covers only login,
        so other /auth routes keep ProblemDetailAdvice's 409.
+       2026-09-29, Claude Code (Fable 5), PR #142: AccountLockedException
+       mapped to 429 problem+json (issue #145 decided by the author — the
+       lockout is deliberately distinguishable from other failures).
 Author review: Ryan to review via the PR.
 */
 
@@ -33,6 +36,7 @@ import foc.user.dto.LoginRequest;
 import foc.user.dto.LoginResponse;
 import foc.user.dto.SignupRequest;
 import foc.user.dto.UserResponse;
+import foc.user.exception.AccountLockedException;
 import foc.user.exception.LoginFailedException;
 import foc.user.service.AuthService;
 import jakarta.validation.Valid;
@@ -69,6 +73,13 @@ public class AuthController {
     @ExceptionHandler(LoginFailedException.class)
     public ProblemDetail handleLoginFailed(LoginFailedException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
+    }
+
+    // 429, not 401: the lockout is deliberately distinguishable (issue
+    // #145 decision) so the UI can show the wireframe's lockout message
+    @ExceptionHandler(AccountLockedException.class)
+    public ProblemDetail handleAccountLocked(AccountLockedException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
     }
 
     @ExceptionHandler(ResponseStatusException.class)

@@ -55,6 +55,7 @@ class AuthControllerTest extends PostgresTestContainer {
     private static final String WEB_ORIGIN = "http://localhost:5173";
     private static final String PASSWORD = "ValidPassword123";
     private static final String LOGIN_FAILED = "Incorrect username/email or password";
+    private static final String LOCKED = "Too many failed attempts. Login disabled for 15 minutes.";
 
     @Autowired
     private MockMvc mockMvc;
@@ -224,13 +225,19 @@ class AuthControllerTest extends PostgresTestContainer {
     void login_lockout() throws Exception {
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isCreated());
 
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 4; i++) {
             login("student_alex", "WrongPassword123").andExpect(status().isUnauthorized());
         }
+        // the fifth failure trips the lock and already says so (issue #145:
+        // the lockout is deliberately distinguishable, as a 429)
+        login("student_alex", "WrongPassword123")
+            .andExpect(status().isTooManyRequests())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.detail").value(LOCKED));
 
         login("student_alex", PASSWORD)
-            .andExpect(status().isUnauthorized())
-            .andExpect(jsonPath("$.detail").value(LOGIN_FAILED));
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.detail").value(LOCKED));
         assertThat(userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow().getLockedUntil()).isNotNull();
     }
 
