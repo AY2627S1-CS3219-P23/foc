@@ -12,21 +12,15 @@
 // error alert box — using the app's Tailwind conventions; logic unchanged.
 // PR #142 Copilot review: role="alert" on the error message so screen
 // readers announce failed logins.
+// 2026-09-29, Claude Code (Fable 5), issue #112: local errorMessage
+// replaced by the copy hoisted to lib/api/http.ts; logic unchanged.
 // Reviewed by: Ryan Ang
 
 import React, { useState } from "react";
-import { ApiError, apiFetch } from "@/lib/api/http";
+import { apiFetch, errorMessage } from "@/lib/api/http";
 import { router } from "../../routes/index";
 import { useAuth } from "./useAuth";
 import type { LoginResponse } from "./types";
-
-// ApiError carries user-service's problem+json reason, and apiFetch's own
-// Error names a missing VITE_USER_SERVICE_URL; a TypeError is the network
-function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error && !(error instanceof TypeError)) return error.message;
-  return fallback;
-}
 
 export function Login() {
   const [username, setUsername] = useState("");

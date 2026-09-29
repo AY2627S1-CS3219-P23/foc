@@ -1,6 +1,8 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Fable 5), 2026-09-21, issue #108.
 // Scope: shared fetch wrapper all domains use for REST calls.
+// 2026-09-29, Claude Code (Fable 5), issue #112: errorMessage hoisted
+// here from its three per-page copies (login, register, UsersSection).
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import { serviceBaseUrls, type ServiceName } from './config'
@@ -33,6 +35,16 @@ export class ApiError extends Error {
     this.status = status
     this.problem = problem
   }
+}
+
+// ApiError carries the backend's problem+json reason, and apiFetch's own
+// Error names a missing VITE_*_SERVICE_URL; a TypeError is the network
+// failing, which gets the caller's friendlier fallback.
+export function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) return error.message
+  if (error instanceof Error && !(error instanceof TypeError))
+    return error.message
+  return fallback
 }
 
 export async function apiFetch<T>(

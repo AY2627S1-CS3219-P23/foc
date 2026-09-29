@@ -14,51 +14,15 @@
 // PR #142 Copilot review: role="alert" on the error message; checklist
 // moved outside the password <label> (a ul is not phrasing content and
 // was polluting the field's accessible name).
+// 2026-09-29, Claude Code (Fable 5), issue #112: errorMessage and the
+// password checklist moved out to shared homes (lib/api/http.ts and
+// PasswordChecklist.tsx) for reuse by the profile page; logic unchanged.
 // Reviewed by: Ryan Ang
 
 import React, { useState } from "react";
-import { ApiError, apiFetch } from "@/lib/api/http";
+import { apiFetch, errorMessage } from "@/lib/api/http";
 import { router } from "../../routes/index";
-
-// ApiError carries user-service's problem+json reason, and apiFetch's own
-// Error names a missing VITE_USER_SERVICE_URL; a TypeError is the network
-function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error && !(error instanceof TypeError)) return error.message;
-  return fallback;
-}
-
-// Mirrors user-service's AccountRules password policy (PASSWORD_PATTERN,
-// PASSWORD_MIN/MAX). Display-only: the server remains the validator.
-const passwordRules = [
-  {
-    label: "Contains uppercase and lowercase",
-    met: (p: string) => /[a-z]/.test(p) && /[A-Z]/.test(p),
-  },
-  {
-    label: "Contains numbers",
-    met: (p: string) => /\d/.test(p),
-  },
-  {
-    label: "Length between 10 and 50 characters",
-    met: (p: string) => p.length >= 10 && p.length <= 50,
-  },
-];
-
-function PasswordChecklist({ password }: { password: string }) {
-  return (
-    <ul className="mt-2 space-y-0.5 text-xs font-normal">
-      {passwordRules.map(({ label, met }) => {
-        const ok = met(password);
-        return (
-          <li key={label} className={ok ? "text-green-600" : "text-red-600"}>
-            {ok ? "✓" : "✗"} {label}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
+import { PasswordChecklist } from "./PasswordChecklist";
 
 export function Register() {
   const [email, setEmail] = useState("");

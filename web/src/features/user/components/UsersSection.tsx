@@ -12,11 +12,15 @@
 // Scope: Admin Dashboard "Users" section — list, search, role filter,
 // paging, promote/demote, remove — per
 // web/docs/wireframes/admin-dashboard.png.
+// 2026-09-29, Claude Code (Fable 5), issue #112: local errorMessage
+// replaced by the copy hoisted to lib/api/http.ts (that variant shows
+// the fallback for TypeErrors, i.e. network failures, instead of the
+// browser's terse message — a small behavior improvement).
 // Reviewed by: Ryan Ang
 
 import { useEffect, useState } from 'react'
 
-import { ApiError } from '@/lib/api/http'
+import { errorMessage } from '@/lib/api/http'
 import { Pagination } from '@/shared/components/Pagination'
 import { adminUserApi } from '../adminApi'
 import type { AdminUser, AdminUserPage, UserRole } from '../types'
@@ -35,12 +39,6 @@ const roleOptions: { value: UserRole | ''; label: string }[] = [
   { value: 'ADMIN', label: 'Admin' },
   { value: 'OWNER', label: 'Owner' },
 ]
-
-function errorMessage(err: unknown, fallback: string) {
-  if (err instanceof ApiError) return err.message
-  if (err instanceof Error && err.message) return err.message
-  return fallback
-}
 
 // Identifies one list request, so a newer query shows as loading until its
 // own result arrives.
