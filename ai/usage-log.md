@@ -45,7 +45,16 @@ Entry template:
   after logout because it read `localStorage` directly (a raw read
   React never re-renders on); it now takes the logged-in state from
   `useAuth()`, the same source the NavBar uses — reproduced and
-  verified fixed in-browser (login → logout resets the page).
+  verified fixed in-browser (login → logout resets the page). Also on
+  this PR, at the author's request: JWT wired into `apiFetch` —
+  `AuthProvider` now feeds the stored session's `accessToken` to
+  `setTokenSource` (a layout effect, so it is set before any page's
+  mount-time fetch), the session is typed as the `LoginResponse` it
+  actually is (shared via `types.ts`; `useAuth`/`useLocalStorage` were
+  typed as jose's `JWTPayload` but never held one), and the
+  Authorization header was verified present on a live `/users` request
+  in-browser. Server-side JWT validation does not exist yet, so
+  authenticated endpoints still 403 — tracked separately.
 - **Prompt(s):** Asked to fix the UI discrepancy in the login and
   sign-up pages; the author chose "match the wireframes" and "include
   the password checklist" (omitting forgot-password and the OTP modal,

@@ -18,13 +18,7 @@ import React, { useState } from "react";
 import { ApiError, apiFetch } from "@/lib/api/http";
 import { router } from "../../routes/index";
 import { useAuth } from "./useAuth";
-
-// POST /auth/login's body
-type LoginResponse = {
-  accessToken: string;
-  tokenType: string;
-  expiresIn: number;
-};
+import type { LoginResponse } from "./types";
 
 // ApiError carries user-service's problem+json reason, and apiFetch's own
 // Error names a missing VITE_USER_SERVICE_URL; a TypeError is the network
