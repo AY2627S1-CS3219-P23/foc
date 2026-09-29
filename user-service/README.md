@@ -23,7 +23,7 @@
   includeDeleted list filter, the shared 400 format, and the login
   section's lockout (429) and row-locked counters.
   2026-09-29, Claude Code (Opus 5.5): "Demo accounts" section for the
-  USER_SEED_DEMO seeder.
+  USER_SEED_DEMO seeder
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -141,9 +141,21 @@ that already exist, so restarts are safe:
 | `demo_user_001` … `demo_user_100` (`e9100001`–`e9100100@u.nus.edu`) | USER | `StudentPass123` |
 
 The passwords are public, so never set the flag on a real deployment.
-An account that is changed later (e.g. a demoted admin) is left as it
-is; delete it, or reset the database (`docker compose down -v user-db`),
-to get the original back.
+
+The seeder only inserts missing accounts, and soft-deleted rows count as
+present: an account that is changed (e.g. a demoted admin) or removed
+(soft-deleted, kept until the day-31 purge below) is not restored on
+restart. To get the originals back, reset the user database — remove the
+`user-db` container and its data volume, then start again:
+
+```sh
+docker compose rm -sf user-db
+docker volume rm foc_user-db-data   # "<project>_user-db-data"; foc = the repo folder name
+docker compose up -d user-db user-service
+```
+
+(`docker compose down -v` also works, but wipes every service's
+database.)
 
 ## Soft delete & day-31 purge (#93)
 
