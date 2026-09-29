@@ -26,6 +26,25 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Ryan Ang (#147 admin Suppliers list)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `web/`: new
+  `src/features/supplier/components/SuppliersAdminSection.tsx` (read-only
+  supplier list from `listSuppliers`: name, categories, location, hours;
+  table at md+, cards on mobile; shared `Pagination`, 20 per page;
+  loading, empty and error states) replaces the placeholder in
+  `src/routes/admin.tsx`; `src/test/admin.test.tsx` fakes
+  `listSuppliers` and replaces the placeholder test with five cases.
+- **Prompt(s):** Summary: Team decision to list suppliers on the admin
+  dashboard first and add the create/edit/delete buttons once
+  supplier-service's CRUD endpoints (#104) exist. Implementation choices
+  by the tool, to confirm in review: the wireframe's Zone column left out
+  (zones were dropped, supplier-service D4); 20 suppliers per page; hours
+  shown as "08:00–18:00" like the Suppliers page's cards.
+- **Author review:** Ryan to review via the PR. Web: 48 tests pass;
+  type-check and lint clean.
+
 ## 2026-09-29 — Ryan Ang (#147 admin Users section bugs)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor (bug fixes), generate (tests)
