@@ -5,6 +5,10 @@
  * notification-service's JwtVerifierTest (valid, expired, malformed,
  * wrong-key, missing-subject tokens; weak-secret startup failure) and
  * adding coverage for the role claim this service also needs.
+ * PR #143 review (LeongWZ; also flagged by Copilot): added
+ * rejectsTokenWithoutExpiry — jjwt only checks exp when the claim is
+ * present, so a validly-signed token with none at all previously
+ * verified forever.
  * Reviewed by: [pending]
  */
 package foc.supplier.security;
@@ -81,6 +85,21 @@ class JwtVerifierTest {
         assertThatThrownBy(() -> verifier.verify(token))
                 .isInstanceOf(MalformedJwtException.class)
                 .hasMessageContaining("subject");
+    }
+
+    @Test
+    void rejectsTokenWithoutExpiry() {
+        // no .expiration(...) at all — jjwt itself only enforces exp
+        // when the claim is present, so this must be rejected explicitly.
+        String token = Jwts.builder()
+                .subject("42")
+                .claim("role", "USER")
+                .signWith(key(SECRET))
+                .compact();
+
+        assertThatThrownBy(() -> verifier.verify(token))
+                .isInstanceOf(MalformedJwtException.class)
+                .hasMessageContaining("expiry");
     }
 
     @Test

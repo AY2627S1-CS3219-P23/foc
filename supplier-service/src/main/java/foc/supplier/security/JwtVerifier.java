@@ -8,6 +8,10 @@
  * issue #90: claim "role", value one of the Role enum names) for the
  * role gate (design doc D2: CRUD endpoints admin-gated via JWT role
  * claim).
+ * PR #143 review (LeongWZ): jjwt only checks exp when the claim is
+ * present, so a signed token with no exp at all verified indefinitely
+ * — Copilot flagged the same gap. Fixed by requiring exp explicitly,
+ * mirroring user-service's merged JwtVerifier (issue #91).
  * Reviewed by: [pending]
  */
 package foc.supplier.security;
@@ -65,6 +69,11 @@ public class JwtVerifier {
         String subject = claims.getSubject();
         if (subject == null || subject.isBlank()) {
             throw new MalformedJwtException("token has no subject");
+        }
+        // jjwt only checks exp when it is present; a token without one
+        // would never expire
+        if (claims.getExpiration() == null) {
+            throw new MalformedJwtException("token has no expiry");
         }
         String role = claims.get("role", String.class);
         if (role == null || role.isBlank()) {
