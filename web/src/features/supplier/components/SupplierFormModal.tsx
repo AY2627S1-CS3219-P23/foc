@@ -11,6 +11,15 @@
 // (Name, Location, Opening/Close) so the `required` HTML5 validation
 // already in place is visible before a user hits Save, not just as a
 // browser-native error after the fact.
+// 2026-09-29, Claude Code (Sonnet 5), issue #104: added Latitude/
+// Longitude inputs — previously the form silently sent 0/0 for a new
+// supplier (initial?.latitude ?? 0) with no way to enter real
+// coordinates, so every newly-created supplier was pinned to (0, 0)
+// and sorted wrongly (or not at all) by "Nearest to Me". Validated as
+// required numbers in range (type="number", min/max/step="any", the
+// same native-HTML5-validation approach already used for the other
+// required fields) — backend also validates the same range
+// (SupplierRequest).
 // Reviewed by: [pending]
 
 import { useState, type FormEvent, type KeyboardEvent } from 'react'
@@ -38,6 +47,8 @@ export function SupplierFormModal({
   const [openingTime, setOpeningTime] = useState(initial?.openingTime ?? '09:00')
   const [closingTime, setClosingTime] = useState(initial?.closingTime ?? '18:00')
   const [description, setDescription] = useState(initial?.description ?? '')
+  const [latitude, setLatitude] = useState(initial?.latitude !== undefined ? String(initial.latitude) : '')
+  const [longitude, setLongitude] = useState(initial?.longitude !== undefined ? String(initial.longitude) : '')
 
   function addCategory() {
     const value = categoryDraft.trim()
@@ -63,8 +74,8 @@ export function SupplierFormModal({
       openingTime,
       closingTime,
       description,
-      latitude: initial?.latitude ?? 0,
-      longitude: initial?.longitude ?? 0,
+      latitude: Number(latitude),
+      longitude: Number(longitude),
     })
   }
 
@@ -95,6 +106,41 @@ export function SupplierFormModal({
             className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
           />
         </label>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-sm">
+            <span className="font-medium text-gray-700">
+              Latitude <span className="text-red-500">*</span>
+            </span>
+            <input
+              required
+              type="number"
+              step="any"
+              min={-90}
+              max={90}
+              value={latitude}
+              onChange={(e) => setLatitude(e.target.value)}
+              placeholder="1.2966"
+              className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="font-medium text-gray-700">
+              Longitude <span className="text-red-500">*</span>
+            </span>
+            <input
+              required
+              type="number"
+              step="any"
+              min={-180}
+              max={180}
+              value={longitude}
+              onChange={(e) => setLongitude(e.target.value)}
+              placeholder="103.7764"
+              className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
+            />
+          </label>
+        </div>
 
         <div className="text-sm">
           <span className="font-medium text-gray-700">Categories</span>

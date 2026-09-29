@@ -27,6 +27,17 @@
  * @CsvBindByName(column = "Type") binds by the CSV's actual header text,
  * not the Java field name.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-09-29 (author request): the CSV is read as Windows-1252, not
+ * UTF-8 — two rows ("Octobox", "Supersnacks") have a curly apostrophe
+ * in "Prince George's Park" encoded as the single byte 0x92, which is
+ * Windows-1252's right-single-quote but not valid UTF-8 in that
+ * position; decoded as UTF-8 it silently became U+FFFD ("�") instead
+ * of failing loudly. Confirmed every other byte in the file is plain
+ * ASCII (identical under both encodings), so this is a safe,
+ * whole-file fix rather than special-casing those two rows — same
+ * "the seed CSV is course-provided and can't be edited, so fix the
+ * read side" precedent as SupplierService's image-URL normalization.
+ * Reviewed by: [pending]
  */
 package foc.supplier.seed;
 
@@ -43,7 +54,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 
 @Component
 public class SuppliersSeeder implements CommandLineRunner {
@@ -60,7 +71,7 @@ public class SuppliersSeeder implements CommandLineRunner {
         if (suppliersRepository.count() == 0) {
             ClassPathResource csvResource = new ClassPathResource("csv/supplier-seed-data.csv");
 
-            try (InputStreamReader reader = new InputStreamReader(csvResource.getInputStream(), StandardCharsets.UTF_8)) {
+            try (InputStreamReader reader = new InputStreamReader(csvResource.getInputStream(), Charset.forName("windows-1252"))) {
                 CsvToBean<Suppliers> csvToBean = new CsvToBeanBuilder<Suppliers>(reader)
                         .withType(Suppliers.class)
                         .withIgnoreLeadingWhiteSpace(true)

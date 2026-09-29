@@ -26,6 +26,11 @@
  * predicate) — `search` now arrives pre-escaped from SupplierService,
  * so `%`/`_` typed by a user are matched literally instead of being
  * interpreted as LIKE wildcards.
+ * 2026-09-29 (author request): `search` now also matches `building`/
+ * `locationDescription`, not just `name` — e.g. searching "yusof"
+ * finds every supplier at Yusof Ishak House, the same simple substring
+ * match already used for name (no abbreviation/synonym expansion, kept
+ * deliberately simple per the author).
  * Reviewed by: [pending]
  */
 package foc.supplier.repository;
@@ -45,7 +50,10 @@ public interface SuppliersRepository extends JpaRepository<Suppliers, Long> {
     @Query("""
             SELECT DISTINCT s FROM Suppliers s
             LEFT JOIN SupplierCategories sc ON sc.supplier = s
-            WHERE (:search IS NULL OR LOWER(s.name) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) ESCAPE '\\')
+            WHERE (:search IS NULL
+                OR LOWER(s.name) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) ESCAPE '\\'
+                OR LOWER(s.building) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) ESCAPE '\\'
+                OR LOWER(s.locationDescription) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) ESCAPE '\\')
             AND (:category IS NULL OR LOWER(sc.category) = LOWER(CAST(:category AS string)))
             """)
     Page<Suppliers> search(@Param("search") String search, @Param("category") String category,
@@ -53,7 +61,10 @@ public interface SuppliersRepository extends JpaRepository<Suppliers, Long> {
 
     @Query(value = """
             SELECT s.* FROM suppliers s
-            WHERE (:search IS NULL OR LOWER(s.name) LIKE LOWER(CONCAT('%', CAST(:search AS TEXT), '%')) ESCAPE '\\')
+            WHERE (:search IS NULL
+                OR LOWER(s.name) LIKE LOWER(CONCAT('%', CAST(:search AS TEXT), '%')) ESCAPE '\\'
+                OR LOWER(s.building) LIKE LOWER(CONCAT('%', CAST(:search AS TEXT), '%')) ESCAPE '\\'
+                OR LOWER(s.location_description) LIKE LOWER(CONCAT('%', CAST(:search AS TEXT), '%')) ESCAPE '\\')
             AND (:category IS NULL OR EXISTS (
                 SELECT 1 FROM supplier_categories sc
                 WHERE sc.id = s.id AND LOWER(sc.category) = LOWER(CAST(:category AS TEXT))
@@ -70,7 +81,10 @@ public interface SuppliersRepository extends JpaRepository<Suppliers, Long> {
             """,
             countQuery = """
             SELECT count(*) FROM suppliers s
-            WHERE (:search IS NULL OR LOWER(s.name) LIKE LOWER(CONCAT('%', CAST(:search AS TEXT), '%')) ESCAPE '\\')
+            WHERE (:search IS NULL
+                OR LOWER(s.name) LIKE LOWER(CONCAT('%', CAST(:search AS TEXT), '%')) ESCAPE '\\'
+                OR LOWER(s.building) LIKE LOWER(CONCAT('%', CAST(:search AS TEXT), '%')) ESCAPE '\\'
+                OR LOWER(s.location_description) LIKE LOWER(CONCAT('%', CAST(:search AS TEXT), '%')) ESCAPE '\\')
             AND (:category IS NULL OR EXISTS (
                 SELECT 1 FROM supplier_categories sc
                 WHERE sc.id = s.id AND LOWER(sc.category) = LOWER(CAST(:category AS TEXT))

@@ -50,17 +50,35 @@
  * seed time) so it also covers any supplier created/edited later
  * through the admin CRUD API with the same kind of URL, not just the
  * CSV-seeded rows.
+ * 2026-09-29, issue #104: added createSupplier/updateSupplier/
+ * deleteSupplier (F1.1–F1.1.4; team decision, D5: hard delete). The
+ * request DTO's single `location` field (the form has no separate
+ * building/description inputs) is written entirely into
+ * locationDescription with building cleared, not merged with whatever
+ * building was already there — an edit's `location` starts as
+ * SupplierResponse's already-combined "building, description" string
+ * (round-tripped through the form), so keeping the old building too
+ * would double it up on the next read. Categories are reconciled by
+ * deleting a supplier's existing rows and reinserting the request's
+ * set, the simplest correct way to handle an arbitrary added/removed
+ * set without diffing. Delete removes the category rows first — no
+ * cascade is declared from Suppliers, and the FK would otherwise
+ * reject the supplier row's deletion.
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
 
 import foc.supplier.dto.PageResponse;
+import foc.supplier.dto.SupplierRequest;
 import foc.supplier.dto.SupplierResponse;
 import foc.supplier.exception.InvalidSortException;
+import foc.supplier.exception.SupplierNotFoundException;
 import foc.supplier.model.SupplierCategories;
 import foc.supplier.model.Suppliers;
 import foc.supplier.repository.SupplierCategoriesRepository;
 import foc.supplier.repository.SuppliersRepository;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -72,6 +90,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SupplierService {
@@ -122,6 +141,67 @@ public class SupplierService {
 
     public List<String> listCategories() {
         return supplierCategoriesRepository.findDistinctCategories();
+    }
+
+    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
+
+    @Transactional
+    public SupplierResponse createSupplier(SupplierRequest request) {
+        Suppliers supplier = new Suppliers();
+        applyRequest(supplier, request);
+        Suppliers saved = suppliersRepository.save(supplier);
+        List<String> categories = saveCategories(saved, request.categories());
+        return toResponse(saved, categories);
+    }
+
+    @Transactional
+    public SupplierResponse updateSupplier(Long id, SupplierRequest request) {
+        Suppliers supplier = suppliersRepository.findById(id)
+                .orElseThrow(() -> new SupplierNotFoundException(id));
+        applyRequest(supplier, request);
+        Suppliers saved = suppliersRepository.save(supplier);
+        supplierCategoriesRepository.deleteBySupplierId(id);
+        List<String> categories = saveCategories(saved, request.categories());
+        return toResponse(saved, categories);
+    }
+
+    @Transactional
+    public void deleteSupplier(Long id) {
+        if (!suppliersRepository.existsById(id)) {
+            throw new SupplierNotFoundException(id);
+        }
+        supplierCategoriesRepository.deleteBySupplierId(id);
+        suppliersRepository.deleteById(id);
+    }
+
+    private static void applyRequest(Suppliers supplier, SupplierRequest request) {
+        supplier.setName(request.name());
+        // the form has one free-text location field, not separate
+        // building/description inputs — see class header
+        supplier.setBuilding(null);
+        supplier.setLocationDescription(request.location());
+        supplier.setStartingTime(LocalTime.parse(request.openingTime(), TIME_FORMAT));
+        supplier.setClosingTime(LocalTime.parse(request.closingTime(), TIME_FORMAT));
+        supplier.setSupplierDescription(request.description());
+        supplier.setLatitude(request.latitude());
+        supplier.setLongitude(request.longitude());
+        supplier.setImageURL(request.imageUrl());
+    }
+
+    // Saves one SupplierCategories row per non-blank category and
+    // returns exactly the set that was persisted, for the response.
+    private List<String> saveCategories(Suppliers supplier, List<String> categories) {
+        if (categories == null) {
+            return List.of();
+        }
+        List<String> nonBlank = categories.stream().filter(c -> c != null && !c.isBlank()).toList();
+        for (String category : nonBlank) {
+            SupplierCategories sc = new SupplierCategories();
+            sc.setSupplier(supplier);
+            sc.setCategory(category);
+            supplierCategoriesRepository.save(sc);
+        }
+        return nonBlank;
     }
 
     private static SupplierResponse toResponse(Suppliers s, List<String> categories) {
