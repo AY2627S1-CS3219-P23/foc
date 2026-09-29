@@ -48,6 +48,22 @@ Entry template:
   Mailpit inbox, verify 201, login token issued. Reviewed via pull
   request.
 
+## 2026-09-29 — Leong Wei Zhi (architecture docs: resolved TBDs struck)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs
+- **Scope:** `docs/architecture.md`, `docs/architecture.mmd` — the
+  follow-up the D2 design doc lists: strike resolved TBDs (same PR as
+  the #88 implementation above).
+- **Prompt(s):** Asked to do the docs follow-up for issue #88.
+  Email provider recorded as Gmail SMTP (Mailpit locally) at the
+  User Service → Email Provider edge and moved out of "Decisions still
+  open"; User/Supplier DB engine TBDs replaced with PostgreSQL, matching
+  what compose.yaml has run since issue #85 and the supplier
+  scaffolding.
+- **Author review:** Transcription only — every decision recorded here
+  was made earlier by its owner (provider via options Q&A in the #88
+  PR; engines with the DB wiring PRs). Reviewed via pull request.
+
 ## 2026-09-29 — Leong Wei Zhi (#146 login errors that name their cause)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** generate (implementation + tests + docs)
