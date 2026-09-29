@@ -21,6 +21,10 @@ signed-in user; every other method on /users and /users/* needs ADMIN/OWNER
 (WEB_ALLOWED_ORIGIN, the variable supplier-service already uses), applied in
 the filter chain so browser preflights pass before the fail-closed rules.
 CORS in this PR per team decision.
+2026-09-29 (Claude Code, Opus 5.5), issue #91: JwtAuthenticationFilter added
+to the chain (bearer JWT -> ROLE_ authority, design doc §3), stateless
+sessions, and problem+json 401/403 from SecurityProblemResponses (a missing
+token is now 401, not Spring's default 403).
 
 */
 
@@ -35,12 +39,18 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import foc.user.security.JwtAuthenticationFilter;
+import foc.user.security.JwtVerifier;
+import foc.user.security.SecurityProblemResponses;
 
 @Configuration
 public class SecurityConfig {
@@ -64,19 +74,32 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        // Permit /auth/** while security is being built
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtVerifier jwtVerifier,
+            SecurityProblemResponses problems) throws Exception {
         return http
             .csrf(AbstractHttpConfigurer::disable)
             // uses the corsConfigurationSource bean; answers preflights
             // before the authorization rules below
             .cors(Customizer.withDefaults())
+            // every request carries its own bearer token: no session
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            // the caller comes from the Authorization header (design doc §3)
+            .addFilterBefore(new JwtAuthenticationFilter(jwtVerifier, problems),
+                UsernamePasswordAuthenticationFilter.class)
+            // 401 without usable credentials, 403 for the wrong role, both
+            // problem+json like the controllers' errors
+            .exceptionHandling(errors -> errors
+                .authenticationEntryPoint(problems)
+                .accessDeniedHandler(problems))
             .authorizeHttpRequests(auth -> auth
                 // /error must stay open: any exception thrown from a
                 // permitAll route (e.g. /auth/**) makes the container
                 // forward here to render the response, and without this
                 // Spring Security blocks that internal forward, clobbering
                 // the real status/body with a bare 403.
+                // #90's POST /auth/logout needs an authenticated() rule
+                // above this line (JwtAuthenticationFilter already reads
+                // its token)
                 .requestMatchers("/auth/**", "/error").permitAll()
                 // health checks (compose depends_on / probes) carry no credentials
                 .requestMatchers("/actuator/health").permitAll()

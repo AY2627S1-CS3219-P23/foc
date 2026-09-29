@@ -18,6 +18,9 @@ Author review: Ryan reviewed and ensured tests run successfully.
        2026-09-29 (Claude Code, Opus 5.5), PR #140 review: GET /users now
        hides soft-deleted accounts (team decision); list expectations
        updated and a case added that a deleted account is left out.
+       2026-09-29 (Claude Code, Opus 5.5), issue #91: requests without
+       credentials now get 401 from the JWT entry point (was a provisional
+       403).
 */
 
 package foc.user.controller;
@@ -152,15 +155,13 @@ class AdminControllerTest extends PostgresTestContainer {
     @Test
     @DisplayName("Admin endpoints should be rejected without credentials")
     void unauthenticated() throws Exception {
-        // provisional: 403 is Spring Security's default with no entry point
-        // configured; expected to become 401 once JWT auth (#91) adds one
         mockMvc.perform(get("/users"))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isUnauthorized());
         mockMvc.perform(patch("/users/{id}", alex.getId())
                 .contentType(MediaType.APPLICATION_JSON).content(roleBody("ADMIN")))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isUnauthorized());
         mockMvc.perform(delete("/users/{id}", alex.getId()))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isUnauthorized());
 
         User unchanged = userRepository.findById(alex.getId()).orElseThrow();
         assertThat(unchanged.getRole()).isEqualTo(Role.USER);
