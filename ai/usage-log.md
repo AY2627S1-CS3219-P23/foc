@@ -26,6 +26,28 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Leong Wei Zhi (#88 OTP email sending)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `user-service/` — sign-up reworked to the design doc's
+  insert-after-verify shape: `pending_signups` entity/repository (the
+  generic `otps` table removed with it), `OtpService` (code policy),
+  `OtpEmailSender`/`SmtpOtpEmailSender` (SMTP via
+  spring-boot-starter-mail), `POST /auth/signup` → 202 + emailed code,
+  new `POST /auth/signup/verify` → 201, purge scheduler sweep, unit +
+  integration tests; `compose.yaml` mailpit container + MAIL_*/OTP_*
+  wiring; `.env.example`, `AGENTS.md` port row.
+- **Prompt(s):** Asked to read the D2 design doc and plan/resolve #88.
+  The open design decisions were made by the author via options Q&A:
+  Gmail SMTP as the provider (over a transactional API and AWS SES),
+  scope including OTP issuance and the sign-up wiring, Mailpit as the
+  local SMTP default, and the pending-tables design (drop `otps`;
+  `pending_email_changes` to follow with #92).
+- **Author review:** Full test suite (213 tests) green; end-to-end
+  verified against the compose stack — sign-up 202, code read from the
+  Mailpit inbox, verify 201, login token issued. Reviewed via pull
+  request.
+
 ## 2026-09-29 — Leong Wei Zhi (#146 login errors that name their cause)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** generate (implementation + tests + docs)

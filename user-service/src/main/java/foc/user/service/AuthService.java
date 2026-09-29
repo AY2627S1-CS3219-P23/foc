@@ -29,6 +29,14 @@ Scope: sign-up (issue #87) and login (issue #89), replacing PR #139's
        the lock and password checks, so an account past the window answers
        as gone whatever password is typed, instead of only when the
        password happened to be right.
+       2026-09-29, Claude Code (Fable 5), issue #88: the deferred OTP step
+       is in — sign-up now parks the request in pending_signups and emails
+       a code (202), and verifySignup (POST /auth/signup/verify) is what
+       inserts the users row (design doc: insert after verify). A repeat
+       sign-up renews the pending row (that is the resend); a mail failure
+       is a 502 and rolls the pending row back; wrong codes count attempts
+       like login failures do, and exhausting them discards the pending
+       sign-up. Flow decisions chosen by Leong Wei Zhi via options Q&A.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -44,6 +52,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.mail.MailException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,11 +61,17 @@ import org.springframework.web.server.ResponseStatusException;
 import foc.user.dto.LoginRequest;
 import foc.user.dto.LoginResponse;
 import foc.user.dto.SignupRequest;
+import foc.user.dto.SignupResponse;
+import foc.user.dto.SignupVerifyRequest;
 import foc.user.dto.UserResponse;
+import foc.user.entity.PendingSignup;
 import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.exception.AccountLockedException;
 import foc.user.exception.LoginFailedException;
+import foc.user.exception.OtpAttemptsExceededException;
+import foc.user.exception.OtpVerificationException;
+import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
 import foc.user.security.JwtIssuer;
 
@@ -67,49 +82,132 @@ public class AuthService {
     static final Duration LOCKOUT = Duration.ofMinutes(15);
 
     private final UserRepository userRepository;
+    private final PendingSignupRepository pendingSignupRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtIssuer jwtIssuer;
+    private final OtpService otpService;
+    private final OtpEmailSender otpEmailSender;
     private final int retentionDays;
     private final Clock clock;
 
     @Autowired
     public AuthService(
             UserRepository userRepository,
+            PendingSignupRepository pendingSignupRepository,
             PasswordEncoder passwordEncoder,
             JwtIssuer jwtIssuer,
+            OtpService otpService,
+            OtpEmailSender otpEmailSender,
             @Value("${user.retention.days}") int retentionDays) {
-        this(userRepository, passwordEncoder, jwtIssuer, retentionDays, Clock.systemUTC());
+        this(userRepository, pendingSignupRepository, passwordEncoder, jwtIssuer,
+            otpService, otpEmailSender, retentionDays, Clock.systemUTC());
     }
 
     AuthService(
             UserRepository userRepository,
+            PendingSignupRepository pendingSignupRepository,
             PasswordEncoder passwordEncoder,
             JwtIssuer jwtIssuer,
+            OtpService otpService,
+            OtpEmailSender otpEmailSender,
             int retentionDays,
             Clock clock) {
         this.userRepository = userRepository;
+        this.pendingSignupRepository = pendingSignupRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtIssuer = jwtIssuer;
+        this.otpService = otpService;
+        this.otpEmailSender = otpEmailSender;
         this.retentionDays = retentionDays;
         this.clock = clock;
     }
 
-    // creates a USER account. OTP verification will sit before the insert
-    // once it lands (POST /auth/signup/verify); until then sign-up inserts
+    // parks the request in pending_signups and emails a code; the users
+    // row is only inserted by verifySignup (design doc: insert after
+    // verify, so an unverified sign-up never holds the email/username)
     @Transactional
-    public UserResponse signup(SignupRequest request) {
+    public SignupResponse signup(SignupRequest request) {
         String email = NewAccountDetails.normalizeEmail(request.email());
         String username = NewAccountDetails.normalizeUsername(request.username());
         NewAccountDetails.ensureUnique(userRepository, email, username);
 
-        User user = new User(email, username, passwordEncoder.encode(request.password()), Role.USER);
+        String code = otpService.generateCode();
+        String passwordHash = passwordEncoder.encode(request.password());
+        Instant expiresAt = clock.instant().plus(otpService.ttl());
+
+        // one pending row per email: a repeat sign-up renews it with a
+        // fresh code — which is also how a lost code is resent
+        PendingSignup pending = pendingSignupRepository.findByEmail(email).orElse(null);
+        if (pending == null) {
+            pending = new PendingSignup(email, username, passwordHash,
+                otpService.hash(code), expiresAt);
+        } else {
+            pending.renew(username, passwordHash, otpService.hash(code), expiresAt);
+        }
         try {
-            return UserResponse.from(userRepository.saveAndFlush(user));
+            pendingSignupRepository.saveAndFlush(pending);
+        } catch (DataIntegrityViolationException e) {
+            // two first sign-ups for one email at once: the loser's insert
+            // hits the unique index after its empty findByEmail
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "A sign-up for this email is already in progress; try again");
+        }
+
+        try {
+            otpEmailSender.sendSignupCode(email, code, otpService.ttl());
+        } catch (MailException e) {
+            // rolls the pending row back too: no orphan row holding a code
+            // nobody received, and a retry is a clean fresh sign-up
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                "Could not send the verification email; try again later");
+        }
+
+        return new SignupResponse(email, otpService.ttl().toSeconds());
+    }
+
+    // noRollbackFor: a wrong code must still commit its attempt counter,
+    // and a spent or expired pending row must stay deleted (same trick as
+    // login's failure counters)
+    @Transactional(noRollbackFor = {OtpVerificationException.class, OtpAttemptsExceededException.class})
+    public UserResponse verifySignup(SignupVerifyRequest request) {
+        String email = NewAccountDetails.normalizeEmail(request.email());
+        // no pending row answers exactly like a wrong code: there is
+        // nothing to count an attempt against, so nothing to reveal
+        PendingSignup pending = pendingSignupRepository.findByEmail(email)
+            .orElseThrow(OtpVerificationException::new);
+
+        if (pending.getExpiresAt().isBefore(clock.instant())) {
+            pendingSignupRepository.delete(pending);
+            throw new OtpVerificationException("Code has expired; sign up again to get a new code");
+        }
+
+        if (!otpService.matches(request.code(), pending.getCodeHash())) {
+            pending.incrementAttempts();
+            // the attempt that exhausts the codes also discards the pending
+            // sign-up, so the caller learns immediately (login's lockout
+            // reports on the tripping attempt for the same reason)
+            if (pending.getAttempts() >= otpService.maxAttempts()) {
+                pendingSignupRepository.delete(pending);
+                throw new OtpAttemptsExceededException();
+            }
+            pendingSignupRepository.save(pending);
+            throw new OtpVerificationException();
+        }
+
+        // the identifiers were free at sign-up; re-check now in case an
+        // account (or another verified pending sign-up) took them since
+        NewAccountDetails.ensureUnique(userRepository, email, pending.getUsername());
+        // the hash stored at sign-up is already BCrypt: never re-encode
+        User user = new User(email, pending.getUsername(), pending.getPasswordHash(), Role.USER);
+        try {
+            user = userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException e) {
             // a concurrent sign-up took the email or username after the checks
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "Email or username was just taken; choose another");
         }
+        pendingSignupRepository.delete(pending);
+        return UserResponse.from(user);
     }
 
     // noRollbackFor: a failed attempt must still commit its counter update

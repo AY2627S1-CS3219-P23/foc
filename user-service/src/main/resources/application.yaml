@@ -17,6 +17,10 @@
 # 2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: user.jwt (login
 # token signing, design doc §3) and user.web-allowed-origin (CORS, reusing
 # supplier-service's WEB_ALLOWED_ORIGIN variable).
+# 2026-09-29, Claude Code (Fable 5), issue #88: spring.mail + user.mail/
+# user.otp for OTP email sending. Defaults target the compose Mailpit
+# container; Gmail SMTP (the chosen provider) is switched on via the
+# MAIL_* values documented in .env.example.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -30,20 +34,38 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
+  mail:
+    # SMTP target for OTP emails (issue #88). The defaults reach the
+    # compose Mailpit container (web inbox: http://localhost:8025); for
+    # real delivery set the Gmail values from .env.example. Unlike
+    # JWT_SECRET, empty credentials are legitimate — Mailpit is
+    # unauthenticated — so nothing fails loudly here.
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      "mail.smtp.auth": ${MAIL_SMTP_AUTH:false}
+      "mail.smtp.starttls.enable": ${MAIL_SMTP_STARTTLS:false}
 
 management:
   endpoints:
     web:
       exposure:
         include: health
+  health:
+    mail:
+      # Don't let an SMTP outage mark the whole service down: everything
+      # but the email flows keeps working, and a failed send already
+      # surfaces as a 502 on sign-up (issue #88).
+      enabled: false
 
 user:
   retention:
     # Soft-deleted accounts keep their row — and so their unique email/
     # username — for this many days (design doc §2: 30-day reuse block).
-    # The purge scheduler hard-deletes them, with their otps and
-    # account_tokens rows, once deleted_at is older than this ("purge on
-    # day 31").
+    # The purge scheduler hard-deletes them, with their account_tokens
+    # rows, once deleted_at is older than this ("purge on day 31").
     days: ${USER_RETENTION_DAYS:30}
     # Cron schedule (Spring's 6-field format) controlling how often the
     # purge sweep runs. Default: daily at 03:00 server time.
@@ -57,6 +79,17 @@ user:
     access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:1h}
   # Browser origin allowed by CORS (the web SPA).
   web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
+  mail:
+    # From-address on OTP emails. With Gmail SMTP this must equal
+    # MAIL_USERNAME (Gmail rewrites anything else).
+    from: ${MAIL_FROM:no-reply@foc.local}
+  otp:
+    # Sign-up verification code lifetime, as a Spring duration (10m); a
+    # bare number is seconds (OTP_TTL=600 is 10 min).
+    ttl: ${OTP_TTL:10m}
+    # Wrong codes allowed before the pending sign-up is discarded and a
+    # fresh sign-up is required (mirrors the login lockout's 5).
+    max-attempts: ${OTP_MAX_ATTEMPTS:5}
 
 owner:
   setup:

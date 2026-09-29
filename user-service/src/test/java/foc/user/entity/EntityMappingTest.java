@@ -8,6 +8,9 @@
  * substitute.
  * 2026-09-25, Claude Code (Opus 5.5): container moved to the shared
  * PostgresTestContainer base (PR #131 review).
+ * 2026-09-29, Claude Code (Fable 5), issue #88: the Otp round-trip went
+ * with the otps table; PendingSignup round-trip and its email-unique
+ * violation added in its place.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.user.entity;
@@ -15,12 +18,14 @@ package foc.user.entity;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 
 import foc.user.PostgresTestContainer;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceException;
 
 /**
  * Persists and reloads one row per entity so a mapping mistake (wrong
@@ -64,19 +69,31 @@ class EntityMappingTest extends PostgresTestContainer {
     }
 
     @Test
-    void otpRoundTrip() {
-        User user = persistUser("e2234567@u.nus.edu", "otp_user");
-        Otp saved = persistAndFlush(
-            new Otp(user, "code_hash", Otp.Purpose.SIGNUP, EXPIRY));
+    void pendingSignupRoundTrip() {
+        PendingSignup saved = persistAndFlush(new PendingSignup(
+            "e2234567@u.nus.edu", "pending_user", "bcrypt_hash", "code_hash", EXPIRY));
         entityManager.clear();
 
-        Otp found = entityManager.find(Otp.class, saved.getId());
+        PendingSignup found = entityManager.find(PendingSignup.class, saved.getId());
 
-        assertThat(found.getUser().getId()).isEqualTo(user.getId());
+        assertThat(found.getEmail()).isEqualTo("e2234567@u.nus.edu");
+        assertThat(found.getUsername()).isEqualTo("pending_user");
+        assertThat(found.getPasswordHash()).isEqualTo("bcrypt_hash");
         assertThat(found.getCodeHash()).isEqualTo("code_hash");
-        assertThat(found.getPurpose()).isEqualTo(Otp.Purpose.SIGNUP);
         assertThat(found.getExpiresAt()).isEqualTo(EXPIRY);
         assertThat(found.getAttempts()).isZero();
+    }
+
+    @Test
+    void pendingSignupEmailIsUnique() {
+        persistAndFlush(new PendingSignup(
+            "e2234567@u.nus.edu", "first_user", "bcrypt_hash", "code_hash", EXPIRY));
+
+        // one pending sign-up per email: the second insert must trip the
+        // unique index (usernames may repeat — users' index decides those)
+        assertThatThrownBy(() -> persistAndFlush(new PendingSignup(
+                "e2234567@u.nus.edu", "second_user", "bcrypt_hash", "code_hash", EXPIRY)))
+            .isInstanceOf(PersistenceException.class);
     }
 
     @Test

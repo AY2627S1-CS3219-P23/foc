@@ -10,6 +10,13 @@ Scope: integration tests for POST /auth/signup and POST /auth/login
        2026-09-29, Claude Code (Opus 5), issue #146: the 401s are no longer
        non-revealing — they name the cause — so the tests pin one detail per
        cause, the countdown as it runs down, and the 429's Retry-After.
+       2026-09-29, Claude Code (Fable 5), issue #88: sign-up now answers
+       202 and the account only exists after /auth/signup/verify, so the
+       sign-up cases assert the pending shape, the flow tests drive verify
+       with the code captured off the mocked OtpEmailSender (mocked over
+       GreenMail on purpose: no new dependency, and the SMTP layer has its
+       own unit test + the manual Mailpit check), and the login cases
+       create their accounts through the full flow.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -22,12 +29,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.verify;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import static org.hamcrest.Matchers.allOf;
@@ -40,9 +53,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import foc.user.PostgresTestContainer;
+import foc.user.entity.PendingSignup;
 import foc.user.entity.Role;
 import foc.user.entity.User;
+import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
+import foc.user.service.OtpEmailSender;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -73,10 +89,18 @@ class AuthControllerTest extends PostgresTestContainer {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private PendingSignupRepository pendingSignupRepository;
+
+    // captures the plain code instead of speaking SMTP; reset per test
+    @MockitoBean
+    private OtpEmailSender otpEmailSender;
+
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
     @BeforeEach
     void cleanDatabase() {
+        pendingSignupRepository.deleteAll();
         userRepository.deleteAll();
     }
 
@@ -90,16 +114,51 @@ class AuthControllerTest extends PostgresTestContainer {
         return postJson("/auth/signup", Map.of("email", email, "username", username, "password", password));
     }
 
+    private ResultActions verifySignup(String email, String code) throws Exception {
+        return postJson("/auth/signup/verify", Map.of("email", email, "code", code));
+    }
+
     private ResultActions login(String usernameOrEmail, String password) throws Exception {
         return postJson("/auth/login", Map.of("usernameOrEmail", usernameOrEmail, "password", password));
+    }
+
+    // the last code the mocked sender was handed for this (normalised) email
+    private String emailedCode(String email) {
+        ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+        verify(otpEmailSender, atLeastOnce()).sendSignupCode(eq(email), code.capture(), any());
+        return code.getValue();
+    }
+
+    // full sign-up flow: request, code off the mocked sender, verify
+    private void createAccount(String email, String username) throws Exception {
+        signup(email, username, PASSWORD).andExpect(status().isAccepted());
+        verifySignup(email, emailedCode(email)).andExpect(status().isCreated());
     }
 
     // ---- sign-up ----
 
     @Test
-    @DisplayName("Sign-up creates a USER account and returns it without the password")
-    void signup_created() throws Exception {
+    @DisplayName("Sign-up answers 202 with a pending row and an emailed code — no account yet")
+    void signup_accepted() throws Exception {
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD)
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.email").value("e1234567@u.nus.edu"))
+            .andExpect(jsonPath("$.expiresInSeconds").value(600));
+
+        assertThat(userRepository.findByUsernameIgnoreCase("student_alex")).isEmpty();
+        PendingSignup pending = pendingSignupRepository.findByEmail("e1234567@u.nus.edu").orElseThrow();
+        String code = emailedCode("e1234567@u.nus.edu");
+        // both secrets are stored hashed, never plain
+        assertThat(pending.getPasswordHash()).isNotEqualTo(PASSWORD).startsWith("$2");
+        assertThat(pending.getCodeHash()).isNotEqualTo(code).startsWith("$2");
+    }
+
+    @Test
+    @DisplayName("Verifying the emailed code creates the account, which can then log in")
+    void signup_verifyFlow() throws Exception {
+        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isAccepted());
+
+        verifySignup("e1234567@u.nus.edu", emailedCode("e1234567@u.nus.edu"))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.id").isNumber())
             .andExpect(jsonPath("$.email").value("e1234567@u.nus.edu"))
@@ -110,6 +169,72 @@ class AuthControllerTest extends PostgresTestContainer {
 
         User saved = userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow();
         assertThat(saved.getPasswordHash()).isNotEqualTo(PASSWORD).startsWith("$2");
+        assertThat(pendingSignupRepository.findByEmail("e1234567@u.nus.edu")).isEmpty();
+
+        login("student_alex", PASSWORD).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("A wrong code is 400; the right one still works after it")
+    void signup_wrongCodeThenRight() throws Exception {
+        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isAccepted());
+        String code = emailedCode("e1234567@u.nus.edu");
+        String wrong = code.equals("000000") ? "000001" : "000000";
+
+        verifySignup("e1234567@u.nus.edu", wrong)
+            .andExpect(status().isBadRequest())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.detail").value("Invalid verification code"));
+
+        verifySignup("e1234567@u.nus.edu", code).andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("The fifth wrong code discards the pending sign-up with a 429; re-signing up recovers")
+    void signup_attemptsExhausted() throws Exception {
+        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isAccepted());
+        String code = emailedCode("e1234567@u.nus.edu");
+        String wrong = code.equals("000000") ? "000001" : "000000";
+
+        for (int attempt = 1; attempt <= 4; attempt++) {
+            verifySignup("e1234567@u.nus.edu", wrong).andExpect(status().isBadRequest());
+        }
+        verifySignup("e1234567@u.nus.edu", wrong)
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.detail").value(
+                "Too many incorrect codes; sign up again to get a new code"));
+
+        // the row is gone, so even the right code is just a wrong code now
+        verifySignup("e1234567@u.nus.edu", code)
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Invalid verification code"));
+
+        // a fresh sign-up issues a fresh code and completes
+        createAccount("e1234567@u.nus.edu", "student_alex");
+    }
+
+    @Test
+    @DisplayName("A repeat sign-up resends: the new code wins, the old one no longer counts")
+    void signup_repeatResends() throws Exception {
+        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isAccepted());
+        String first = emailedCode("e1234567@u.nus.edu");
+
+        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isAccepted());
+        String second = emailedCode("e1234567@u.nus.edu");
+
+        if (!second.equals(first)) {
+            verifySignup("e1234567@u.nus.edu", first)
+                .andExpect(status().isBadRequest());
+        }
+        verifySignup("e1234567@u.nus.edu", second).andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("Verify with no pending sign-up answers like a wrong code")
+    void signup_verifyWithoutSignup() throws Exception {
+        verifySignup("e1234567@u.nus.edu", "123456")
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Invalid verification code"));
     }
 
     @Test
@@ -134,7 +259,7 @@ class AuthControllerTest extends PostgresTestContainer {
     @Test
     @DisplayName("Sign-up with a taken email or username is 400 with the exact reason")
     void signup_duplicates() throws Exception {
-        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isCreated());
+        createAccount("e1234567@u.nus.edu", "student_alex");
 
         signup("E1234567@u.nus.edu", "someone_else", PASSWORD)
             .andExpect(status().isBadRequest())
@@ -149,6 +274,19 @@ class AuthControllerTest extends PostgresTestContainer {
     }
 
     @Test
+    @DisplayName("An identifier taken while a sign-up was pending fails its verify")
+    void signup_identifierTakenWhilePending() throws Exception {
+        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isAccepted());
+        String code = emailedCode("e1234567@u.nus.edu");
+        // someone else completes the same username first
+        createAccount("e7654321@u.nus.edu", "student_alex");
+
+        verifySignup("e1234567@u.nus.edu", code)
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Username is already taken"));
+    }
+
+    @Test
     @DisplayName("Sign-up ignores a role in the body: the account is always USER")
     void signup_roleIgnored() throws Exception {
         postJson("/auth/signup", Map.of(
@@ -156,6 +294,9 @@ class AuthControllerTest extends PostgresTestContainer {
                 "username", "student_alex",
                 "password", PASSWORD,
                 "role", "ADMIN"))
+            .andExpect(status().isAccepted());
+
+        verifySignup("e1234567@u.nus.edu", emailedCode("e1234567@u.nus.edu"))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.role").value("USER"));
 
@@ -185,7 +326,7 @@ class AuthControllerTest extends PostgresTestContainer {
     @Test
     @DisplayName("Login by username or email returns a token for the account")
     void login_success() throws Exception {
-        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isCreated());
+        createAccount("e1234567@u.nus.edu", "student_alex");
         Long id = userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow().getId();
 
         for (String identifier : new String[] { "student_alex", "E1234567@u.nus.edu" }) {
@@ -209,7 +350,7 @@ class AuthControllerTest extends PostgresTestContainer {
     @Test
     @DisplayName("Login matches the username ignoring case; the account keeps its own case")
     void login_usernameIgnoresCase() throws Exception {
-        signup("e1234567@u.nus.edu", "Student_Alex", PASSWORD).andExpect(status().isCreated());
+        createAccount("e1234567@u.nus.edu", "Student_Alex");
 
         login("student_alex", PASSWORD).andExpect(status().isOk());
         login("STUDENT_ALEX", PASSWORD).andExpect(status().isOk());
@@ -220,7 +361,7 @@ class AuthControllerTest extends PostgresTestContainer {
     @Test
     @DisplayName("An unknown account and a wrong password get different 401 problem+json details")
     void login_namesTheFailure() throws Exception {
-        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isCreated());
+        createAccount("e1234567@u.nus.edu", "student_alex");
 
         login("nobody", "WrongPassword123")
             .andExpect(status().isUnauthorized())
@@ -236,7 +377,7 @@ class AuthControllerTest extends PostgresTestContainer {
     @Test
     @DisplayName("After 5 failures the account is locked, even for the right password")
     void login_lockout() throws Exception {
-        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isCreated());
+        createAccount("e1234567@u.nus.edu", "student_alex");
 
         // the countdown runs down to the singular on the last attempt
         for (int remaining = 4; remaining > 0; remaining--) {

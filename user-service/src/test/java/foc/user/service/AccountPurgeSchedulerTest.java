@@ -9,6 +9,9 @@ Scope: integration test for issue #93's day-31 purge, following
 Reviewed by: Leong Wei Zhi (via pull request).
 2026-09-29 (Claude Code, Opus 5.5), PR #141 review: username checks use
        existsByUsernameIgnoreCase (usernames now ignore case, team decision).
+2026-09-29 (Claude Code, Fable 5), issue #88: the otps seeding went with
+       the otps table; a case for the expired pending sign-up sweep the
+       same purge run now performs is added instead.
 */
 
 package foc.user.service;
@@ -26,11 +29,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import foc.user.PostgresTestContainer;
 import foc.user.entity.AccountToken;
-import foc.user.entity.Otp;
+import foc.user.entity.PendingSignup;
 import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.repository.AccountTokenRepository;
-import foc.user.repository.OtpRepository;
+import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
 
 /**
@@ -51,20 +54,20 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
     private UserRepository userRepository;
 
     @Autowired
-    private OtpRepository otpRepository;
+    private AccountTokenRepository accountTokenRepository;
 
     @Autowired
-    private AccountTokenRepository accountTokenRepository;
+    private PendingSignupRepository pendingSignupRepository;
 
     @BeforeEach
     void cleanDatabase() {
-        otpRepository.deleteAll();
         accountTokenRepository.deleteAll();
+        pendingSignupRepository.deleteAll();
         userRepository.deleteAll();
     }
 
     @Test
-    @DisplayName("Should purge accounts deleted beyond the 30-day window, with their otps and tokens")
+    @DisplayName("Should purge accounts deleted beyond the 30-day window, with their tokens")
     void purgesOnlyAccountsBeyondTheRetentionWindow() {
         User active = saveUser("e1111111@u.nus.edu", "active_user", null);
         User inWindow = saveUser("e2222222@u.nus.edu", "recently_deleted",
@@ -72,8 +75,6 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
         User expired = saveUser("e3333333@u.nus.edu", "expired_deleted",
             Instant.now().minus(31, ChronoUnit.DAYS));
         for (User user : new User[] {active, inWindow, expired}) {
-            otpRepository.save(new Otp(user, "code_hash", Otp.Purpose.SIGNUP,
-                Instant.now().plus(1, ChronoUnit.DAYS)));
             accountTokenRepository.save(new AccountToken(user, "token_hash",
                 AccountToken.Kind.RECOVERY, Instant.now().plus(1, ChronoUnit.DAYS)));
         }
@@ -82,8 +83,6 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
         scheduler.purgeExpiredDeletedAccounts();
 
         assertThat(userRepository.findAll()).extracting(User::getId)
-            .containsExactlyInAnyOrder(active.getId(), inWindow.getId());
-        assertThat(otpRepository.findAll()).extracting(otp -> otp.getUser().getId())
             .containsExactlyInAnyOrder(active.getId(), inWindow.getId());
         assertThat(accountTokenRepository.findAll()).extracting(token -> token.getUser().getId())
             .containsExactlyInAnyOrder(active.getId(), inWindow.getId());
@@ -105,6 +104,22 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
         userRepository.save(
             new User("e3333333@u.nus.edu", "expired_deleted", "hashed_password", Role.USER));
         userRepository.flush();
+    }
+
+    @Test
+    @DisplayName("Should sweep expired pending sign-ups and keep live ones")
+    void sweepsExpiredPendingSignups() {
+        pendingSignupRepository.save(new PendingSignup("e4444444@u.nus.edu", "expired_pending",
+            "password_hash", "code_hash", Instant.now().minusSeconds(60)));
+        PendingSignup live = pendingSignupRepository.save(
+            new PendingSignup("e5555555@u.nus.edu", "live_pending",
+                "password_hash", "code_hash", Instant.now().plusSeconds(600)));
+        pendingSignupRepository.flush();
+
+        scheduler.purgeExpiredDeletedAccounts();
+
+        assertThat(pendingSignupRepository.findAll()).extracting(PendingSignup::getId)
+            .containsExactly(live.getId());
     }
 
     private User saveUser(String email, String username, Instant deletedAt) {

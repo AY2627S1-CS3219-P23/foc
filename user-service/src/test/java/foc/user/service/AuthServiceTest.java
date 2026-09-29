@@ -12,6 +12,12 @@ Scope: unit tests for AuthService (issues #87/#89): sign-up normalisation
        remaining minutes. PR #148 Copilot review: cases for part-second
        rounding and for an account past the retention window answering as
        gone whatever password (or lock) it carries.
+       2026-09-29, Claude Code (Fable 5), issue #88: the sign-up cases now
+       assert the pending-row-and-email shape (no users insert, renewal on
+       repeat, mail failure to 502), and a verify section covers the code
+       match, attempt counting, expiry, exhaustion and the verify-time
+       uniqueness re-check. A real OtpService (plain encoder) keeps the
+       code round-trip honest; only the email sender is mocked.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -33,12 +39,15 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.mail.MailSendException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
@@ -46,11 +55,17 @@ import org.springframework.web.server.ResponseStatusException;
 import foc.user.dto.LoginRequest;
 import foc.user.dto.LoginResponse;
 import foc.user.dto.SignupRequest;
+import foc.user.dto.SignupResponse;
+import foc.user.dto.SignupVerifyRequest;
 import foc.user.dto.UserResponse;
+import foc.user.entity.PendingSignup;
 import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.exception.AccountLockedException;
 import foc.user.exception.LoginFailedException;
+import foc.user.exception.OtpAttemptsExceededException;
+import foc.user.exception.OtpVerificationException;
+import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
 import foc.user.security.JwtIssuer;
 
@@ -59,6 +74,8 @@ class AuthServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-09-29T10:00:00Z");
     private static final String PASSWORD = "ValidPassword123";
+    private static final Duration OTP_TTL = Duration.ofMinutes(10);
+    private static final int OTP_MAX_ATTEMPTS = 5;
 
     // stores "hashed:<raw>", so tests can build users with a known password
     private static final PasswordEncoder PLAIN_ENCODER = new PasswordEncoder() {
@@ -76,14 +93,21 @@ class AuthServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private PendingSignupRepository pendingSignupRepository;
+
+    @Mock
+    private OtpEmailSender otpEmailSender;
+
     private AuthService authService;
     private User user;
 
     @BeforeEach
     void setUp() {
         JwtIssuer issuer = new JwtIssuer("test-jwt-secret-that-is-at-least-32-bytes-long", Duration.ofHours(1));
-        authService = new AuthService(userRepository, PLAIN_ENCODER, issuer, 30,
-            Clock.fixed(NOW, ZoneOffset.UTC));
+        OtpService otpService = new OtpService(PLAIN_ENCODER, OTP_TTL, OTP_MAX_ATTEMPTS);
+        authService = new AuthService(userRepository, pendingSignupRepository, PLAIN_ENCODER,
+            issuer, otpService, otpEmailSender, 30, Clock.fixed(NOW, ZoneOffset.UTC));
 
         user = new User("e1234567@u.nus.edu", "student_alex", PLAIN_ENCODER.encode(PASSWORD), Role.USER);
         ReflectionTestUtils.setField(user, "id", 42L);
@@ -100,20 +124,49 @@ class AuthServiceTest {
     // ---- sign-up ----
 
     @Test
-    @DisplayName("Sign-up stores a normalised USER with a hashed password")
-    void signup_createsUser() {
-        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+    @DisplayName("Sign-up parks a normalised pending row and emails the code — no users insert")
+    void signup_parksPendingAndEmailsCode() {
+        when(pendingSignupRepository.saveAndFlush(any(PendingSignup.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
 
-        UserResponse response = authService.signup(
+        SignupResponse response = authService.signup(
             new SignupRequest(" E1234567@U.NUS.EDU ", " student_alex ", PASSWORD));
 
-        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).saveAndFlush(saved.capture());
+        ArgumentCaptor<PendingSignup> saved = ArgumentCaptor.forClass(PendingSignup.class);
+        verify(pendingSignupRepository).saveAndFlush(saved.capture());
+        ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+        verify(otpEmailSender).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), eq(OTP_TTL));
+
         assertThat(saved.getValue().getEmail()).isEqualTo("e1234567@u.nus.edu");
         assertThat(saved.getValue().getUsername()).isEqualTo("student_alex");
-        assertThat(saved.getValue().getRole()).isEqualTo(Role.USER);
         assertThat(saved.getValue().getPasswordHash()).isEqualTo("hashed:" + PASSWORD);
-        assertThat(response.role()).isEqualTo("USER");
+        // the emailed code is 6 digits and only its hash is stored
+        assertThat(code.getValue()).matches("\\d{6}");
+        assertThat(saved.getValue().getCodeHash()).isEqualTo("hashed:" + code.getValue());
+        assertThat(saved.getValue().getExpiresAt()).isEqualTo(NOW.plus(OTP_TTL));
+        assertThat(response.email()).isEqualTo("e1234567@u.nus.edu");
+        assertThat(response.expiresInSeconds()).isEqualTo(OTP_TTL.toSeconds());
+        verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("A repeat sign-up renews the pending row with a fresh code — that is the resend")
+    void signup_renewsExistingPending() {
+        PendingSignup existing = new PendingSignup("e1234567@u.nus.edu", "old_name",
+            "hashed:OldPassword1", "hashed:000000", NOW.minusSeconds(60));
+        existing.incrementAttempts();
+        when(pendingSignupRepository.findByEmail("e1234567@u.nus.edu"))
+            .thenReturn(Optional.of(existing));
+        when(pendingSignupRepository.saveAndFlush(any(PendingSignup.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+
+        authService.signup(new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD));
+
+        verify(pendingSignupRepository).saveAndFlush(existing);
+        assertThat(existing.getUsername()).isEqualTo("student_alex");
+        assertThat(existing.getPasswordHash()).isEqualTo("hashed:" + PASSWORD);
+        assertThat(existing.getExpiresAt()).isEqualTo(NOW.plus(OTP_TTL));
+        assertThat(existing.getAttempts()).isZero();
     }
 
     @Test
@@ -125,7 +178,7 @@ class AuthServiceTest {
             new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD)));
 
         assertBadRequest(thrown, "Email is already registered");
-        verify(userRepository, never()).saveAndFlush(any());
+        verify(pendingSignupRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -140,15 +193,33 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Sign-up losing a race on the unique columns is a 400, not a 500")
+    @DisplayName("Two first sign-ups for one email at once: the loser is a 400, not a 500")
     void signup_concurrentDuplicate() {
-        when(userRepository.saveAndFlush(any(User.class)))
+        when(pendingSignupRepository.saveAndFlush(any(PendingSignup.class)))
             .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
         Throwable thrown = catchThrowable(() -> authService.signup(
             new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD)));
 
-        assertBadRequest(thrown, "Email or username was just taken; choose another");
+        assertBadRequest(thrown, "A sign-up for this email is already in progress; try again");
+        verify(otpEmailSender, never()).sendSignupCode(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("A mail failure is a 502, so the pending row rolls back with it")
+    void signup_mailFailure() {
+        when(pendingSignupRepository.saveAndFlush(any(PendingSignup.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+        doThrow(new MailSendException("connection refused"))
+            .when(otpEmailSender).sendSignupCode(any(), any(), any());
+
+        Throwable thrown = catchThrowable(() -> authService.signup(
+            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD)));
+
+        assertThat(thrown).isInstanceOf(ResponseStatusException.class);
+        ResponseStatusException e = (ResponseStatusException) thrown;
+        assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+        assertThat(e.getReason()).isEqualTo("Could not send the verification email; try again later");
     }
 
     private static void assertBadRequest(Throwable thrown, String reason) {
@@ -156,6 +227,121 @@ class AuthServiceTest {
         ResponseStatusException e = (ResponseStatusException) thrown;
         assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(e.getReason()).isEqualTo(reason);
+    }
+
+    // ---- sign-up verify ----
+
+    private PendingSignup pendingWithCode(String code) {
+        PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
+            "hashed:" + PASSWORD, "hashed:" + code, NOW.plus(OTP_TTL));
+        when(pendingSignupRepository.findByEmail("e1234567@u.nus.edu"))
+            .thenReturn(Optional.of(pending));
+        return pending;
+    }
+
+    private UserResponse verifyCode(String code) {
+        return authService.verifySignup(new SignupVerifyRequest("e1234567@u.nus.edu", code));
+    }
+
+    @Test
+    @DisplayName("The right code inserts the user with the stored hash and clears the pending row")
+    void verify_createsUser() {
+        PendingSignup pending = pendingWithCode("123456");
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UserResponse response = authService.verifySignup(
+            new SignupVerifyRequest(" E1234567@U.NUS.EDU ", "123456"));
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getEmail()).isEqualTo("e1234567@u.nus.edu");
+        assertThat(saved.getValue().getUsername()).isEqualTo("student_alex");
+        // the hash from sign-up is carried over, never re-encoded
+        assertThat(saved.getValue().getPasswordHash()).isEqualTo("hashed:" + PASSWORD);
+        assertThat(saved.getValue().getRole()).isEqualTo(Role.USER);
+        assertThat(response.role()).isEqualTo("USER");
+        verify(pendingSignupRepository).delete(pending);
+    }
+
+    @Test
+    @DisplayName("A wrong code counts an attempt and answers 400 without naming which part failed")
+    void verify_wrongCodeCounts() {
+        PendingSignup pending = pendingWithCode("123456");
+
+        assertThatThrownBy(() -> verifyCode("654321"))
+            .isInstanceOf(OtpVerificationException.class)
+            .hasMessage("Invalid verification code");
+
+        assertThat(pending.getAttempts()).isEqualTo(1);
+        verify(pendingSignupRepository).save(pending);
+        verify(pendingSignupRepository, never()).delete(any(PendingSignup.class));
+        verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("An email with no pending sign-up answers exactly like a wrong code")
+    void verify_unknownEmail() {
+        when(pendingSignupRepository.findByEmail("e1234567@u.nus.edu"))
+            .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> verifyCode("123456"))
+            .isInstanceOf(OtpVerificationException.class)
+            .hasMessage("Invalid verification code");
+    }
+
+    @Test
+    @DisplayName("An expired code discards the pending sign-up and says to sign up again")
+    void verify_expired() {
+        PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
+            "hashed:" + PASSWORD, "hashed:123456", NOW.minusSeconds(1));
+        when(pendingSignupRepository.findByEmail("e1234567@u.nus.edu"))
+            .thenReturn(Optional.of(pending));
+
+        assertThatThrownBy(() -> verifyCode("123456"))
+            .isInstanceOf(OtpVerificationException.class)
+            .hasMessage("Code has expired; sign up again to get a new code");
+
+        verify(pendingSignupRepository).delete(pending);
+    }
+
+    @Test
+    @DisplayName("The wrong code that exhausts the attempts discards the pending sign-up")
+    void verify_attemptsExhausted() {
+        PendingSignup pending = pendingWithCode("123456");
+        for (int i = 0; i < OTP_MAX_ATTEMPTS - 1; i++) {
+            pending.incrementAttempts();
+        }
+
+        assertThatThrownBy(() -> verifyCode("654321"))
+            .isInstanceOf(OtpAttemptsExceededException.class)
+            .hasMessage("Too many incorrect codes; sign up again to get a new code");
+
+        verify(pendingSignupRepository).delete(pending);
+        verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("An identifier taken since sign-up fails the verify with the exact reason")
+    void verify_identifierTakenSinceSignup() {
+        pendingWithCode("123456");
+        when(userRepository.existsByEmail("e1234567@u.nus.edu")).thenReturn(true);
+
+        Throwable thrown = catchThrowable(() -> verifyCode("123456"));
+
+        assertBadRequest(thrown, "Email is already registered");
+        verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("Verify losing the insert race on the unique columns is a 400, not a 500")
+    void verify_concurrentDuplicate() {
+        pendingWithCode("123456");
+        when(userRepository.saveAndFlush(any(User.class)))
+            .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        Throwable thrown = catchThrowable(() -> verifyCode("123456"));
+
+        assertBadRequest(thrown, "Email or username was just taken; choose another");
     }
 
     // ---- login ----

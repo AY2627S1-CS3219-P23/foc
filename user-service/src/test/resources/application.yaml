@@ -9,6 +9,10 @@
 # call the purge method directly).
 # 2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: fixed JWT secret
 # and TTL for the auth tests, and the CORS origin.
+# 2026-09-29, Claude Code (Fable 5), issue #88: mail/otp values so the
+# context builds with spring-boot-starter-mail on the classpath (this file
+# fully shadows the main yaml). The JavaMailSender bean never connects in
+# tests — OtpEmailSender is mocked where sending would happen.
 
 spring:
   application:
@@ -16,6 +20,15 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+  mail:
+    host: localhost
+    port: 1025
+
+management:
+  health:
+    mail:
+      # as in the main yaml: no SMTP listener should not fail /actuator/health
+      enabled: false
 
 owner:
   setup:
@@ -29,3 +42,8 @@ user:
     secret: test-jwt-secret-that-is-at-least-32-bytes-long
     access-token-ttl: 1h
   web-allowed-origin: http://localhost:5173
+  mail:
+    from: no-reply@foc.local
+  otp:
+    ttl: 10m
+    max-attempts: 5

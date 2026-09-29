@@ -23,6 +23,10 @@
   gson) for minting login tokens, same version and modules as
   notification-service's verifier so minted tokens pass it (jjwt-gson
   for the same Jackson 3 reason recorded in that pom).
+  2026-09-29, Claude Code (Fable 5), issue #88: spring-boot-starter-mail
+  for OTP email sending over SMTP (provider decision: Gmail SMTP, with a
+  Mailpit container as the local default — chosen by Leong Wei Zhi via
+  options Q&A).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -77,6 +81,10 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
