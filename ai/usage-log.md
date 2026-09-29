@@ -53,6 +53,270 @@ Entry template:
   eslint, build + mock-absent-from-bundle check; reviewed via pull
   request.
 
+## 2026-09-29 — Ryan Ang (PR #152 Copilot review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor
+- **Scope:** `web/`: `UsersSection.tsx` takes the signed-in admin's id
+  from `useAuth().me` (AuthProvider's shared `GET /users/me`) instead of
+  its own request; `admin.test.tsx` replaces the now-impossible
+  "unknown signed-in admin" case with one checking a single `/users/me`
+  request per page; the `Reviewed by` lines in
+  `features/supplier/components/DeleteSupplierModal.tsx` and
+  `routes/suppliers.tsx` record Ryan's review of the #147 changes and
+  leave the original supplier code's review with its author.
+- **Prompt(s):** Summary: Asked to fix PR #152's Copilot comments (a
+  duplicate current-user request, and two files still marked
+  `[pending]`).
+- **Author review:** Ryan to review via the PR. Web: 52 tests pass;
+  type-check and lint clean.
+
+## 2026-09-29 — Ryan Ang (merging main into fix/user-issues)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (merge conflict resolution)
+- **Scope:** `user-service`: `AuthService` / `LoginAttempts` combine
+  issue #146's per-cause login messages and earlier retention check (PR
+  #148) with #147's row-locked counter update — `LoginAttempts.Result`
+  now carries the attempts left and the lock's remaining time, and
+  `pastRetention` runs before the lock and password checks;
+  `AuthController`, `AuthControllerTest`, `AuthServiceTest` and the
+  user-service README keep both sides. `web/`: `AuthProvider` and
+  `useAuth` expose both PR #143's token-decoded `role` (used by the
+  Suppliers page) and #147's `me` from `GET /users/me` (used by the
+  `/admin` guard and the nav link); `routes/suppliers.tsx` keeps both
+  sides' imports.
+- **Prompt(s):** Summary: Asked to merge `main` and fix the conflicts.
+  Nothing was dropped from either side; the two role sources in the web
+  app are left side by side for the team to decide whether to unify.
+- **Author review:** Ryan to review via the PR. user-service: 198 tests
+  pass; web: 52 tests pass, type-check and lint clean.
+
+## 2026-09-29 — Ryan Ang (#147 admin Suppliers list)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `web/`: new
+  `src/features/supplier/components/SuppliersAdminSection.tsx` (read-only
+  supplier list from `listSuppliers`: name, categories, location, hours;
+  table at md+, cards on mobile; shared `Pagination`, 20 per page;
+  loading, empty and error states) replaces the placeholder in
+  `src/routes/admin.tsx`; `src/test/admin.test.tsx` fakes
+  `listSuppliers` and replaces the placeholder test with five cases.
+- **Prompt(s):** Summary: Team decision to list suppliers on the admin
+  dashboard first and add the create/edit/delete buttons once
+  supplier-service's CRUD endpoints (#104) exist. Implementation choices
+  by the tool, to confirm in review: the wireframe's Zone column left out
+  (zones were dropped, supplier-service D4); 20 suppliers per page; hours
+  shown as "08:00–18:00" like the Suppliers page's cards.
+- **Author review:** Ryan to review via the PR. Web: 48 tests pass;
+  type-check and lint clean.
+
+## 2026-09-29 — Ryan Ang (#147 admin Users section bugs)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (bug fixes), generate (tests)
+- **Scope:** `web/`: `UsersSection.tsx` no longer patches rows locally
+  before reloading after a role change or removal; row actions
+  (`UserTable.tsx` `actionsDisabled`) and the confirm buttons
+  (`ConfirmModal.tsx`, `RemoveUserModal.tsx`, `ChangeRoleModal.tsx`
+  `disabled`) are off while the list reloads; removing the only row of
+  a later page goes straight to the previous page. Three
+  `admin.test.tsx` cases (the emptied page is never fetched, a role
+  change shows through one reload, actions and confirm off during a
+  reload).
+- **Prompt(s):** Summary: Asked to fix the three admin Users section
+  bugs on #147 (from the PR #140 review): the last-row check reading
+  outdated rows with confirm still enabled during a reload, the local
+  patch plus reload after each action, and the extra fetch when the last
+  row of the last page is removed. Implementation choices by the tool,
+  to confirm in review: rely on the reload instead of the local patch
+  (old rows stay on screen, actions disabled, until it lands) and
+  disable actions rather than read the latest rows through a ref.
+- **Author review:** Ryan to review via the PR. Web: 44 tests pass;
+  type-check and lint clean.
+
+## 2026-09-29 — Ryan Ang (#147 Admin Dashboard nav link)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests), refactor
+- **Scope:** `web/`: `AuthProvider.tsx` asks `GET /users/me` once per
+  session and shares it as `me` (`useAuth.tsx` gains the `CurrentUser`
+  type, `ADMIN_ROLES` and `isAdmin`); `AdminRoute.tsx` uses `me` instead
+  of its own request; `shared/shell/navigation.ts` gains `adminNavItem`
+  (label "Admin Dashboard", mobile tab "Admin"); `NavBar.tsx` and
+  `TabBar.tsx` show it after Profile for ADMIN and OWNER only (the tab
+  bar widens to six columns); `NavBar.tsx` Prettier-formatted; tests in
+  `admin.test.tsx` (link shown to an ADMIN, hidden from a USER),
+  `app.test.tsx` (hidden when logged out) and `auth.test.tsx` (login now
+  also fetches `/users/me` with the new token).
+- **Prompt(s):** Summary: Asked for an Admin Dashboard button beside
+  Profile in the nav bar, routing to `/admin` and shown only to ADMIN and
+  OWNER. Implementation choices by the tool, to confirm in review: the
+  role comes from the same `GET /users/me` answer the `/admin` guard
+  uses, fetched once in `AuthProvider`; the link also appears in the
+  mobile tab bar (as "Admin") so admins on phones can reach the page.
+- **Author review:** Ryan to review via the PR. Web: 42 tests pass;
+  type-check and lint clean.
+
+## 2026-09-29 — Ryan Ang (#147 admin route guard)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `web/`: new `src/features/user/AdminRoute.tsx` (asks
+  `GET /users/me` for the signed-in user's role; ADMIN and OWNER see the
+  page, anyone else is redirected to the home page; a failed check shows
+  an error message); `src/routes/index.tsx` puts `/admin` behind it;
+  `src/test/admin.test.tsx` waits for the guarded page and gains three
+  guard cases (USER redirected, OWNER allowed, failed check).
+- **Prompt(s):** Summary: Asked how to keep normal users off `/admin`;
+  the tool noted user-service already rejects them (403) and listed
+  where the web app could get the role from. Team decision: a route
+  guard that asks `GET /users/me`. Implementation choices by the tool, to
+  confirm in review: non-admins are redirected to the home page; the
+  "Checking access..." and "Could not check your access. Try again."
+  texts; the guard re-checks when the session token changes.
+- **Author review:** Ryan to review via the PR. Web: 39 tests pass;
+  type-check and lint clean.
+
+## 2026-09-29 — Ryan Ang (#147 team-decision items)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests), refactor
+- **Scope:** `user-service`: Flyway (`pom.xml`, `db/migration/V1__baseline.sql`
+  dumped from the entities' generated schema, `V2__username_unique_ignoring_case.sql`,
+  `ddl-auto: none` and baseline settings in both `application.yaml`s,
+  `User` index annotation); `UserRepository` username lookups on
+  `lower(username)`; `GET /users?includeDeleted` (`AdminController`,
+  `AdminService`) and `deletedAt` on `UserResponse` (omitted while null);
+  the invalid-body and unreadable-body handlers moved from
+  `AuthController` to `ProblemDetailAdvice`, `AdminController` keeping
+  only the query-parameter one, and a message on `UpdateRoleRequest`;
+  `AuthService.signup`/`login` no longer `@Transactional`, with the
+  attempt's counter update in new `LoginAttempts` (row locked with
+  `refresh(..., PESSIMISTIC_WRITE)`, which also closes the parallel-login
+  lockout bypass); tests: `FlywayMigrationTest` (new), parallel-login and
+  database-uniqueness cases in `AuthControllerTest`, `includeDeleted`
+  and invalid-body reasons in `AdminControllerTest`, the owner-setup
+  reason, `EntityMappingTest` table cleanup, `AuthServiceTest`/
+  `AdminServiceTest`/`ProfileServiceTest` updated; README "Errors" and
+  "Schema (Flyway)" sections. `web/`: `types.ts`, `adminApi.ts`,
+  `adminApiMock.ts` (soft-deleting), `UsersSection.tsx` ("Show removed
+  accounts" toggle), `UserTable.tsx` (removed rows greyed with their
+  removal date, no actions), `register.tsx`/`login.tsx` ("Account
+  created" notice via navigation state); `admin.test.tsx` and
+  `auth.test.tsx` cases.
+- **Prompt(s):** Summary: Asked to implement team decisions: an
+  `includeDeleted` filter with a toggle in the Users table instead of a
+  separate deleted-users table; one validation error format by moving
+  `AuthController`'s handler into `ProblemDetailAdvice` (#138 contract);
+  Flyway with a `lower(username)` unique index and clean-up of existing
+  case-duplicates; bcrypt outside the transaction; an "account created"
+  message; token expiry left to #109. The tool asked about the points
+  those left open, and the team decided: duplicates are renamed (the
+  oldest keeps the name, later ones get a numbered suffix); `ddl-auto`
+  becomes `none`; removed rows are view-only (restore stays with #94);
+  token expiry stays with #109. Implementation choices by the tool, to
+  confirm in review: fixing the lockout race with a row lock taken after
+  the password check; the notice text "Account created. Log in to
+  continue."; "Role is required" and "Invalid request parameter";
+  `deletedAt` left out of the JSON while null; dates as "29 September
+  2026"; with removed accounts shown, a removed row stays and greys
+  instead of disappearing.
+- **Author review:** Ryan to review via the PR. user-service: 192 tests
+  pass (the parallel-login test also run 3 more times); web: 36 tests
+  pass, type-check, lint and build clean.
+
+## 2026-09-29 — Ryan Ang (#147 housekeeping and duplicated code)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, generate (tests)
+- **Scope:** `web/`: `errorMessage` moved into `src/lib/api/http.ts`
+  and used by `UsersSection.tsx`, `login.tsx`, `register.tsx` and
+  `routes/suppliers.tsx`; new `src/shared/components/ConfirmModal.tsx`,
+  with `RemoveUserModal`, `ChangeRoleModal` and `DeleteSupplierModal`
+  built on it; `routes/suppliers.tsx`'s Previous/Next pager replaced by
+  the shared `Pagination`; `UserTable.tsx`'s `UserActionsProps` spelled
+  out and its handlers passed by name; `axios` removed from
+  `package.json`; Prettier run on `login.tsx`, `register.tsx`,
+  `AuthProvider.tsx`, `useAuth.tsx` and `useLocalStorage.tsx`; review
+  headers filled in on `adminApiMock.ts` and `UserTable.tsx`; the
+  `VITE_MOCK_ADMIN_API` comment in `.env.example` updated; new
+  `src/test/auth.test.tsx` (7 login and sign-up page tests).
+- **Prompt(s):** Summary: Asked to do the housekeeping and duplicated-code
+  items of issue #147 (open review items from PRs #140 and #141), leaving
+  the items that need a team decision. Implementation choices by the
+  tool, to confirm in review: the shared `errorMessage` shows the
+  fallback text for a network failure (a `TypeError`), so the admin Users
+  section no longer shows "Failed to fetch"; `ConfirmModal`'s props;
+  the supplier pager gains page numbers and keeps its "Page X of Y · N
+  suppliers" label.
+- **Author review:** Ryan to review via the PR. Web: 32 tests pass;
+  type-check, lint and build clean.
+
+## 2026-09-29 — Alastair Tan (#106 JWT verification + role gate in supplier-service)
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `supplier-service`: JWT verification (`security/JwtVerifier`,
+  jjwt 0.13.0, mirroring `notification-service`'s `JwtVerifier`), the
+  authentication filter (`security/JwtAuthenticationFilter`), problem+json
+  401/403 handlers (`security/RestAuthEntryPoint`,
+  `security/RestAccessDeniedHandler`), and the Spring Security filter
+  chain (`config/SecurityConfig`, replacing the old `CorsConfig` per
+  design doc D2: GET open to any authenticated user, everything else
+  under `/suppliers` needs `ROLE_ADMIN`); `spring-boot-starter-security`
+  and jjwt added to `pom.xml`; `supplier.jwt.secret` in both
+  `application.yaml`s; `compose.yaml` passes `JWT_SECRET`;
+  `JwtVerifierTest`, `SecurityConfigTest`.
+- **Prompt(s):** Asked to implement issue #106 ("mirror JwtVerifier"),
+  scoped to supplier-service only. The JWT `role` claim's name/shape was
+  confirmed against user-service's already-merged `JwtIssuer` (PR #141)
+  rather than invented, per AGENTS.md's restriction on agents making
+  interface/schema decisions; the GET-endpoint auth requirement (design
+  doc D2) was confirmed with the author before implementing, since it
+  temporarily breaks browser access to supplier browsing until the
+  frontend's separate auth-wiring task lands.
+- **Author review:** Tested live end-to-end against running
+  user-service + supplier-service containers (signup, login, then
+  GET/POST /suppliers with no/invalid/valid tokens and non-admin/admin
+  roles); `./mvnw test` passes (21/21). Reviewed by: [pending].
+## 2026-09-29 — Leong Wei Zhi (#146 login errors that name their cause)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** generate (implementation + tests + docs)
+- **Scope:** `user-service`: `exception/LoginFailedException` (one
+  message per cause, via `unknownAccount()` / `wrongPassword(remaining)`
+  / `wrongPassword()`), `exception/AccountLockedException` (the wait
+  computed from the lockout's end instead of a hard-coded "15 minutes",
+  and exposed for `Retry-After`), `service/AuthService` (each failure
+  throws its own message; `recordFailure` returns the running count; the
+  timing-equalisation hash removed), `controller/AuthController`
+  (`Retry-After` on the 429; the lost-race path answers with the
+  wrong-password message); `AuthServiceTest`, `AuthControllerTest`,
+  `ConflictResponseTest` updated; `web/src/test/login.test.tsx` (new —
+  the login page had no tests); user-service and root READMEs.
+- **Prompt(s):** Asked to plan and resolve issue #146 (split the generic
+  login failure into unknown-account and incorrect-password), then to
+  consider adding an attempts-remaining countdown and a lockout message
+  that counts down the minutes left. The author chose, via
+  neutral-options Q&A: the exact wording of all three messages; the
+  countdown shown on every wrong-password failure; the lockout time
+  computed dynamically with a `Retry-After` header; both 401s keeping
+  their status (no 404, no problem `type` URI), so the web page needed
+  no source change; an account deleted past the retention window
+  answering as unknown and the concurrent-login race loser answering as
+  a wrong password; and docs-only handling of the wireframe, which still
+  shows the old single error box. The accepted trade-off — login now
+  reveals whether an account exists, reversing #89's non-revealing
+  failures — is the author's call, noted because sign-up's "already
+  taken" 400s already reveal it and #145 already accepted revealing the
+  lock state. Because the messages state which failure happened, the
+  decoy password hash that made an unknown account answer as slowly as a
+  wrong password no longer hid anything and was removed.
+  PR #148 Copilot review: the lockout's seconds are rounded up before its
+  minutes are (a part-second could otherwise be dropped twice and quote a
+  wait shorter than the lock, with `Retry-After` a second early), and the
+  retention-window check moved ahead of the lock and password checks, so
+  an account past the window answers as gone whatever password is typed
+  instead of only when the password happened to be right — a wrong one
+  used to get the countdown and count towards a lock.
+- **Author review:** Leong Wei Zhi to review via the PR.
+  user-service 191/191 tests pass; web 29/29 tests pass, lint clean,
+  build succeeds; the three messages verified live against a running
+  stack and in-browser on `/login`.
+
+---
 ## 2026-09-29 — Ryan Ang (#91 Spring Security filter chain in user-service)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (implementation + tests)

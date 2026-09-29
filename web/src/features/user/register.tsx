@@ -25,33 +25,36 @@ import { router } from "../../routes/index";
 import { PasswordChecklist } from "./PasswordChecklist";
 
 export function Register() {
-  const [email, setEmail] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
 
   const register = async (event: React.SyntheticEvent) => {
-    event.preventDefault();
+    event.preventDefault()
     try {
-      await apiFetch("user", "/auth/signup", {
-        method: "POST",
+      await apiFetch('user', '/auth/signup', {
+        method: 'POST',
         body: JSON.stringify({ email, username, password }),
-      });
+      })
 
-      setError("");
-      setEmail("");
-      setUsername("");
-      setPassword("");
-      router.navigate("/login");
+      setError('')
+      setEmail('')
+      setUsername('')
+      setPassword('')
+      // the login page shows an "account created" notice (issue #147)
+      router.navigate('/login', { state: { accountCreated: true } })
     } catch (error: unknown) {
-      setError(errorMessage(error, "Could not register. Try again."));
+      setError(errorMessage(error, 'Could not register. Try again.'))
     }
-  };
+  }
 
   return (
     <div className="mx-auto mt-16 w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <h2 className="text-2xl font-semibold text-gray-900">Create Account</h2>
-      <p className="mt-1 text-sm text-gray-500">Join NUS peer-to-peer errand network.</p>
+      <p className="mt-1 text-sm text-gray-500">
+        Join NUS peer-to-peer errand network.
+      </p>
       {error && (
         <p
           role="alert"
@@ -100,14 +103,14 @@ export function Register() {
         </button>
       </form>
       <p className="mt-4 text-center text-sm text-gray-600">
-        Already have an account?{" "}
+        Already have an account?{' '}
         <button
-          onClick={() => router.navigate("/login")}
+          onClick={() => router.navigate('/login')}
           className="font-medium text-gray-900 underline cursor-pointer"
         >
           Log in
         </button>
       </p>
     </div>
-  );
+  )
 }

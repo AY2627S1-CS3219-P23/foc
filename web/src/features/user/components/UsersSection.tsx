@@ -9,6 +9,17 @@
 // the end moves to the last page, the error banner clears on a new query,
 // search is trimmed before debouncing, the fetch lists its inputs, and an
 // unknown signed-in user gets a general self-demotion warning).
+// 2026-09-29 (issue #147): errorMessage moved to lib/api/http, so a
+// network failure now shows the fallback instead of "Failed to fetch".
+// "Show removed accounts" toggle lists soft-deleted accounts too, greyed
+// with their removal date (team decision, issue #147).
+// PR #152 review: the signed-in admin's id comes from AuthProvider's
+// shared GET /users/me answer instead of a second request.
+// Issue #147 bug fixes: actions no longer patch rows locally before the
+// reload (one GET /users per action); while the list reloads, row actions
+// and the confirm buttons are disabled, so a confirm never acts on
+// outdated rows; removing the only row of a later page goes straight to
+// the previous page instead of first fetching the emptied one.
 // Scope: Admin Dashboard "Users" section — list, search, role filter,
 // paging, promote/demote, remove — per
 // web/docs/wireframes/admin-dashboard.png.
@@ -23,6 +34,7 @@ import { useEffect, useState } from 'react'
 import { errorMessage } from '@/lib/api/http'
 import { Pagination } from '@/shared/components/Pagination'
 import { adminUserApi } from '../adminApi'
+import { useAuth } from '../useAuth'
 import type { AdminUser, AdminUserPage, UserRole } from '../types'
 import { ChangeRoleModal } from './ChangeRoleModal'
 import { RemoveUserModal } from './RemoveUserModal'
@@ -45,10 +57,11 @@ const roleOptions: { value: UserRole | ''; label: string }[] = [
 function queryKeyOf(
   search: string,
   role: UserRole | '',
+  showRemoved: boolean,
   page: number,
   reloadCount: number,
 ) {
-  return JSON.stringify([search, role, page, reloadCount])
+  return JSON.stringify([search, role, showRemoved, page, reloadCount])
 }
 
 interface LoadResult {
@@ -61,6 +74,7 @@ export function UsersSection() {
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [role, setRole] = useState<UserRole | ''>('')
+  const [showRemoved, setShowRemoved] = useState(false)
   const [page, setPage] = useState(1) // 1-based; the API is 0-based
   // Bumped to reload the current query after a change on the server.
   const [reloadCount, setReloadCount] = useState(0)
@@ -72,26 +86,13 @@ export function UsersSection() {
     user: AdminUser
     role: UserRole
   } | null>(null)
-  // null until GET /users/me answers, and if it fails
-  const [currentUserId, setCurrentUserId] = useState<number | null>(null)
-
-  // Used to hide Remove on the admin's own row and to warn before
-  // self-demotion. If it fails, Remove shows (user-service still rejects
-  // self-removal) and every demotion gets a general warning instead.
-  useEffect(() => {
-    let cancelled = false
-    adminUserApi.getCurrentUser().then(
-      (me) => {
-        if (!cancelled) setCurrentUserId(me.id)
-      },
-      (err: unknown) => {
-        console.warn('Could not identify the signed-in admin', err)
-      },
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  // The signed-in admin, from the GET /users/me answer AuthProvider
+  // shares (the /admin guard has already waited for it). Used to hide
+  // Remove on the admin's own row and to warn before self-demotion; null
+  // only if it is somehow unavailable, which falls back to a general
+  // self-demotion warning (user-service still rejects self-removal).
+  const { me } = useAuth()
+  const currentUserId = me?.status === 'ready' ? me.user.id : null
 
   // Apply the search box to the query once typing pauses. Compared
   // trimmed, so a whitespace-only edit doesn't reset the page.
@@ -108,12 +109,13 @@ export function UsersSection() {
 
   useEffect(() => {
     let cancelled = false
-    const key = queryKeyOf(search, role, page, reloadCount)
+    const key = queryKeyOf(search, role, showRemoved, page, reloadCount)
 
     adminUserApi
       .listUsers({
         search: search || undefined,
         role: role || undefined,
+        includeDeleted: showRemoved || undefined,
         page: page - 1,
         size: USERS_PAGE_SIZE,
       })
@@ -142,9 +144,10 @@ export function UsersSection() {
     return () => {
       cancelled = true
     }
-  }, [search, role, page, reloadCount])
+  }, [search, role, showRemoved, page, reloadCount])
 
-  const loading = result?.key !== queryKeyOf(search, role, page, reloadCount)
+  const loading =
+    result?.key !== queryKeyOf(search, role, showRemoved, page, reloadCount)
   const data = result?.data ?? null
   const error = actionError ?? (loading ? null : (result?.error ?? null))
 
@@ -155,20 +158,15 @@ export function UsersSection() {
     setActionError(null)
   }
 
-  function handlePageChange(value: number) {
-    setPage(value)
+  function handleShowRemoved(value: boolean) {
+    setShowRemoved(value)
+    setPage(1)
     setActionError(null)
   }
 
-  function updateUsers(update: (users: AdminUser[]) => AdminUser[]) {
-    setResult((prev) =>
-      prev?.data
-        ? {
-            ...prev,
-            data: { ...prev.data, content: update(prev.data.content) },
-          }
-        : prev,
-    )
+  function handlePageChange(value: number) {
+    setPage(value)
+    setActionError(null)
   }
 
   async function handleChangeRole() {
@@ -177,11 +175,10 @@ export function UsersSection() {
     setBusyUserId(user.id)
     setActionError(null)
     try {
-      const updated = await adminUserApi.changeRole(user.id, newRole)
-      updateUsers((users) =>
-        users.map((u) => (u.id === updated.id ? updated : u)),
-      )
-      // The user may no longer match the role filter, and counts change.
+      await adminUserApi.changeRole(user.id, newRole)
+      // The reload shows the new role; the user may also no longer match
+      // the role filter, and counts change. The old rows stay on screen,
+      // with actions disabled, until it lands.
       setReloadCount((n) => n + 1)
     } catch (err) {
       setActionError(
@@ -200,14 +197,17 @@ export function UsersSection() {
     setActionError(null)
     try {
       await adminUserApi.removeUser(target.id)
-      // Hide the row now, unless it's the page's last: then the reload's
-      // last-page check moves back a page without flashing an empty list
-      if ((data?.content.length ?? 0) > 1) {
-        updateUsers((users) => users.filter((u) => u.id !== target.id))
+      // The page's only row, on a later page: that page is now empty, so
+      // go straight to the previous one rather than fetching the empty
+      // page first. `data` is current: confirm is disabled while loading.
+      // (With removed accounts shown, the row stays, greyed.)
+      if (!showRemoved && page > 1 && data?.content.length === 1) {
+        setPage(page - 1)
+      } else {
+        // GET /users leaves removed accounts out: reload for the rows and
+        // counts
+        setReloadCount((n) => n + 1)
       }
-      // GET /users leaves removed accounts out, so reload for the right
-      // counts
-      setReloadCount((n) => n + 1)
     } catch (err) {
       setActionError(errorMessage(err, `Could not remove ${target.username}.`))
     } finally {
@@ -245,6 +245,15 @@ export function UsersSection() {
               </option>
             ))}
           </select>
+          <label className="flex items-center gap-2 text-sm text-gray-700 sm:whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={showRemoved}
+              onChange={(e) => handleShowRemoved(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            Show removed accounts
+          </label>
         </div>
       </div>
 
@@ -274,6 +283,7 @@ export function UsersSection() {
             users={data.content}
             currentUserId={currentUserId}
             busyUserId={busyUserId}
+            actionsDisabled={loading}
             onChangeRole={(user, newRole) =>
               setPendingRoleChange({ user, role: newRole })
             }
@@ -300,6 +310,7 @@ export function UsersSection() {
           onCancel={() => setPendingRoleChange(null)}
           onConfirm={handleChangeRole}
           saving={busyUserId === pendingRoleChange.user.id}
+          disabled={loading}
         />
       )}
 
@@ -309,6 +320,7 @@ export function UsersSection() {
           onCancel={() => setPendingRemove(null)}
           onConfirm={handleRemove}
           removing={busyUserId === pendingRemove.id}
+          disabled={loading}
         />
       )}
     </section>

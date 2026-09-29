@@ -4,10 +4,21 @@
 // web/docs/wireframes/suppliers.png and add-edit-supplier.png.
 // Implements F1.2, F1.2.1, F2.1, F2.2, F2.2.1, F1.1-F1.1.4.
 //
-// TEMPORARY: admin gating is a hardcoded constant below because
-// src/shared/auth/ doesn't exist yet (see its README). Replace
-// IS_ADMIN with the real role check once User Service auth lands —
-// search this file for "TEMPORARY" when that happens.
+// 2026-09-29, Claude Code (Sonnet 5): the hardcoded IS_ADMIN constant
+// (a TEMPORARY stand-in noted here since auth didn't exist yet) is
+// replaced with useAuth()'s real role — supplier-service's role gate
+// (issue #106) already rejects a non-admin's CRUD calls server-side,
+// but this page showed Add/Edit/Delete to everyone regardless, so a
+// regular user could click into a control that was always going to
+// 403. Now those controls only render for role === 'ADMIN'.
+// PR #143 review (LeongWZ): OWNER can't do supplier CRUD as written —
+// Role.OWNER (issue #97) is the platform's admin-equivalent super
+// admin, so the backend gate now allows ADMIN or OWNER; this check
+// updated to match (isAdmin renders for either role).
+// 2026-09-29, Claude Code (Sonnet 5), issue #104: added a green success
+// banner (create/update/delete), matching the existing red error
+// banner's style, auto-dismissed after 4s; mutually exclusive with the
+// error banner (each clears the other on set).
 //
 // 2026-09-26 (issue #133): wired to the real, now-paginated
 // GET /suppliers. Removed the `listZones()` call — the backend has no
@@ -87,7 +98,13 @@
 // comment above handleSortChange for the mechanism. Fixed by rejecting
 // the sort selection in that handler instead of correcting `sort` back
 // as a render-phase side effect.
-// Reviewed by: [pending]
+// 2026-09-29 (Claude Code, Opus 5.5, issue #147): the hand-rolled
+// Previous/Next pager replaced by the shared Pagination component (so it
+// gains page numbers and aria-current), keeping the "Page X of Y · N
+// suppliers" label beside it; load/save/delete errors use the shared
+// errorMessage helper.
+// Reviewed by: Ryan Ang (the 2026-09-29 issue #147 changes above); the
+// original supplier code's review is still pending with its author.
 
 import { Fragment, useCallback, useEffect, useState } from 'react'
 
@@ -105,10 +122,9 @@ import { SupplierFilterBar } from '@/features/supplier/components/SupplierFilter
 import { SupplierFormModal } from '@/features/supplier/components/SupplierFormModal'
 import { formatDistance, haversineDistanceMeters } from '@/features/supplier/distance'
 import type { Supplier, SupplierInput } from '@/features/supplier/types'
-import { ApiError } from '@/lib/api/http'
-
-// TEMPORARY — see file header.
-const IS_ADMIN = true
+import { errorMessage } from '@/lib/api/http'
+import { Pagination } from '@/shared/components/Pagination'
+import { useAuth } from '@/features/user/useAuth'
 
 const PAGE_SIZE = 10
 const DISTANCE_SORT = 'distance'
@@ -119,10 +135,14 @@ interface Coordinates {
 }
 
 export function Suppliers() {
+  const { role } = useAuth()
+  const isAdmin = role === 'ADMIN' || role === 'OWNER'
+
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('')
@@ -281,11 +301,7 @@ export function Suppliers() {
         setTotalElements(result.totalElements)
       } catch (err) {
         if (cancelled) return
-        setError(
-          err instanceof ApiError
-            ? err.message
-            : 'Could not load suppliers. Try again.',
-        )
+        setError(errorMessage(err, 'Could not load suppliers. Try again.'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -317,6 +333,15 @@ export function Suppliers() {
     }
   }, [])
 
+  // Auto-dismisses a create/update/delete success banner after a few
+  // seconds — errors stay until the next action, but a success message
+  // that lingers just clutters the page once the user has moved on.
+  useEffect(() => {
+    if (!successMessage) return
+    const timeout = window.setTimeout(() => setSuccessMessage(null), 4000)
+    return () => window.clearTimeout(timeout)
+  }, [successMessage])
+
   const selected = suppliers.find((s) => s.id === selectedId) ?? null
 
   // Derived, not stored — while true, fetchCurrentPage resolves to
@@ -326,6 +351,7 @@ export function Suppliers() {
   const waitingForLocation = sort === DISTANCE_SORT && !userLocation
 
   async function handleSave(input: SupplierInput) {
+    const isEdit = formOpenFor !== 'new'
     setSaving(true)
     try {
       if (formOpenFor && formOpenFor !== 'new') {
@@ -334,13 +360,20 @@ export function Suppliers() {
         await createSupplier(input)
       }
       setFormOpenFor(null)
+      setError(null)
+      setSuccessMessage(
+        isEdit
+          ? `Successfully updated Supplier "${input.name}".`
+          : `Successfully created Supplier "${input.name}".`,
+      )
       // Trigger the load effect rather than fetching and setting state
       // here directly — see that effect's comment for why (staleness
       // guard, and not misattributing a refetch failure as "the save
       // failed").
       setRefreshKey((k) => k + 1)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save supplier.')
+      setSuccessMessage(null)
+      setError(errorMessage(err, 'Could not save supplier.'))
     } finally {
       setSaving(false)
     }
@@ -353,6 +386,8 @@ export function Suppliers() {
       await deleteSupplier(pendingDelete.id)
       if (selectedId === pendingDelete.id) setSelectedId(null)
       setPendingDelete(null)
+      setError(null)
+      setSuccessMessage(`Successfully deleted Supplier "${pendingDelete.name}".`)
       // Deleting the last item on the last page would otherwise leave
       // `page` pointing past the new totalPages — step back a page
       // first when that happens; `page` is already one of
@@ -364,7 +399,8 @@ export function Suppliers() {
         setRefreshKey((k) => k + 1)
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete supplier.')
+      setSuccessMessage(null)
+      setError(errorMessage(err, 'Could not delete supplier.'))
     } finally {
       setSaving(false)
     }
@@ -374,7 +410,7 @@ export function Suppliers() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-semibold text-gray-900">Active Campus Suppliers</h1>
-        {IS_ADMIN && (
+        {isAdmin && (
           <button
             type="button"
             onClick={() => setFormOpenFor('new')}
@@ -395,6 +431,12 @@ export function Suppliers() {
         onSortChange={handleSortChange}
         locationNotice={locationNotice}
       />
+
+      {successMessage && (
+        <p className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+          {successMessage}
+        </p>
+      )}
 
       {error && (
         <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -447,7 +489,7 @@ export function Suppliers() {
                     <div className="col-span-full lg:hidden">
                       <SupplierDetailPanel
                         supplier={selected}
-                        isAdmin={IS_ADMIN}
+                        isAdmin={isAdmin}
                         onEdit={() => setFormOpenFor(selected)}
                         onDelete={() => setPendingDelete(selected)}
                       />
@@ -459,26 +501,17 @@ export function Suppliers() {
           )}
 
           {!loading && !waitingForLocation && totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="rounded-md border border-gray-200 px-3 py-1.5 font-medium hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                Previous
-              </button>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
               <span>
                 Page {page + 1} of {totalPages} · {totalElements} suppliers
               </span>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                className="rounded-md border border-gray-200 px-3 py-1.5 font-medium hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                Next
-              </button>
+              {/* The shared pager is 1-based; this page's state is 0-based
+                  like the API. */}
+              <Pagination
+                page={page + 1}
+                totalPages={totalPages}
+                onPageChange={(p) => setPage(p - 1)}
+              />
             </div>
           )}
         </div>
@@ -488,7 +521,7 @@ export function Suppliers() {
           <div className="hidden lg:block">
             <SupplierDetailPanel
               supplier={selected}
-              isAdmin={IS_ADMIN}
+              isAdmin={isAdmin}
               onEdit={() => setFormOpenFor(selected)}
               onDelete={() => setPendingDelete(selected)}
             />

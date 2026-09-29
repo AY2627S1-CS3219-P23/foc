@@ -26,6 +26,9 @@ Author review: Ryan validated correctness and naming.
 2026-09-27 (Claude Code, Fable 5), issue #93: reuse-block cases added — a
        soft-deleted account's email and username still fail the uniqueness
        checks (design doc §2: 30-day reuse block).
+2026-09-29 (Claude Code, Opus 5.5), issue #147: an invalid body now gets
+       problem+json with the broken rule's message (ProblemDetailAdvice,
+       team decision).
 */
 
 
@@ -196,7 +199,9 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
                 .header("X-Setup-Token", VALID_SETUP_TOKEN)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(invalidEmailRequest)))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value(
+                "Email must be a valid @u.nus.edu address. Email used should not be the friendly email."));
     }
 
     @Test

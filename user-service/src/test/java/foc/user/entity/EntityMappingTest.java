@@ -8,6 +8,9 @@
  * substitute.
  * 2026-09-25, Claude Code (Opus 5.5): container moved to the shared
  * PostgresTestContainer base (PR #131 review).
+ * 2026-09-29, Claude Code (Opus 5.5), issue #147: tables emptied before
+ * each test, since the Flyway-built schema (unlike create-drop) keeps
+ * rows other test classes committed.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.user.entity;
@@ -15,6 +18,7 @@ package foc.user.entity;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -34,6 +38,15 @@ class EntityMappingTest extends PostgresTestContainer {
 
     @Autowired
     private EntityManager entityManager;
+
+    // rows committed by other test classes; the delete rolls back with the test
+    @BeforeEach
+    void emptyTables() {
+        entityManager.createNativeQuery("delete from otps").executeUpdate();
+        entityManager.createNativeQuery("delete from account_tokens").executeUpdate();
+        entityManager.createNativeQuery("delete from token_denylist").executeUpdate();
+        entityManager.createNativeQuery("delete from users").executeUpdate();
+    }
 
     private <T> T persistAndFlush(T entity) {
         entityManager.persist(entity);

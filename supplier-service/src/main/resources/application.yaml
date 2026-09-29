@@ -6,6 +6,9 @@
 # actuator health endpoint. 2026-09-26 (issue #133): web-allowed-origin
 # for CorsConfig, so the browser can call GET /suppliers directly.
 # Reviewed by: Ko-Khan (via pull request).
+# 2026-09-29, issue #106: JWT secret binding for the JWT verification +
+# role gate filter chain (same shared JWT_SECRET as user-service and
+# notification-service).
 
 spring:
   application:
@@ -21,6 +24,11 @@ spring:
 
 supplier:
   web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
+  jwt:
+    # Shared platform secret (HS256). Empty default so the yaml stays
+    # parseable; JwtVerifier turns a missing/short value into a clear
+    # startup failure.
+    secret: ${JWT_SECRET:}
 
 management:
   endpoints:

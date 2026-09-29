@@ -16,6 +16,9 @@ UserRepository.getActiveUser; role rank taken from the Role enum order.
 2026-09-29 (Claude Code, Opus 5.5), PR #140 review: GET /users leaves out
 soft-deleted accounts (team decision, replacing "soft-deleted included"):
 removed users no longer come back on the admin page's next reload.
+2026-09-29 (Claude Code, Opus 5.5), issue #147: includeDeleted lists
+soft-deleted accounts too, so admins can see removed accounts before the
+purge (team decision: a filter on GET /users, not a separate table).
 */
 
 package foc.user.service;
@@ -59,11 +62,12 @@ public class AdminService {
         this.userRepository = userRepository;
     }
 
-    // active accounts only: soft-deleted ones are hidden until they recover or
-    // are purged. sort is "field" or "field,asc|desc";
-    // null sorts by id ascending
+    // active accounts only, unless includeDeleted: soft-deleted ones are
+    // otherwise hidden until they recover or are purged. sort is "field" or
+    // "field,asc|desc"; null sorts by id ascending
     @Transactional(readOnly = true)
-    public Page<UserResponse> listUsers(String search, Role role, String sort, int page, int size) {
+    public Page<UserResponse> listUsers(
+            String search, Role role, String sort, int page, int size, boolean includeDeleted) {
         if (page < 0) {
             throw badRequest("page must not be negative");
         }
@@ -75,7 +79,7 @@ public class AdminService {
         // ordering is applied inside the specification (role sorts by rank, which a
         // plain Sort can't express), so the page request itself stays unsorted
         return userRepository
-            .findAll(matching(search, role, order), PageRequest.of(page, size))
+            .findAll(matching(search, role, includeDeleted, order), PageRequest.of(page, size))
             .map(UserResponse::from);
     }
 
@@ -142,11 +146,14 @@ public class AdminService {
         throw badRequest("sort direction must be asc or desc");
     }
 
-    private static Specification<User> matching(String search, Role role, SortOrder order) {
+    private static Specification<User> matching(
+            String search, Role role, boolean includeDeleted, SortOrder order) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            predicates.add(cb.isNull(root.get("deletedAt")));
+            if (!includeDeleted) {
+                predicates.add(cb.isNull(root.get("deletedAt")));
+            }
 
             if (role != null) {
                 predicates.add(cb.equal(root.get("role"), role));

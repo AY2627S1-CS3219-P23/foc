@@ -8,22 +8,27 @@ Scope: POST /auth/signup (issue #87) and POST /auth/login (issues #89/#90),
        controller, so other controllers' error bodies are unchanged (#138).
        PR #141 review: the lost-race-to-401 mapping now covers only login,
        so other /auth routes keep ProblemDetailAdvice's 409.
+       2026-09-29 (issue #147): the invalid-body and unreadable-body
+       handlers moved to ProblemDetailAdvice, shared by every controller
+       (team decision).
        2026-09-29, Claude Code (Fable 5), PR #142: AccountLockedException
        mapped to 429 problem+json (issue #145 decided by the author — the
        lockout is deliberately distinguishable from other failures).
-Author review: Ryan to review via the PR.
+       2026-09-29, Claude Code (Opus 5), issue #146: the 429 carries a
+       Retry-After header, and the lost-race path now answers with the
+       wrong-password message (the mapping used to exist to hide that the
+       account exists, which the new messages no longer do).
+Author review: Leong Wei Zhi to review via the PR.
 */
 
 package foc.user.controller;
 
-import java.util.stream.Collectors;
-
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
-import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -63,10 +68,11 @@ public class AuthController {
             return authService.login(request);
         } catch (OptimisticLockingFailureException e) {
             // two logins to one account at once: the loser's counter update
-            // fails the @Version check at commit. Answered like any failed
-            // login, not ProblemDetailAdvice's 409, which would reveal that
-            // the account exists
-            throw new LoginFailedException();
+            // fails the @Version check at commit. Answered as a failed
+            // login, not ProblemDetailAdvice's 409, which is no answer to
+            // give someone typing a password. The count it lost is the
+            // count it can't quote, so this one carries no tally
+            throw LoginFailedException.wrongPassword();
         }
     }
 
@@ -76,32 +82,18 @@ public class AuthController {
     }
 
     // 429, not 401: the lockout is deliberately distinguishable (issue
-    // #145 decision) so the UI can show the wireframe's lockout message
+    // #145 decision) so the UI can show the lockout message. Retry-After
+    // repeats the same wait the message is phrased from, in the header
+    // the standard defines for it
     @ExceptionHandler(AccountLockedException.class)
-    public ProblemDetail handleAccountLocked(AccountLockedException e) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
+    public ResponseEntity<ProblemDetail> handleAccountLocked(AccountLockedException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
+            .body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage()));
     }
 
     @ExceptionHandler(ResponseStatusException.class)
     public ProblemDetail handleResponseStatus(ResponseStatusException e) {
         return e.getBody();
-    }
-
-    // every broken rule, sorted by field so the message is stable
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ProblemDetail handleInvalidBody(MethodArgumentNotValidException e) {
-        String reasons = e.getBindingResult().getFieldErrors().stream()
-            .sorted((a, b) -> a.getField().compareTo(b.getField()))
-            .map(error -> error.getDefaultMessage())
-            .distinct()
-            // some messages end in a full stop and some don't
-            .map(message -> message.endsWith(".") ? message : message + ".")
-            .collect(Collectors.joining(" "));
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, reasons);
-    }
-
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ProblemDetail handleUnreadableBody(HttpMessageNotReadableException e) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request body is missing or malformed");
     }
 }

@@ -7,7 +7,9 @@ Scope: Generated tests for the response when a save loses an optimistic
        through MockMvc; UserOptimisticLockTest covers the locking itself.
        2026-09-29 (Claude Code, Opus 5.5), PR #141 review: a lost race is
        401 on login only; sign-up keeps the 409.
-Author review: Ryan to review via the PR.
+       2026-09-29 (Claude Code, Opus 5), issue #146: that 401 now carries
+       the wrong-password message without a countdown.
+Author review: Leong Wei Zhi to review via the PR.
 */
 
 package foc.user.controller;
@@ -104,7 +106,8 @@ class ConflictResponseTest extends PostgresTestContainer {
                 .content("{\"usernameOrEmail\":\"student_alex\",\"password\":\"Password1234\"}"))
             .andExpect(status().isUnauthorized())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-            .andExpect(jsonPath("$.detail").value("Incorrect username/email or password"));
+            // no tally: the attempt that lost the race can't quote a count
+            .andExpect(jsonPath("$.detail").value("Incorrect password."));
     }
 
     @Test

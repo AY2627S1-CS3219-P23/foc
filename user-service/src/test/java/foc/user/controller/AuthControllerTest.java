@@ -7,19 +7,33 @@ Scope: integration tests for POST /auth/signup and POST /auth/login
        token claims, and the CORS preflight for the web origin.
        PR #141 review: usernames match ignoring case at sign-up and login
        (team decision).
-Author review: Ryan to review via the PR.
+       Issue #147: parallel wrong passwords still trip the lockout, and the
+       database itself rejects usernames differing only in case.
+       2026-09-29, Claude Code (Opus 5), issue #146: the 401s are no longer
+       non-revealing — they name the cause — so the tests pin one detail per
+       cause, the countdown as it runs down, and the 429's Retry-After.
+Author review: Leong Wei Zhi to review via the PR.
 */
 
 package foc.user.controller;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
@@ -54,8 +68,15 @@ class AuthControllerTest extends PostgresTestContainer {
     private static final String JWT_SECRET = "test-jwt-secret-that-is-at-least-32-bytes-long";
     private static final String WEB_ORIGIN = "http://localhost:5173";
     private static final String PASSWORD = "ValidPassword123";
-    private static final String LOGIN_FAILED = "Incorrect username/email or password";
-    private static final String LOCKED = "Too many failed attempts. Login disabled for 15 minutes.";
+    private static final String UNKNOWN_ACCOUNT = "No account found for that username or email.";
+    private static final String LOCKED = "Your account is locked due to too many failed login"
+        + " attempts. Try again in 15 minutes.";
+
+    // the countdown the server quotes after the n-th consecutive failure
+    private static String wrongPassword(int remaining) {
+        return "Incorrect password. " + (remaining == 1 ? "1 attempt" : remaining + " attempts")
+            + " remaining before your account is temporarily locked.";
+    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -208,16 +229,70 @@ class AuthControllerTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("Unknown account and wrong password get the same 401 problem+json")
-    void login_nonRevealing() throws Exception {
+    @DisplayName("Wrong passwords sent at once all count: the account locks and a later right password is refused")
+    void login_parallelFailuresLock() throws Exception {
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isCreated());
 
-        for (String identifier : new String[] { "student_alex", "nobody" }) {
-            login(identifier, "WrongPassword123")
-                .andExpect(status().isUnauthorized())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.detail").value(LOGIN_FAILED));
+        int attempts = 10;
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(attempts);
+        try {
+            List<Future<Integer>> statuses = new ArrayList<>();
+            for (int i = 0; i < attempts; i++) {
+                Callable<Integer> attempt = () -> {
+                    start.await();
+                    return login("student_alex", "WrongPassword123").andReturn().getResponse().getStatus();
+                };
+                statuses.add(pool.submit(attempt));
+            }
+            start.countDown();
+
+            int unauthorized = 0;
+            for (Future<Integer> status : statuses) {
+                int code = status.get();
+                assertThat(code).isIn(401, 429);
+                if (code == 401) {
+                    unauthorized++;
+                }
+            }
+            // before the fix most of these lost the version check and never
+            // counted; now the first four are plain failures and the rest
+            // are refused by the lock
+            assertThat(unauthorized).isEqualTo(4);
+        } finally {
+            pool.shutdownNow();
         }
+
+        assertThat(userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow().getLockedUntil())
+            .isNotNull();
+        login("student_alex", PASSWORD).andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    @DisplayName("The database rejects a username that differs from another only in case")
+    void usernameUniqueIgnoringCaseInDatabase() {
+        userRepository.saveAndFlush(new User("e1234567@u.nus.edu", "Student_Alex", "hash", Role.USER));
+
+        // straight to the repository, skipping sign-up's own check
+        assertThatThrownBy(() -> userRepository.saveAndFlush(
+                new User("e7654321@u.nus.edu", "student_alex", "hash", Role.USER)))
+            .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("An unknown account and a wrong password get different 401 problem+json details")
+    void login_namesTheFailure() throws Exception {
+        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isCreated());
+
+        login("nobody", "WrongPassword123")
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.detail").value(UNKNOWN_ACCOUNT));
+
+        login("student_alex", "WrongPassword123")
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.detail").value(wrongPassword(4)));
     }
 
     @Test
@@ -225,18 +300,23 @@ class AuthControllerTest extends PostgresTestContainer {
     void login_lockout() throws Exception {
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isCreated());
 
-        for (int i = 0; i < 4; i++) {
-            login("student_alex", "WrongPassword123").andExpect(status().isUnauthorized());
+        // the countdown runs down to the singular on the last attempt
+        for (int remaining = 4; remaining > 0; remaining--) {
+            login("student_alex", "WrongPassword123")
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.detail").value(wrongPassword(remaining)));
         }
         // the fifth failure trips the lock and already says so (issue #145:
         // the lockout is deliberately distinguishable, as a 429)
         login("student_alex", "WrongPassword123")
             .andExpect(status().isTooManyRequests())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(header().string(HttpHeaders.RETRY_AFTER, "900"))
             .andExpect(jsonPath("$.detail").value(LOCKED));
 
         login("student_alex", PASSWORD)
             .andExpect(status().isTooManyRequests())
+            .andExpect(header().exists(HttpHeaders.RETRY_AFTER))
             .andExpect(jsonPath("$.detail").value(LOCKED));
         assertThat(userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow().getLockedUntil()).isNotNull();
     }

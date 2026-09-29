@@ -4,6 +4,9 @@
 // 2026-09-29, Claude Code (Fable 5), issue #112: errorMessage hoisted
 // here from its three per-page copies (login, register, UsersSection).
 // Reviewed by: Leong Wei Zhi (via pull request).
+// 2026-09-29, Claude Code (Opus 5.5), issue #147: errorMessage added, the
+// one error-to-text helper for every feature (was copied in the admin
+// Users section, login, register and the suppliers page).
 
 import { serviceBaseUrls, type ServiceName } from './config'
 

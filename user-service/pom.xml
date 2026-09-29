@@ -23,6 +23,8 @@
   gson) for minting login tokens, same version and modules as
   notification-service's verifier so minted tokens pass it (jjwt-gson
   for the same Jackson 3 reason recorded in that pom).
+  2026-09-29, Claude Code (Opus 5.5), issue #147: spring-boot-starter-flyway
+  and flyway-database-postgresql (team decision: Flyway manages the schema).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -77,6 +79,14 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-flyway</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
