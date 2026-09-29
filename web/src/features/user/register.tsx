@@ -4,13 +4,22 @@
 // PR #139's user-auth server on port 8081) with the NUS email it
 // requires, then sends you to log in (sign-up returns the account, not
 // a token); shows the server's error message. The response (the new
-// account) is not logged (PR #141 review). The page itself comes from PR #139.
+// account) is not logged (PR #141 review). Second PR #141 review: calls go
+// through apiFetch, so a missing VITE_USER_SERVICE_URL shows as such; no
+// success log. The page itself comes from PR #139.
 // Reviewed by: Ryan Ang
 
 import React, { useState } from "react";
-import axios from "axios";
+import { ApiError, apiFetch } from "@/lib/api/http";
 import { router } from "../../routes/index";
-import { serviceBaseUrls } from "@/lib/api/config";
+
+// ApiError carries user-service's problem+json reason, and apiFetch's own
+// Error names a missing VITE_USER_SERVICE_URL; a TypeError is the network
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error && !(error instanceof TypeError)) return error.message;
+  return fallback;
+}
 
 export function Register() {
   const [email, setEmail] = useState("");
@@ -21,10 +30,9 @@ export function Register() {
   const register = async (event: React.SyntheticEvent) => {
     event.preventDefault();
     try {
-      await axios.post(`${serviceBaseUrls.user}/auth/signup`, {
-        email,
-        username,
-        password,
+      await apiFetch("user", "/auth/signup", {
+        method: "POST",
+        body: JSON.stringify({ email, username, password }),
       });
 
       setError("");
@@ -32,17 +40,8 @@ export function Register() {
       setUsername("");
       setPassword("");
       router.navigate("/login");
-      console.log("Registration successful");
     } catch (error: unknown) {
-      // user-service replies with problem+json; show its exact reason
-      if (axios.isAxiosError(error) && error.response?.data?.detail) {
-        setError(error.response.data.detail);
-      } else if (error instanceof Error) {
-        setError("Could not register. Try again.");
-        console.error(error.message); 
-      } else {
-        console.error("An unexpected error occurred:", error);
-      }
+      setError(errorMessage(error, "Could not register. Try again."));
     }
   };
 

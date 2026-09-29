@@ -11,6 +11,9 @@ Scope: sign-up (issue #87) and login (issue #89), replacing PR #139's
        insert-after-verify shape, with verify skipped for now); a
        soft-deleted account is recovered by logging in within the
        retention window.
+       PR #141 review: sign-up's normalising and uniqueness checks shared
+       with owner setup (NewAccountDetails); usernames match ignoring case
+       at sign-up and login (team decision).
 Author review: Ryan to review via the PR.
 */
 
@@ -83,16 +86,9 @@ public class AuthService {
     // once it lands (POST /auth/signup/verify); until then sign-up inserts
     @Transactional
     public UserResponse signup(SignupRequest request) {
-        String email = request.email().trim().toLowerCase();
-        String username = request.username().trim();
-
-        // includes soft-deleted accounts: their identifiers stay reserved
-        if (userRepository.existsByEmail(email)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email is already registered");
-        }
-        if (userRepository.existsByUsername(username)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username is already taken");
-        }
+        String email = NewAccountDetails.normalizeEmail(request.email());
+        String username = NewAccountDetails.normalizeUsername(request.username());
+        NewAccountDetails.ensureUnique(userRepository, email, username);
 
         User user = new User(email, username, passwordEncoder.encode(request.password()), Role.USER);
         try {
@@ -152,7 +148,7 @@ public class AuthService {
         String identifier = usernameOrEmail.trim();
         return identifier.contains("@")
             ? userRepository.findByEmail(identifier.toLowerCase())
-            : userRepository.findByUsername(identifier);
+            : userRepository.findByUsernameIgnoreCase(identifier);
     }
 
     private void recordFailure(User user, Instant now) {

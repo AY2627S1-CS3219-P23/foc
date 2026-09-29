@@ -3,15 +3,31 @@
 // Scope: login now calls user-service's POST /auth/login (replacing
 // PR #139's user-auth server on port 8081) with usernameOrEmail, and
 // shows the server's error message; the response is no longer logged,
-// as it now holds the access token (PR #141 review). The page itself
-// comes from PR #139.
+// as it now holds the access token (PR #141 review). Second PR #141
+// review: calls go through apiFetch, so a missing VITE_USER_SERVICE_URL
+// shows as such; AuthProvider does the one navigation after login; no
+// success log. The page itself comes from PR #139.
 // Reviewed by: Ryan Ang
 
 import React, { useState } from "react";
-import axios from "axios";
-import { serviceBaseUrls } from "@/lib/api/config";
+import { ApiError, apiFetch } from "@/lib/api/http";
 import { router } from "../../routes/index";
 import { useAuth } from "./useAuth";
+
+// POST /auth/login's body
+type LoginResponse = {
+  accessToken: string;
+  tokenType: string;
+  expiresIn: number;
+};
+
+// ApiError carries user-service's problem+json reason, and apiFetch's own
+// Error names a missing VITE_USER_SERVICE_URL; a TypeError is the network
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error && !(error instanceof TypeError)) return error.message;
+  return fallback;
+}
 
 export function Login() {
   const [username, setUsername] = useState("");
@@ -27,27 +43,18 @@ export function Login() {
   const login = async (event: React.SyntheticEvent) => {
     event.preventDefault();
     try {
-      const response = await axios.post(`${serviceBaseUrls.user}/auth/login`, {
-        usernameOrEmail: username,
-        password,
+      const response = await apiFetch<LoginResponse>("user", "/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ usernameOrEmail: username, password }),
       });
 
-      await data.login(response.data);
       setError("");
       setUsername("");
       setPassword("");
-      router.navigate("/");
-      console.log("login successful");
+      // navigates to the home page
+      await data.login(response);
     } catch (error: unknown) {
-      // user-service replies with problem+json; show its reason
-      if (axios.isAxiosError(error) && error.response?.data?.detail) {
-        setError(error.response.data.detail);
-      } else if (error instanceof Error) {
-        setError("Could not log in. Try again.");
-        console.error(error.message); 
-      } else {
-        console.error("An unexpected error occurred:", error);
-      }
+      setError(errorMessage(error, "Could not log in. Try again."));
     }
   };
 

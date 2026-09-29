@@ -6,6 +6,8 @@ Scope: POST /auth/signup (issue #87) and POST /auth/login (issues #89/#90),
        user-auth server. Errors are problem+json with the exact reason
        (design doc: "400 + exact reason"); the handlers are local to this
        controller, so other controllers' error bodies are unchanged (#138).
+       PR #141 review: the lost-race-to-401 mapping now covers only login,
+       so other /auth routes keep ProblemDetailAdvice's 409.
 Author review: Ryan to review via the PR.
 */
 
@@ -53,20 +55,20 @@ public class AuthController {
 
     @PostMapping(value = "/login", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
-        return authService.login(request);
+        try {
+            return authService.login(request);
+        } catch (OptimisticLockingFailureException e) {
+            // two logins to one account at once: the loser's counter update
+            // fails the @Version check at commit. Answered like any failed
+            // login, not ProblemDetailAdvice's 409, which would reveal that
+            // the account exists
+            throw new LoginFailedException();
+        }
     }
 
     @ExceptionHandler(LoginFailedException.class)
     public ProblemDetail handleLoginFailed(LoginFailedException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
-    }
-
-    // two logins to one account at once: the loser's counter update fails the
-    // @Version check. Answered like any failed login, not ProblemDetailAdvice's
-    // 409, which would reveal that the account exists
-    @ExceptionHandler(OptimisticLockingFailureException.class)
-    public ProblemDetail handleConcurrentLogin(OptimisticLockingFailureException e) {
-        return handleLoginFailed(new LoginFailedException());
     }
 
     @ExceptionHandler(ResponseStatusException.class)

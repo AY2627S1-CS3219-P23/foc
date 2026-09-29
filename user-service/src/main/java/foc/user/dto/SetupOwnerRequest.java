@@ -6,34 +6,32 @@ Author review: Ryan validated correctness and edited error messages.
 2026-09-23 (Claude Code, Opus 5.5): email pattern made case-insensitive and
 whitespace-tolerant (redundant @Email dropped, as it rejects
 padded input and the pattern already fixes the format); password size message now states both bounds (PR #126 review).
+2026-09-29 (Claude Code, Opus 5.5), PR #141 review: rules and messages
+moved to AccountRules, shared with SignupRequest (unchanged).
 
 */
 
 
 package foc.user.dto;
 
+import static foc.user.dto.AccountRules.*;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record SetupOwnerRequest(
-    @NotBlank(message = "Email is required")
-    // Case-insensitive, and tolerant of surrounding whitespace, so input the
-    // service normalises (trim + lowercase) isn't rejected before it gets there.
-    @Pattern(regexp = "^\\s*(?i)e\\d{7}@u\\.nus\\.edu\\s*$",
-            message = "Email must be a valid @u.nus.edu address. Email used should not be the friendly email.")
+    @NotBlank(message = EMAIL_REQUIRED)
+    @Pattern(regexp = EMAIL_PATTERN, message = EMAIL_MESSAGE)
     String email,
 
-    @NotBlank(message = "Username is required")
-    @Size(min = 3, max = 30, message = "Username must be between 3 and 30 characters")
-    @Pattern(regexp = "^[a-zA-Z0-9_]+$", 
-            message = "Username can only contain alphanumeric characters and underscores")
+    @NotBlank(message = USERNAME_REQUIRED)
+    @Size(min = USERNAME_MIN, max = USERNAME_MAX, message = USERNAME_SIZE_MESSAGE)
+    @Pattern(regexp = USERNAME_PATTERN, message = USERNAME_MESSAGE)
     String username,
 
-    @NotBlank(message = "Password is required")
-    @Size(min = 10, max = 50,
-            message = "Password must be between 10 and 50 characters long")
-    @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).+$", 
-            message = "Password must contain at least one uppercase letter, one lowercase letter, and one number.")
+    @NotBlank(message = PASSWORD_REQUIRED)
+    @Size(min = PASSWORD_MIN, max = PASSWORD_MAX, message = PASSWORD_SIZE_MESSAGE)
+    @Pattern(regexp = PASSWORD_PATTERN, message = PASSWORD_MESSAGE)
     String password
 ) {}

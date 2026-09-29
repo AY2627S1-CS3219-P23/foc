@@ -6,6 +6,8 @@ Scope: JWT minting for login (issue #90), per design doc §3: HS256 with the
        handling and the 32-byte minimum mirror notification-service's
        JwtVerifier, so minted tokens pass it. Building it now (with #87/#89)
        was a team decision.
+       PR #141 review: a TTL with no unit is read as seconds, not
+       milliseconds.
 Author review: Ryan to review via the PR.
 */
 
@@ -15,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.UUID;
 
@@ -22,6 +25,7 @@ import javax.crypto.SecretKey;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.convert.DurationUnit;
 import org.springframework.stereotype.Component;
 
 import foc.user.entity.User;
@@ -41,7 +45,8 @@ public class JwtIssuer {
     @Autowired
     public JwtIssuer(
             @Value("${user.jwt.secret:}") String secret,
-            @Value("${user.jwt.access-token-ttl}") Duration ttl) {
+            // a bare number is seconds (JWT_ACCESS_TOKEN_TTL=3600 is 1 h)
+            @Value("${user.jwt.access-token-ttl}") @DurationUnit(ChronoUnit.SECONDS) Duration ttl) {
         this(secret, ttl, Clock.systemUTC());
     }
 

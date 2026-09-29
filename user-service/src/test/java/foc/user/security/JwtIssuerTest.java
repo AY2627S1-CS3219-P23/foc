@@ -5,6 +5,7 @@ Scope: tests for JwtIssuer (issue #90): tokens verify the way
        notification-service's JwtVerifier checks them (HS256, shared
        secret, sub = user id) and carry role, jti and a 1 h expiry; a short
        secret fails at construction.
+       PR #141 review: a TTL with no unit binds as seconds.
 Author review: Ryan to review via the PR.
 */
 
@@ -20,6 +21,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.convert.ApplicationConversionService;
+import org.springframework.core.MethodParameter;
+import org.springframework.core.convert.TypeDescriptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import foc.user.entity.Role;
@@ -80,6 +84,21 @@ class JwtIssuerTest {
     @DisplayName("An unset TTL (empty JWT_ACCESS_TOKEN_TTL) defaults to 1 hour")
     void nullTtlDefaultsToOneHour() {
         assertThat(new JwtIssuer(SECRET, null).ttl()).isEqualTo(Duration.ofHours(1));
+    }
+
+    @Test
+    @DisplayName("A TTL with no unit (JWT_ACCESS_TOKEN_TTL=3600) binds as seconds")
+    void unitlessTtlIsSeconds() throws Exception {
+        // the conversion Spring Boot applies to the constructor's @Value TTL
+        TypeDescriptor ttlParam = new TypeDescriptor(MethodParameter.forExecutable(
+            JwtIssuer.class.getConstructor(String.class, Duration.class), 1));
+
+        Object ttl = ApplicationConversionService.getSharedInstance()
+            .convert("3600", TypeDescriptor.valueOf(String.class), ttlParam);
+
+        assertThat(ttl).isEqualTo(Duration.ofHours(1));
+        assertThat(ApplicationConversionService.getSharedInstance()
+            .convert("30m", TypeDescriptor.valueOf(String.class), ttlParam)).isEqualTo(Duration.ofMinutes(30));
     }
 
     @Test

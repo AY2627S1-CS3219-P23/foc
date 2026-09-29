@@ -5,6 +5,7 @@ Scope: unit tests for AuthService (issues #87/#89): sign-up normalisation
        and uniqueness, and login lookup, lockout, counter reset,
        non-revealing failures and recovery within the retention window.
        Fixed clock and a plain-text password encoder keep them fast.
+       PR #141 review: username lookups ignore case (team decision).
 Author review: Ryan to review via the PR.
 */
 
@@ -82,7 +83,7 @@ class AuthServiceTest {
     }
 
     private void userFoundByUsername() {
-        when(userRepository.findByUsername("student_alex")).thenReturn(Optional.of(user));
+        when(userRepository.findByUsernameIgnoreCase("student_alex")).thenReturn(Optional.of(user));
     }
 
     private LoginResponse login(String password) {
@@ -123,7 +124,7 @@ class AuthServiceTest {
     @Test
     @DisplayName("Sign-up rejects a taken username with 400 and the exact reason")
     void signup_usernameTaken() {
-        when(userRepository.existsByUsername("student_alex")).thenReturn(true);
+        when(userRepository.existsByUsernameIgnoreCase("student_alex")).thenReturn(true);
 
         Throwable thrown = catchThrowable(() -> authService.signup(
             new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD)));
@@ -184,13 +185,13 @@ class AuthServiceTest {
         LoginResponse response = authService.login(new LoginRequest(" E1234567@U.NUS.EDU ", PASSWORD));
 
         assertThat(response.accessToken()).isNotBlank();
-        verify(userRepository, never()).findByUsername(any());
+        verify(userRepository, never()).findByUsernameIgnoreCase(any());
     }
 
     @Test
     @DisplayName("Unknown account and wrong password fail with the same message")
     void login_failuresAreNonRevealing() {
-        when(userRepository.findByUsername("nobody")).thenReturn(Optional.empty());
+        when(userRepository.findByUsernameIgnoreCase("nobody")).thenReturn(Optional.empty());
         userFoundByUsername();
 
         Throwable unknown = catchThrowable(() -> authService.login(new LoginRequest("nobody", PASSWORD)));

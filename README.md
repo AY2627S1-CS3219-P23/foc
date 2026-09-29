@@ -250,7 +250,10 @@ and user-service sign-up, login and JWT issuance (issues #87, #89, #90)
 — `POST /auth/signup`, `POST /auth/login` with the 5-failure lockout,
 HS256 token minting, CORS, their tests, the removal of PR #139's
 separate `user-auth` server and the login/register pages pointed at
-user-service, with auth placement, OTP deferral and response shapes
+user-service, plus the PR #141 review fixes (shared sign-up and
+owner-setup rules, case-insensitive usernames, the token lifetime unit,
+login-only race handling, `apiFetch` on the login and register pages),
+with auth placement, OTP deferral, username case and response shapes
 decided by the team and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through

@@ -60,8 +60,30 @@ Entry template:
   response (the login one now holds the access token); the #90 logout
   denylist stays deferred, per the design doc's "defer for now" on logout
   revocation, with #90 kept open.
+  Second PR #141 review (after merging `main`, which brought in PR #140):
+  the tool sorted a reviewer's findings into implementation fixes and
+  ones needing a team decision. Team decision: usernames are matched
+  ignoring case (stored as typed), so `UserRepository` gains
+  `existsByUsernameIgnoreCase` / `findByUsernameIgnoreCase` in place of
+  the exact-match methods. Fixed: `SignupRequest` and `SetupOwnerRequest`
+  share their rules through new `dto/AccountRules.java`, and sign-up and
+  owner setup share normalising and uniqueness checks through new
+  `service/NewAccountDetails.java`; `JwtIssuer` reads a unit-less TTL as
+  seconds (`@DurationUnit`), documented in `.env.example` and the
+  README; `AuthController` maps a lost optimistic-locking race to 401 for
+  login only, so other `/auth` routes keep the 409; `login.tsx` and
+  `register.tsx` call `apiFetch` instead of axios and drop their success
+  logs; `AuthProvider.tsx` navigates to `/` (not the missing `/home`)
+  and is the only navigation after login. Tests: case-insensitive
+  sign-up and login, the login/sign-up race responses in
+  `ConflictResponseTest`, and the TTL unit in `JwtIssuerTest`. Left for
+  the team: holding a DB connection through bcrypt, the service-wide
+  validation error format, token storage and expiry on the web side,
+  and the post-sign-up message.
 - **Author review:** Full `./mvnw test`
-  suite passes, including the Docker-backed `AuthControllerTest`.
+  suite passes, including the Docker-backed `AuthControllerTest`
+  (156 tests after the second review). Web: 25 tests pass, lint and
+  type-check clean.
 
 ## 2026-09-29 — Ryan Ang (#113 PR #140 second review)
 - **Tool:** Claude Code (Opus 5.5)

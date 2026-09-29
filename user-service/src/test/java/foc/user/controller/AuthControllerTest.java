@@ -5,6 +5,8 @@ Scope: integration tests for POST /auth/signup and POST /auth/login
        (issues #87/#89/#90) against the shared Testcontainers Postgres:
        created account, exact 400 reasons, non-revealing 401s, lockout,
        token claims, and the CORS preflight for the web origin.
+       PR #141 review: usernames match ignoring case at sign-up and login
+       (team decision).
 Author review: Ryan to review via the PR.
 */
 
@@ -95,7 +97,7 @@ class AuthControllerTest extends PostgresTestContainer {
             .andExpect(jsonPath("$.password").doesNotExist())
             .andExpect(jsonPath("$.passwordHash").doesNotExist());
 
-        User saved = userRepository.findByUsername("student_alex").orElseThrow();
+        User saved = userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow();
         assertThat(saved.getPasswordHash()).isNotEqualTo(PASSWORD).startsWith("$2");
     }
 
@@ -129,6 +131,10 @@ class AuthControllerTest extends PostgresTestContainer {
         signup("e7654321@u.nus.edu", "student_alex", PASSWORD)
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.detail").value("Username is already taken"));
+        // usernames are unique ignoring case
+        signup("e7654321@u.nus.edu", "Student_Alex", PASSWORD)
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Username is already taken"));
     }
 
     @Test
@@ -142,7 +148,7 @@ class AuthControllerTest extends PostgresTestContainer {
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.role").value("USER"));
 
-        assertThat(userRepository.findByUsername("student_alex").orElseThrow().getRole()).isEqualTo(Role.USER);
+        assertThat(userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow().getRole()).isEqualTo(Role.USER);
     }
 
     @Test
@@ -169,7 +175,7 @@ class AuthControllerTest extends PostgresTestContainer {
     @DisplayName("Login by username or email returns a token for the account")
     void login_success() throws Exception {
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isCreated());
-        Long id = userRepository.findByUsername("student_alex").orElseThrow().getId();
+        Long id = userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow().getId();
 
         for (String identifier : new String[] { "student_alex", "E1234567@u.nus.edu" }) {
             String body = login(identifier, PASSWORD)
@@ -187,6 +193,17 @@ class AuthControllerTest extends PostgresTestContainer {
             assertThat(claims.getSubject()).isEqualTo(String.valueOf(id));
             assertThat(claims.get("role", String.class)).isEqualTo("USER");
         }
+    }
+
+    @Test
+    @DisplayName("Login matches the username ignoring case; the account keeps its own case")
+    void login_usernameIgnoresCase() throws Exception {
+        signup("e1234567@u.nus.edu", "Student_Alex", PASSWORD).andExpect(status().isCreated());
+
+        login("student_alex", PASSWORD).andExpect(status().isOk());
+        login("STUDENT_ALEX", PASSWORD).andExpect(status().isOk());
+        assertThat(userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow().getUsername())
+            .isEqualTo("Student_Alex");
     }
 
     @Test
@@ -214,7 +231,7 @@ class AuthControllerTest extends PostgresTestContainer {
         login("student_alex", PASSWORD)
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.detail").value(LOGIN_FAILED));
-        assertThat(userRepository.findByUsername("student_alex").orElseThrow().getLockedUntil()).isNotNull();
+        assertThat(userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow().getLockedUntil()).isNotNull();
     }
 
     @Test

@@ -51,6 +51,8 @@ These replace PR #139's separate `user-auth` server; auth lives here.
   account (no token). Same rules as owner setup: `eXXXXXXX@u.nus.edu`,
   username 3–30 of `[A-Za-z0-9_]`, password 10–50 with upper, lower and
   a digit; email and username unique (soft-deleted accounts included).
+  Usernames keep the case they were typed in but are unique, and match
+  at login, ignoring case.
   Failures are 400 problem+json with the exact reason. OTP verification
   is deferred: once it lands, the account is inserted only after
   `POST /auth/signup/verify` (design doc §3); today sign-up inserts it.
@@ -62,7 +64,7 @@ These replace PR #139's separate `user-auth` server; auth lives here.
   30-day window recovers a soft-deleted account.
 - Tokens are HS256 with the shared `JWT_SECRET` (≥ 32 bytes, checked at
   startup): `sub` = user id, `role`, `jti`, `exp` = 1 h
-  (`JWT_ACCESS_TOKEN_TTL`). Checking tokens on incoming requests is #91.
+  (`JWT_ACCESS_TOKEN_TTL`, e.g. `1h`; a bare number is seconds). Checking tokens on incoming requests is #91.
 
 ## Soft delete & day-31 purge (#93)
 
