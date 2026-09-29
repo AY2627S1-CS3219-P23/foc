@@ -26,6 +26,35 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Ryan Ang (#91 Spring Security filter chain in user-service)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `user-service`: `security/JwtVerifier`,
+  `security/JwtAuthenticationFilter`, `security/SecurityProblemResponses`
+  (new); `SecurityConfig` (filter wiring, stateless sessions, 401/403
+  handlers); `CallerId` comment; `JwtVerifierTest`,
+  `JwtAuthenticationTest` (new); the provisional-403 cases in
+  `ProfileControllerTest` and `AdminControllerTest` changed to 401;
+  user-service README "Checking tokens" section.
+- **Prompt(s):** Summary: Asked whether #91 could be picked up, then to
+  implement it on `feat/spring-security-filter-chain` following the D2
+  design doc (§3: the filter chain validates the JWT, maps `role` to
+  authorities, violations are problem+json 401/403; §4: verify locally
+  like notification-service's `JwtVerifier`). The
+  `token_denylist` check is deferred; a bad token on a public route was
+  discussed (ignore vs reject, a client-side exclude, `web.ignoring()`,
+  a path allowlist), and the author chose to skip the filter on
+  `/auth/**` except `/auth/logout`, and on `/actuator/health`, and reject
+  bad tokens with 401 everywhere else. Implementation choices by the
+  tool, to confirm in review: the `detail` texts ("Authentication
+  required", "Token has expired", "Invalid token", "You do not have
+  permission to access this resource"); `WWW-Authenticate: Bearer`
+  (with `error="invalid_token"` for a bad token); rejecting tokens with
+  a non-numeric `sub`, no `exp`, or an unknown `role`; the `Bearer`
+  scheme matched case-insensitively; another scheme treated as no token.
+- **Author review:** Ryan to review via the PR; the full user-service
+  suite (185 tests) passes locally.
+
 ## 2026-09-29 — Leong Wei Zhi (PR #142 login/sign-up wireframe restyle)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor (UI restyle) + generate (password checklist)

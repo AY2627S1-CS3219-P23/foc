@@ -17,6 +17,8 @@
   2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: sign-up, login,
   JWT issuance and CORS added to the status; new "Sign-up & login"
   section.
+  2026-09-29, Claude Code (Opus 5.5), issue #91: "Checking tokens" section
+  for the JWT filter chain.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -64,7 +66,28 @@ These replace PR #139's separate `user-auth` server; auth lives here.
   30-day window recovers a soft-deleted account.
 - Tokens are HS256 with the shared `JWT_SECRET` (≥ 32 bytes, checked at
   startup): `sub` = user id, `role`, `jti`, `exp` = 1 h
-  (`JWT_ACCESS_TOKEN_TTL`, e.g. `1h`; a bare number is seconds). Checking tokens on incoming requests is #91.
+  (`JWT_ACCESS_TOKEN_TTL`, e.g. `1h`; a bare number is seconds). Checking tokens on incoming requests is #91 (below).
+
+## Checking tokens (#91)
+
+- Every route outside `/auth/**` and `/actuator/health` reads
+  `Authorization: Bearer <token>`. The token must be HS256 with
+  `JWT_SECRET`, unexpired, with a numeric `sub` and a `role` of `USER`,
+  `ADMIN` or `OWNER`. `sub` becomes the caller's id and `role` the
+  `ROLE_*` authority the `/users` rules check. The role is read from the
+  token, not the database.
+- No token (or another scheme) on a protected route → 401
+  `"Authentication required"`. An expired token → 401
+  `"Token has expired"`; any other bad token → 401 `"Invalid token"`,
+  on every filtered route. The wrong role → 403 `"You do not have
+  permission to access this resource"`. All are problem+json with
+  `type`, `title`, `status`, `detail` and `instance`.
+- `/auth/**` and `/actuator/health` never read the header, so a stale
+  token in the browser can't block login or sign-up. `/auth/logout` is
+  the exception: it is filtered, and #90 adds its `authenticated()` rule
+  in `SecurityConfig`.
+- No sessions: each request stands on its own token. The logout
+  denylist (`token_denylist`) isn't checked yet (deferred).
 
 ## Soft delete & day-31 purge (#93)
 
