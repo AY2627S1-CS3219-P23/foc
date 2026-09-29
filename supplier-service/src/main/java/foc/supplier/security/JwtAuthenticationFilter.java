@@ -9,6 +9,12 @@
  * rather than rejecting the request here, so SecurityConfig's
  * authorization rules and RestAuthEntryPoint render a single,
  * consistent 401 for both cases.
+ * PR #143 review (LeongWZ): "Bearer " with nothing after it left an
+ * empty token string, which jjwt rejects with IllegalArgumentException
+ * ("CharSequence cannot be null or empty") rather than JwtException —
+ * escaping the catch below and surfacing as an unhandled 500 instead of
+ * the intended 401. Fixed by catching IllegalArgumentException too and
+ * trimming the token, matching user-service's merged filter.
  * Reviewed by: [pending]
  */
 package foc.supplier.security;
@@ -44,12 +50,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String header = request.getHeader(AUTHORIZATION_HEADER);
         if (header != null && header.startsWith(BEARER_PREFIX)) {
             try {
-                JwtVerifier.VerifiedToken verified = jwtVerifier.verify(header.substring(BEARER_PREFIX.length()));
+                String token = header.substring(BEARER_PREFIX.length()).trim();
+                JwtVerifier.VerifiedToken verified = jwtVerifier.verify(token);
                 var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + verified.role()));
                 var authentication =
                         new UsernamePasswordAuthenticationToken(verified.userId(), null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-            } catch (JwtException ex) {
+            } catch (JwtException | IllegalArgumentException ex) {
                 SecurityContextHolder.clearContext();
             }
         }

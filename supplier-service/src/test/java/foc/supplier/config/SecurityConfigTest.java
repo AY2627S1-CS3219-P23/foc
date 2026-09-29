@@ -7,6 +7,11 @@
  * route, and a valid token of any role can reach the (currently
  * read-only) browse endpoints. The role-gate's 200 path for an actual
  * admin CRUD endpoint is left for #6, which adds those routes.
+ * PR #143 review (LeongWZ): added listSuppliersRejectsEmptyBearerToken,
+ * pinning the JwtAuthenticationFilter fix for an empty token after
+ * "Bearer " (jjwt throws IllegalArgumentException, not JwtException,
+ * for that case — was escaping the filter's catch and surfacing as an
+ * unhandled 500 instead of a 401).
  * Reviewed by: [pending]
  */
 package foc.supplier.config;
@@ -63,6 +68,15 @@ class SecurityConfigTest {
     @Test
     void listSuppliersRejectsInvalidToken() throws Exception {
         mockMvc.perform(get("/suppliers").header("Authorization", "Bearer not-a-jwt"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status", equalTo(401)));
+    }
+
+    @Test
+    void listSuppliersRejectsEmptyBearerToken() throws Exception {
+        // "Bearer " with nothing after it: jjwt throws
+        // IllegalArgumentException for an empty token, not JwtException.
+        mockMvc.perform(get("/suppliers").header("Authorization", "Bearer "))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status", equalTo(401)));
     }
