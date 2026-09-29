@@ -26,6 +26,23 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Ryan Ang (PR #152 Copilot review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor
+- **Scope:** `web/`: `UsersSection.tsx` takes the signed-in admin's id
+  from `useAuth().me` (AuthProvider's shared `GET /users/me`) instead of
+  its own request; `admin.test.tsx` replaces the now-impossible
+  "unknown signed-in admin" case with one checking a single `/users/me`
+  request per page; the `Reviewed by` lines in
+  `features/supplier/components/DeleteSupplierModal.tsx` and
+  `routes/suppliers.tsx` record Ryan's review of the #147 changes and
+  leave the original supplier code's review with its author.
+- **Prompt(s):** Summary: Asked to fix PR #152's Copilot comments (a
+  duplicate current-user request, and two files still marked
+  `[pending]`).
+- **Author review:** Ryan to review via the PR. Web: 52 tests pass;
+  type-check and lint clean.
+
 ## 2026-09-29 — Ryan Ang (merging main into fix/user-issues)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor (merge conflict resolution)

@@ -11,7 +11,8 @@
 // 2026-09-29 (issue #147): cases for the admin-only route guard.
 // Nav-bar and tab-bar Admin Dashboard link shown to ADMIN/OWNER only.
 // Bug fixes: one GET /users per action, no fetch of an emptied page, and
-// actions off while the list reloads. The Suppliers section's read-only
+// actions off while the list reloads. PR #152 review: one GET /users/me per page (the
+// unknown-admin fallback case can no longer happen, so its test went). The Suppliers section's read-only
 // list (team decision) against a faked listSuppliers.
 // Scope: tests for the Admin Dashboard page — Users and Suppliers
 // sections, the route guard and the nav link.
@@ -709,27 +710,17 @@ describe('Users section', () => {
     })
   })
 
-  test('an unknown signed-in admin gets a general warning when demoting', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    // the route guard's check succeeds; the Users section's own one fails
-    vi.mocked(adminUserApi.getCurrentUser)
-      .mockResolvedValueOnce({ ...seedUsers[2] })
-      .mockRejectedValue(new Error('Unauthorized'))
-    const user = userEvent.setup()
+  test('the page asks GET /users/me once, shared by the guard and the list', async () => {
     renderAdmin()
     const table = await findSectionTable('Users')
 
-    await user.click(
-      rowFor(table, 'nus_courier_99').getByRole('button', {
-        name: 'Demote to User',
-      }),
-    )
-
+    // the signed-in admin's own row still has no Remove
     expect(
-      within(screen.getByRole('dialog', { name: 'Demote to User' })).getByText(
-        /If this is your own account, you will lose access/,
-      ),
-    ).toBeInTheDocument()
+      rowFor(table, 'nus_courier_99').queryByRole('button', {
+        name: 'Remove Account',
+      }),
+    ).not.toBeInTheDocument()
+    expect(adminUserApi.getCurrentUser).toHaveBeenCalledTimes(1)
   })
 
   test('a new search or filter clears the last action error', async () => {

@@ -99,7 +99,8 @@
 // gains page numbers and aria-current), keeping the "Page X of Y · N
 // suppliers" label beside it; load/save/delete errors use the shared
 // errorMessage helper.
-// Reviewed by: [pending]
+// Reviewed by: Ryan Ang (the 2026-09-29 issue #147 changes above); the
+// original supplier code's review is still pending with its author.
 
 import { Fragment, useCallback, useEffect, useState } from 'react'
 

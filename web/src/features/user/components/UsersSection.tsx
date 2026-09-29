@@ -13,6 +13,8 @@
 // network failure now shows the fallback instead of "Failed to fetch".
 // "Show removed accounts" toggle lists soft-deleted accounts too, greyed
 // with their removal date (team decision, issue #147).
+// PR #152 review: the signed-in admin's id comes from AuthProvider's
+// shared GET /users/me answer instead of a second request.
 // Issue #147 bug fixes: actions no longer patch rows locally before the
 // reload (one GET /users per action); while the list reloads, row actions
 // and the confirm buttons are disabled, so a confirm never acts on
@@ -28,6 +30,7 @@ import { useEffect, useState } from 'react'
 import { errorMessage } from '@/lib/api/http'
 import { Pagination } from '@/shared/components/Pagination'
 import { adminUserApi } from '../adminApi'
+import { useAuth } from '../useAuth'
 import type { AdminUser, AdminUserPage, UserRole } from '../types'
 import { ChangeRoleModal } from './ChangeRoleModal'
 import { RemoveUserModal } from './RemoveUserModal'
@@ -79,26 +82,13 @@ export function UsersSection() {
     user: AdminUser
     role: UserRole
   } | null>(null)
-  // null until GET /users/me answers, and if it fails
-  const [currentUserId, setCurrentUserId] = useState<number | null>(null)
-
-  // Used to hide Remove on the admin's own row and to warn before
-  // self-demotion. If it fails, Remove shows (user-service still rejects
-  // self-removal) and every demotion gets a general warning instead.
-  useEffect(() => {
-    let cancelled = false
-    adminUserApi.getCurrentUser().then(
-      (me) => {
-        if (!cancelled) setCurrentUserId(me.id)
-      },
-      (err: unknown) => {
-        console.warn('Could not identify the signed-in admin', err)
-      },
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  // The signed-in admin, from the GET /users/me answer AuthProvider
+  // shares (the /admin guard has already waited for it). Used to hide
+  // Remove on the admin's own row and to warn before self-demotion; null
+  // only if it is somehow unavailable, which falls back to a general
+  // self-demotion warning (user-service still rejects self-removal).
+  const { me } = useAuth()
+  const currentUserId = me?.status === 'ready' ? me.user.id : null
 
   // Apply the search box to the query once typing pauses. Compared
   // trimmed, so a whitespace-only edit doesn't reset the page.

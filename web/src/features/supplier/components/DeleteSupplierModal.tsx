@@ -4,7 +4,8 @@
 // web/docs/wireframes/add-edit-supplier.png. Implements F1.1.3.
 // 2026-09-29 (Claude Code, Opus 5.5, issue #147): built on the shared
 // ConfirmModal; text and behaviour unchanged.
-// Reviewed by: [pending]
+// Reviewed by: Ryan Ang (the 2026-09-29 issue #147 changes above); the
+// original supplier code's review is still pending with its author.
 
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import type { Supplier } from '../types'
