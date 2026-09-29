@@ -14,9 +14,12 @@
 // readers announce failed logins.
 // 2026-09-29, Claude Code (Opus 5.5), issue #147: errorMessage now comes
 // from lib/api/http; Prettier formatting.
+// 2026-09-29 (issue #147): "Account created" notice after sign-up (team
+// decision), passed in the navigation state by the sign-up page.
 // Reviewed by: Ryan Ang
 
 import React, { useState } from 'react'
+import { useLocation } from 'react-router'
 import { apiFetch, errorMessage } from '@/lib/api/http'
 import { router } from '../../routes/index'
 import { useAuth } from './useAuth'
@@ -27,6 +30,10 @@ export function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const data = useAuth()
+  // set by the sign-up page after it creates the account
+  const accountCreated =
+    (useLocation().state as { accountCreated?: boolean } | null)
+      ?.accountCreated === true
 
   const toRegister = () => {
     router.navigate('/register')
@@ -56,6 +63,14 @@ export function Login() {
       <p className="mt-1 text-sm text-gray-500">
         Access your student errand portal.
       </p>
+      {accountCreated && !error && (
+        <p
+          role="status"
+          className="mt-4 rounded-md border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-700"
+        >
+          Account created. Log in to continue.
+        </p>
+      )}
       {error && (
         <p
           role="alert"

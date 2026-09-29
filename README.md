@@ -277,7 +277,13 @@ recorded in `ai/usage-log.md`; and the issue #147 clean-up — a shared
 `errorMessage` helper and `ConfirmModal`, the suppliers page on the
 shared `Pagination`, `axios` removed, Prettier on the auth pages,
 review headers and the admin mock comment updated, and login/sign-up
-page tests, recorded in `ai/usage-log.md`.
+page tests, recorded in `ai/usage-log.md`; and the issue #147
+team-decision items — Flyway for user-service with a case-insensitive
+username index and duplicate clean-up, an `includeDeleted` admin list
+filter with a "Show removed accounts" toggle, one validation error
+format across user-service, bcrypt outside the database transaction
+with row-locked login counters, and an "account created" notice, with
+the behaviour decided by the team and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

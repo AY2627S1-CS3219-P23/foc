@@ -12,6 +12,8 @@ Author review: Ryan reviewed and ensured tests run successfully.
        without saving).
 2026-09-27 (Claude Code, Opus 5.5), PR #135 review: the repository mock
        calls real default methods, so getActiveUser uses the stubbed finder.
+2026-09-29 (Claude Code, Opus 5.5), issue #147: UserResponse gained
+deletedAt (null for an active account).
 */
 
 package foc.user.service;
@@ -63,7 +65,7 @@ class ProfileServiceTest {
         UserResponse response = profileService.getOwnProfile(1L);
 
         assertThat(response).isEqualTo(new UserResponse(
-            1L, "e1234567@u.nus.edu", "student_alex", "USER", user.getCreatedAt()));
+            1L, "e1234567@u.nus.edu", "student_alex", "USER", user.getCreatedAt(), null));
     }
 
     @Test

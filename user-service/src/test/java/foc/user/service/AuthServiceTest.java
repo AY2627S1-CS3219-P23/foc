@@ -6,6 +6,7 @@ Scope: unit tests for AuthService (issues #87/#89): sign-up normalisation
        non-revealing failures and recovery within the retention window.
        Fixed clock and a plain-text password encoder keep them fast.
        PR #141 review: username lookups ignore case (team decision).
+       Issue #147: built with the LoginAttempts the counters moved to.
 Author review: Ryan to review via the PR.
 */
 
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -47,6 +49,7 @@ import foc.user.exception.AccountLockedException;
 import foc.user.exception.LoginFailedException;
 import foc.user.repository.UserRepository;
 import foc.user.security.JwtIssuer;
+import jakarta.persistence.EntityManager;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -70,17 +73,22 @@ class AuthServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private EntityManager entityManager;
+
     private AuthService authService;
     private User user;
 
     @BeforeEach
     void setUp() {
         JwtIssuer issuer = new JwtIssuer("test-jwt-secret-that-is-at-least-32-bytes-long", Duration.ofHours(1));
-        authService = new AuthService(userRepository, PLAIN_ENCODER, issuer, 30,
-            Clock.fixed(NOW, ZoneOffset.UTC));
+        authService = new AuthService(userRepository, PLAIN_ENCODER, issuer,
+            new LoginAttempts(userRepository, entityManager, 30), Clock.fixed(NOW, ZoneOffset.UTC));
 
         user = new User("e1234567@u.nus.edu", "student_alex", PLAIN_ENCODER.encode(PASSWORD), Role.USER);
         ReflectionTestUtils.setField(user, "id", 42L);
+        // LoginAttempts re-reads the account with the row locked (refresh is a no-op here)
+        lenient().when(entityManager.find(User.class, 42L)).thenReturn(user);
     }
 
     private void userFoundByUsername() {

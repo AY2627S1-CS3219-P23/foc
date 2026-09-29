@@ -4,7 +4,7 @@
 // the request each page sends, a successful login storing the session
 // and leaving the page, sign-up sending the user to log in, the server's
 // problem+json reason shown on failure, and the fallback text for a
-// network failure.
+// network failure; the "account created" notice after sign-up.
 // Author review: Ryan to review via the PR.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -48,10 +48,12 @@ function submitButton(name: string) {
   return within(form).getByRole('button', { name })
 }
 
-function renderAt(path: string) {
+function renderAt(path: string, state?: unknown) {
   render(
     <RouterProvider
-      router={createMemoryRouter(routes, { initialEntries: [path] })}
+      router={createMemoryRouter(routes, {
+        initialEntries: [{ pathname: path, state }],
+      })}
     />,
   )
 }
@@ -121,6 +123,22 @@ describe('login page', () => {
     )
   })
 
+  test('says the account was created when arriving from sign-up', () => {
+    renderAt('/login', { accountCreated: true })
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Account created. Log in to continue.',
+    )
+  })
+
+  test('shows no notice when opened directly', () => {
+    renderAt('/login')
+
+    expect(
+      screen.queryByText('Account created. Log in to continue.'),
+    ).not.toBeInTheDocument()
+  })
+
   test('shows a general message when the service is unreachable', async () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
 
@@ -157,7 +175,11 @@ describe('sign-up page', () => {
 
     await signUp()
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/login'))
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith('/login', {
+        state: { accountCreated: true },
+      }),
+    )
     expect(sentRequest()).toEqual({
       url: 'http://user.test/auth/signup',
       method: 'POST',

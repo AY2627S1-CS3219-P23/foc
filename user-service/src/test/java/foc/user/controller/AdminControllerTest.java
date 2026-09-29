@@ -21,6 +21,9 @@ Author review: Ryan reviewed and ensured tests run successfully.
        2026-09-29 (Claude Code, Opus 5.5), issue #91: requests without
        credentials now get 401 from the JWT entry point (was a provisional
        403).
+       2026-09-29 (Claude Code, Opus 5.5), issue #147: includeDeleted cases
+       (team decision), and the invalid-body reasons now that
+       ProblemDetailAdvice reports them.
 */
 
 package foc.user.controller;
@@ -216,6 +219,28 @@ class AdminControllerTest extends PostgresTestContainer {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.content.length()").value(0))
             .andExpect(jsonPath("$.page.totalElements").value(0));
+    }
+
+    @Test
+    @DisplayName("GET /users?includeDeleted=true should list soft-deleted accounts with their deletion time")
+    void list_includeDeleted() throws Exception {
+        mockMvc.perform(get("/users").param("includeDeleted", "true").with(as(admin)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.page.totalElements").value(5))
+            .andExpect(jsonPath("$.content[4].username").value("gone_user"))
+            .andExpect(jsonPath("$.content[4].deletedAt").exists())
+            // an active account's response has no deletedAt at all
+            .andExpect(jsonPath("$.content[0].deletedAt").doesNotExist());
+        mockMvc.perform(get("/users").param("includeDeleted", "true").param("search", "gone_user").with(as(admin)))
+            .andExpect(jsonPath("$.page.totalElements").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /users should return 400 for a non-boolean includeDeleted")
+    void list_includeDeletedInvalid() throws Exception {
+        mockMvc.perform(get("/users").param("includeDeleted", "maybe").with(as(admin)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Invalid request parameter"));
     }
 
     @Test
@@ -475,16 +500,20 @@ class AdminControllerTest extends PostgresTestContainer {
         mockMvc.perform(patch("/users/{id}", alex.getId()).with(as(admin))
                 .contentType(MediaType.APPLICATION_JSON).content(roleBody("SUPERUSER")))
             .andExpect(status().isBadRequest())
-            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.detail").value("Request body is missing or malformed"));
         mockMvc.perform(patch("/users/{id}", alex.getId()).with(as(admin))
                 .contentType(MediaType.APPLICATION_JSON).content("{}"))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Role is required."));
         mockMvc.perform(patch("/users/{id}", alex.getId()).with(as(admin))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"role\":null}"))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Role is required."));
         mockMvc.perform(patch("/users/{id}", alex.getId()).with(as(admin))
                 .contentType(MediaType.APPLICATION_JSON).content(""))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("Request body is missing or malformed"));
 
         assertThat(userRepository.findById(alex.getId()).orElseThrow().getRole()).isEqualTo(Role.USER);
     }

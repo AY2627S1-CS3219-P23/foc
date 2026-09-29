@@ -4,7 +4,9 @@
 // the signed-in admin's own row; ID column added, since search matches
 // IDs); 2026-09-29 (issue #147): UserActionsProps spelled out instead of
 // derived from UserTableProps, and the handlers passed by name rather
-// than rest-spread, so new table props don't leak into it.
+// than rest-spread, so new table props don't leak into it. Removed
+// accounts (shown when the admin asks for them) are greyed out, with
+// their removal date in place of actions (team decision).
 // Scope: admin users list — a table at md+ and stacked cards below,
 // per web/docs/wireframes/admin-dashboard.png (Users section).
 // Reviewed by: Ryan Ang
@@ -34,6 +36,15 @@ interface UserActionsProps {
   onRemove: (user: AdminUser) => void
 }
 
+// e.g. "29 September 2026"
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-SG', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
 const linkClass =
   'text-sm font-medium text-gray-900 hover:underline disabled:cursor-not-allowed disabled:opacity-50'
 
@@ -48,6 +59,15 @@ function UserActions({
   onChangeRole,
   onRemove,
 }: UserActionsProps) {
+  // removed accounts are view-only; restoring them is #94's
+  if (user.deletedAt) {
+    return (
+      <span className="text-sm text-gray-500">
+        Removed {formatDate(user.deletedAt)}
+      </span>
+    )
+  }
+
   const canRemove = user.role !== 'OWNER' && !isSelf
 
   return (
@@ -119,7 +139,10 @@ export function UserTable({
           </thead>
           <tbody className="divide-y divide-gray-200">
             {users.map((user) => (
-              <tr key={user.id}>
+              <tr
+                key={user.id}
+                className={user.deletedAt ? 'bg-gray-50 opacity-60' : undefined}
+              >
                 <td className="px-4 py-3 tabular-nums text-gray-600">
                   {user.id}
                 </td>
@@ -152,7 +175,9 @@ export function UserTable({
         {users.map((user) => (
           <li
             key={user.id}
-            className="rounded-lg border border-gray-200 bg-white p-4"
+            className={`rounded-lg border border-gray-200 p-4 ${
+              user.deletedAt ? 'bg-gray-50 opacity-60' : 'bg-white'
+            }`}
           >
             <p className="font-medium text-gray-900">{user.username}</p>
             <p className="text-sm text-gray-600">{user.email}</p>

@@ -6,6 +6,8 @@
 // 2026-09-29 (second PR #140 review): cases for a role change emptying a
 // later page, the general warning when the signed-in admin is unknown, the
 // error banner clearing on a new query, and whitespace-only search edits.
+// 2026-09-29 (issue #147): the fake soft-deletes like user-service, and
+// cases for the "Show removed accounts" toggle (team decision).
 // Scope: tests for the Admin Dashboard page — Users section, plus the
 // Suppliers placeholder.
 // Reviewed by: Ryan Ang
@@ -61,6 +63,7 @@ function fakeListUsers(params: ListUsersParams): AdminUserPage {
   const search = params.search?.toLowerCase()
   const matches = users.filter(
     (u) =>
+      (params.includeDeleted || !u.deletedAt) &&
       (!params.role || u.role === params.role) &&
       (!search ||
         String(u.id).includes(search) ||
@@ -159,8 +162,11 @@ beforeEach(() => {
     user.role = role
     return { ...user }
   })
+  // soft delete, like user-service
   vi.spyOn(adminUserApi, 'removeUser').mockImplementation(async (id) => {
-    users = users.filter((u) => u.id !== id)
+    users = users.map((u) =>
+      u.id === id ? { ...u, deletedAt: '2026-09-29T08:00:00Z' } : u,
+    )
   })
   // Signed in as nus_courier_99 (an ADMIN in the seed data).
   vi.spyOn(adminUserApi, 'getCurrentUser').mockResolvedValue({
@@ -366,6 +372,59 @@ describe('Users section', () => {
       await rowFor(table, 'student_alex').findByText('User'),
     ).toBeInTheDocument()
     expect(adminUserApi.changeRole).toHaveBeenLastCalledWith(2, 'USER')
+  })
+
+  test('removed accounts are hidden until "Show removed accounts" is ticked', async () => {
+    users.push({
+      id: 99,
+      email: 'e0999000@u.nus.edu',
+      username: 'left_already',
+      role: 'USER',
+      createdAt: '2026-09-01T00:00:00Z',
+      deletedAt: '2026-09-20T08:00:00Z',
+    })
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+    expect(within(table).queryByText('left_already')).not.toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Show removed accounts' }),
+    )
+
+    await waitFor(() => expect(lastListParams()?.includeDeleted).toBe(true))
+    const row = rowFor(await findSectionTable('Users'), 'left_already')
+    expect(row.getByText('Removed 20 September 2026')).toBeInTheDocument()
+    // view only: no actions on a removed account
+    expect(row.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  test('removing a user while removed accounts are shown greys the row', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    await findSectionTable('Users')
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Show removed accounts' }),
+    )
+    const table = await findSectionTable('Users')
+
+    await user.click(
+      rowFor(table, 'utown_runner').getByRole('button', {
+        name: 'Remove Account',
+      }),
+    )
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Remove Account' })).getByRole(
+        'button',
+        { name: 'Remove' },
+      ),
+    )
+
+    await waitFor(() =>
+      expect(
+        rowFor(table, 'utown_runner').getByText('Removed 29 September 2026'),
+      ).toBeInTheDocument(),
+    )
   })
 
   test('remove asks for confirmation, then removes the user', async () => {

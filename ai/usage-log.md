@@ -26,6 +26,53 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Ryan Ang (#147 team-decision items)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests), refactor
+- **Scope:** `user-service`: Flyway (`pom.xml`, `db/migration/V1__baseline.sql`
+  dumped from the entities' generated schema, `V2__username_unique_ignoring_case.sql`,
+  `ddl-auto: none` and baseline settings in both `application.yaml`s,
+  `User` index annotation); `UserRepository` username lookups on
+  `lower(username)`; `GET /users?includeDeleted` (`AdminController`,
+  `AdminService`) and `deletedAt` on `UserResponse` (omitted while null);
+  the invalid-body and unreadable-body handlers moved from
+  `AuthController` to `ProblemDetailAdvice`, `AdminController` keeping
+  only the query-parameter one, and a message on `UpdateRoleRequest`;
+  `AuthService.signup`/`login` no longer `@Transactional`, with the
+  attempt's counter update in new `LoginAttempts` (row locked with
+  `refresh(..., PESSIMISTIC_WRITE)`, which also closes the parallel-login
+  lockout bypass); tests: `FlywayMigrationTest` (new), parallel-login and
+  database-uniqueness cases in `AuthControllerTest`, `includeDeleted`
+  and invalid-body reasons in `AdminControllerTest`, the owner-setup
+  reason, `EntityMappingTest` table cleanup, `AuthServiceTest`/
+  `AdminServiceTest`/`ProfileServiceTest` updated; README "Errors" and
+  "Schema (Flyway)" sections. `web/`: `types.ts`, `adminApi.ts`,
+  `adminApiMock.ts` (soft-deleting), `UsersSection.tsx` ("Show removed
+  accounts" toggle), `UserTable.tsx` (removed rows greyed with their
+  removal date, no actions), `register.tsx`/`login.tsx` ("Account
+  created" notice via navigation state); `admin.test.tsx` and
+  `auth.test.tsx` cases.
+- **Prompt(s):** Summary: Asked to implement team decisions: an
+  `includeDeleted` filter with a toggle in the Users table instead of a
+  separate deleted-users table; one validation error format by moving
+  `AuthController`'s handler into `ProblemDetailAdvice` (#138 contract);
+  Flyway with a `lower(username)` unique index and clean-up of existing
+  case-duplicates; bcrypt outside the transaction; an "account created"
+  message; token expiry left to #109. The tool asked about the points
+  those left open, and the team decided: duplicates are renamed (the
+  oldest keeps the name, later ones get a numbered suffix); `ddl-auto`
+  becomes `none`; removed rows are view-only (restore stays with #94);
+  token expiry stays with #109. Implementation choices by the tool, to
+  confirm in review: fixing the lockout race with a row lock taken after
+  the password check; the notice text "Account created. Log in to
+  continue."; "Role is required" and "Invalid request parameter";
+  `deletedAt` left out of the JSON while null; dates as "29 September
+  2026"; with removed accounts shown, a removed row stays and greys
+  instead of disappearing.
+- **Author review:** Ryan to review via the PR. user-service: 192 tests
+  pass (the parallel-login test also run 3 more times); web: 36 tests
+  pass, type-check, lint and build clean.
+
 ## 2026-09-29 — Ryan Ang (#147 housekeeping and duplicated code)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor, generate (tests)

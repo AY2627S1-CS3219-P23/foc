@@ -16,6 +16,7 @@
 // was polluting the field's accessible name).
 // 2026-09-29, Claude Code (Opus 5.5), issue #147: errorMessage now comes
 // from lib/api/http; Prettier formatting.
+// 2026-09-29 (issue #147): the login page is told the account was created.
 // Reviewed by: Ryan Ang
 
 import React, { useState } from 'react'
@@ -72,7 +73,8 @@ export function Register() {
       setEmail('')
       setUsername('')
       setPassword('')
-      router.navigate('/login')
+      // the login page shows an "account created" notice (issue #147)
+      router.navigate('/login', { state: { accountCreated: true } })
     } catch (error: unknown) {
       setError(errorMessage(error, 'Could not register. Try again.'))
     }
