@@ -40,7 +40,12 @@ Entry template:
   `react-router-dom` dependency removed from `web/package.json`;
   `.idea/` added to `.gitignore`. PR #142 Copilot review fixes:
   `role="alert"` on both error messages, the checklist moved outside the
-  password `<label>`, and these disclosure updates.
+  password `<label>`, and these disclosure updates. Follow-up fix
+  reported by the author: `home.tsx` kept showing the logged-in view
+  after logout because it read `localStorage` directly (a raw read
+  React never re-renders on); it now takes the logged-in state from
+  `useAuth()`, the same source the NavBar uses — reproduced and
+  verified fixed in-browser (login → logout resets the page).
 - **Prompt(s):** Asked to fix the UI discrepancy in the login and
   sign-up pages; the author chose "match the wireframes" and "include
   the password checklist" (omitting forgot-password and the OTP modal,
