@@ -26,6 +26,13 @@
 // initial?.imageUrl on save so editing a supplier no longer erases its
 // seed/existing image. No UI for clearing an image exists, so there's
 // no case where omission should mean "remove it."
+// 2026-09-29 (author request): replaced that round-tripped value with
+// an actual editable Image URL field — a plain text input (paste a
+// link), matching the data model exactly (Suppliers.imageURL is
+// already just a URL string; even the seed data points at
+// GitHub-hosted images, not uploaded files, so this needs no backend
+// change). Optional, like Description; clearing it now intentionally
+// removes the image, which the round-trip approach couldn't do.
 // Reviewed by: [pending]
 
 import { useState, type FormEvent, type KeyboardEvent } from 'react'
@@ -55,6 +62,7 @@ export function SupplierFormModal({
   const [description, setDescription] = useState(initial?.description ?? '')
   const [latitude, setLatitude] = useState(initial?.latitude !== undefined ? String(initial.latitude) : '')
   const [longitude, setLongitude] = useState(initial?.longitude !== undefined ? String(initial.longitude) : '')
+  const [imageUrl, setImageUrl] = useState(initial?.imageUrl ?? '')
 
   function addCategory() {
     const value = categoryDraft.trim()
@@ -82,7 +90,7 @@ export function SupplierFormModal({
       description,
       latitude: Number(latitude),
       longitude: Number(longitude),
-      imageUrl: initial?.imageUrl,
+      imageUrl: imageUrl.trim(),
     })
   }
 
@@ -213,6 +221,17 @@ export function SupplierFormModal({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Describe the supplier, services, or delivery details..."
             rows={3}
+            className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
+          />
+        </label>
+
+        <label className="block text-sm">
+          <span className="font-medium text-gray-700">Image URL</span>
+          <input
+            type="url"
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            placeholder="https://..."
             className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
           />
         </label>
