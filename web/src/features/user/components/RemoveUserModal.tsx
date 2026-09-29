@@ -2,7 +2,8 @@
 // Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113.
 // Scope: remove-account confirmation for the admin user-management
 // screen, following features/supplier/components/DeleteSupplierModal.
-// 2026-09-29 (issue #147): built on the shared ConfirmModal.
+// 2026-09-29 (issue #147): built on the shared ConfirmModal; confirm
+// disabled while the list reloads.
 // Reviewed by: Ryan Ang
 
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
@@ -13,6 +14,8 @@ interface RemoveUserModalProps {
   onCancel: () => void
   onConfirm: () => void
   removing?: boolean
+  // confirm off while the list reloads
+  disabled?: boolean
 }
 
 export function RemoveUserModal({
@@ -20,6 +23,7 @@ export function RemoveUserModal({
   onCancel,
   onConfirm,
   removing,
+  disabled,
 }: RemoveUserModalProps) {
   return (
     <ConfirmModal
@@ -27,6 +31,7 @@ export function RemoveUserModal({
       confirmLabel="Remove"
       busyLabel="Removing..."
       busy={removing}
+      disabled={disabled}
       danger
       onCancel={onCancel}
       onConfirm={onConfirm}

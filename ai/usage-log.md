@@ -26,6 +26,29 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Ryan Ang (#147 admin Users section bugs)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (bug fixes), generate (tests)
+- **Scope:** `web/`: `UsersSection.tsx` no longer patches rows locally
+  before reloading after a role change or removal; row actions
+  (`UserTable.tsx` `actionsDisabled`) and the confirm buttons
+  (`ConfirmModal.tsx`, `RemoveUserModal.tsx`, `ChangeRoleModal.tsx`
+  `disabled`) are off while the list reloads; removing the only row of
+  a later page goes straight to the previous page. Three
+  `admin.test.tsx` cases (the emptied page is never fetched, a role
+  change shows through one reload, actions and confirm off during a
+  reload).
+- **Prompt(s):** Summary: Asked to fix the three admin Users section
+  bugs on #147 (from the PR #140 review): the last-row check reading
+  outdated rows with confirm still enabled during a reload, the local
+  patch plus reload after each action, and the extra fetch when the last
+  row of the last page is removed. Implementation choices by the tool,
+  to confirm in review: rely on the reload instead of the local patch
+  (old rows stay on screen, actions disabled, until it lands) and
+  disable actions rather than read the latest rows through a ref.
+- **Author review:** Ryan to review via the PR. Web: 44 tests pass;
+  type-check and lint clean.
+
 ## 2026-09-29 — Ryan Ang (#147 Admin Dashboard nav link)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (implementation + tests), refactor

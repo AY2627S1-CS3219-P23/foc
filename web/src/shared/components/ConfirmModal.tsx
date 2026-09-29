@@ -2,7 +2,8 @@
 // Tool: Claude Code (Opus 5.5), 2026-09-29, issue #147.
 // Scope: shared confirm dialog — the Modal plus the Cancel / confirm
 // footer that RemoveUserModal, ChangeRoleModal and DeleteSupplierModal
-// each repeated.
+// each repeated. `disabled` added the same day (confirm off while the
+// admin list reloads).
 // Author review: Ryan to review via the PR.
 
 import type { ReactNode } from 'react'
@@ -19,6 +20,8 @@ interface ConfirmModalProps {
   busy?: boolean
   // red confirm button, for destructive actions
   danger?: boolean
+  // confirm unavailable without being busy (e.g. while data reloads)
+  disabled?: boolean
   onCancel: () => void
   onConfirm: () => void
 }
@@ -30,6 +33,7 @@ export function ConfirmModal({
   busyLabel,
   busy = false,
   danger = false,
+  disabled = false,
   onCancel,
   onConfirm,
 }: ConfirmModalProps) {
@@ -47,7 +51,7 @@ export function ConfirmModal({
         <button
           type="button"
           onClick={onConfirm}
-          disabled={busy}
+          disabled={busy || disabled}
           className={`rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-50 ${
             danger
               ? 'bg-red-600 hover:bg-red-700'

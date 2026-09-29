@@ -13,6 +13,11 @@
 // network failure now shows the fallback instead of "Failed to fetch".
 // "Show removed accounts" toggle lists soft-deleted accounts too, greyed
 // with their removal date (team decision, issue #147).
+// Issue #147 bug fixes: actions no longer patch rows locally before the
+// reload (one GET /users per action); while the list reloads, row actions
+// and the confirm buttons are disabled, so a confirm never acts on
+// outdated rows; removing the only row of a later page goes straight to
+// the previous page instead of first fetching the emptied one.
 // Scope: Admin Dashboard "Users" section — list, search, role filter,
 // paging, promote/demote, remove — per
 // web/docs/wireframes/admin-dashboard.png.
@@ -170,28 +175,16 @@ export function UsersSection() {
     setActionError(null)
   }
 
-  function updateUsers(update: (users: AdminUser[]) => AdminUser[]) {
-    setResult((prev) =>
-      prev?.data
-        ? {
-            ...prev,
-            data: { ...prev.data, content: update(prev.data.content) },
-          }
-        : prev,
-    )
-  }
-
   async function handleChangeRole() {
     if (!pendingRoleChange) return
     const { user, role: newRole } = pendingRoleChange
     setBusyUserId(user.id)
     setActionError(null)
     try {
-      const updated = await adminUserApi.changeRole(user.id, newRole)
-      updateUsers((users) =>
-        users.map((u) => (u.id === updated.id ? updated : u)),
-      )
-      // The user may no longer match the role filter, and counts change.
+      await adminUserApi.changeRole(user.id, newRole)
+      // The reload shows the new role; the user may also no longer match
+      // the role filter, and counts change. The old rows stay on screen,
+      // with actions disabled, until it lands.
       setReloadCount((n) => n + 1)
     } catch (err) {
       setActionError(
@@ -210,15 +203,17 @@ export function UsersSection() {
     setActionError(null)
     try {
       await adminUserApi.removeUser(target.id)
-      // Hide the row now, unless it's the page's last: then the reload's
-      // last-page check moves back a page without flashing an empty list.
-      // With removed accounts shown, the row stays and the reload greys it
-      if (!showRemoved && (data?.content.length ?? 0) > 1) {
-        updateUsers((users) => users.filter((u) => u.id !== target.id))
+      // The page's only row, on a later page: that page is now empty, so
+      // go straight to the previous one rather than fetching the empty
+      // page first. `data` is current: confirm is disabled while loading.
+      // (With removed accounts shown, the row stays, greyed.)
+      if (!showRemoved && page > 1 && data?.content.length === 1) {
+        setPage(page - 1)
+      } else {
+        // GET /users leaves removed accounts out: reload for the rows and
+        // counts
+        setReloadCount((n) => n + 1)
       }
-      // GET /users leaves removed accounts out, so reload for the right
-      // counts
-      setReloadCount((n) => n + 1)
     } catch (err) {
       setActionError(errorMessage(err, `Could not remove ${target.username}.`))
     } finally {
@@ -294,6 +289,7 @@ export function UsersSection() {
             users={data.content}
             currentUserId={currentUserId}
             busyUserId={busyUserId}
+            actionsDisabled={loading}
             onChangeRole={(user, newRole) =>
               setPendingRoleChange({ user, role: newRole })
             }
@@ -320,6 +316,7 @@ export function UsersSection() {
           onCancel={() => setPendingRoleChange(null)}
           onConfirm={handleChangeRole}
           saving={busyUserId === pendingRoleChange.user.id}
+          disabled={loading}
         />
       )}
 
@@ -329,6 +326,7 @@ export function UsersSection() {
           onCancel={() => setPendingRemove(null)}
           onConfirm={handleRemove}
           removing={busyUserId === pendingRemove.id}
+          disabled={loading}
         />
       )}
     </section>

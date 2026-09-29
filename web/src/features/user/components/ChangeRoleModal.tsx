@@ -5,7 +5,8 @@
 // review): when the signed-in admin is unknown, every demotion carries a
 // general warning, so a failed GET /users/me can't hide the self-demotion
 // one.
-// 2026-09-29 (issue #147): built on the shared ConfirmModal.
+// 2026-09-29 (issue #147): built on the shared ConfirmModal; confirm
+// disabled while the list reloads.
 // Reviewed by: Ryan Ang
 
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
@@ -19,6 +20,8 @@ interface ChangeRoleModalProps {
   onCancel: () => void
   onConfirm: () => void
   saving?: boolean
+  // confirm off while the list reloads
+  disabled?: boolean
 }
 
 export function ChangeRoleModal({
@@ -28,6 +31,7 @@ export function ChangeRoleModal({
   onCancel,
   onConfirm,
   saving,
+  disabled,
 }: ChangeRoleModalProps) {
   const promoting = role === 'ADMIN'
 
@@ -37,6 +41,7 @@ export function ChangeRoleModal({
       confirmLabel={promoting ? 'Promote' : 'Demote'}
       busyLabel="Saving..."
       busy={saving}
+      disabled={disabled}
       onCancel={onCancel}
       onConfirm={onConfirm}
     >

@@ -6,7 +6,8 @@
 // derived from UserTableProps, and the handlers passed by name rather
 // than rest-spread, so new table props don't leak into it. Removed
 // accounts (shown when the admin asks for them) are greyed out, with
-// their removal date in place of actions (team decision).
+// their removal date in place of actions (team decision). Row actions
+// can be disabled as a whole while the list reloads.
 // Scope: admin users list — a table at md+ and stacked cards below,
 // per web/docs/wireframes/admin-dashboard.png (Users section).
 // Reviewed by: Ryan Ang
@@ -24,6 +25,8 @@ interface UserTableProps {
   // The signed-in admin; null while unknown.
   currentUserId: number | null
   busyUserId: number | null
+  // every row's actions off, e.g. while the list reloads
+  actionsDisabled?: boolean
   onChangeRole: (user: AdminUser, role: UserRole) => void
   onRemove: (user: AdminUser) => void
 }
@@ -110,6 +113,7 @@ export function UserTable({
   users,
   currentUserId,
   busyUserId,
+  actionsDisabled = false,
   onChangeRole,
   onRemove,
 }: UserTableProps) {
@@ -158,7 +162,7 @@ export function UserTable({
                     <UserActions
                       user={user}
                       isSelf={user.id === currentUserId}
-                      busy={busyUserId === user.id}
+                      busy={actionsDisabled || busyUserId === user.id}
                       onChangeRole={onChangeRole}
                       onRemove={onRemove}
                     />
@@ -188,7 +192,7 @@ export function UserTable({
               <UserActions
                 user={user}
                 isSelf={user.id === currentUserId}
-                busy={busyUserId === user.id}
+                busy={actionsDisabled || busyUserId === user.id}
                 onChangeRole={onChangeRole}
                 onRemove={onRemove}
               />

@@ -10,6 +10,8 @@
 // cases for the "Show removed accounts" toggle (team decision).
 // 2026-09-29 (issue #147): cases for the admin-only route guard.
 // Nav-bar and tab-bar Admin Dashboard link shown to ADMIN/OWNER only.
+// Bug fixes: one GET /users per action, no fetch of an emptied page, and
+// actions off while the list reloads.
 // Scope: tests for the Admin Dashboard page — Users section, plus the
 // Suppliers placeholder.
 // Reviewed by: Ryan Ang
@@ -568,10 +570,63 @@ describe('Users section', () => {
     const dialog = within(
       screen.getByRole('dialog', { name: 'Remove Account' }),
     )
+    const callsBefore = vi.mocked(adminUserApi.listUsers).mock.calls.length
     await user.click(dialog.getByRole('button', { name: 'Remove' }))
 
     expect(await within(table).findByText(nth(1))).toBeInTheDocument()
     expect(lastListParams()).toEqual({ page: 0, size: USERS_PAGE_SIZE })
+    // straight to page 1: the emptied page 2 is never fetched
+    const after = vi
+      .mocked(adminUserApi.listUsers)
+      .mock.calls.slice(callsBefore)
+    expect(after.map(([params]) => params.page)).toEqual([0])
+  })
+
+  test('a role change fetches the list once and shows the new role', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+    const callsBefore = vi.mocked(adminUserApi.listUsers).mock.calls.length
+
+    await changeRole(user, table, 'student_alex', 'Promote to Admin')
+
+    await waitFor(() =>
+      expect(
+        rowFor(table, 'student_alex').getByRole('button', {
+          name: 'Demote to User',
+        }),
+      ).toBeInTheDocument(),
+    )
+    expect(vi.mocked(adminUserApi.listUsers).mock.calls.length).toBe(
+      callsBefore + 1,
+    )
+  })
+
+  test('actions and confirm are off while the list reloads', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    const table = await findSectionTable('Users')
+    await user.click(
+      rowFor(table, 'utown_runner').getByRole('button', {
+        name: 'Remove Account',
+      }),
+    )
+    // a reload that hasn't answered yet
+    vi.mocked(adminUserApi.listUsers).mockReturnValue(new Promise(() => {}))
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Filter by role' }),
+      'USER',
+    )
+
+    const dialog = within(
+      screen.getByRole('dialog', { name: 'Remove Account' }),
+    )
+    expect(dialog.getByRole('button', { name: 'Remove' })).toBeDisabled()
+    expect(
+      rowFor(table, 'student_alex').getByRole('button', {
+        name: 'Promote to Admin',
+      }),
+    ).toBeDisabled()
   })
 
   test('a role change that empties a later page goes back a page', async () => {
