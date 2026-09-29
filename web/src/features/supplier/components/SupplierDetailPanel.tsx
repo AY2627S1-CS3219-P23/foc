@@ -6,6 +6,9 @@
 // change; the pure Supplier browse page just omits it.
 // 2026-09-26: removed the `zone` prop and its display line — the team
 // dropped the zone feature.
+// 2026-09-29, Claude Code (Sonnet 5): `isAdmin` comment updated — it's
+// now the caller's real role from useAuth() (routes/suppliers.tsx),
+// not the hardcoded stand-in the old comment referred to.
 // Reviewed by: [pending]
 
 import type { Supplier } from '../types'
@@ -13,7 +16,7 @@ import type { Supplier } from '../types'
 interface SupplierDetailPanelProps {
   supplier: Supplier
   onSelect?: () => void
-  isAdmin?: boolean // TEMPORARY — see suppliers.tsx for why
+  isAdmin?: boolean // caller's real role (routes/suppliers.tsx), not a stand-in
   onEdit?: () => void
   onDelete?: () => void
 }

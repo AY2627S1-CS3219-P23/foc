@@ -7,6 +7,11 @@
 // accessToken is now fed to apiFetch via setTokenSource, so every API
 // call carries the Authorization header (getToken was hardcoded to
 // null); the session is typed as the LoginResponse it actually is.
+// 2026-09-29, Claude Code (Sonnet 5): exposes `role`, decoded from the
+// token's claims (display-only — see jwt.ts), so pages can hide
+// admin-only controls for non-admin callers instead of showing them
+// and letting the server's role gate (supplier-service #106) reject
+// the action after the fact.
 // Reviewed by: Ryan Ang
 
 import { useLayoutEffect, useMemo } from "react";
@@ -14,6 +19,7 @@ import { useNavigate, Outlet } from "react-router";
 import { AuthContext } from "./useAuth";
 import { useLocalStorage } from "./useLocalStorage";
 import { setTokenSource } from "@/lib/api/http";
+import { decodeJwtRole } from "./jwt";
 import type { LoginResponse } from "./types";
 
 export const AuthProvider = () => {
@@ -29,6 +35,8 @@ export const AuthProvider = () => {
     setTokenSource(() => token?.accessToken ?? null);
   }, [token]);
 
+  const role = useMemo(() => (token ? decodeJwtRole(token.accessToken) : null), [token]);
+
   const value = useMemo(() => {
 
     // call this function to set login values
@@ -43,8 +51,8 @@ export const AuthProvider = () => {
       navigate("/", { replace: true });
     };
 
-    return { token, login, logout };
-  }, [token, navigate, setToken]);
+    return { token, role, login, logout };
+  }, [token, role, navigate, setToken]);
 
   return (
     <AuthContext.Provider value={value}>
