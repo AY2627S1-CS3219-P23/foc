@@ -43,7 +43,6 @@ class JwtIssuerTest {
         return user;
     }
 
-    // what notification-service's JwtVerifier does
     private static Jws<Claims> verify(String token) {
         return Jwts.parser()
             .verifyWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
@@ -67,6 +66,8 @@ class JwtIssuerTest {
         assertThat(claims.getId()).isNotBlank();
         assertThat(claims.getIssuedAt().toInstant()).isEqualTo(now);
         assertThat(claims.getExpiration().toInstant()).isEqualTo(now.plus(Duration.ofHours(1)));
+        assertThat(claims.getIssuer()).isEqualTo("cs3219group23");
+        assertThat(claims.getAudience()).contains("cs3219group23");
     }
 
     @Test

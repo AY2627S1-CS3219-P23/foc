@@ -61,17 +61,29 @@ public class JwtVerifier {
             throw new MalformedJwtException("unexpected signature algorithm");
         }
         Claims claims = jws.getPayload();
-
         String subject = claims.getSubject();
+        
         if (!isUserId(subject)) {
             throw new MalformedJwtException("token has no numeric subject");
         }
+
+        Role tokenRole = verifyRole(claims);
+        
         // jjwt only checks exp when it is present; a token without one
         // would never expire
         if (claims.getExpiration() == null) {
             throw new MalformedJwtException("token has no expiry");
         }
-        return new VerifiedToken(subject, role(claims));
+
+        if (!"cs3219group23".equals(claims.getIssuer())) {
+            throw new MalformedJwtException("token has incorrect issuer");
+        }
+
+        if (claims.getAudience() == null || !claims.getAudience().contains("cs3219group23")) {
+            throw new MalformedJwtException("token has incorrect audience");
+        }
+        
+        return new VerifiedToken(subject, tokenRole);
     }
 
     // digits only, and small enough for the Long user ids (CallerId)
@@ -87,7 +99,7 @@ public class JwtVerifier {
         }
     }
 
-    private static Role role(Claims claims) {
+    private static Role verifyRole(Claims claims) {
         Object role = claims.get("role");
         if (role instanceof String name) {
             for (Role candidate : Role.values()) {

@@ -60,10 +60,31 @@ public class JwtVerifier {
 		if (!"HS256".equals(jws.getHeader().getAlgorithm())) {
 			throw new MalformedJwtException("unexpected signature algorithm");
 		}
-		String subject = jws.getPayload().getSubject();
-		if (subject == null || subject.isBlank()) {
-			throw new MalformedJwtException("token has no subject");
-		}
+        Claims claims = jws.getPayload();
+        String subject = claims.getSubject();
+
+        // does not check if valid subject
+        if (subject == null || subject.isBlank()) {
+            throw new MalformedJwtException("token has no subject");
+        }
+        //does not check if valid role
+        String role = claims.get("role", String.class);
+        if (role == null || role.isBlank()) {
+            throw new MalformedJwtException("token has no role");
+        }
+
+        if (claims.getExpiration() == null) {
+            throw new MalformedJwtException("token has no expiry");
+        }
+
+        if (!"cs3219group23".equals(claims.getIssuer())) {
+            throw new MalformedJwtException("token has incorrect issuer");
+        }
+
+        if (claims.getAudience() == null || !claims.getAudience().contains("cs3219group23")) {
+            throw new MalformedJwtException("token has incorrect audience");
+        }
+        
 		return subject;
 	}
 }

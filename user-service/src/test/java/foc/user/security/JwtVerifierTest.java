@@ -5,6 +5,10 @@ Scope: tests for JwtVerifier (issue #91): tokens from JwtIssuer verify to
        their sub and role; expired, wrongly signed, non-HS256, unsigned and
        claim-less tokens are rejected; a short secret fails at construction.
 Author review: Ryan to review via the PR.
+Tool: Github Copilot SDK, date: 2026-09-29
+Scope: Wrote tests for JwtVerifier for issuer and audience.
+Author review: Xiu Xi.
+
 */
 
 package foc.user.security;
@@ -50,6 +54,8 @@ class JwtVerifierTest {
             .subject("7")
             .claim("role", "USER")
             .id("a-jti")
+            .issuer("cs3219group23")
+            .audience().add("cs3219group23").and()
             .issuedAt(Date.from(now))
             .expiration(Date.from(now.plus(Duration.ofHours(1))));
     }
@@ -60,7 +66,7 @@ class JwtVerifierTest {
     }
 
     @Test
-    @DisplayName("A token from JwtIssuer verifies to its sub and role")
+    @DisplayName("A token from JwtIssuer verifies its sub and role")
     void issuedToken() {
         String token = new JwtIssuer(SECRET, Duration.ofHours(1)).issue(user(7L, Role.ADMIN));
 
@@ -161,6 +167,32 @@ class JwtVerifierTest {
         assertThatThrownBy(() -> verifier.verify(token))
             .isInstanceOf(JwtException.class)
             .hasMessageContaining("expiry");
+    }
+    
+    @Test
+    @DisplayName("A token with the wrong issuer is rejected")
+    void badIssuer() {
+        String wrongIssuer = signed(token().issuer("wrong-issuer"));
+        String noIssuer = signed(token().issuer(null));
+
+        for (String token : new String[] {wrongIssuer, noIssuer}) {
+            assertThatThrownBy(() -> verifier.verify(token))
+                .isInstanceOf(JwtException.class)
+                .hasMessageContaining("issuer");
+        }
+    }
+
+    @Test
+    @DisplayName("A token with the wrong audience is rejected")
+    void badAudience() {
+        String wrongAudience = signed(token().audience().clear().add("wrong").and());
+        String noAudience = signed(token().audience().clear().and());
+
+        for (String token : new String[] {wrongAudience, noAudience}) {
+            assertThatThrownBy(() -> verifier.verify(token))
+                .isInstanceOf(JwtException.class)
+                .hasMessageContaining("audience");
+        }
     }
 
     @Test

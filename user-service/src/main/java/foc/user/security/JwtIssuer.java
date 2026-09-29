@@ -74,6 +74,8 @@ public class JwtIssuer {
             .id(UUID.randomUUID().toString())
             .issuedAt(Date.from(now))
             .expiration(Date.from(now.plus(ttl)))
+            .issuer("cs3219group23")
+            .audience().add("cs3219group23").and()
             .signWith(key, Jwts.SIG.HS256)
             .compact();
     }

@@ -67,18 +67,30 @@ public class JwtVerifier {
         }
         Claims claims = jws.getPayload();
         String subject = claims.getSubject();
+
+        // does not check if valid subject
         if (subject == null || subject.isBlank()) {
             throw new MalformedJwtException("token has no subject");
         }
-        // jjwt only checks exp when it is present; a token without one
-        // would never expire
-        if (claims.getExpiration() == null) {
-            throw new MalformedJwtException("token has no expiry");
-        }
+        
+        //does not check if valid role
         String role = claims.get("role", String.class);
         if (role == null || role.isBlank()) {
             throw new MalformedJwtException("token has no role");
         }
+
+        if (claims.getExpiration() == null) {
+            throw new MalformedJwtException("token has no expiry");
+        }
+
+        if (!"cs3219group23".equals(claims.getIssuer())) {
+            throw new MalformedJwtException("token has incorrect issuer");
+        }
+
+        if (claims.getAudience() == null || !claims.getAudience().contains("cs3219group23")) {
+            throw new MalformedJwtException("token has incorrect audience");
+        }
+        
         return new VerifiedToken(subject, role);
     }
 
