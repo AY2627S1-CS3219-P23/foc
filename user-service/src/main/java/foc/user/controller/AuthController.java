@@ -18,6 +18,17 @@ Scope: POST /auth/signup (issue #87) and POST /auth/login (issues #89/#90),
        Retry-After header, and the lost-race path now answers with the
        wrong-password message (the mapping used to exist to hide that the
        account exists, which the new messages no longer do).
+       2026-09-29, Claude Code (Fable 5), issue #88: sign-up now answers
+       202 (a code was emailed; no account yet) and POST /auth/signup/verify
+       is what creates the account (201) — design doc §3's insert-after-
+       verify flow. Wrong/expired codes are 400, exhausted attempts 429
+       (no Retry-After: there is no wait, the remedy is a fresh sign-up).
+       Both routes sit under the /auth/** permit in SecurityConfig.
+       2026-09-29, Claude Code (Opus 5), PR #150 author review: sign-up
+       gained two refusals from the review of repeat sign-ups — 409 when
+       the email has a live pending sign-up that isn't the caller's own
+       request (which used to be silently merged, a hijack), and 429 with
+       Retry-After when a resend is inside the cooldown.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -40,9 +51,14 @@ import org.springframework.web.server.ResponseStatusException;
 import foc.user.dto.LoginRequest;
 import foc.user.dto.LoginResponse;
 import foc.user.dto.SignupRequest;
+import foc.user.dto.SignupResponse;
+import foc.user.dto.SignupVerifyRequest;
 import foc.user.dto.UserResponse;
 import foc.user.exception.AccountLockedException;
 import foc.user.exception.LoginFailedException;
+import foc.user.exception.OtpAttemptsExceededException;
+import foc.user.exception.OtpResendTooSoonException;
+import foc.user.exception.OtpVerificationException;
 import foc.user.service.AuthService;
 import jakarta.validation.Valid;
 
@@ -56,10 +72,19 @@ public class AuthController {
         this.authService = authService;
     }
 
+    // 202, not 201: nothing is created yet — a code was emailed and the
+    // account waits on /auth/signup/verify. Repeating the call resends
+    // (a fresh code); there is no separate resend route
     @PostMapping(value = "/signup", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    @ResponseStatus(HttpStatus.CREATED)
-    public UserResponse signup(@Valid @RequestBody SignupRequest request) {
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public SignupResponse signup(@Valid @RequestBody SignupRequest request) {
         return authService.signup(request);
+    }
+
+    @PostMapping(value = "/signup/verify", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    public UserResponse verifySignup(@Valid @RequestBody SignupVerifyRequest request) {
+        return authService.verifySignup(request);
     }
 
     @PostMapping(value = "/login", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
@@ -87,6 +112,28 @@ public class AuthController {
     // the standard defines for it
     @ExceptionHandler(AccountLockedException.class)
     public ResponseEntity<ProblemDetail> handleAccountLocked(AccountLockedException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
+            .body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage()));
+    }
+
+    @ExceptionHandler(OtpVerificationException.class)
+    public ProblemDetail handleOtpVerification(OtpVerificationException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+
+    // 429 like the login lockout (issue #145 precedent), but without
+    // Retry-After: waiting won't help — the pending sign-up is discarded
+    // and the remedy is signing up again for a fresh code
+    @ExceptionHandler(OtpAttemptsExceededException.class)
+    public ProblemDetail handleOtpAttemptsExceeded(OtpAttemptsExceededException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
+    }
+
+    // 429 with Retry-After, the lockout's shape: here waiting is exactly
+    // the remedy, and the wait is seconds, so the SPA can count it down
+    @ExceptionHandler(OtpResendTooSoonException.class)
+    public ResponseEntity<ProblemDetail> handleOtpResendTooSoon(OtpResendTooSoonException e) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
             .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
             .body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage()));

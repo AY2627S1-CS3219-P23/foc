@@ -6,7 +6,12 @@
   campus-zone filter) no longer matches what's being built; noted as
   stale/directional rather than edited, since the underlying PNG itself
   wasn't changed.
-  Reviewed by: [pending]
+  2026-09-30, Claude Code (Opus 5), issue #109 (PR #150): the signup.png
+  row records where the shipped OTP dialog goes beyond the wireframe (the
+  resend cooldown label and the expiry line), same convention as the
+  suppliers.png note above.
+  Author review: Leong Wei Zhi to review via PR #150 — which also closes
+  the pending marker the 2026-09-27 entry above was left with.
 -->
 
 # web/ — Frontend Agent Guide
@@ -40,7 +45,7 @@ first**; they cost nothing to read, unlike Figma MCP calls:
 
 | File | Screen |
 | --- | --- |
-| `docs/wireframes/signup.png` | Sign Up — NUS email, username, password (live strength checklist), OTP verification step |
+| `docs/wireframes/signup.png` | Sign Up — NUS email, username, password (live strength checklist), OTP verification step (built in PR #150: the six code boxes and "Resend code" are as drawn; the dialog adds a cooldown label on that link and one line stating when the code expires, neither of which the wireframe shows — the API refuses a resend inside `OTP_RESEND_COOLDOWN`, so the button has to say why it is disabled) |
 | `docs/wireframes/login.png` | Login — username/email + password |
 | `docs/wireframes/dashboard.png` | Dashboard — credit balance, requester/courier mode toggle, quick actions, active requests with status chips, recent activity |
 | `docs/wireframes/suppliers.png` | Suppliers — search and category filters, supplier detail panel, empty state (wireframe image still shows a campus-zone filter; team dropped the zone feature, see `docs/supplier-service.md` D4 — the image is directional, not a spec, per this file's own note above) |

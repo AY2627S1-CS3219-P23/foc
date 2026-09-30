@@ -45,6 +45,12 @@
 # supplier-service for its new JWT verification + role gate filter
 # chain (the shared platform secret, same var already used by
 # notification-service and user-service).
+# 2026-09-29, Claude Code (Fable 5), issue #88: mailpit container added as
+# the default SMTP target for OTP emails, and the MAIL_*/OTP_* vars passed
+# to the user service (Gmail SMTP chosen as the real provider, Mailpit for
+# local dev/demo — Leong Wei Zhi via options Q&A). Setting the Gmail
+# values in .env redirects delivery without compose edits. PR #150
+# Copilot review: the mailpit image pinned to a tested minor version.
 # 2026-09-29, Claude Code (Opus 5.5): USER_SEED_DEMO passed to the user
 # service (demo-account seeder, off unless set).
 # Other services add their own entries in their own PRs.
@@ -227,9 +233,25 @@ services:
       JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-1h}
       # Browser origin allowed by CORS, shared with supplier-service.
       WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
+      # OTP email delivery (issue #88). Defaults reach the mailpit
+      # container; the Gmail values in .env.example switch to real
+      # delivery. Empty credentials are fine — Mailpit needs none.
+      MAIL_HOST: ${MAIL_HOST:-mailpit}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-false}
+      MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS:-false}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@foc.local}
+      OTP_TTL: ${OTP_TTL:-10m}
+      OTP_MAX_ATTEMPTS: ${OTP_MAX_ATTEMPTS:-5}
+      OTP_RESEND_COOLDOWN: ${OTP_RESEND_COOLDOWN:-60s}
     depends_on:
       user-db:
         condition: service_healthy
+      # vestigial once .env points MAIL_HOST at Gmail, but harmless
+      mailpit:
+        condition: service_started
     restart: unless-stopped
 
   # User DB: PostgreSQL owned exclusively by the user service
@@ -253,6 +275,20 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
+
+  # Local mail catcher (issue #88): the default SMTP target for the user
+  # service's OTP emails, so dev and demo need no real mail account.
+  # Caught mail is browsable at http://localhost:8025; the store is
+  # in-memory on purpose — a dev inbox has nothing worth persisting.
+  # Both ports loopback-bound like the DBs: this machine only.
+  mailpit:
+    # Minor-pinned like the DB images (PR #150 Copilot review), so a
+    # future Mailpit release can't change the demo stack unannounced.
+    image: axllent/mailpit:v1.31
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
     restart: unless-stopped
 
 # Other services add their own entries in their own PRs.

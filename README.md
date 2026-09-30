@@ -51,6 +51,14 @@
   Copilot review.
   2026-09-27: AI Use Summary extended for the PR #135 review fixes
   (issue #96) by Claude Code (Opus 5.5).
+  2026-09-29: AI Use Summary extended for the user-service OTP email
+  sending (issue #88 — insert-after-verify sign-up, Gmail SMTP/Mailpit,
+  pending_signups replacing the otps table) by Claude Code (Fable 5),
+  on PR #150 Copilot review (the summary had missed the change); and
+  again for that PR's author-review fixes (repeat sign-ups can no longer
+  hijack a pending sign-up; resend cooldown) by Claude Code (Opus 5); and
+  again for its re-review fixes and the web sign-up OTP screen (issue
+  #109) by Claude Code (Opus 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -308,6 +316,34 @@ minutes left and repeats them in `Retry-After`, with their tests and the
 first tests for the web login page, the wording and the trade-off (login
 now reveals whether an account exists, reversing #89's non-revealing
 failures) chosen by the author via neutral-options Q&A and recorded in
+`ai/usage-log.md`; and user-service OTP email sending (issue #88, PR
+#150) — sign-up reworked to the design doc's insert-after-verify shape
+(`POST /auth/signup` now parks a `pending_signups` row and emails a
+6-digit code, new `POST /auth/signup/verify` creates the account), the
+generic `otps` table removed for per-operation pending tables, an
+`OtpService`/`OtpEmailSender` pair sending over SMTP (Gmail SMTP as the
+provider, a pinned Mailpit compose container as the local target), the
+purge scheduler's expired-pending sweep, their unit and integration
+tests, and the PR #150 Copilot-review fixes (locked verify reads,
+timing-equalized unknown emails, expiry boundary, sub-minute TTL
+wording, finite SMTP timeouts), plus the PR #150 author-review fixes
+(a repeat sign-up can no longer rewrite a live pending sign-up's
+username and password — only a repeat of its own details resends, other
+details are a 409, and an expired row may be taken over — with a resend
+cooldown answering 429 + `Retry-After` and the wrong-code attempts now
+surviving a resend), with the provider, scope, local-mail,
+pending-tables and repeat-sign-up decisions made by the author via
+neutral-options Q&A and recorded in `ai/usage-log.md`; and that PR's
+re-review fixes — a pending sign-up whose email or username was taken
+meanwhile is discarded instead of blocking its address, a resend no longer
+extends the code's expiry (so a pending sign-up can no longer be held
+open indefinitely), the resend cooldown now travels in the 202 body with
+`Retry-After` exposed through CORS, and the sign-up OTP screen in `web/`
+(a six-box code dialog over the register page with resend and cooldown,
+part of issue #109) without which registration through the site
+dead-ended at a failed login — with the fix-versus-restructure choice,
+the dialog's shape and the cooldown's route all decided by the author via
+neutral-options Q&A and recorded in `ai/usage-log.md`.
 `ai/usage-log.md`; and an
 opt-in demo-account seeder for user-service (`USER_SEED_DEMO`: 1
 owner, 3 admins, 100 users), with the mechanism, the off-by-default

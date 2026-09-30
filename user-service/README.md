@@ -22,6 +22,15 @@
   2026-09-29, Claude Code (Opus 5.5), issue #147: Flyway schema, the
   includeDeleted list filter, the shared 400 format, and the login
   section's lockout (429) and row-locked counters.
+  2026-09-30, Claude Code (Opus 5), issue #88 (PR #150), written when
+  #147's Flyway switch was merged into that branch: sign-up is the
+  insert-after-verify flow (202 + emailed code, POST /auth/signup/verify
+  creates the account), with its repeat/resend rules, the V3 migration
+  and the purge's pending_signups sweep.
+  2026-09-30, Claude Code (Opus 5), PR #150 re-review: the two pending-row
+  rules that came out of it (a resend keeps the original expiry; verify
+  discards a row whose identifiers were taken) and the 202's
+  resendInSeconds, each with the reason it exists.
   2026-09-29, Claude Code (Opus 5.5): "Demo accounts" section for the
   USER_SEED_DEMO seeder
   Reviewed by: Leong Wei Zhi (via pull request).
@@ -35,8 +44,9 @@ Backlog: issues #84–#98.
 
 Spring Boot 4 · Java 21 · Maven.
 
-Currently: actuator health endpoint, `POST /auth/signup` and
-`POST /auth/login` (#87/#89, JWT issuance #90 — see below),
+Currently: actuator health endpoint, `POST /auth/signup` /
+`POST /auth/signup/verify` and
+`POST /auth/login` (#87/#89/#88, JWT issuance #90 — see below),
 `POST /auth/setup-owner` (creates an
 OWNER for any caller with the setup token, #97), `GET /users/me` /
 `GET /users/{id}` (own and public profile, #95), `DELETE /users/me`
@@ -51,19 +61,60 @@ reachable (`USER_DB_*` env vars) and `JWT_SECRET` set. Tests supply
 their own database. CORS allows the web origin in `WEB_ALLOWED_ORIGIN`
 (default `http://localhost:5173`).
 
-## Sign-up & login (#87, #89, #90)
+## Sign-up & login (#87, #88, #89, #90)
 
 These replace PR #139's separate `user-auth` server; auth lives here.
 
-- `POST /auth/signup` `{ email, username, password }` → 201 with the
-  account (no token). Same rules as owner setup: `eXXXXXXX@u.nus.edu`,
-  username 3–30 of `[A-Za-z0-9_]`, password 10–50 with upper, lower and
-  a digit; email and username unique (soft-deleted accounts included).
-  Usernames keep the case they were typed in but are unique, and match
-  at login, ignoring case.
-  Failures are 400 problem+json with the exact reason. OTP verification
-  is deferred: once it lands, the account is inserted only after
-  `POST /auth/signup/verify` (design doc §3); today sign-up inserts it.
+Sign-up is the design doc's insert-after-verify flow (#88): the request
+is parked in `pending_signups` with a hashed 6-digit code, and the
+`users` row appears only once the code is verified — so an unverified
+sign-up never reserves an email or username.
+
+- `POST /auth/signup` `{ email, username, password }` → **202**
+  `{ email, expiresInSeconds, resendInSeconds }`; no account yet, a code
+  has been emailed. `expiresInSeconds` is the time the code has **left**
+  (less than `OTP_TTL` on a resend, see below), and `resendInSeconds` is
+  the cooldown the SPA disables its resend button for. The cooldown is in
+  the body rather than read from the 429's `Retry-After` because the SPA
+  is cross-origin and that header is not CORS-safelisted (it *is* named in
+  `exposedHeaders`, so a 429 can still correct the countdown).
+  Same rules as owner setup: `eXXXXXXX@u.nus.edu`, username 3–30 of
+  `[A-Za-z0-9_]`, password 10–50 with upper, lower and a digit; email and
+  username unique (soft-deleted accounts included). Usernames keep the
+  case they were typed in but are unique, and match at login, ignoring
+  case. Failures are 400 problem+json with the exact reason.
+  Repeating the call is the resend — there is no separate route — but
+  only for a repeat of the same request: the same username and a password
+  matching the one stored. Anything else gets 409 (a live pending sign-up
+  is never rewritten; PR #150 review found that overwriting it let anyone
+  who knew the address hijack the sign-up). A resend inside
+  `OTP_RESEND_COOLDOWN` (default 60s) gets 429 with `Retry-After`; an
+  expired pending sign-up is dead, so any sign-up takes its place. A mail
+  failure is 502 and leaves nothing behind.
+  A resend replaces the code but **not** the expiry, so a pending sign-up
+  lives at most `OTP_TTL` from the moment it was created and always
+  reaches the expired-and-takeable state. Without that, whoever pended an
+  address first could resend once per cooldown for ever and hold it while
+  its real owner kept getting the 409 telling them to wait for an expiry
+  that never came (PR #150 review). The consequence is deliberate: a
+  resend late in the window hands out a short-lived code, and both the
+  email and the 202 quote the seconds actually left.
+- `POST /auth/signup/verify` `{ email, code }` → **201** with the account
+  (no token). A wrong code, or an email with no pending sign-up, is 400
+  "Invalid verification code" — deliberately the same answer, at the same
+  bcrypt cost; an expired code is 400 "sign up again". Wrong codes are
+  counted per pending sign-up, resends included (`OTP_MAX_ATTEMPTS`,
+  default 5): the attempt that exhausts them is 429 and discards the
+  pending sign-up.
+  If the email or username was taken while the code was in flight, verify
+  answers 400 with that reason **and discards the pending row** — a
+  sign-up that can never complete must not keep holding its email, which
+  used to lock whoever lost a username race out of their own address for
+  the rest of the TTL (PR #150 review).
+  Codes are BCrypt-hashed at rest, never logged, and live for `OTP_TTL`
+  (default 10 min). Locally they land in Mailpit
+  (<http://localhost:8025>); real delivery goes over Gmail SMTP with the
+  `MAIL_*` values in `.env.example`.
 - `POST /auth/login` `{ usernameOrEmail, password }` → 200
   `{ accessToken, tokenType: "Bearer", expiresIn }`. A failure names its
   cause (#146): 401 problem+json "No account found for that username or
@@ -125,7 +176,10 @@ generate; a database built that way is recorded as V1 on first start
 `V2__username_unique_ignoring_case` renames usernames that differ only
 in case (the oldest keeps its name, later ones get `_2`, `_3`, …) and
 replaces the username constraint with a unique index on
-`lower(username)`. Schema changes go in a new `V<n>__<name>.sql`, never
+`lower(username)`. `V3__pending_signups` drops the generic (always
+empty) `otps` table and creates `pending_signups` — #88 replaced one
+OTP table with a pending table per operation; `pending_email_changes`
+follows with #92. Schema changes go in a new `V<n>__<name>.sql`, never
 by editing an applied one.
 
 ## Demo accounts (local only)
@@ -165,7 +219,9 @@ user can recover within 30 days (#94). Repeat deletion, like every other
 `/users/me` call on a deleted account, returns 404. A daily scheduler
 (`AccountPurgeScheduler`, default 03:00) hard-deletes accounts whose
 `deleted_at` is older than the retention window, together with their
-`otps`/`account_tokens` rows — that purge is what frees the identifiers.
+`account_tokens` rows — that purge is what frees the identifiers. The
+same daily run sweeps expired `pending_signups` rows (hygiene only:
+verify rejects an expired row on sight).
 Configure via `USER_RETENTION_DAYS` (default 30) and `USER_PURGE_CRON`
 (Spring 6-field cron).
 
