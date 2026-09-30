@@ -25,13 +25,18 @@
 // were sent are snapshotted, because user-service treats only a repeat of
 // the identical request as the resend. Modal over this page rather than a
 // second route: Leong Wei Zhi's call via options Q&A.
+// PR #150 review (@Sinnez1): dismissing the dialog keeps the pending
+// sign-up and offers "Enter your code" to reopen it — discarding it
+// stranded the code already emailed behind the resend cooldown. The
+// snapshot holds absolute times so a reopened dialog counts from the
+// truth.
 // Reviewed by: Ryan Ang
 
 import React, { useState } from 'react'
 import { apiFetch, errorMessage } from '@/lib/api/http'
 import { router } from '../../routes/index'
 import { OtpVerificationModal } from './components/OtpVerificationModal'
-import type { SignupPending } from './types'
+import type { SignupAccepted, SignupPending } from './types'
 
 // Mirrors user-service's AccountRules password policy (PASSWORD_PATTERN,
 // PASSWORD_MIN/MAX). Display-only: the server remains the validator.
@@ -71,17 +76,21 @@ export function Register() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  // set once a code is on its way: the body that was sent, plus what the
-  // 202 answered. A snapshot rather than a read of the live fields, so a
-  // resend repeats the identical request even if the form is edited behind
-  // the dialog — anything else would be refused with a 409
+  // set once a code is on its way: the body that was sent, plus when that
+  // code dies and when it may be resent. A snapshot rather than a read of
+  // the live fields, so a resend repeats the identical request even if the
+  // form is edited behind the dialog — anything else would be refused 409
   const [pending, setPending] = useState<SignupPending | null>(null)
+  // dismissing the dialog hides it but keeps the pending sign-up, so the
+  // code already emailed can still be entered — closing it used to strand
+  // that code behind a cooldown and a pointless resend (PR #150 review)
+  const [codeOpen, setCodeOpen] = useState(false)
 
   const register = async (event: React.SyntheticEvent) => {
     event.preventDefault()
     setSubmitting(true)
     try {
-      const accepted = await apiFetch<SignupPending>('user', '/auth/signup', {
+      const accepted = await apiFetch<SignupAccepted>('user', '/auth/signup', {
         method: 'POST',
         body: JSON.stringify({ email, username, password }),
       })
@@ -89,7 +98,14 @@ export function Register() {
       setError('')
       // no account exists yet, and nothing is cleared: the dialog takes
       // over from here, and its verify call is what creates the account
-      setPending({ ...accepted, email, username, password })
+      setPending({
+        email,
+        username,
+        password,
+        expiresAt: Date.now() + accepted.expiresInSeconds * 1000,
+        resendAt: Date.now() + accepted.resendInSeconds * 1000,
+      })
+      setCodeOpen(true)
     } catch (error: unknown) {
       setError(errorMessage(error, 'Could not register. Try again.'))
     } finally {
@@ -100,6 +116,7 @@ export function Register() {
   // the account exists now, so finish where sign-up always finished
   const accountCreated = () => {
     setPending(null)
+    setCodeOpen(false)
     setEmail('')
     setUsername('')
     setPassword('')
@@ -161,6 +178,18 @@ export function Register() {
           {submitting ? 'Sending code...' : 'Sign Up'}
         </button>
       </form>
+      {pending && !codeOpen && (
+        <p className="mt-4 text-center text-sm text-gray-600">
+          We emailed a code to {pending.email}.{' '}
+          <button
+            type="button"
+            onClick={() => setCodeOpen(true)}
+            className="font-medium text-gray-900 underline cursor-pointer"
+          >
+            Enter your code
+          </button>
+        </p>
+      )}
       <p className="mt-4 text-center text-sm text-gray-600">
         Already have an account?{' '}
         <button
@@ -172,16 +201,19 @@ export function Register() {
       </p>
       {/* outside the <form>: the dialog holds a form of its own, and forms
           may not nest */}
-      {pending && (
+      {pending && codeOpen && (
         <OtpVerificationModal
           pending={pending}
-          onClose={() => setPending(null)}
+          // hidden, not discarded: "Enter your code" brings it back
+          onClose={() => setCodeOpen(false)}
           onVerified={accountCreated}
+          onResent={setPending}
           onRestart={(message) => {
             // the pending sign-up is dead (expired, or too many wrong
             // codes): back to the still-filled form, one click from a
             // fresh code
             setPending(null)
+            setCodeOpen(false)
             setError(message)
           }}
         />

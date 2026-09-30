@@ -7,16 +7,21 @@
 // than shared/components/ because shared/ is for cross-domain primitives
 // (see shared/components/README.md) and every flow that needs a code is
 // user-domain — move it there if a non-user feature ever wants one.
-// Controlled by a single string so the owning screen keeps the value.
+// PR #150 review (@Sinnez1): the value is one entry per box rather than a
+// string of the digits typed so far. Collapsing it to a string made
+// clearing a middle box slide every later digit one box left, so a code
+// could not be corrected in place and Verify stayed disabled at five
+// digits.
 // Author review: Leong Wei Zhi to review via the PR.
 
 import { useRef } from 'react'
 
 interface CodeInputProps {
-  value: string
-  onChange: (value: string) => void
+  // one entry per box, '' for an empty one; its length is the box count,
+  // so the boxes and the value can never disagree
+  value: string[]
+  onChange: (value: string[]) => void
   disabled?: boolean
-  length?: number
   autoFocus?: boolean
   // names the group of boxes for screen readers and for tests
   label: string
@@ -28,35 +33,44 @@ export function CodeInput({
   value,
   onChange,
   disabled = false,
-  length = 6,
   autoFocus = false,
   label,
 }: CodeInputProps) {
+  const length = value.length
   const boxes = useRef<(HTMLInputElement | null)[]>([])
 
   const focus = (index: number) => {
     if (index >= 0 && index < length) boxes.current[index]?.focus()
   }
 
-  // Replace one position, keeping the value a plain string of digits.
-  // Boxes fill left to right, so a gap can't be typed; if one is somehow
-  // reached, the digits close up rather than leaving a hole in the value.
-  const setDigit = (index: number, digit: string) => {
-    const padded = value.padEnd(length, ' ').split('')
-    padded[index] = digit || ' '
-    onChange(padded.join('').replace(/ /g, '').slice(0, length))
+  // Positional: box n is value[n] whether or not its neighbours are
+  // filled, so editing one box never disturbs another.
+  const setAt = (index: number, digit: string) => {
+    const next = [...value]
+    next[index] = digit
+    onChange(next)
+  }
+
+  // Lay several digits out from `index` — a paste, or a browser
+  // autofilling the whole code into one box.
+  const spreadFrom = (index: number, digits: string) => {
+    const next = [...value]
+    for (let i = 0; i < digits.length && index + i < length; i++) {
+      next[index + i] = digits[i]
+    }
+    onChange(next)
+    focus(Math.min(index + digits.length, length - 1))
   }
 
   const handleChange = (index: number, raw: string) => {
-    // a browser autofilling the whole code into one box arrives as
-    // several digits (maxLength only stops typing): spread it from here on
     const digits = digitsOnly(raw)
     if (digits.length > 1) {
-      onChange((value.slice(0, index) + digits).slice(0, length))
-      focus(Math.min(index + digits.length, length - 1))
+      spreadFrom(index, digits)
       return
     }
-    setDigit(index, digits)
+    // '' here is the browser deleting the character in a filled box: the
+    // box empties in place and the rest of the code stays where it is
+    setAt(index, digits)
     if (digits) focus(index + 1)
   }
 
@@ -68,7 +82,7 @@ export function CodeInput({
       // an empty box sends the backspace to the one before it, which is
       // what people expect when correcting a code
       event.preventDefault()
-      setDigit(index - 1, '')
+      setAt(index - 1, '')
       focus(index - 1)
     } else if (event.key === 'ArrowLeft') {
       event.preventDefault()
@@ -86,14 +100,12 @@ export function CodeInput({
     const digits = digitsOnly(event.clipboardData.getData('text'))
     if (!digits) return
     event.preventDefault()
-    const next = (value.slice(0, index) + digits).slice(0, length)
-    onChange(next)
-    focus(Math.min(next.length, length - 1))
+    spreadFrom(index, digits.slice(0, length - index))
   }
 
   return (
     <div role="group" aria-label={label} className="flex justify-center gap-2">
-      {Array.from({ length }, (_, index) => (
+      {value.map((digit, index) => (
         <input
           key={index}
           ref={(element) => {
@@ -107,7 +119,7 @@ export function CodeInput({
           autoComplete={index === 0 ? 'one-time-code' : 'off'}
           autoFocus={autoFocus && index === 0}
           disabled={disabled}
-          value={value[index] ?? ''}
+          value={digit}
           aria-label={`Digit ${index + 1} of ${length}`}
           // selecting on focus lets a digit be typed straight over a
           // filled box, which maxLength would otherwise block

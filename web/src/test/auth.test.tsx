@@ -11,6 +11,10 @@
 // the account, a wrong code, the failures that send the user back to the
 // form, the resend and its cooldown, and the six-box code field. reply()
 // gained headers so ApiError can read Retry-After.
+// 2026-09-30, Claude Code (Opus 5), PR #150 review (@Sinnez1): cases for
+// the four dialog fixes — correcting a middle digit, reopening a dismissed
+// dialog, a 500 keeping the dialog open, and Verify being disabled while a
+// resend is in flight.
 // Author review: Ryan to review via the PR.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -405,6 +409,80 @@ describe('sign-up page', () => {
 
     expect(otpDialog().getByLabelText('Digit 1 of 6')).toHaveValue('4')
     expect(otpDialog().getByLabelText('Digit 6 of 6')).toHaveValue('3')
+  })
+
+  test('a middle digit can be corrected without shifting the rest', async () => {
+    fetchMock.mockResolvedValue(reply(202, accepted))
+
+    const user = await signUp()
+    await typeCode(user, '123456')
+    // clear the third box and type the right digit in place
+    await user.click(otpDialog().getByLabelText('Digit 3 of 6'))
+    await user.keyboard('{Backspace}9')
+
+    expect(otpDialog().getByLabelText('Digit 3 of 6')).toHaveValue('9')
+    expect(otpDialog().getByLabelText('Digit 4 of 6')).toHaveValue('4')
+    expect(otpDialog().getByLabelText('Digit 6 of 6')).toHaveValue('6')
+    // six digits, so Verify is live rather than stuck at five
+    expect(
+      otpDialog().getByRole('button', { name: 'Verify & Activate' }),
+    ).toBeEnabled()
+  })
+
+  test('closing the dialog keeps the code enterable', async () => {
+    fetchMock.mockResolvedValue(reply(202, accepted))
+
+    const user = await signUp()
+    await user.click(otpDialog().getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    // the emailed code is still live, so it must not take a resend to
+    // get back to entering it
+    await user.click(screen.getByRole('button', { name: 'Enter your code' }))
+
+    expect(
+      screen.getByRole('dialog', { name: 'OTP Verification' }),
+    ).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  test('a server error keeps the dialog open, code still valid', async () => {
+    fetchMock
+      .mockResolvedValueOnce(reply(202, accepted))
+      .mockResolvedValueOnce(problem(500, 'Internal Server Error'))
+
+    const user = await signUp()
+    await typeCode(user, '482910')
+    await user.click(
+      otpDialog().getByRole('button', { name: 'Verify & Activate' }),
+    )
+
+    expect(await otpDialog().findByRole('alert')).toBeInTheDocument()
+    expect(
+      screen.getByRole('dialog', { name: 'OTP Verification' }),
+    ).toBeInTheDocument()
+  })
+
+  test('Verify is blocked while a resend is in flight', async () => {
+    let releaseResend: (value: unknown) => void = () => {}
+    fetchMock
+      .mockResolvedValueOnce(reply(202, { ...accepted, resendInSeconds: 0 }))
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          releaseResend = resolve
+        }),
+      )
+
+    const user = await signUp()
+    await typeCode(user, '482910')
+    await user.click(otpDialog().getByRole('button', { name: 'Resend code' }))
+
+    // the resend is replacing the code, so verifying the old one would
+    // spend an attempt for nothing
+    expect(
+      otpDialog().getByRole('button', { name: 'Verify & Activate' }),
+    ).toBeDisabled()
+    releaseResend(reply(202, { ...accepted, resendInSeconds: 0 }))
   })
 
   test("shows the server's reason when sign-up is rejected", async () => {
