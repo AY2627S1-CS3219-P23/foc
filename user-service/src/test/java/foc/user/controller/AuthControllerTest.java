@@ -7,6 +7,8 @@ Scope: integration tests for POST /auth/signup and POST /auth/login
        token claims, and the CORS preflight for the web origin.
        PR #141 review: usernames match ignoring case at sign-up and login
        (team decision).
+       Issue #147: parallel wrong passwords still trip the lockout, and the
+       database itself rejects usernames differing only in case.
        2026-09-29, Claude Code (Opus 5), issue #146: the 401s are no longer
        non-revealing — they name the cause — so the tests pin one detail per
        cause, the countdown as it runs down, and the 429's Retry-After.
@@ -30,9 +32,17 @@ Author review: Leong Wei Zhi to review via the PR.
 package foc.user.controller;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -42,6 +52,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
@@ -411,6 +422,58 @@ class AuthControllerTest extends PostgresTestContainer {
         login("STUDENT_ALEX", PASSWORD).andExpect(status().isOk());
         assertThat(userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow().getUsername())
             .isEqualTo("Student_Alex");
+    }
+
+    @Test
+    @DisplayName("Wrong passwords sent at once all count: the account locks and a later right password is refused")
+    void login_parallelFailuresLock() throws Exception {
+        // #88's sign-up only emails a code; the account needs the verify
+        createAccount("e1234567@u.nus.edu", "student_alex");
+
+        int attempts = 10;
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(attempts);
+        try {
+            List<Future<Integer>> statuses = new ArrayList<>();
+            for (int i = 0; i < attempts; i++) {
+                Callable<Integer> attempt = () -> {
+                    start.await();
+                    return login("student_alex", "WrongPassword123").andReturn().getResponse().getStatus();
+                };
+                statuses.add(pool.submit(attempt));
+            }
+            start.countDown();
+
+            int unauthorized = 0;
+            for (Future<Integer> status : statuses) {
+                int code = status.get();
+                assertThat(code).isIn(401, 429);
+                if (code == 401) {
+                    unauthorized++;
+                }
+            }
+            // before the fix most of these lost the version check and never
+            // counted; now the first four are plain failures and the rest
+            // are refused by the lock
+            assertThat(unauthorized).isEqualTo(4);
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow().getLockedUntil())
+            .isNotNull();
+        login("student_alex", PASSWORD).andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    @DisplayName("The database rejects a username that differs from another only in case")
+    void usernameUniqueIgnoringCaseInDatabase() {
+        userRepository.saveAndFlush(new User("e1234567@u.nus.edu", "Student_Alex", "hash", Role.USER));
+
+        // straight to the repository, skipping sign-up's own check
+        assertThatThrownBy(() -> userRepository.saveAndFlush(
+                new User("e7654321@u.nus.edu", "student_alex", "hash", Role.USER)))
+            .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

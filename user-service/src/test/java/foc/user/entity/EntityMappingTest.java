@@ -13,6 +13,11 @@
  * violation added in its place.
  * 2026-09-29, Claude Code (Opus 5), PR #150 review: last_sent_at (the
  * resend cooldown's origin) is part of that round-trip.
+ * 2026-09-29, Claude Code (Opus 5.5), issue #147: tables emptied before
+ * each test, since the Flyway-built schema (unlike create-drop) keeps
+ * rows other test classes committed.
+ * 2026-09-30, Claude Code (Opus 5), merging main: that sweep clears
+ * pending_signups instead of the otps table #88 dropped.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.user.entity;
@@ -21,6 +26,7 @@ import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -42,6 +48,15 @@ class EntityMappingTest extends PostgresTestContainer {
 
     @Autowired
     private EntityManager entityManager;
+
+    // rows committed by other test classes; the delete rolls back with the test
+    @BeforeEach
+    void emptyTables() {
+        entityManager.createNativeQuery("delete from pending_signups").executeUpdate();
+        entityManager.createNativeQuery("delete from account_tokens").executeUpdate();
+        entityManager.createNativeQuery("delete from token_denylist").executeUpdate();
+        entityManager.createNativeQuery("delete from users").executeUpdate();
+    }
 
     private <T> T persistAndFlush(T entity) {
         entityManager.persist(entity);

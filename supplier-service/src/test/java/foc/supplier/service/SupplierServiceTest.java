@@ -13,19 +13,30 @@
  * to the raw.githubusercontent.com equivalent at the API response
  * boundary, since the CSV itself (course-provided data) can't be
  * edited.
+ * 2026-09-29, issue #104: added unit tests for createSupplier/
+ * updateSupplier/deleteSupplier — location merging (the single
+ * request field replaces building+locationDescription, not appended to
+ * the old building), category reconciliation (old rows deleted before
+ * the new set is saved), not-found on update/delete, and the FK-safe
+ * delete order (categories before the supplier row).
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
 
+import foc.supplier.dto.SupplierRequest;
 import foc.supplier.exception.InvalidSortException;
+import foc.supplier.exception.SupplierNotFoundException;
 import foc.supplier.model.Suppliers;
 import foc.supplier.repository.SupplierCategoriesRepository;
 import foc.supplier.repository.SuppliersRepository;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -39,8 +50,10 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -130,6 +143,94 @@ class SupplierServiceTest {
         var response = supplierService.listSuppliers(null, null, null, null, pageable);
 
         assertThat(response.getContent().get(0).getImageUrl()).isNull();
+    }
+
+    @Test
+    @DisplayName("createSupplier should save the supplier and its categories")
+    void createSupplier_savesSupplierAndCategories() {
+        when(suppliersRepository.save(any())).thenAnswer(invocation -> {
+            Suppliers s = invocation.getArgument(0);
+            s.setId(7L);
+            return s;
+        });
+        SupplierRequest request = new SupplierRequest("Cafe", "Building A, Level 2",
+                List.of("Food", "Coffee"), "09:00", "18:00", "desc", 1.3, 103.8, null);
+
+        var response = supplierService.createSupplier(request);
+
+        assertThat(response.getId()).isEqualTo("7");
+        assertThat(response.getName()).isEqualTo("Cafe");
+        assertThat(response.getCategories()).containsExactly("Food", "Coffee");
+        verify(supplierCategoriesRepository, times(2)).save(any());
+    }
+
+    @Test
+    @DisplayName("createSupplier should store the single location field as locationDescription, with building cleared")
+    void createSupplier_storesLocationWithoutBuilding() {
+        ArgumentCaptor<Suppliers> captor = ArgumentCaptor.forClass(Suppliers.class);
+        when(suppliersRepository.save(captor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
+        SupplierRequest request = new SupplierRequest("Cafe", "Building A, Level 2",
+                List.of(), "09:00", "18:00", null, null, null, null);
+
+        supplierService.createSupplier(request);
+
+        assertThat(captor.getValue().getBuilding()).isNull();
+        assertThat(captor.getValue().getLocationDescription()).isEqualTo("Building A, Level 2");
+    }
+
+    @Test
+    @DisplayName("updateSupplier should replace an existing supplier's categories, not merge with the old set")
+    void updateSupplier_reconcilesCategories() {
+        Suppliers existing = new Suppliers();
+        existing.setId(7L);
+        existing.setBuilding("Old Building");
+        when(suppliersRepository.findById(7L)).thenReturn(Optional.of(existing));
+        when(suppliersRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        SupplierRequest request = new SupplierRequest("Cafe", "New Location",
+                List.of("Shopping"), "09:00", "18:00", null, null, null, null);
+
+        supplierService.updateSupplier(7L, request);
+
+        InOrder order = inOrder(supplierCategoriesRepository);
+        order.verify(supplierCategoriesRepository).deleteBySupplierId(7L);
+        order.verify(supplierCategoriesRepository).save(any());
+    }
+
+    @Test
+    @DisplayName("updateSupplier should throw when the id doesn't exist")
+    void updateSupplier_throwsWhenNotFound() {
+        when(suppliersRepository.findById(99L)).thenReturn(Optional.empty());
+        SupplierRequest request = new SupplierRequest("Cafe", "Loc", List.of(), "09:00", "18:00", null, null, null,
+                null);
+
+        assertThatThrownBy(() -> supplierService.updateSupplier(99L, request))
+                .isInstanceOf(SupplierNotFoundException.class);
+
+        verify(suppliersRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("deleteSupplier should delete categories before the supplier row (FK)")
+    void deleteSupplier_deletesCategoriesFirst() {
+        when(suppliersRepository.existsById(7L)).thenReturn(true);
+
+        supplierService.deleteSupplier(7L);
+
+        InOrder order = inOrder(supplierCategoriesRepository, suppliersRepository);
+        order.verify(supplierCategoriesRepository).deleteBySupplierId(7L);
+        order.verify(suppliersRepository).deleteById(7L);
+    }
+
+    @Test
+    @DisplayName("deleteSupplier should throw when the id doesn't exist, without deleting anything")
+    void deleteSupplier_throwsWhenNotFound() {
+        when(suppliersRepository.existsById(99L)).thenReturn(false);
+
+        assertThatThrownBy(() -> supplierService.deleteSupplier(99L))
+                .isInstanceOf(SupplierNotFoundException.class);
+
+        verify(supplierCategoriesRepository, never()).deleteBySupplierId(any());
+        verify(suppliersRepository, never()).deleteById(any());
     }
 
     private static Suppliers supplierWithImageUrl(String imageUrl) {

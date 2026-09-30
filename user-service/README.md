@@ -19,6 +19,14 @@
   section.
   2026-09-29, Claude Code (Opus 5.5), issue #91: "Checking tokens" section
   for the JWT filter chain.
+  2026-09-29, Claude Code (Opus 5.5), issue #147: Flyway schema, the
+  includeDeleted list filter, the shared 400 format, and the login
+  section's lockout (429) and row-locked counters.
+  2026-09-30, Claude Code (Opus 5), issue #88 (PR #150), written when
+  #147's Flyway switch was merged into that branch: sign-up is the
+  insert-after-verify flow (202 + emailed code, POST /auth/signup/verify
+  creates the account), with its repeat/resend rules, the V3 migration
+  and the purge's pending_signups sweep.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -30,34 +38,58 @@ Backlog: issues #84–#98.
 
 Spring Boot 4 · Java 21 · Maven.
 
-Currently: actuator health endpoint, `POST /auth/signup` and
-`POST /auth/login` (#87/#89, JWT issuance #90 — see below),
+Currently: actuator health endpoint, `POST /auth/signup` /
+`POST /auth/signup/verify` and
+`POST /auth/login` (#87/#89/#88, JWT issuance #90 — see below),
 `POST /auth/setup-owner` (creates an
 OWNER for any caller with the setup token, #97), `GET /users/me` /
 `GET /users/{id}` (own and public profile, #95), `DELETE /users/me`
 (self-deletion, #93), and the admin endpoints
-`GET /users` (list, search, role filter, sort, 20/50/100 page sizes),
+`GET /users` (list, search, role filter, sort, 20/50/100 page sizes,
+`includeDeleted=true` to list removed accounts with their `deletedAt`),
 `PATCH /users/{id}` (promote/demote) and `DELETE /users/{id}` (soft
 delete) for ADMIN/OWNER callers (#96), backed by Postgres via
-Spring Data JPA. The root `compose.yaml` runs it with its own `user-db` (host port
+Spring Data JPA, with the schema managed by Flyway (see below). The root `compose.yaml` runs it with its own `user-db` (host port
 `${USER_SERVICE_PORT:-8087}`); `spring-boot:run` needs that database
 reachable (`USER_DB_*` env vars) and `JWT_SECRET` set. Tests supply
 their own database. CORS allows the web origin in `WEB_ALLOWED_ORIGIN`
 (default `http://localhost:5173`).
 
-## Sign-up & login (#87, #89, #90)
+## Sign-up & login (#87, #88, #89, #90)
 
 These replace PR #139's separate `user-auth` server; auth lives here.
 
-- `POST /auth/signup` `{ email, username, password }` → 201 with the
-  account (no token). Same rules as owner setup: `eXXXXXXX@u.nus.edu`,
-  username 3–30 of `[A-Za-z0-9_]`, password 10–50 with upper, lower and
-  a digit; email and username unique (soft-deleted accounts included).
-  Usernames keep the case they were typed in but are unique, and match
-  at login, ignoring case.
-  Failures are 400 problem+json with the exact reason. OTP verification
-  is deferred: once it lands, the account is inserted only after
-  `POST /auth/signup/verify` (design doc §3); today sign-up inserts it.
+Sign-up is the design doc's insert-after-verify flow (#88): the request
+is parked in `pending_signups` with a hashed 6-digit code, and the
+`users` row appears only once the code is verified — so an unverified
+sign-up never reserves an email or username.
+
+- `POST /auth/signup` `{ email, username, password }` → **202**
+  `{ email, expiresInSeconds }`; no account yet, a code has been emailed.
+  Same rules as owner setup: `eXXXXXXX@u.nus.edu`, username 3–30 of
+  `[A-Za-z0-9_]`, password 10–50 with upper, lower and a digit; email and
+  username unique (soft-deleted accounts included). Usernames keep the
+  case they were typed in but are unique, and match at login, ignoring
+  case. Failures are 400 problem+json with the exact reason.
+  Repeating the call is the resend — there is no separate route — but
+  only for a repeat of the same request: the same username and a password
+  matching the one stored. Anything else gets 409 (a live pending sign-up
+  is never rewritten; PR #150 review found that overwriting it let anyone
+  who knew the address hijack the sign-up). A resend inside
+  `OTP_RESEND_COOLDOWN` (default 60s) gets 429 with `Retry-After`; an
+  expired pending sign-up is dead, so any sign-up takes its place. A mail
+  failure is 502 and leaves nothing behind.
+- `POST /auth/signup/verify` `{ email, code }` → **201** with the account
+  (no token). A wrong code, or an email with no pending sign-up, is 400
+  "Invalid verification code" — deliberately the same answer, at the same
+  bcrypt cost; an expired code is 400 "sign up again". Wrong codes are
+  counted per pending sign-up, resends included (`OTP_MAX_ATTEMPTS`,
+  default 5): the attempt that exhausts them is 429 and discards the
+  pending sign-up.
+  Codes are BCrypt-hashed at rest, never logged, and live for `OTP_TTL`
+  (default 10 min). Locally they land in Mailpit
+  (<http://localhost:8025>); real delivery goes over Gmail SMTP with the
+  `MAIL_*` values in `.env.example`.
 - `POST /auth/login` `{ usernameOrEmail, password }` → 200
   `{ accessToken, tokenType: "Bearer", expiresIn }`. A failure names its
   cause (#146): 401 problem+json "No account found for that username or
@@ -72,6 +104,9 @@ These replace PR #139's separate `user-auth` server; auth lives here.
   Login therefore tells a caller whether an account exists — the author
   chose that over the non-revealing failures of #89, as sign-up's
   "already taken" 400s reveal the same thing.
+  Wrong passwords sent at once each count: the counter is updated with
+  the row locked, after the password check (which holds no database
+  connection).
 - Tokens are HS256 with the shared `JWT_SECRET` (≥ 32 bytes, checked at
   startup): `sub` = user id, `role`, `jti`, `exp` = 1 h
   (`JWT_ACCESS_TOKEN_TTL`, e.g. `1h`; a bare number is seconds). Checking tokens on incoming requests is #91 (below).
@@ -97,6 +132,31 @@ These replace PR #139's separate `user-auth` server; auth lives here.
 - No sessions: each request stands on its own token. The logout
   denylist (`token_denylist`) isn't checked yet (deferred).
 
+## Errors
+
+Every error body is RFC 9457 problem+json. A request body that breaks
+validation rules gets 400 with one sentence per broken rule, sorted by
+field (e.g. `"Email is required. Password is required."`), from
+`ProblemDetailAdvice`, on every endpoint. A missing or unreadable body
+(bad JSON, an unknown role) gets 400 `"Request body is missing or
+malformed"`; a query parameter of the wrong type gets 400 `"Invalid
+request parameter"`.
+
+## Schema (Flyway)
+
+Flyway owns the schema (`src/main/resources/db/migration`); Hibernate's
+`ddl-auto` is `none`. `V1__baseline` is the schema `ddl-auto` used to
+generate; a database built that way is recorded as V1 on first start
+(`baseline-on-migrate`) and only gets the later migrations.
+`V2__username_unique_ignoring_case` renames usernames that differ only
+in case (the oldest keeps its name, later ones get `_2`, `_3`, …) and
+replaces the username constraint with a unique index on
+`lower(username)`. `V3__pending_signups` drops the generic (always
+empty) `otps` table and creates `pending_signups` — #88 replaced one
+OTP table with a pending table per operation; `pending_email_changes`
+follows with #92. Schema changes go in a new `V<n>__<name>.sql`, never
+by editing an applied one.
+
 ## Soft delete & day-31 purge (#93)
 
 `DELETE /users/me` (bearer only, no body) stamps `deleted_at` — the row
@@ -105,7 +165,9 @@ user can recover within 30 days (#94). Repeat deletion, like every other
 `/users/me` call on a deleted account, returns 404. A daily scheduler
 (`AccountPurgeScheduler`, default 03:00) hard-deletes accounts whose
 `deleted_at` is older than the retention window, together with their
-`otps`/`account_tokens` rows — that purge is what frees the identifiers.
+`account_tokens` rows — that purge is what frees the identifiers. The
+same daily run sweeps expired `pending_signups` rows (hygiene only:
+verify rejects an expired row on sight).
 Configure via `USER_RETENTION_DAYS` (default 30) and `USER_PURGE_CRON`
 (Spring 6-field cron).
 

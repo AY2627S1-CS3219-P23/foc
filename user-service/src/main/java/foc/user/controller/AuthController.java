@@ -8,6 +8,9 @@ Scope: POST /auth/signup (issue #87) and POST /auth/login (issues #89/#90),
        controller, so other controllers' error bodies are unchanged (#138).
        PR #141 review: the lost-race-to-401 mapping now covers only login,
        so other /auth routes keep ProblemDetailAdvice's 409.
+       2026-09-29 (issue #147): the invalid-body and unreadable-body
+       handlers moved to ProblemDetailAdvice, shared by every controller
+       (team decision).
        2026-09-29, Claude Code (Fable 5), PR #142: AccountLockedException
        mapped to 429 problem+json (issue #145 decided by the author — the
        lockout is deliberately distinguishable from other failures).
@@ -31,16 +34,12 @@ Author review: Leong Wei Zhi to review via the PR.
 
 package foc.user.controller;
 
-import java.util.stream.Collectors;
-
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -143,23 +142,5 @@ public class AuthController {
     @ExceptionHandler(ResponseStatusException.class)
     public ProblemDetail handleResponseStatus(ResponseStatusException e) {
         return e.getBody();
-    }
-
-    // every broken rule, sorted by field so the message is stable
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ProblemDetail handleInvalidBody(MethodArgumentNotValidException e) {
-        String reasons = e.getBindingResult().getFieldErrors().stream()
-            .sorted((a, b) -> a.getField().compareTo(b.getField()))
-            .map(error -> error.getDefaultMessage())
-            .distinct()
-            // some messages end in a full stop and some don't
-            .map(message -> message.endsWith(".") ? message : message + ".")
-            .collect(Collectors.joining(" "));
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, reasons);
-    }
-
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ProblemDetail handleUnreadableBody(HttpMessageNotReadableException e) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request body is missing or malformed");
     }
 }

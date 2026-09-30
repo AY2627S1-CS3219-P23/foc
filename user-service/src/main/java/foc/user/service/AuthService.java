@@ -14,6 +14,10 @@ Scope: sign-up (issue #87) and login (issue #89), replacing PR #139's
        PR #141 review: sign-up's normalising and uniqueness checks shared
        with owner setup (NewAccountDetails); usernames match ignoring case
        at sign-up and login (team decision).
+       Issue #147: signup and login are no longer @Transactional, so
+       bcrypt runs without holding a pooled connection (team decision);
+       the attempt's counter update moved to LoginAttempts, which locks
+       the row so parallel wrong guesses each count toward the lockout.
        2026-09-29, Claude Code (Fable 5), PR #142: lockout now raises
        AccountLockedException (a distinct message/status) instead of the
        generic failure — issue #145 decided by the author: the wireframe's
@@ -57,6 +61,18 @@ Scope: sign-up (issue #87) and login (issue #89), replacing PR #139's
        per pending sign-up rather than per code, and the insert-race loser
        answers with the same 409 as the check above instead of a 400 whose
        wording was a near-duplicate of it.
+       Merged with issue #147's LoginAttempts (2026-09-29, Claude Code,
+       Opus 5.5): #146's messages now come from the outcome LoginAttempts
+       records under the row lock (attempts left, time left, gone), and
+       the retention-window check moved there with them.
+       2026-09-30, Claude Code (Opus 5), merging main into #88's branch:
+       login is #147's (no transaction, LoginAttempts records the attempt);
+       sign-up and verify stay @Transactional, because the pending row and
+       its email must commit or roll back together — a mail failure leaves
+       no row holding a code nobody received — and verify's attempt
+       counter rides the same row lock. #147's reason for dropping the
+       transaction (bcrypt shouldn't hold a pooled connection) is answered
+       here by the finite SMTP timeouts added in PR #150's Copilot review.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -65,11 +81,9 @@ package foc.user.service;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.MailException;
@@ -115,7 +129,7 @@ public class AuthService {
     private final JwtIssuer jwtIssuer;
     private final OtpService otpService;
     private final OtpEmailSender otpEmailSender;
-    private final int retentionDays;
+    private final LoginAttempts loginAttempts;
     private final Clock clock;
     // matched against when no pending sign-up exists, so an unknown
     // email takes as long to verify as a wrong code (same trick login
@@ -130,9 +144,9 @@ public class AuthService {
             JwtIssuer jwtIssuer,
             OtpService otpService,
             OtpEmailSender otpEmailSender,
-            @Value("${user.retention.days}") int retentionDays) {
+            LoginAttempts loginAttempts) {
         this(userRepository, pendingSignupRepository, passwordEncoder, jwtIssuer,
-            otpService, otpEmailSender, retentionDays, Clock.systemUTC());
+            otpService, otpEmailSender, loginAttempts, Clock.systemUTC());
     }
 
     AuthService(
@@ -142,7 +156,7 @@ public class AuthService {
             JwtIssuer jwtIssuer,
             OtpService otpService,
             OtpEmailSender otpEmailSender,
-            int retentionDays,
+            LoginAttempts loginAttempts,
             Clock clock) {
         this.userRepository = userRepository;
         this.pendingSignupRepository = pendingSignupRepository;
@@ -150,14 +164,16 @@ public class AuthService {
         this.jwtIssuer = jwtIssuer;
         this.otpService = otpService;
         this.otpEmailSender = otpEmailSender;
-        this.retentionDays = retentionDays;
+        this.loginAttempts = loginAttempts;
         this.clock = clock;
         this.unknownPendingCodeHash = otpService.hash("no-pending-signup");
     }
 
     // parks the request in pending_signups and emails a code; the users
     // row is only inserted by verifySignup (design doc: insert after
-    // verify, so an unverified sign-up never holds the email/username)
+    // verify, so an unverified sign-up never holds the email/username).
+    // @Transactional unlike #147's login: the pending row and its email
+    // commit or roll back together
     @Transactional
     public SignupResponse signup(SignupRequest request) {
         String email = NewAccountDetails.normalizeEmail(request.email());
@@ -291,8 +307,9 @@ public class AuthService {
         return UserResponse.from(user);
     }
 
-    // noRollbackFor: a failed attempt must still commit its counter update
-    @Transactional(noRollbackFor = {LoginFailedException.class, AccountLockedException.class})
+    // Not @Transactional: the lookup and the bcrypt check run without
+    // holding a pooled connection; LoginAttempts then records the attempt
+    // in its own short transaction
     public LoginResponse login(LoginRequest request) {
         Optional<User> found = findAccount(request.usernameOrEmail());
         if (found.isEmpty()) {
@@ -306,8 +323,7 @@ public class AuthService {
         // it answers as if it were already gone — before the lock and the
         // password, so every attempt on it gets that one answer and none of
         // them count against a row that is on its way out
-        if (!user.isActive()
-                && user.getDeletedAt().isBefore(now.minus(retentionDays, ChronoUnit.DAYS))) {
+        if (loginAttempts.pastRetention(user, now)) {
             throw LoginFailedException.unknownAccount();
         }
 
@@ -317,27 +333,20 @@ public class AuthService {
             throw new AccountLockedException(Duration.between(now, user.getLockedUntil()));
         }
 
-        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            int failures = recordFailure(user, now);
+        // bcrypt, outside any transaction; LoginAttempts then counts the
+        // attempt with the row locked, re-checking the lock a parallel
+        // attempt may have set meanwhile
+        boolean matched = passwordEncoder.matches(request.password(), user.getPasswordHash());
+        LoginAttempts.Result result = loginAttempts.record(user.getId(), matched, now);
+        return switch (result.outcome()) {
+            case SUCCESS -> LoginResponse.bearer(jwtIssuer.issue(result.user()), jwtIssuer.ttl().toSeconds());
             // the attempt that trips the lock reports the lockout too, so
             // the user learns immediately rather than on the next try
-            if (failures >= MAX_FAILED_ATTEMPTS) {
-                throw new AccountLockedException(LOCKOUT);
-            }
-            throw LoginFailedException.wrongPassword(MAX_FAILED_ATTEMPTS - failures);
-        }
-
-        // only write when something changes: an unconditional save bumps the
-        // row's @Version and could make a concurrent admin action fail
-        if (user.getFailedLoginAttempts() != 0 || user.getLockedUntil() != null || !user.isActive()) {
-            user.setFailedLoginAttempts(0);
-            user.setLockedUntil(null);
-            // logging in within the window recovers a soft-deleted account
-            user.setDeletedAt(null);
-            userRepository.save(user);
-        }
-
-        return LoginResponse.bearer(jwtIssuer.issue(user), jwtIssuer.ttl().toSeconds());
+            case LOCKED -> throw new AccountLockedException(result.retryAfter());
+            case FAILED -> throw LoginFailedException.wrongPassword(result.attemptsLeft());
+            // purged since the lookup
+            case GONE -> throw LoginFailedException.unknownAccount();
+        };
     }
 
     // usernames can't contain '@', so an '@' means an email
@@ -346,20 +355,5 @@ public class AuthService {
         return identifier.contains("@")
             ? userRepository.findByEmail(identifier.toLowerCase())
             : userRepository.findByUsernameIgnoreCase(identifier);
-    }
-
-    // returns the running failure count this attempt made, so the caller
-    // can say how many are left; MAX_FAILED_ATTEMPTS means it just locked
-    private int recordFailure(User user, Instant now) {
-        int failures = user.getFailedLoginAttempts() + 1;
-        if (failures >= MAX_FAILED_ATTEMPTS) {
-            // start the lockout and a fresh count for after it ends
-            user.setLockedUntil(now.plus(LOCKOUT));
-            user.setFailedLoginAttempts(0);
-        } else {
-            user.setFailedLoginAttempts(failures);
-        }
-        userRepository.save(user);
-        return failures;
     }
 }

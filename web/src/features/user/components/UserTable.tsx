@@ -2,10 +2,15 @@
 // Tool: Claude Code (Opus 5.5), 2026-09-23, issue #113; revised
 // 2026-09-28 (Credits column and Add Credits removed; Remove hidden on
 // the signed-in admin's own row; ID column added, since search matches
-// IDs).
+// IDs); 2026-09-29 (issue #147): UserActionsProps spelled out instead of
+// derived from UserTableProps, and the handlers passed by name rather
+// than rest-spread, so new table props don't leak into it. Removed
+// accounts (shown when the admin asks for them) are greyed out, with
+// their removal date in place of actions (team decision). Row actions
+// can be disabled as a whole while the list reloads.
 // Scope: admin users list — a table at md+ and stacked cards below,
 // per web/docs/wireframes/admin-dashboard.png (Users section).
-// Reviewed by: [pending]
+// Reviewed by: Ryan Ang
 
 import type { AdminUser, UserRole } from '../types'
 
@@ -20,17 +25,27 @@ interface UserTableProps {
   // The signed-in admin; null while unknown.
   currentUserId: number | null
   busyUserId: number | null
+  // every row's actions off, e.g. while the list reloads
+  actionsDisabled?: boolean
   onChangeRole: (user: AdminUser, role: UserRole) => void
   onRemove: (user: AdminUser) => void
 }
 
-type UserActionsProps = Omit<
-  UserTableProps,
-  'users' | 'currentUserId' | 'busyUserId'
-> & {
+interface UserActionsProps {
   user: AdminUser
   isSelf: boolean
   busy: boolean
+  onChangeRole: (user: AdminUser, role: UserRole) => void
+  onRemove: (user: AdminUser) => void
+}
+
+// e.g. "29 September 2026"
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-SG', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
 }
 
 const linkClass =
@@ -47,6 +62,15 @@ function UserActions({
   onChangeRole,
   onRemove,
 }: UserActionsProps) {
+  // removed accounts are view-only; restoring them is #94's
+  if (user.deletedAt) {
+    return (
+      <span className="text-sm text-gray-500">
+        Removed {formatDate(user.deletedAt)}
+      </span>
+    )
+  }
+
   const canRemove = user.role !== 'OWNER' && !isSelf
 
   return (
@@ -89,7 +113,9 @@ export function UserTable({
   users,
   currentUserId,
   busyUserId,
-  ...actions
+  actionsDisabled = false,
+  onChangeRole,
+  onRemove,
 }: UserTableProps) {
   return (
     <>
@@ -117,7 +143,10 @@ export function UserTable({
           </thead>
           <tbody className="divide-y divide-gray-200">
             {users.map((user) => (
-              <tr key={user.id}>
+              <tr
+                key={user.id}
+                className={user.deletedAt ? 'bg-gray-50 opacity-60' : undefined}
+              >
                 <td className="px-4 py-3 tabular-nums text-gray-600">
                   {user.id}
                 </td>
@@ -133,8 +162,9 @@ export function UserTable({
                     <UserActions
                       user={user}
                       isSelf={user.id === currentUserId}
-                      busy={busyUserId === user.id}
-                      {...actions}
+                      busy={actionsDisabled || busyUserId === user.id}
+                      onChangeRole={onChangeRole}
+                      onRemove={onRemove}
                     />
                   </div>
                 </td>
@@ -149,7 +179,9 @@ export function UserTable({
         {users.map((user) => (
           <li
             key={user.id}
-            className="rounded-lg border border-gray-200 bg-white p-4"
+            className={`rounded-lg border border-gray-200 p-4 ${
+              user.deletedAt ? 'bg-gray-50 opacity-60' : 'bg-white'
+            }`}
           >
             <p className="font-medium text-gray-900">{user.username}</p>
             <p className="text-sm text-gray-600">{user.email}</p>
@@ -160,8 +192,9 @@ export function UserTable({
               <UserActions
                 user={user}
                 isSelf={user.id === currentUserId}
-                busy={busyUserId === user.id}
-                {...actions}
+                busy={actionsDisabled || busyUserId === user.id}
+                onChangeRole={onChangeRole}
+                onRemove={onRemove}
               />
             </div>
           </li>

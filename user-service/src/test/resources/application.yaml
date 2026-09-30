@@ -15,13 +15,16 @@
 # context builds with spring-boot-starter-mail on the classpath (this file
 # fully shadows the main yaml). The JavaMailSender bean never connects in
 # tests — OtpEmailSender is mocked where sending would happen.
+# 2026-09-29, Claude Code (Opus 5.5), issue #147: ddl-auto none, so the
+# Testcontainers database gets its schema from the Flyway migrations.
 
 spring:
   application:
     name: user-service
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      # schema from the Flyway migrations, as in production
+      ddl-auto: none
   mail:
     host: localhost
     port: 1025

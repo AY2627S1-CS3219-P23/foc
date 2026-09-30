@@ -9,6 +9,8 @@ Scope: Generated unit tests for AdminService (issue #96): role change,
 Author review: Ryan reviewed and ensured tests run successfully.
 2026-09-27 (Claude Code, Opus 5.5), PR #135 review: the repository mock
        calls real default methods, so getActiveUser uses the stubbed finder.
+2026-09-29 (Claude Code, Opus 5.5), issue #147: listUsers calls pass
+includeDeleted.
 */
 
 package foc.user.service;
@@ -210,7 +212,7 @@ class AdminServiceTest {
     @DisplayName("Should reject page sizes other than 20, 50 and 100")
     void listUsers_invalidSize(int size) {
         Throwable thrown = catchThrowable(
-            () -> adminService.listUsers(null, null, null, 0, size));
+            () -> adminService.listUsers(null, null, null, 0, size, false));
 
         assertStatus(thrown, HttpStatus.BAD_REQUEST);
         verifyNoInteractions(userRepository);
@@ -220,7 +222,7 @@ class AdminServiceTest {
     @DisplayName("Should reject a negative page number")
     void listUsers_negativePage() {
         Throwable thrown = catchThrowable(
-            () -> adminService.listUsers(null, null, null, -1, 100));
+            () -> adminService.listUsers(null, null, null, -1, 100, false));
 
         assertStatus(thrown, HttpStatus.BAD_REQUEST);
     }
@@ -230,7 +232,7 @@ class AdminServiceTest {
     @DisplayName("Should reject unknown sort fields and directions")
     void listUsers_invalidSort(String sort) {
         Throwable thrown = catchThrowable(
-            () -> adminService.listUsers(null, null, sort, 0, 100));
+            () -> adminService.listUsers(null, null, sort, 0, 100, false));
 
         assertStatus(thrown, HttpStatus.BAD_REQUEST);
         verifyNoInteractions(userRepository);

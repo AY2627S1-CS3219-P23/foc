@@ -25,6 +25,10 @@
 # PR #150 author review: user.otp.resend-cooldown, the gap enforced
 # between two codes for one pending sign-up (chosen by Leong Wei Zhi via
 # options Q&A).
+# 2026-09-29, Claude Code (Opus 5.5), issue #147: Flyway owns the schema
+# (team decision): ddl-auto none, and databases that ddl-auto built are
+# baselined at V1. V3 (2026-09-30, merge of this branch) drops the otps
+# table issue #88 removed and creates pending_signups.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -36,7 +40,8 @@ spring:
     password: ${USER_DB_PASSWORD:}
   jpa:
     hibernate:
-      ddl-auto: update
+      # Flyway (db/migration) owns the schema; Hibernate never changes it
+      ddl-auto: none
     open-in-view: false
   mail:
     # SMTP target for OTP emails (issue #88). The defaults reach the
@@ -57,6 +62,11 @@ spring:
       "mail.smtp.connectiontimeout": "5000"
       "mail.smtp.timeout": "10000"
       "mail.smtp.writetimeout": "10000"
+  flyway:
+    # a database ddl-auto built before Flyway has tables but no history:
+    # record it as V1 (the baseline script's schema) and apply V2 onward
+    baseline-on-migrate: true
+    baseline-version: 1
 
 management:
   endpoints:
