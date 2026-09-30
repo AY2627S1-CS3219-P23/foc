@@ -79,6 +79,40 @@ Entry template:
 - **Author review:** Full suite green (222 tests, up from 213). Reviewed
   via pull request.
 
+## 2026-09-30 — Leong Wei Zhi (PR #150 re-review: bounded pending sign-ups + the web OTP step)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** fix + generate
+- **Scope:** `user-service/` — the re-review's two pending-row findings.
+  (1) `verifySignup` now discards a pending sign-up whose email or
+  username was taken while the code was in flight (new
+  `SignupIdentifierTakenException`, a `ResponseStatusException` subclass
+  named in `noRollbackFor` so the delete commits): such a row can never
+  complete, and leaving it locked whoever merely lost a username race out
+  of their own address for the rest of the TTL. (2) `renewCode` no longer
+  moves `expires_at`, so a row lives at most `OTP_TTL` from creation and
+  always becomes takeable — previously whoever pended an address first
+  could resend once per cooldown for ever; the email and the 202 now quote
+  the seconds actually left. Also `SignupResponse.resendInSeconds` and
+  `Retry-After` in the CORS `exposedHeaders`.
+  `web/` — the code-entry step the review's High finding demanded (the
+  sign-up/OTP half of #109): new `CodeInput` (six boxes per
+  `docs/wireframes/signup.png`) and `OtpVerificationModal` under
+  `features/user/components/`, `register.tsx` opening that dialog on the
+  202 instead of navigating to `/login`, `ApiError.retryAfter`, and ten
+  new cases in `src/test/auth.test.tsx`.
+  Docs: `user-service/README.md`, `web/AGENTS.md`, the wiki D2 design page
+  (§3 and its route table), this log and the README summary.
+- **Prompt(s):** Asked to resolve the PR comments, with the web dead-end
+  called out as needing a fix in this branch. Decisions by the author via
+  options Q&A: patch the two findings narrowly rather than restructuring
+  to one pending row per request; the code step as a modal over the
+  register page with a six-box input (wireframe fidelity); and the
+  cooldown carried in the 202 body. The tool's own finding, reported and
+  folded in: `Retry-After` is not CORS-safelisted, so the SPA could not
+  have read it without the `exposedHeaders` line.
+- **Author review:** user-service 230 tests pass; web 62 pass, build,
+  lint and Prettier clean. Reviewed via pull request.
+
 ## 2026-09-30 — Leong Wei Zhi (merging main into feat/otp-email-sending)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** refactor (merge conflict resolution)

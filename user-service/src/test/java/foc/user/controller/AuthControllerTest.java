@@ -26,6 +26,9 @@ Scope: integration tests for POST /auth/signup and POST /auth/login
        the review found). Attempts are asserted to survive a resend. The
        resend cooldown is 0s here (test yaml) so these can resend back to
        back; SignupResendCooldownTest runs the real default.
+       2026-09-30, Claude Code (Opus 5), PR #150 re-review: the
+       identifier-taken case now also proves the email is released, and the
+       202 body carries resendInSeconds for the SPA's resend button.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -166,7 +169,10 @@ class AuthControllerTest extends PostgresTestContainer {
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD)
             .andExpect(status().isAccepted())
             .andExpect(jsonPath("$.email").value("e1234567@u.nus.edu"))
-            .andExpect(jsonPath("$.expiresInSeconds").value(600));
+            .andExpect(jsonPath("$.expiresInSeconds").value(600))
+            // the cooldown is off in this file's config, so the dialog is
+            // told it may resend at once (SignupResendCooldownTest runs 60s)
+            .andExpect(jsonPath("$.resendInSeconds").value(0));
 
         assertThat(userRepository.findByUsernameIgnoreCase("student_alex")).isEmpty();
         PendingSignup pending = pendingSignupRepository.findByEmail("e1234567@u.nus.edu").orElseThrow();
@@ -340,7 +346,7 @@ class AuthControllerTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("An identifier taken while a sign-up was pending fails its verify")
+    @DisplayName("An identifier taken while a sign-up was pending fails its verify and frees the email")
     void signup_identifierTakenWhilePending() throws Exception {
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isAccepted());
         String code = emailedCode("e1234567@u.nus.edu");
@@ -350,6 +356,15 @@ class AuthControllerTest extends PostgresTestContainer {
         verifySignup("e1234567@u.nus.edu", code)
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.detail").value("Username is already taken"));
+
+        // losing that race must not cost the loser their email for the
+        // rest of the TTL (PR #150 re-review): the pending row is gone, so
+        // a new name works straight away instead of answering 409
+        assertThat(pendingSignupRepository.findByEmail("e1234567@u.nus.edu")).isEmpty();
+        signup("e1234567@u.nus.edu", "student_alex_2", PASSWORD).andExpect(status().isAccepted());
+        verifySignup("e1234567@u.nus.edu", emailedCode("e1234567@u.nus.edu"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.username").value("student_alex_2"));
     }
 
     @Test

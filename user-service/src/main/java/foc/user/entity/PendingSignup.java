@@ -17,6 +17,9 @@ Scope: pending-signup row for issue #88, implementing the design doc's
        start a dead row allows. A repeat that is neither (someone else's
        live pending sign-up) is refused by AuthService instead.
        last_sent_at added for the resend cooldown.
+       PR #150 re-review: renewCode no longer moves expires_at, so a
+       resend cannot extend the row's life (decision by Leong Wei Zhi via
+       options Q&A).
 Reviewed by: Leong Wei Zhi (via pull request).
 */
 
@@ -94,19 +97,27 @@ public class PendingSignup {
     }
 
     /**
-     * A repeat sign-up for the same email resends: fresh code, fresh
-     * expiry, fresh send time. Deliberately not the username, the
-     * password hash or the attempt count — the request that pended this
-     * email decided those, and a later request (which need not come
+     * A repeat sign-up for the same email resends: a fresh code and a
+     * fresh send time, and nothing else. Deliberately not the username,
+     * the password hash or the attempt count — the request that pended
+     * this email decided those, and a later request (which need not come
      * from the same person) may not rewrite them (PR #150 review).
      * Keeping the attempts means the limit caps guesses per pending
-     * sign-up, not per code. Renewal in place rather than delete-and-
-     * insert, so the row never leaves its unique index slot.
+     * sign-up, not per code.
+     *
+     * <p>Deliberately not {@code expiresAt} either, for the same review:
+     * a row that renewed its own expiry could be resent once per cooldown
+     * for ever, so whoever pended an address first could hold it
+     * indefinitely while its real owner kept getting the 409 that tells
+     * them to try again once it expires. Left alone, the row's life is
+     * bounded by the TTL it was created with.
+     *
+     * <p>Renewal in place rather than delete-and-insert, so the row never
+     * leaves its unique index slot.
      */
-    public void renewCode(String codeHash, Instant sentAt, Instant expiresAt) {
+    public void renewCode(String codeHash, Instant sentAt) {
         this.codeHash = codeHash;
         this.lastSentAt = sentAt;
-        this.expiresAt = expiresAt;
     }
 
     /**

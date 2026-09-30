@@ -56,7 +56,9 @@
   pending_signups replacing the otps table) by Claude Code (Fable 5),
   on PR #150 Copilot review (the summary had missed the change); and
   again for that PR's author-review fixes (repeat sign-ups can no longer
-  hijack a pending sign-up; resend cooldown) by Claude Code (Opus 5).
+  hijack a pending sign-up; resend cooldown) by Claude Code (Opus 5); and
+  again for its re-review fixes and the web sign-up OTP screen (issue
+  #109) by Claude Code (Opus 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -331,6 +333,16 @@ details are a 409, and an expired row may be taken over — with a resend
 cooldown answering 429 + `Retry-After` and the wrong-code attempts now
 surviving a resend), with the provider, scope, local-mail,
 pending-tables and repeat-sign-up decisions made by the author via
+neutral-options Q&A and recorded in `ai/usage-log.md`; and that PR's
+re-review fixes — a pending sign-up whose email or username was taken
+meanwhile is discarded instead of blocking its address, a resend no longer
+extends the code's expiry (so a pending sign-up can no longer be held
+open indefinitely), the resend cooldown now travels in the 202 body with
+`Retry-After` exposed through CORS, and the sign-up OTP screen in `web/`
+(a six-box code dialog over the register page with resend and cooldown,
+part of issue #109) without which registration through the site
+dead-ended at a failed login — with the fix-versus-restructure choice,
+the dialog's shape and the cooldown's route all decided by the author via
 neutral-options Q&A and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through

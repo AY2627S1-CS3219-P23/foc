@@ -35,6 +35,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -68,6 +69,10 @@ public class SecurityConfig {
         cors.setAllowedOrigins(List.of(webAllowedOrigin));
         cors.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        // Retry-After is not CORS-safelisted, so without this the SPA
+        // cannot read the wait off a 429 (the OTP resend cooldown, and
+        // login's lockout) however carefully it asks
+        cors.setExposedHeaders(List.of(HttpHeaders.RETRY_AFTER));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", cors);
         return source;

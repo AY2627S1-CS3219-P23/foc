@@ -27,6 +27,10 @@
   insert-after-verify flow (202 + emailed code, POST /auth/signup/verify
   creates the account), with its repeat/resend rules, the V3 migration
   and the purge's pending_signups sweep.
+  2026-09-30, Claude Code (Opus 5), PR #150 re-review: the two pending-row
+  rules that came out of it (a resend keeps the original expiry; verify
+  discards a row whose identifiers were taken) and the 202's
+  resendInSeconds, each with the reason it exists.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -65,7 +69,13 @@ is parked in `pending_signups` with a hashed 6-digit code, and the
 sign-up never reserves an email or username.
 
 - `POST /auth/signup` `{ email, username, password }` → **202**
-  `{ email, expiresInSeconds }`; no account yet, a code has been emailed.
+  `{ email, expiresInSeconds, resendInSeconds }`; no account yet, a code
+  has been emailed. `expiresInSeconds` is the time the code has **left**
+  (less than `OTP_TTL` on a resend, see below), and `resendInSeconds` is
+  the cooldown the SPA disables its resend button for. The cooldown is in
+  the body rather than read from the 429's `Retry-After` because the SPA
+  is cross-origin and that header is not CORS-safelisted (it *is* named in
+  `exposedHeaders`, so a 429 can still correct the countdown).
   Same rules as owner setup: `eXXXXXXX@u.nus.edu`, username 3–30 of
   `[A-Za-z0-9_]`, password 10–50 with upper, lower and a digit; email and
   username unique (soft-deleted accounts included). Usernames keep the
@@ -79,6 +89,14 @@ sign-up never reserves an email or username.
   `OTP_RESEND_COOLDOWN` (default 60s) gets 429 with `Retry-After`; an
   expired pending sign-up is dead, so any sign-up takes its place. A mail
   failure is 502 and leaves nothing behind.
+  A resend replaces the code but **not** the expiry, so a pending sign-up
+  lives at most `OTP_TTL` from the moment it was created and always
+  reaches the expired-and-takeable state. Without that, whoever pended an
+  address first could resend once per cooldown for ever and hold it while
+  its real owner kept getting the 409 telling them to wait for an expiry
+  that never came (PR #150 review). The consequence is deliberate: a
+  resend late in the window hands out a short-lived code, and both the
+  email and the 202 quote the seconds actually left.
 - `POST /auth/signup/verify` `{ email, code }` → **201** with the account
   (no token). A wrong code, or an email with no pending sign-up, is 400
   "Invalid verification code" — deliberately the same answer, at the same
@@ -86,6 +104,11 @@ sign-up never reserves an email or username.
   counted per pending sign-up, resends included (`OTP_MAX_ATTEMPTS`,
   default 5): the attempt that exhausts them is 429 and discards the
   pending sign-up.
+  If the email or username was taken while the code was in flight, verify
+  answers 400 with that reason **and discards the pending row** — a
+  sign-up that can never complete must not keep holding its email, which
+  used to lock whoever lost a username race out of their own address for
+  the rest of the TTL (PR #150 review).
   Codes are BCrypt-hashed at rest, never logged, and live for `OTP_TTL`
   (default 10 min). Locally they land in Mailpit
   (<http://localhost:8025>); real delivery goes over Gmail SMTP with the

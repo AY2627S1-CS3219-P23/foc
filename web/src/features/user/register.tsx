@@ -17,11 +17,21 @@
 // 2026-09-29, Claude Code (Opus 5.5), issue #147: errorMessage now comes
 // from lib/api/http; Prettier formatting.
 // 2026-09-29 (issue #147): the login page is told the account was created.
+// 2026-09-30, Claude Code (Opus 5), issue #109 (PR #150): sign-up no longer
+// ends here. POST /auth/signup answers 202 and only emails a code (issue
+// #88), so this page opens the OTP dialog and the account is created by the
+// verify call inside it — before this, every registration through the site
+// dead-ended at a failed login (PR #150 review, @Sinnez1). The values that
+// were sent are snapshotted, because user-service treats only a repeat of
+// the identical request as the resend. Modal over this page rather than a
+// second route: Leong Wei Zhi's call via options Q&A.
 // Reviewed by: Ryan Ang
 
 import React, { useState } from 'react'
 import { apiFetch, errorMessage } from '@/lib/api/http'
 import { router } from '../../routes/index'
+import { OtpVerificationModal } from './components/OtpVerificationModal'
+import type { SignupPending } from './types'
 
 // Mirrors user-service's AccountRules password policy (PASSWORD_PATTERN,
 // PASSWORD_MIN/MAX). Display-only: the server remains the validator.
@@ -60,24 +70,41 @@ export function Register() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  // set once a code is on its way: the body that was sent, plus what the
+  // 202 answered. A snapshot rather than a read of the live fields, so a
+  // resend repeats the identical request even if the form is edited behind
+  // the dialog — anything else would be refused with a 409
+  const [pending, setPending] = useState<SignupPending | null>(null)
 
   const register = async (event: React.SyntheticEvent) => {
     event.preventDefault()
+    setSubmitting(true)
     try {
-      await apiFetch('user', '/auth/signup', {
+      const accepted = await apiFetch<SignupPending>('user', '/auth/signup', {
         method: 'POST',
         body: JSON.stringify({ email, username, password }),
       })
 
       setError('')
-      setEmail('')
-      setUsername('')
-      setPassword('')
-      // the login page shows an "account created" notice (issue #147)
-      router.navigate('/login', { state: { accountCreated: true } })
+      // no account exists yet, and nothing is cleared: the dialog takes
+      // over from here, and its verify call is what creates the account
+      setPending({ ...accepted, email, username, password })
     } catch (error: unknown) {
       setError(errorMessage(error, 'Could not register. Try again.'))
+    } finally {
+      setSubmitting(false)
     }
+  }
+
+  // the account exists now, so finish where sign-up always finished
+  const accountCreated = () => {
+    setPending(null)
+    setEmail('')
+    setUsername('')
+    setPassword('')
+    // the login page shows an "account created" notice (issue #147)
+    router.navigate('/login', { state: { accountCreated: true } })
   }
 
   return (
@@ -128,9 +155,10 @@ export function Register() {
         </div>
         <button
           type="submit"
-          className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          disabled={submitting}
+          className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
         >
-          Sign Up
+          {submitting ? 'Sending code...' : 'Sign Up'}
         </button>
       </form>
       <p className="mt-4 text-center text-sm text-gray-600">
@@ -142,6 +170,22 @@ export function Register() {
           Log in
         </button>
       </p>
+      {/* outside the <form>: the dialog holds a form of its own, and forms
+          may not nest */}
+      {pending && (
+        <OtpVerificationModal
+          pending={pending}
+          onClose={() => setPending(null)}
+          onVerified={accountCreated}
+          onRestart={(message) => {
+            // the pending sign-up is dead (expired, or too many wrong
+            // codes): back to the still-filled form, one click from a
+            // fresh code
+            setPending(null)
+            setError(message)
+          }}
+        />
+      )}
     </div>
   )
 }

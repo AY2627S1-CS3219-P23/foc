@@ -61,6 +61,17 @@ Scope: sign-up (issue #87) and login (issue #89), replacing PR #139's
        per pending sign-up rather than per code, and the insert-race loser
        answers with the same 409 as the check above instead of a 400 whose
        wording was a near-duplicate of it.
+       2026-09-30, Claude Code (Opus 5), PR #150 re-review (@Sinnez1), both
+       fixes chosen by Leong Wei Zhi via options Q&A over restructuring to
+       one pending row per request: (1) verify discards a pending sign-up
+       whose email or username has since been taken, because such a row can
+       never complete and used to hold its email — and so lock out whoever
+       lost a username race — until the code expired; (2) a resend no longer
+       extends expires_at, so a row's life is bounded by OTP_TTL from
+       creation and always reaches the "expired, anyone may take it over"
+       branch, where before, whoever pended an address first could resend
+       once per cooldown for ever and keep its real owner on 409. The email
+       and the 202 now quote the time actually left rather than a full TTL.
        Merged with issue #147's LoginAttempts (2026-09-29, Claude Code,
        Opus 5.5): #146's messages now come from the outcome LoginAttempts
        records under the row lock (attempts left, time left, gone), and
@@ -106,6 +117,7 @@ import foc.user.exception.LoginFailedException;
 import foc.user.exception.OtpAttemptsExceededException;
 import foc.user.exception.OtpResendTooSoonException;
 import foc.user.exception.OtpVerificationException;
+import foc.user.exception.SignupIdentifierTakenException;
 import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
 import foc.user.security.JwtIssuer;
@@ -209,19 +221,26 @@ public class AuthService {
 
         String code = otpService.generateCode();
         String codeHash = otpService.hash(code);
-        Instant expiresAt = now.plus(otpService.ttl());
         if (pending == null) {
             pending = new PendingSignup(email, username, passwordEncoder.encode(request.password()),
-                codeHash, now, expiresAt);
+                codeHash, now, now.plus(otpService.ttl()));
         } else if (expired) {
             pending.replaceExpired(username, passwordEncoder.encode(request.password()),
-                codeHash, now, expiresAt);
+                codeHash, now, now.plus(otpService.ttl()));
         } else {
             // the resend: a fresh code for the details already stored,
             // with the attempt count carried over, so the limit caps
-            // guesses per pending sign-up rather than per code
-            pending.renewCode(codeHash, now, expiresAt);
+            // guesses per pending sign-up rather than per code — and
+            // deliberately not a fresh expiry (PR #150 review): a row that
+            // renewed its own expiry could be resent indefinitely, holding
+            // an address for ever and making the 409's "try again once it
+            // expires" a promise nobody could collect on
+            pending.renewCode(codeHash, now);
         }
+        // the time actually left, which after a resend is less than a full
+        // TTL: both the email and the 202 quote it rather than the TTL, so
+        // neither claims a freshness the code doesn't have
+        Duration validity = Duration.between(now, pending.getExpiresAt());
         try {
             pendingSignupRepository.saveAndFlush(pending);
         } catch (DataIntegrityViolationException e) {
@@ -233,7 +252,7 @@ public class AuthService {
         }
 
         try {
-            otpEmailSender.sendSignupCode(email, code, otpService.ttl());
+            otpEmailSender.sendSignupCode(email, code, validity);
         } catch (MailException e) {
             // rolls the pending row back too: no orphan row holding a code
             // nobody received, and a retry is a clean fresh sign-up — for
@@ -243,7 +262,8 @@ public class AuthService {
                 "Could not send the verification email; try again later");
         }
 
-        return new SignupResponse(email, otpService.ttl().toSeconds());
+        return new SignupResponse(email, validity.toSeconds(),
+            otpService.resendCooldown().toSeconds());
     }
 
     // Is this repeat the very request that pended the email? Same
@@ -257,9 +277,14 @@ public class AuthService {
     }
 
     // noRollbackFor: a wrong code must still commit its attempt counter,
-    // and a spent or expired pending row must stay deleted (same trick as
-    // login's failure counters)
-    @Transactional(noRollbackFor = {OtpVerificationException.class, OtpAttemptsExceededException.class})
+    // and a spent, expired or unusable pending row must stay deleted (same
+    // trick as login's failure counters). Deliberately not the plain
+    // ResponseStatusException the insert race below throws: that one comes
+    // after a failed flush, and a transaction Hibernate has already marked
+    // rollback-only cannot be committed — asking would turn a 400 into an
+    // UnexpectedRollbackException 500
+    @Transactional(noRollbackFor = {OtpVerificationException.class, OtpAttemptsExceededException.class,
+        SignupIdentifierTakenException.class})
     public UserResponse verifySignup(SignupVerifyRequest request) {
         String email = NewAccountDetails.normalizeEmail(request.email());
         // the row lock serializes concurrent guesses at one pending
@@ -293,7 +318,19 @@ public class AuthService {
 
         // the identifiers were free at sign-up; re-check now in case an
         // account (or another verified pending sign-up) took them since
-        NewAccountDetails.ensureUnique(userRepository, email, pending.getUsername());
+        try {
+            NewAccountDetails.ensureUnique(userRepository, email, pending.getUsername());
+        } catch (ResponseStatusException e) {
+            // this sign-up can never complete, so it must stop holding its
+            // email: leaving the row (PR #150 review) locked out whoever
+            // merely lost a username race for the rest of the TTL — they
+            // could neither re-sign-up under a new name (409, the stored
+            // details differ) nor the old one (taken). Deleting here and
+            // committing it is what the noRollbackFor above is for; the
+            // lock this row is under rules out a separate transaction
+            pendingSignupRepository.delete(pending);
+            throw new SignupIdentifierTakenException(e.getReason());
+        }
         // the hash stored at sign-up is already BCrypt: never re-encode
         User user = new User(email, pending.getUsername(), pending.getPasswordHash(), Role.USER);
         try {

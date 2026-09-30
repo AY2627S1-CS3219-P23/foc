@@ -27,6 +27,10 @@ Scope: unit tests for AuthService (issues #87/#89): sign-up normalisation
        attempt count), anything else is a 409 rather than a silent merge,
        and an expired row is taken over outright — plus the resend
        cooldown's 429 and the Retry-After it quotes.
+       2026-09-30, Claude Code (Opus 5), PR #150 re-review: a resend keeps
+       the row's original expiry (and the email quotes the seconds left),
+       and a verify whose email or username was taken meanwhile discards
+       the row instead of leaving it to block the address.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -76,6 +80,7 @@ import foc.user.exception.LoginFailedException;
 import foc.user.exception.OtpAttemptsExceededException;
 import foc.user.exception.OtpResendTooSoonException;
 import foc.user.exception.OtpVerificationException;
+import foc.user.exception.SignupIdentifierTakenException;
 import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
 import foc.user.security.JwtIssuer;
@@ -167,6 +172,8 @@ class AuthServiceTest {
         assertThat(saved.getValue().getExpiresAt()).isEqualTo(NOW.plus(OTP_TTL));
         assertThat(response.email()).isEqualTo("e1234567@u.nus.edu");
         assertThat(response.expiresInSeconds()).isEqualTo(OTP_TTL.toSeconds());
+        // the cooldown the OTP dialog disables its resend button for
+        assertThat(response.resendInSeconds()).isEqualTo(OTP_RESEND_COOLDOWN.toSeconds());
         verify(userRepository, never()).saveAndFlush(any());
     }
 
@@ -194,19 +201,43 @@ class AuthServiceTest {
 
         // the username may come back in different case: sign-up matches
         // usernames ignoring case, and so does this
-        signupAgain("Student_Alex", PASSWORD);
+        SignupResponse response = signupAgain("Student_Alex", PASSWORD);
 
         verify(pendingSignupRepository).saveAndFlush(existing);
         ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
-        verify(otpEmailSender).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), eq(OTP_TTL));
+        // pended 90s ago, so 90s of the TTL is gone: the email and the 202
+        // quote what is left, not a fresh TTL
+        Duration left = OTP_TTL.minusSeconds(90);
+        verify(otpEmailSender).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), eq(left));
+        assertThat(response.expiresInSeconds()).isEqualTo(left.toSeconds());
         assertThat(existing.getCodeHash()).isEqualTo("hashed:" + code.getValue());
         assertThat(existing.getLastSentAt()).isEqualTo(NOW);
-        assertThat(existing.getExpiresAt()).isEqualTo(NOW.plus(OTP_TTL));
+        // the expiry the first request set, untouched: a resend that moved
+        // it could hold the address for ever (PR #150 re-review)
+        assertThat(existing.getExpiresAt()).isEqualTo(NOW.minusSeconds(90).plus(OTP_TTL));
         // the details the first request supplied, untouched — and the
         // attempt it already spent, so resending can't reset the limit
         assertThat(existing.getUsername()).isEqualTo("student_alex");
         assertThat(existing.getPasswordHash()).isEqualTo("hashed:" + PASSWORD);
         assertThat(existing.getAttempts()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("A resend late in the window hands out the seconds that are left, not a fresh TTL")
+    void signup_lateResendKeepsShortValidity() {
+        // pended with 30s left: no resend may stretch that back to 10 min,
+        // so the row always reaches its "expired" branch
+        PendingSignup existing = existingPending(
+            "student_alex", PASSWORD, NOW.minus(OTP_TTL).plusSeconds(30));
+        when(pendingSignupRepository.saveAndFlush(any(PendingSignup.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+
+        SignupResponse response = signupAgain("student_alex", PASSWORD);
+
+        verify(otpEmailSender).sendSignupCode(
+            eq("e1234567@u.nus.edu"), any(), eq(Duration.ofSeconds(30)));
+        assertThat(response.expiresInSeconds()).isEqualTo(30);
+        assertThat(existing.getExpiresAt()).isEqualTo(NOW.plusSeconds(30));
     }
 
     @Test
@@ -424,15 +455,32 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("An identifier taken since sign-up fails the verify with the exact reason")
+    @DisplayName("An identifier taken since sign-up fails the verify and discards the pending row")
     void verify_identifierTakenSinceSignup() {
-        pendingWithCode("123456");
+        PendingSignup pending = pendingWithCode("123456");
         when(userRepository.existsByEmail("e1234567@u.nus.edu")).thenReturn(true);
 
         Throwable thrown = catchThrowable(() -> verifyCode("123456"));
 
         assertBadRequest(thrown, "Email is already registered");
+        assertThat(thrown).isInstanceOf(SignupIdentifierTakenException.class);
         verify(userRepository, never()).saveAndFlush(any());
+        // the row can never complete now, so it must stop holding the
+        // email: keeping it locked out whoever lost the race for the rest
+        // of the TTL (PR #150 re-review)
+        verify(pendingSignupRepository).delete(pending);
+    }
+
+    @Test
+    @DisplayName("A username taken since sign-up discards the pending row too")
+    void verify_usernameTakenSinceSignup() {
+        PendingSignup pending = pendingWithCode("123456");
+        when(userRepository.existsByUsernameIgnoreCase("student_alex")).thenReturn(true);
+
+        Throwable thrown = catchThrowable(() -> verifyCode("123456"));
+
+        assertBadRequest(thrown, "Username is already taken");
+        verify(pendingSignupRepository).delete(pending);
     }
 
     @Test
