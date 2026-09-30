@@ -31,6 +31,8 @@ Scope: unit tests for AuthService (issues #87/#89): sign-up normalisation
        the row's original expiry (and the email quotes the seconds left),
        and a verify whose email or username was taken meanwhile discards
        the row instead of leaving it to block the address.
+       PR #150 Copilot review: sign-up's pending-row read is stubbed on the
+       locked finder, which is what it now uses.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -181,7 +183,7 @@ class AuthServiceTest {
     private PendingSignup existingPending(String username, String password, Instant sentAt) {
         PendingSignup existing = new PendingSignup("e1234567@u.nus.edu", username,
             PLAIN_ENCODER.encode(password), "hashed:000000", sentAt, sentAt.plus(OTP_TTL));
-        when(pendingSignupRepository.findByEmail("e1234567@u.nus.edu"))
+        when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(existing));
         return existing;
     }
@@ -204,6 +206,11 @@ class AuthServiceTest {
         SignupResponse response = signupAgain("Student_Alex", PASSWORD);
 
         verify(pendingSignupRepository).saveAndFlush(existing);
+        // read under the row lock, so two repeats for one email queue
+        // instead of both passing the cooldown and overwriting each
+        // other's code (PR #150 Copilot review)
+        verify(pendingSignupRepository).findWithLockByEmail("e1234567@u.nus.edu");
+        verify(pendingSignupRepository, never()).findByEmail(any());
         ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
         // pended 90s ago, so 90s of the TTL is gone: the email and the 202
         // quote what is left, not a fresh TTL

@@ -6,7 +6,9 @@ Scope: repository for issue #88's pending sign-ups: lookup by email for
        scheduler (bulk delete style follows OtpRepository's, whose table
        this design replaces).
        PR #150 Copilot review: locked finder added so concurrent verify
-       attempts serialize per row instead of losing attempt increments.
+       attempts serialize per row instead of losing attempt increments;
+       on re-review sign-up reads through it too, for the same reason
+       (two resends could otherwise overwrite each other's code).
 Reviewed by: Leong Wei Zhi (via pull request).
 */
 
@@ -28,10 +30,13 @@ import jakarta.persistence.LockModeType;
 @Repository
 public interface PendingSignupRepository extends JpaRepository<PendingSignup, Long> {
 
+    // plain read, for tests and inspection: both flows that write a row
+    // (sign-up and verify) go through the locked finder below
     Optional<PendingSignup> findByEmail(String email);
 
-    // verify reads-then-writes the attempts counter; the row lock makes
-    // concurrent guesses queue so none of the increments is lost
+    // verify reads-then-writes the attempts counter, and sign-up
+    // reads-then-replaces the code; the row lock makes concurrent
+    // requests for one email queue, so no increment and no code is lost
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM PendingSignup p WHERE p.email = :email")
     Optional<PendingSignup> findWithLockByEmail(@Param("email") String email);

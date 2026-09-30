@@ -61,6 +61,10 @@ Scope: sign-up (issue #87) and login (issue #89), replacing PR #139's
        per pending sign-up rather than per code, and the insert-race loser
        answers with the same 409 as the check above instead of a 400 whose
        wording was a near-duplicate of it.
+       2026-09-30, Claude Code (Opus 5), PR #150 Copilot review: sign-up
+       reads the pending row through the locked finder, as verify does, so
+       concurrent repeats for one email can't both pass the cooldown and
+       overwrite each other's code.
        2026-09-30, Claude Code (Opus 5), PR #150 re-review (@Sinnez1), both
        fixes chosen by Leong Wei Zhi via options Q&A over restructuring to
        one pending row per request: (1) verify discards a pending sign-up
@@ -197,7 +201,15 @@ public class AuthService {
         // Leong Wei Zhi via options Q&A). Merging a later request into it
         // was a hijack either way round: whoever received the code then
         // verified it into an account holding someone else's password
-        PendingSignup pending = pendingSignupRepository.findByEmail(email).orElse(null);
+        //
+        // Read under the same row lock verify uses, so two repeats for one
+        // email queue instead of interleaving (PR #150 Copilot review):
+        // unlocked, both could pass the cooldown check and write different
+        // codes, leaving one of the two emails dead on arrival — and on
+        // the expired-takeover path below, one request's credentials could
+        // end up paired with the other's code. The cost is that the lock
+        // is held across the send; the SMTP timeouts bound that
+        PendingSignup pending = pendingSignupRepository.findWithLockByEmail(email).orElse(null);
         Instant now = clock.instant();
         // an expired row is dead — verify rejects it on sight — so it
         // guards nothing and any sign-up may take it over
@@ -244,8 +256,8 @@ public class AuthService {
         try {
             pendingSignupRepository.saveAndFlush(pending);
         } catch (DataIntegrityViolationException e) {
-            // two first sign-ups for one email at once: the loser's insert
-            // hits the unique index after its empty findByEmail. Answered
+            // two first sign-ups for one email at once: there was no row
+            // to lock, so the loser's insert hits the unique index. Answered
             // as the same 409 as a pending row found up front — it is the
             // same situation, half a millisecond earlier
             throw new ResponseStatusException(HttpStatus.CONFLICT, SIGNUP_IN_PROGRESS);

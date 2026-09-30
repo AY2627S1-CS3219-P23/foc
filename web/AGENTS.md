@@ -10,7 +10,8 @@
   row records where the shipped OTP dialog goes beyond the wireframe (the
   resend cooldown label and the expiry line), same convention as the
   suppliers.png note above.
-  Reviewed by: [pending]
+  Author review: Leong Wei Zhi to review via PR #150 — which also closes
+  the pending marker the 2026-09-27 entry above was left with.
 -->
 
 # web/ — Frontend Agent Guide
