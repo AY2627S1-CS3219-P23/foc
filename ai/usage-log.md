@@ -26,6 +26,33 @@ Entry template:
 ```
 
 ---
+## 2026-09-30 — Ryan Ang (PR #156 review fixes)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug (implementation + tests)
+- **Scope:** `web/`, addressing the PR #156 review (LeongWZ, plus one
+  Copilot finding). `SuppliersAdminSection.tsx`: a failed save shows its
+  reason inside the form, which stays open; a failed delete closes the
+  confirm so the section's alert is visible (as `UsersSection` does);
+  "Try again" shows whenever the load failed, next to any action error;
+  rows kept after a failed load are only reused for the same page, and
+  Edit/Delete are off while a load error stands; the success line
+  clears on a page change and after 4s (as `routes/suppliers.tsx`
+  does). `SupplierFormModal.tsx` gains an optional `error` prop.
+  `routes/admin.tsx` header comment re-wrapped. `test/admin.test.tsx`:
+  the failed-delete case also checks the confirm closed, plus five
+  cases (failed save in the form, retry after a failed save, failed page
+  load, failed reload disabling actions, success cleared on a page
+  change). Then the admin section's success and save/delete error texts
+  were reworded to the Suppliers page's ("Successfully created/updated/
+  deleted Supplier …", "Could not save/delete supplier."), leaving the
+  Suppliers page untouched.
+- **Prompt(s):** Review and suggest fixes for PR #156; then, asked to
+  make the admin dashboard's messages consistent with the Suppliers
+  page's.
+- **Author review:** The fixes follow the reviewer's suggestions; using
+  the Suppliers page's wording was the author's choice. Web tests (63), type-check and lint pass. Ryan to review via the
+  PR.
+
 ## 2026-09-30 — Ryan Ang (admin dashboard supplier CRUD)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (implementation + tests)

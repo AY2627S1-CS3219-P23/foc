@@ -11,6 +11,13 @@
 // SupplierFormModal and DeleteSupplierModal and the same api.ts calls;
 // success is announced in a status line, failures in the alert. A failed
 // load now offers "Try again" instead of leaving only the error (#154).
+// PR #156 review: a failed save shows its reason inside the form (the
+// form stays open over the section); a failed delete closes the confirm
+// so the section's alert is visible; "Try again" stays whenever the load
+// failed; the rows kept after a failed load are only reused for the same
+// page, with actions off until it reloads; the success line clears on a
+// page change and after 4s, like the Suppliers page. Success and error
+// texts reworded to match the Suppliers page's.
 // Supplier-domain UI: flag changes to its owners.
 // Author review: Ryan to review via the PR.
 
@@ -56,12 +63,18 @@ export function SuppliersAdminSection() {
   // bumped to reload the current page after a change or a failed load
   const [reloadCount, setReloadCount] = useState(0)
   const [result, setResult] = useState<LoadResult | null>(null)
-  // the last page that loaded, kept on screen when a reload fails
-  const [lastData, setLastData] = useState<PagedResponse<Supplier> | null>(null)
+  // the last page that loaded, kept on screen when a reload of that same
+  // page fails
+  const [lastData, setLastData] = useState<{
+    page: number
+    data: PagedResponse<Supplier>
+  } | null>(null)
   const [formOpenFor, setFormOpenFor] = useState<Supplier | 'new' | null>(null)
   const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null)
   const [saving, setSaving] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  // a failed save, shown inside the form, which stays open over the section
+  const [formError, setFormError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
   useEffect(() => {
@@ -77,7 +90,7 @@ export function SuppliersAdminSection() {
           return
         }
         setResult({ key, data, error: null })
-        setLastData(data)
+        setLastData({ page, data })
       },
       (err: unknown) => {
         if (!cancelled)
@@ -94,24 +107,45 @@ export function SuppliersAdminSection() {
   }, [page, reloadCount])
 
   // a newer request shows as loading until its own result arrives; the
-  // previous rows stay on screen meanwhile, and after a failed reload
+  // previous rows stay on screen meanwhile, and after a failed reload of
+  // the same page (never under another page's number)
   const loading = result?.key !== queryKeyOf(page, reloadCount)
-  const data = result?.data ?? lastData
+  const data =
+    result?.data ?? (lastData?.page === page ? lastData.data : null)
   const loadError = loading ? null : (result?.error ?? null)
+
+  // a success line only describes the last action: clear it after a while
+  useEffect(() => {
+    if (!success) return
+    const timeout = window.setTimeout(() => setSuccess(null), 4000)
+    return () => window.clearTimeout(timeout)
+  }, [success])
 
   function handlePageChange(value: number) {
     setPage(value)
     setActionError(null)
+    setSuccess(null)
   }
 
   function reload() {
     setReloadCount((n) => n + 1)
   }
 
+  function retryLoad() {
+    setActionError(null)
+    reload()
+  }
+
+  function openForm(target: Supplier | 'new') {
+    setFormError(null)
+    setFormOpenFor(target)
+  }
+
   async function handleSave(input: SupplierInput) {
     const editing = formOpenFor !== 'new' ? formOpenFor : null
     setSaving(true)
     setActionError(null)
+    setFormError(null)
     setSuccess(null)
     try {
       if (editing) {
@@ -122,18 +156,13 @@ export function SuppliersAdminSection() {
       setFormOpenFor(null)
       setSuccess(
         editing
-          ? `Updated supplier "${input.name}".`
-          : `Added supplier "${input.name}".`,
+          ? `Successfully updated Supplier "${input.name}".`
+          : `Successfully created Supplier "${input.name}".`,
       )
       reload()
     } catch (err) {
-      setActionError(
-        errorMessage(
-          err,
-          editing
-            ? 'Could not update the supplier.'
-            : 'Could not add the supplier.',
-        ),
+      setFormError(
+        errorMessage(err, 'Could not save supplier.'),
       )
     } finally {
       setSaving(false)
@@ -148,24 +177,26 @@ export function SuppliersAdminSection() {
     setSuccess(null)
     try {
       await deleteSupplier(target.id)
-      setPendingDelete(null)
-      setSuccess(`Deleted supplier "${target.name}".`)
+      setSuccess(`Successfully deleted Supplier "${target.name}".`)
       // the page's only row, on a later page: go straight to the previous
       // page instead of fetching the emptied one. `data` is current:
-      // actions are disabled while loading
+      // actions are disabled while loading and after a failed load
       if (page > 1 && data?.content.length === 1) {
         setPage(page - 1)
       } else {
         reload()
       }
     } catch (err) {
-      setActionError(errorMessage(err, `Could not delete "${target.name}".`))
+      setActionError(errorMessage(err, 'Could not delete supplier.'))
     } finally {
+      // closed either way: the confirm would cover the section's alert
+      setPendingDelete(null)
       setSaving(false)
     }
   }
 
-  const actionsDisabled = loading || saving
+  // off while the rows may be outdated: loading, or kept after a failed load
+  const actionsDisabled = loading || saving || loadError !== null
 
   function rowActions(supplier: Supplier) {
     return (
@@ -173,7 +204,7 @@ export function SuppliersAdminSection() {
         <button
           type="button"
           disabled={actionsDisabled}
-          onClick={() => setFormOpenFor(supplier)}
+          onClick={() => openForm(supplier)}
           className={linkClass}
           aria-label={`Edit ${supplier.name}`}
         >
@@ -203,7 +234,7 @@ export function SuppliersAdminSection() {
         </h2>
         <button
           type="button"
-          onClick={() => setFormOpenFor('new')}
+          onClick={() => openForm('new')}
           disabled={saving}
           className="rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
         >
@@ -220,21 +251,28 @@ export function SuppliersAdminSection() {
         </p>
       )}
 
-      {(actionError || loadError) && (
+      {actionError && (
+        <p
+          role="alert"
+          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
+          {actionError}
+        </p>
+      )}
+
+      {loadError && (
         <div
           role="alert"
           className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
         >
-          <span>{actionError ?? loadError}</span>
-          {!actionError && loadError && (
-            <button
-              type="button"
-              onClick={reload}
-              className="shrink-0 font-medium underline"
-            >
-              Try again
-            </button>
-          )}
+          <span>{loadError}</span>
+          <button
+            type="button"
+            onClick={retryLoad}
+            className="shrink-0 font-medium underline"
+          >
+            Try again
+          </button>
         </div>
       )}
 
@@ -328,6 +366,7 @@ export function SuppliersAdminSection() {
           onCancel={() => setFormOpenFor(null)}
           onSave={handleSave}
           saving={saving}
+          error={formError}
         />
       )}
 

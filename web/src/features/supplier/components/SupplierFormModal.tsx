@@ -35,7 +35,9 @@
 // removes the image, which the round-trip approach couldn't do.
 // 2026-09-30, Claude Code (Opus 5.5): a click outside the form no longer
 // closes it (Modal closeOnBackdrop={false}); only Cancel or ✕ do, so a
-// half-filled supplier isn't lost to a stray click.
+// half-filled supplier isn't lost to a stray click. PR #156 review: an
+// optional `error` shown inside the form, so a failed save's reason is
+// visible (the form covers the page behind it).
 // Reviewed by: [pending]
 
 import { useState, type FormEvent, type KeyboardEvent } from 'react'
@@ -48,6 +50,8 @@ interface SupplierFormModalProps {
   onCancel: () => void
   onSave: (input: SupplierInput) => void
   saving?: boolean
+  // why the last save failed; the form stays open to fix and retry
+  error?: string | null
 }
 
 export function SupplierFormModal({
@@ -55,6 +59,7 @@ export function SupplierFormModal({
   onCancel,
   onSave,
   saving,
+  error,
 }: SupplierFormModalProps) {
   const [name, setName] = useState(initial?.name ?? '')
   const [location, setLocation] = useState(initial?.location ?? '')
@@ -242,6 +247,15 @@ export function SupplierFormModal({
             className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
           />
         </label>
+
+        {error && (
+          <p
+            role="alert"
+            className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
+            {error}
+          </p>
+        )}
 
         <div className="flex justify-end gap-2 pt-2">
           <button

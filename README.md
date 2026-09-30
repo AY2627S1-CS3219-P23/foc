@@ -310,8 +310,9 @@ now reveals whether an account exists, reversing #89's non-revealing
 failures) chosen by the author via neutral-options Q&A and recorded in
 `ai/usage-log.md`; and supplier
 Add / Edit / Delete on the admin dashboard (reusing the Suppliers page's
-form and delete dialogs, with a retry after a failed load), recorded in
-`ai/usage-log.md`.
+form and delete dialogs, with a retry after a failed load, and its
+failed saves and deletes shown where the admin can see them after the
+PR #156 review), recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
