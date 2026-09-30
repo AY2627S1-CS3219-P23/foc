@@ -7,6 +7,8 @@ Scope: attempts-exhausted signal for issue #88's POST /auth/signup/verify,
        there is no wait to quote: the pending sign-up is discarded and
        the remedy is a fresh sign-up.
 Reviewed by: Leong Wei Zhi (via pull request).
+2026-09-30 (Claude Code, Fable 5), issue #92: message constructor added —
+the account-update flows' remedy is requesting a new code, not signing up.
 */
 
 package foc.user.exception;
@@ -14,6 +16,10 @@ package foc.user.exception;
 public class OtpAttemptsExceededException extends RuntimeException {
 
     public OtpAttemptsExceededException() {
-        super("Too many incorrect codes; sign up again to get a new code");
+        this("Too many incorrect codes; sign up again to get a new code");
+    }
+
+    public OtpAttemptsExceededException(String message) {
+        super(message);
     }
 }

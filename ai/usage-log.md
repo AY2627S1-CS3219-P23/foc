@@ -26,6 +26,39 @@ Entry template:
 ```
 
 ---
+## 2026-09-30 — Leong Wei Zhi (#92 account update flows)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `user-service/` — the F2 account-update flows:
+  `POST /users/me/otp` (gate code to the current email, F2.1.1),
+  `PATCH /users/me` (allow-list DTO — username applies, email parks in
+  the new `pending_email_changes` table with a code to the new address,
+  F2.1.2/F2.1.3), `POST /users/me/email/verify` + `/email/resend`,
+  `POST /users/me/password` (server-side double-entry + policy re-check,
+  F2.1.4/F2.1.5). New `AccountUpdateOtp`/`PendingEmailChange` entities +
+  repos, `AccountUpdateService`, V4/V5 migrations, SecurityConfig route
+  lines, purge sweeps, and problem+json `type` URIs on the OTP errors
+  (the three OTP handlers moved from `AuthController` to
+  `ProblemDetailAdvice`). Tests: `AccountUpdateControllerTest` (29),
+  `AccountUpdateResendCooldownTest` (2), `AccountUpdateServiceTest` (10),
+  plus purge/Flyway/auth/admin suites updated. README section.
+- **Prompt(s):** Asked to plan and resolve #92. Contract decisions made
+  by the author via two AskUserQuestion options rounds (options
+  presented neutrally, no recommendations): backend-only scope; password
+  change on its own OTP-gated endpoint with no `currentPassword`;
+  double-entry checked server-side too; the gate code carried in the
+  mutating request (verify-and-apply in one call); username+email may
+  combine in one PATCH; a parked email change answers 202 with the OTP
+  timings; machine-readable problem `type` URIs in scope including the
+  existing sign-up errors. The tool flagged `POST /users/me/email/resend`
+  as the one route beyond the decided list (mechanically required: the
+  gate code is consumed when the change parks) for author veto at
+  review. OTP semantics reuse the PR #150 decisions (single table per
+  operation, resend keeps expiry and attempts, discard-if-taken at
+  verify) rather than re-deciding them.
+- **Author review:** Full suite green (280 tests, 43 new); manual
+  Mailpit run of all five routes. Reviewed via pull request.
+
 ## 2026-09-29 — Leong Wei Zhi (#88 OTP email sending)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate

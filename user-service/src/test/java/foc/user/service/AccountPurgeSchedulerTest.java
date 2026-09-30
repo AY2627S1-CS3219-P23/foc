@@ -12,6 +12,10 @@ Reviewed by: Leong Wei Zhi (via pull request).
 2026-09-29 (Claude Code, Fable 5), issue #88: the otps seeding went with
        the otps table; a case for the expired pending sign-up sweep the
        same purge run now performs is added instead.
+2026-09-30 (Claude Code, Fable 5), issue #92: cases for the gate-code and
+       pending-email-change sweeps, including the FK-ordering proof — a
+       purged user's (necessarily expired) rows go first, so the users
+       delete never trips their user_id FKs.
 */
 
 package foc.user.service;
@@ -29,10 +33,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import foc.user.PostgresTestContainer;
 import foc.user.entity.AccountToken;
+import foc.user.entity.AccountUpdateOtp;
+import foc.user.entity.PendingEmailChange;
 import foc.user.entity.PendingSignup;
 import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.repository.AccountTokenRepository;
+import foc.user.repository.AccountUpdateOtpRepository;
+import foc.user.repository.PendingEmailChangeRepository;
 import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
 
@@ -59,10 +67,18 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
     @Autowired
     private PendingSignupRepository pendingSignupRepository;
 
+    @Autowired
+    private AccountUpdateOtpRepository accountUpdateOtpRepository;
+
+    @Autowired
+    private PendingEmailChangeRepository pendingEmailChangeRepository;
+
     @BeforeEach
     void cleanDatabase() {
         accountTokenRepository.deleteAll();
         pendingSignupRepository.deleteAll();
+        accountUpdateOtpRepository.deleteAll();
+        pendingEmailChangeRepository.deleteAll();
         userRepository.deleteAll();
     }
 
@@ -120,6 +136,52 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
 
         assertThat(pendingSignupRepository.findAll()).extracting(PendingSignup::getId)
             .containsExactly(live.getId());
+    }
+
+    @Test
+    @DisplayName("Should sweep expired gate codes and pending email changes, keeping live ones")
+    void sweepsExpiredAccountUpdateRows() {
+        User alex = saveUser("e1111111@u.nus.edu", "active_user", null);
+        accountUpdateOtpRepository.save(new AccountUpdateOtp(alex.getId(), "code_hash",
+            Instant.now().minusSeconds(660), Instant.now().minusSeconds(60)));
+        pendingEmailChangeRepository.save(new PendingEmailChange(alex.getId(),
+            "e2222222@u.nus.edu", "code_hash",
+            Instant.now().minusSeconds(660), Instant.now().minusSeconds(60)));
+        User bob = saveUser("e3333333@u.nus.edu", "other_user", null);
+        AccountUpdateOtp liveGate = accountUpdateOtpRepository.save(new AccountUpdateOtp(
+            bob.getId(), "code_hash", Instant.now(), Instant.now().plusSeconds(600)));
+        PendingEmailChange liveChange = pendingEmailChangeRepository.save(new PendingEmailChange(
+            bob.getId(), "e4444444@u.nus.edu", "code_hash",
+            Instant.now(), Instant.now().plusSeconds(600)));
+        userRepository.flush();
+
+        scheduler.purgeExpiredDeletedAccounts();
+
+        assertThat(accountUpdateOtpRepository.findAll()).extracting(AccountUpdateOtp::getId)
+            .containsExactly(liveGate.getId());
+        assertThat(pendingEmailChangeRepository.findAll()).extracting(PendingEmailChange::getId)
+            .containsExactly(liveChange.getId());
+    }
+
+    @Test
+    @DisplayName("A purged account's expired #92 rows never trip its FKs")
+    void purgedAccountsRowsGoFirst() {
+        User expired = saveUser("e3333333@u.nus.edu", "expired_deleted",
+            Instant.now().minus(31, ChronoUnit.DAYS));
+        // whatever such an account left behind expired within its TTL,
+        // weeks before day 31 — seeded here as the purge will find it
+        accountUpdateOtpRepository.save(new AccountUpdateOtp(expired.getId(), "code_hash",
+            Instant.now().minus(31, ChronoUnit.DAYS), Instant.now().minus(31, ChronoUnit.DAYS).plusSeconds(600)));
+        pendingEmailChangeRepository.save(new PendingEmailChange(expired.getId(),
+            "e4444444@u.nus.edu", "code_hash",
+            Instant.now().minus(31, ChronoUnit.DAYS), Instant.now().minus(31, ChronoUnit.DAYS).plusSeconds(600)));
+        userRepository.flush();
+
+        scheduler.purgeExpiredDeletedAccounts();
+
+        assertThat(userRepository.findAll()).isEmpty();
+        assertThat(accountUpdateOtpRepository.findAll()).isEmpty();
+        assertThat(pendingEmailChangeRepository.findAll()).isEmpty();
     }
 
     private User saveUser(String email, String username, Instant deletedAt) {

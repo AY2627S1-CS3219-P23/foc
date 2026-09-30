@@ -29,6 +29,8 @@ case (team decision): existsByUsernameIgnoreCase / findByUsernameIgnoreCase
 replace the exact-match versions.
 2026-09-29 (Claude Code, Opus 5.5), issue #147: the username lookups compare
 lower(username), matching the V2 migration's unique index.
+2026-09-30 (Claude Code, Fable 5), issue #92: except-self uniqueness checks
+added for the account-update flows (NewAccountDetails' except-self variants).
 */
 
 package foc.user.repository;
@@ -60,6 +62,12 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     // Flyway V2); emails are stored lowercased
     @Query("select count(u) > 0 from User u where lower(u.username) = lower(:username)")
     boolean existsByUsernameIgnoreCase(@Param("username") String username);
+
+    // the update flows' variants (#92): the caller's own row doesn't count
+    boolean existsByEmailAndIdNot(String email, Long id);
+
+    @Query("select count(u) > 0 from User u where lower(u.username) = lower(:username) and u.id <> :id")
+    boolean existsByUsernameIgnoreCaseAndIdNot(@Param("username") String username, @Param("id") Long id);
 
     Optional<User> findByEmail(String email);
 

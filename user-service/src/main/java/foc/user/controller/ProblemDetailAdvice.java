@@ -10,6 +10,14 @@ Scope: problem+json handlers shared by ProfileController and AdminController
        (including OwnerSetupController, which had none) reports broken
        rules one sentence per field (team decision; #138 contract).
 Author review: Ryan to review via the PR.
+2026-09-30 (Claude Code, Fable 5), issue #92: the three OTP handlers moved
+here from AuthController — the account-update routes fail the same ways
+sign-up's OTP does, and one handler set keeps the statuses and details in
+lockstep. They now attach problem+json type URIs (ProblemTypes; owner
+decision via options Q&A: machine-readable types in scope, so the SPA can
+stop string-matching detail sentences), and a ResponseStatusException
+passthrough renders typed bodies (uniqueness refusals) for controllers
+without a local one.
 */
 
 package foc.user.controller;
@@ -18,14 +26,20 @@ import java.util.Comparator;
 import java.util.stream.Collectors;
 
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
+import foc.user.exception.OtpAttemptsExceededException;
+import foc.user.exception.OtpResendTooSoonException;
+import foc.user.exception.OtpVerificationException;
 import foc.user.exception.UserNotFoundException;
 
 // the web client reads RFC 9457 problem+json error bodies
@@ -62,5 +76,46 @@ class ProblemDetailAdvice {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ProblemDetail handleUnreadableBody(HttpMessageNotReadableException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request body is missing or malformed");
+    }
+
+    // the OTP failures, moved from AuthController (issue #92): sign-up and
+    // the account-update routes fail the same ways, with the same bodies.
+    // The exception names the type (wrong code / expired / no code yet /
+    // no pending change), the status stays 400
+    @ExceptionHandler(OtpVerificationException.class)
+    ProblemDetail handleOtpVerification(OtpVerificationException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+        problem.setType(e.type());
+        return problem;
+    }
+
+    // 429 like the login lockout (issue #145 precedent), but without
+    // Retry-After: waiting won't help — the pending operation is discarded
+    // and the remedy is starting again for a fresh code
+    @ExceptionHandler(OtpAttemptsExceededException.class)
+    ProblemDetail handleOtpAttemptsExceeded(OtpAttemptsExceededException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
+        problem.setType(ProblemTypes.OTP_ATTEMPTS_EXCEEDED);
+        return problem;
+    }
+
+    // 429 with Retry-After, the lockout's shape: here waiting is exactly
+    // the remedy, and the wait is seconds, so the SPA can count it down
+    @ExceptionHandler(OtpResendTooSoonException.class)
+    ResponseEntity<ProblemDetail> handleOtpResendTooSoon(OtpResendTooSoonException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
+        problem.setType(ProblemTypes.OTP_RESEND_COOLDOWN);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
+            .body(problem);
+    }
+
+    // uniqueness refusals and other typed ResponseStatusExceptions reach
+    // controllers that have no local passthrough (AuthController keeps its
+    // own — local wins there, same output); returning the exception's own
+    // body keeps the type it was built with
+    @ExceptionHandler(ResponseStatusException.class)
+    ProblemDetail handleResponseStatus(ResponseStatusException e) {
+        return e.getBody();
     }
 }

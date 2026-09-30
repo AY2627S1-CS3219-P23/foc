@@ -30,6 +30,9 @@ Scope: integration tests for POST /auth/signup and POST /auth/login
        identifier-taken case now also proves the email is released, and the
        202 body carries resendInSeconds for the SPA's resend button.
 Author review: Leong Wei Zhi to review via the PR.
+2026-09-30, Claude Code (Fable 5), issue #92: the OTP failures now carry
+problem+json type URIs (handlers shared via ProblemDetailAdvice), so the
+OTP cases pin $.type alongside the unchanged details.
 */
 
 package foc.user.controller;
@@ -213,6 +216,7 @@ class AuthControllerTest extends PostgresTestContainer {
         verifySignup("e1234567@u.nus.edu", wrong)
             .andExpect(status().isBadRequest())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-invalid"))
             .andExpect(jsonPath("$.detail").value("Invalid verification code"));
 
         verifySignup("e1234567@u.nus.edu", code).andExpect(status().isCreated());
@@ -230,6 +234,7 @@ class AuthControllerTest extends PostgresTestContainer {
         }
         verifySignup("e1234567@u.nus.edu", wrong)
             .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-attempts-exceeded"))
             .andExpect(jsonPath("$.detail").value(
                 "Too many incorrect codes; sign up again to get a new code"));
 
@@ -306,6 +311,7 @@ class AuthControllerTest extends PostgresTestContainer {
     void signup_verifyWithoutSignup() throws Exception {
         verifySignup("e1234567@u.nus.edu", "123456")
             .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-invalid"))
             .andExpect(jsonPath("$.detail").value("Invalid verification code"));
     }
 
