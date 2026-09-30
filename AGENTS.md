@@ -19,6 +19,9 @@
   2026-09-23, issue #85: user-db row in the port table filled in (host
   port 5435, chosen by Leong Wei Zhi via options Q&A) while wiring
   user-db into compose.yaml.
+  2026-09-29, issue #88 (Fable 5): mailpit row added to the port table
+  (SMTP 1025 / UI 8025) while wiring the local mail catcher for OTP
+  emails into compose.yaml.
   All decisions documented here were made by the team.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
@@ -138,6 +141,7 @@ alone is only a gate inside the server.
 | `order-db` | — | not created yet |
 | `credit-db` | — | not created yet |
 | `web` | — | no database (frontend itself published on `${WEB_PORT:-5173}`) |
+| `mailpit` | — | mail catcher, not a DB: SMTP `${MAILPIT_SMTP_PORT:-1025}`, web inbox `${MAILPIT_UI_PORT:-8025}` (both loopback only) |
 
 When a service gains its own database, its owner adds the container to
 `compose.yaml` in that service's own PR (the same convention the compose

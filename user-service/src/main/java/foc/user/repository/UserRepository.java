@@ -84,8 +84,9 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
     // bulk-deletes accounts whose 30-day recovery window has passed,
     // releasing their email/username. The caller (AccountPurgeScheduler)
-    // provides the transaction and must remove dependent otps /
-    // account_tokens rows first — their user_id FKs block this delete.
+    // provides the transaction and must remove dependent account_tokens
+    // rows first — their user_id FK blocks this delete. (The otps table
+    // this also used to name went with issue #88.)
     @Modifying(clearAutomatically = true)
     @Query("DELETE FROM User u WHERE u.deletedAt < :cutoff")
     int deleteByDeletedBefore(@Param("cutoff") Instant cutoff);

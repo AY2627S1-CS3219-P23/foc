@@ -9,18 +9,38 @@
  * PostgreSQLContainer (PR #126 review).
  * 2026-09-25, Claude Code (Opus 5.5): container moved to the shared
  * PostgresTestContainer base (PR #131 review).
+ * 2026-09-29, Claude Code (Opus 5.5): demoSeederOffByDefault — the
+ * demo-account seeder isn't created unless USER_SEED_DEMO is set. PR #155
+ * Copilot review: user.seed.demo pinned to false on this context, so a
+ * USER_SEED_DEMO=true environment can't change the result.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.user;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 
-@SpringBootTest
+import foc.user.seed.DemoAccountsSeeder;
+
+// the seeder switch pinned off: USER_SEED_DEMO in the environment would
+// otherwise turn it on (relaxed binding) and seed the shared test database
+@SpringBootTest(properties = "user.seed.demo=false")
 class UserServiceApplicationTests extends PostgresTestContainer {
+
+	@Autowired
+	private ApplicationContext context;
 
 	@Test
 	void contextLoads() {
+	}
+
+	// demo accounts only when USER_SEED_DEMO is set (team decision)
+	@Test
+	void demoSeederOffByDefault() {
+		assertThat(context.getBeanProvider(DemoAccountsSeeder.class).getIfAvailable()).isNull();
 	}
 
 }

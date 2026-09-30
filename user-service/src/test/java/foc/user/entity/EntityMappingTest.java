@@ -8,9 +8,16 @@
  * substitute.
  * 2026-09-25, Claude Code (Opus 5.5): container moved to the shared
  * PostgresTestContainer base (PR #131 review).
+ * 2026-09-29, Claude Code (Fable 5), issue #88: the Otp round-trip went
+ * with the otps table; PendingSignup round-trip and its email-unique
+ * violation added in its place.
+ * 2026-09-29, Claude Code (Opus 5), PR #150 review: last_sent_at (the
+ * resend cooldown's origin) is part of that round-trip.
  * 2026-09-29, Claude Code (Opus 5.5), issue #147: tables emptied before
  * each test, since the Flyway-built schema (unlike create-drop) keeps
  * rows other test classes committed.
+ * 2026-09-30, Claude Code (Opus 5), merging main: that sweep clears
+ * pending_signups instead of the otps table #88 dropped.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.user.entity;
@@ -18,6 +25,7 @@ package foc.user.entity;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +33,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 
 import foc.user.PostgresTestContainer;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceException;
 
 /**
  * Persists and reloads one row per entity so a mapping mistake (wrong
@@ -34,6 +43,7 @@ import jakarta.persistence.EntityManager;
 @DataJpaTest
 class EntityMappingTest extends PostgresTestContainer {
 
+    private static final Instant SENT_AT = Instant.parse("2026-09-24T11:50:00Z");
     private static final Instant EXPIRY = Instant.parse("2026-09-24T12:00:00Z");
 
     @Autowired
@@ -42,7 +52,7 @@ class EntityMappingTest extends PostgresTestContainer {
     // rows committed by other test classes; the delete rolls back with the test
     @BeforeEach
     void emptyTables() {
-        entityManager.createNativeQuery("delete from otps").executeUpdate();
+        entityManager.createNativeQuery("delete from pending_signups").executeUpdate();
         entityManager.createNativeQuery("delete from account_tokens").executeUpdate();
         entityManager.createNativeQuery("delete from token_denylist").executeUpdate();
         entityManager.createNativeQuery("delete from users").executeUpdate();
@@ -77,19 +87,32 @@ class EntityMappingTest extends PostgresTestContainer {
     }
 
     @Test
-    void otpRoundTrip() {
-        User user = persistUser("e2234567@u.nus.edu", "otp_user");
-        Otp saved = persistAndFlush(
-            new Otp(user, "code_hash", Otp.Purpose.SIGNUP, EXPIRY));
+    void pendingSignupRoundTrip() {
+        PendingSignup saved = persistAndFlush(new PendingSignup(
+            "e2234567@u.nus.edu", "pending_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY));
         entityManager.clear();
 
-        Otp found = entityManager.find(Otp.class, saved.getId());
+        PendingSignup found = entityManager.find(PendingSignup.class, saved.getId());
 
-        assertThat(found.getUser().getId()).isEqualTo(user.getId());
+        assertThat(found.getEmail()).isEqualTo("e2234567@u.nus.edu");
+        assertThat(found.getUsername()).isEqualTo("pending_user");
+        assertThat(found.getPasswordHash()).isEqualTo("bcrypt_hash");
         assertThat(found.getCodeHash()).isEqualTo("code_hash");
-        assertThat(found.getPurpose()).isEqualTo(Otp.Purpose.SIGNUP);
+        assertThat(found.getLastSentAt()).isEqualTo(SENT_AT);
         assertThat(found.getExpiresAt()).isEqualTo(EXPIRY);
         assertThat(found.getAttempts()).isZero();
+    }
+
+    @Test
+    void pendingSignupEmailIsUnique() {
+        persistAndFlush(new PendingSignup(
+            "e2234567@u.nus.edu", "first_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY));
+
+        // one pending sign-up per email: the second insert must trip the
+        // unique index (usernames may repeat — users' index decides those)
+        assertThatThrownBy(() -> persistAndFlush(new PendingSignup(
+                "e2234567@u.nus.edu", "second_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY)))
+            .isInstanceOf(PersistenceException.class);
     }
 
     @Test

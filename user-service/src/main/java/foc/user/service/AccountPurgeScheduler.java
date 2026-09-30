@@ -6,6 +6,10 @@ Scope: day-31 purge scheduler for issue #93 (design doc §2: "purge on
        FK cleanup as bulk deletes inside the purge transaction chosen by
        Leong Wei Zhi via options Q&A (over DB-level ON DELETE CASCADE);
        window and cadence are env-overridable like the notification purge.
+       2026-09-29, Claude Code (Fable 5), issue #88: the otps sweep went
+       with the otps table (sign-up OTPs live in pending_signups now); the
+       same run sweeps expired pending sign-ups instead — hygiene only,
+       since verify rejects an expired row on sight.
 Reviewed by: Leong Wei Zhi (via pull request).
 */
 
@@ -22,7 +26,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import foc.user.repository.AccountTokenRepository;
-import foc.user.repository.OtpRepository;
+import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
 
 /**
@@ -30,23 +34,25 @@ import foc.user.repository.UserRepository;
  * passed (design doc §2: soft delete = 30-day reuse block, purge on
  * day 31). Until this job runs, a deleted row keeps occupying its
  * unique email/username; the purge is what releases them. Dependent
- * otps/account_tokens rows are removed first, in the same transaction,
- * so the users delete never trips their user_id FKs.
+ * account_tokens rows are removed first, in the same transaction, so
+ * the users delete never trips their user_id FK. The run also sweeps
+ * pending sign-ups whose code has expired (issue #88).
  */
 @Component
 class AccountPurgeScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(AccountPurgeScheduler.class);
 
-    private final OtpRepository otps;
     private final AccountTokenRepository accountTokens;
+    private final PendingSignupRepository pendingSignups;
     private final UserRepository users;
     private final int retentionDays;
 
-    AccountPurgeScheduler(OtpRepository otps, AccountTokenRepository accountTokens,
+    AccountPurgeScheduler(AccountTokenRepository accountTokens,
+            PendingSignupRepository pendingSignups,
             UserRepository users, @Value("${user.retention.days}") int retentionDays) {
-        this.otps = otps;
         this.accountTokens = accountTokens;
+        this.pendingSignups = pendingSignups;
         this.users = users;
         this.retentionDays = retentionDays;
     }
@@ -54,11 +60,13 @@ class AccountPurgeScheduler {
     @Scheduled(cron = "${user.retention.purge-cron}")
     @Transactional
     void purgeExpiredDeletedAccounts() {
-        Instant cutoff = Instant.now().minus(retentionDays, ChronoUnit.DAYS);
-        int otpCount = otps.deleteByUserDeletedBefore(cutoff);
+        Instant now = Instant.now();
+        Instant cutoff = now.minus(retentionDays, ChronoUnit.DAYS);
         int tokenCount = accountTokens.deleteByUserDeletedBefore(cutoff);
         int userCount = users.deleteByDeletedBefore(cutoff);
-        log.info("purged {} account(s) deleted before {} (with {} otp(s), {} account token(s))",
-                userCount, cutoff, otpCount, tokenCount);
+        int pendingCount = pendingSignups.deleteByExpiresAtBefore(now);
+        log.info("purged {} account(s) deleted before {} (with {} account token(s))"
+                + " and {} expired pending sign-up(s)",
+                userCount, cutoff, tokenCount, pendingCount);
     }
 }
