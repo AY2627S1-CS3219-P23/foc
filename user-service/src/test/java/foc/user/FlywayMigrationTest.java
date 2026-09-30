@@ -10,6 +10,9 @@ Scope: issue #147. Runs the Flyway migrations against their own schemas in
        2026-09-30, Claude Code (Opus 5), issue #88 (PR #150): V3 joins
        them (drops otps, creates pending_signups), so the counts move to
        2 for a baselined database and MIGRATION_SCRIPTS for a fresh one.
+       2026-09-30, Claude Code (Fable 5), issue #92: V4 and V5 join them
+       (pending_email_changes and account_update_otps), moving the counts
+       to 4 and 5.
 Author review: Ryan to review via the PR.
 */
 
@@ -35,7 +38,7 @@ import org.springframework.core.io.ClassPathResource;
 class FlywayMigrationTest extends PostgresTestContainer {
 
     // scripts in db/migration; a new V<n> bumps this
-    private static final int MIGRATION_SCRIPTS = 3;
+    private static final int MIGRATION_SCRIPTS = 5;
 
     private static Connection connect(String schema) throws SQLException {
         Connection connection = DriverManager.getConnection(
@@ -95,8 +98,8 @@ class FlywayMigrationTest extends PostgresTestContainer {
 
             MigrateResult result = migrate(schema);
 
-            // V1 is recorded as the baseline, not run again; V2 and V3 run
-            assertThat(result.migrationsExecuted).isEqualTo(2);
+            // V1 is recorded as the baseline, not run again; V2..V5 run
+            assertThat(result.migrationsExecuted).isEqualTo(MIGRATION_SCRIPTS - 1);
             assertThat(usernamesByEmail(statement)).containsExactly(
                 Map.entry("e1000001@u.nus.edu", "Bob"),
                 Map.entry("e1000002@u.nus.edu", "bob_2"),

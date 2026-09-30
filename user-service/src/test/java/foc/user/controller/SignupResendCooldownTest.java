@@ -7,6 +7,8 @@ Scope: PR #150 author review: the resend cooldown end to end at its real
        off. Its own class rather than a nested one because the override
        needs its own application context.
 Author review: Leong Wei Zhi to review via the PR.
+2026-09-30 (Claude Code, Fable 5), issue #92: the 429 also pins its new
+problem+json type URI.
 */
 
 package foc.user.controller;
@@ -93,6 +95,7 @@ class SignupResendCooldownTest extends PostgresTestContainer {
             .andExpect(status().isTooManyRequests())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(header().exists(HttpHeaders.RETRY_AFTER))
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-resend-cooldown"))
             .andExpect(jsonPath("$.detail").value(
                 org.hamcrest.Matchers.startsWith("A verification code was sent to this email")));
 

@@ -89,6 +89,8 @@ Scope: sign-up (issue #87) and login (issue #89), replacing PR #139's
        transaction (bcrypt shouldn't hold a pooled connection) is answered
        here by the finite SMTP timeouts added in PR #150's Copilot review.
 Author review: Leong Wei Zhi to review via the PR.
+2026-09-30 (Claude Code, Fable 5), issue #92: SignupIdentifierTakenException
+now wraps the caught uniqueness refusal whole, carrying its problem type.
 */
 
 package foc.user.service;
@@ -341,7 +343,7 @@ public class AuthService {
             // committing it is what the noRollbackFor above is for; the
             // lock this row is under rules out a separate transaction
             pendingSignupRepository.delete(pending);
-            throw new SignupIdentifierTakenException(e.getReason());
+            throw new SignupIdentifierTakenException(e);
         }
         // the hash stored at sign-up is already BCrypt: never re-encode
         User user = new User(email, pending.getUsername(), pending.getPasswordHash(), Role.USER);
