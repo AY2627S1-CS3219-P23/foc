@@ -8,9 +8,11 @@
 // (read-only, team decision); its Add/Edit/Delete wait on
 // supplier-service's CRUD endpoints (#104). The page is ADMIN/OWNER-only
 // through AdminRoute (routes/index.tsx).
+// 2026-09-30 (Claude Code, Opus 5.5): the Suppliers section removed, so
+// the dashboard shows only the Users section for now (Ryan Ang's
+// decision); admins manage suppliers on the Suppliers page.
 // Reviewed by: Ryan Ang.
 
-import { SuppliersAdminSection } from '@/features/supplier/components/SuppliersAdminSection'
 import { UsersSection } from '@/features/user/components/UsersSection'
 
 export function Admin() {
@@ -25,8 +27,6 @@ export function Admin() {
           users.
         </p>
       </div>
-
-      <SuppliersAdminSection />
 
       <UsersSection />
     </div>

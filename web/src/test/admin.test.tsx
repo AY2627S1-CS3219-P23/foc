@@ -14,17 +14,17 @@
 // actions off while the list reloads. PR #152 review: one GET /users/me per page (the
 // unknown-admin fallback case can no longer happen, so its test went). The Suppliers section's read-only
 // list (team decision) against a faked listSuppliers.
-// Scope: tests for the Admin Dashboard page — Users and Suppliers
-// sections, the route guard and the nav link.
+// 2026-09-30 (Claude Code, Opus 5.5): the Suppliers section's cases and
+// its faked supplier API removed with the section, and a case that the
+// dashboard shows only the Users section for now.
+// Scope: tests for the Admin Dashboard page — the Users section, the
+// route guard and the nav link.
 // Reviewed by: Ryan Ang
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
-import { listSuppliers } from '@/features/supplier/api'
-import { ADMIN_SUPPLIERS_PAGE_SIZE } from '@/features/supplier/components/SuppliersAdminSection'
-import type { PagedResponse, Supplier } from '@/features/supplier/types'
 import { adminUserApi } from '@/features/user/adminApi'
 import { USERS_PAGE_SIZE } from '@/features/user/components/UsersSection'
 import type {
@@ -33,51 +33,6 @@ import type {
   ListUsersParams,
 } from '@/features/user/types'
 import { routes } from '../routes'
-
-// the Suppliers section's only call; faked per test
-vi.mock('@/features/supplier/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/features/supplier/api')>()),
-  listSuppliers: vi.fn(),
-}))
-
-const seedSuppliers: Supplier[] = [
-  {
-    id: 's1',
-    name: 'CoffeeBean@Com3',
-    location: 'COM3-01-01',
-    latitude: 1.29,
-    longitude: 103.77,
-    categories: ['Food', 'Beverage'],
-    openingTime: '08:00',
-    closingTime: '18:00',
-    description: '',
-  },
-  {
-    id: 's2',
-    name: 'Fine Foods UTown',
-    location: 'Plaza Level 1',
-    latitude: 1.3,
-    longitude: 103.77,
-    categories: ['Food'],
-    openingTime: '07:00',
-    closingTime: '22:00',
-    description: '',
-  },
-]
-
-function supplierPage(
-  content: Supplier[],
-  page = 0,
-  totalPages = content.length ? 1 : 0,
-): PagedResponse<Supplier> {
-  return {
-    content,
-    page,
-    size: ADMIN_SUPPLIERS_PAGE_SIZE,
-    totalElements: content.length,
-    totalPages,
-  }
-}
 
 const seedUsers: readonly AdminUser[] = [
   {
@@ -159,13 +114,13 @@ function renderAdmin() {
   )
 }
 
-function section(name: 'Users' | 'Suppliers') {
+function section(name: 'Users') {
   return within(screen.getByRole('region', { name }))
 }
 
 // The page appears once the admin route guard's role check resolves, so
 // the first query of a test waits for its section.
-async function findSection(name: 'Users' | 'Suppliers') {
+async function findSection(name: 'Users') {
   return within(await screen.findByRole('region', { name }))
 }
 
@@ -209,9 +164,6 @@ function lastListParams() {
 
 beforeEach(() => {
   vi.restoreAllMocks()
-  vi.mocked(listSuppliers)
-    .mockReset()
-    .mockResolvedValue(supplierPage(seedSuppliers))
   // /admin sits behind ProtectedRoute, which only checks that
   // AuthProvider found a stored session under "user".
   localStorage.setItem('user', JSON.stringify({ sub: 'test-admin' }))
@@ -821,74 +773,15 @@ describe('Users section', () => {
   })
 })
 
-describe('Suppliers section', () => {
-  test('lists suppliers with category, location and hours', async () => {
+describe('Admin Dashboard page', () => {
+  test('shows only the Users section for now', async () => {
     renderAdmin()
+    await findSectionTable('Users')
 
-    const table = await (await findSection('Suppliers')).findByRole('table')
-    const row = rowFor(table, 'CoffeeBean@Com3')
-    expect(row.getByText('Food, Beverage')).toBeInTheDocument()
-    expect(row.getByText('COM3-01-01')).toBeInTheDocument()
-    expect(row.getByText('08:00–18:00')).toBeInTheDocument()
-    expect(within(table).getByText('Fine Foods UTown')).toBeInTheDocument()
-    expect(listSuppliers).toHaveBeenCalledWith({
-      page: 0,
-      size: ADMIN_SUPPLIERS_PAGE_SIZE,
-    })
-  })
-
-  test('is read-only for now', async () => {
-    renderAdmin()
-
-    const table = await (await findSection('Suppliers')).findByRole('table')
-    expect(within(table).queryByRole('button')).not.toBeInTheDocument()
-  })
-
-  test('pages through suppliers', async () => {
-    vi.mocked(listSuppliers).mockImplementation(async (params = {}) =>
-      supplierPage(
-        params.page === 1 ? [seedSuppliers[1]] : [seedSuppliers[0]],
-        params.page,
-        2,
-      ),
-    )
-    const user = userEvent.setup()
-    renderAdmin()
-    const suppliers = await findSection('Suppliers')
-    const table = await suppliers.findByRole('table')
-    await within(table).findByText('CoffeeBean@Com3')
-
-    await user.click(
-      within(suppliers.getByRole('navigation')).getByRole('button', {
-        name: 'Page 2',
-      }),
-    )
-
+    expect(screen.getAllByRole('region')).toHaveLength(1)
     expect(
-      await within(table).findByText('Fine Foods UTown'),
-    ).toBeInTheDocument()
-    expect(vi.mocked(listSuppliers).mock.lastCall?.[0]).toEqual({
-      page: 1,
-      size: ADMIN_SUPPLIERS_PAGE_SIZE,
-    })
-  })
-
-  test('shows an empty state', async () => {
-    vi.mocked(listSuppliers).mockResolvedValue(supplierPage([]))
-    renderAdmin()
-
-    expect(
-      await (await findSection('Suppliers')).findByText('No suppliers yet.'),
-    ).toBeInTheDocument()
-  })
-
-  test('shows an error when suppliers fail to load', async () => {
-    vi.mocked(listSuppliers).mockRejectedValue(new TypeError('Failed to fetch'))
-    renderAdmin()
-
-    expect(
-      await (await findSection('Suppliers')).findByRole('alert'),
-    ).toHaveTextContent('Could not load suppliers. Try again.')
+      screen.queryByRole('region', { name: 'Suppliers' }),
+    ).not.toBeInTheDocument()
   })
 })
 
