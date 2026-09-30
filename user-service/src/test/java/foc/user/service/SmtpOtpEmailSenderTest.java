@@ -7,6 +7,8 @@ Scope: unit test for issue #88's SmtpOtpEmailSender: the composed
        manually against the compose Mailpit container.
        PR #150 Copilot review: a sub-minute TTL case pins the seconds
        wording (30s must not read as "0 minutes").
+       PR #150 re-review: a part-minute remainder (what a resend leaves)
+       is quoted in whole minutes, as the sign-up dialog does.
 Reviewed by: Leong Wei Zhi (via pull request).
 */
 
@@ -46,6 +48,21 @@ class SmtpOtpEmailSenderTest {
         assertThat(message.getValue().getText())
             .contains("042042")
             .contains("10 minutes");
+    }
+
+    @Test
+    @DisplayName("A part-minute remainder reads in minutes, like the sign-up dialog")
+    void sendSignupCode_partMinuteLifetime() {
+        SmtpOtpEmailSender sender = new SmtpOtpEmailSender(mailSender, "no-reply@foc.local");
+
+        // what a resend leaves: 8m54s of the original 10 minutes
+        sender.sendSignupCode("e1234567@u.nus.edu", "042042", Duration.ofSeconds(534));
+
+        ArgumentCaptor<SimpleMailMessage> message = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(mailSender).send(message.capture());
+        assertThat(message.getValue().getText())
+            .contains("9 minutes")
+            .doesNotContain("534");
     }
 
     @Test
