@@ -103,6 +103,14 @@
 // gains page numbers and aria-current), keeping the "Page X of Y · N
 // suppliers" label beside it; load/save/delete errors use the shared
 // errorMessage helper.
+// 2026-09-30 (Claude Code, Opus 5.5, PR #156 re-review): the supplier
+// form no longer closes on an outside click (PR #156), so a failed save's
+// reason in the page banner sat hidden behind it — it now shows inside
+// the form (formError), which stays open with the input kept. A failed
+// delete closes the confirm (setPendingDelete in finally), so the banner
+// is visible, and names the supplier. The success/failure texts and the
+// 4s auto-dismiss come from features/supplier/messages and
+// useAutoDismissed, shared with the Admin Dashboard's Suppliers section.
 // Reviewed by: Ryan Ang (the 2026-09-29 issue #147 changes above); the
 // original supplier code's review is still pending with its author.
 
@@ -121,7 +129,15 @@ import { SupplierDetailPanel } from '@/features/supplier/components/SupplierDeta
 import { SupplierFilterBar } from '@/features/supplier/components/SupplierFilterBar'
 import { SupplierFormModal } from '@/features/supplier/components/SupplierFormModal'
 import { formatDistance, haversineDistanceMeters } from '@/features/supplier/distance'
+import {
+  createdSupplier,
+  deletedSupplier,
+  deleteSupplierFailed,
+  SAVE_SUPPLIER_FAILED,
+  updatedSupplier,
+} from '@/features/supplier/messages'
 import type { Supplier, SupplierInput } from '@/features/supplier/types'
+import { useAutoDismissed } from '@/features/supplier/useAutoDismissed'
 import { errorMessage } from '@/lib/api/http'
 import { Pagination } from '@/shared/components/Pagination'
 import { useAuth } from '@/features/user/useAuth'
@@ -141,7 +157,10 @@ export function Suppliers() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  // a failed load or delete; a failed save shows inside the form instead
   const [error, setError] = useState<string | null>(null)
+  // why the last save failed, shown in the form, which covers the page
+  const [formError, setFormError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const [query, setQuery] = useState('')
@@ -333,14 +352,7 @@ export function Suppliers() {
     }
   }, [])
 
-  // Auto-dismisses a create/update/delete success banner after a few
-  // seconds — errors stay until the next action, but a success message
-  // that lingers just clutters the page once the user has moved on.
-  useEffect(() => {
-    if (!successMessage) return
-    const timeout = window.setTimeout(() => setSuccessMessage(null), 4000)
-    return () => window.clearTimeout(timeout)
-  }, [successMessage])
+  useAutoDismissed(successMessage, setSuccessMessage)
 
   const selected = suppliers.find((s) => s.id === selectedId) ?? null
 
@@ -350,9 +362,15 @@ export function Suppliers() {
   // was selected.
   const waitingForLocation = sort === DISTANCE_SORT && !userLocation
 
+  function openForm(target: Supplier | 'new') {
+    setFormError(null)
+    setFormOpenFor(target)
+  }
+
   async function handleSave(input: SupplierInput) {
     const isEdit = formOpenFor !== 'new'
     setSaving(true)
+    setFormError(null)
     try {
       if (formOpenFor && formOpenFor !== 'new') {
         await updateSupplier(formOpenFor.id, input)
@@ -362,9 +380,7 @@ export function Suppliers() {
       setFormOpenFor(null)
       setError(null)
       setSuccessMessage(
-        isEdit
-          ? `Successfully updated Supplier "${input.name}".`
-          : `Successfully created Supplier "${input.name}".`,
+        isEdit ? updatedSupplier(input.name) : createdSupplier(input.name),
       )
       // Trigger the load effect rather than fetching and setting state
       // here directly — see that effect's comment for why (staleness
@@ -373,7 +389,9 @@ export function Suppliers() {
       setRefreshKey((k) => k + 1)
     } catch (err) {
       setSuccessMessage(null)
-      setError(errorMessage(err, 'Could not save supplier.'))
+      // in the form, which stays open with the input kept: the page's
+      // banner would sit behind it
+      setFormError(errorMessage(err, SAVE_SUPPLIER_FAILED))
     } finally {
       setSaving(false)
     }
@@ -381,13 +399,13 @@ export function Suppliers() {
 
   async function handleDelete() {
     if (!pendingDelete) return
+    const target = pendingDelete
     setSaving(true)
     try {
-      await deleteSupplier(pendingDelete.id)
-      if (selectedId === pendingDelete.id) setSelectedId(null)
-      setPendingDelete(null)
+      await deleteSupplier(target.id)
+      if (selectedId === target.id) setSelectedId(null)
       setError(null)
-      setSuccessMessage(`Successfully deleted Supplier "${pendingDelete.name}".`)
+      setSuccessMessage(deletedSupplier(target.name))
       // Deleting the last item on the last page would otherwise leave
       // `page` pointing past the new totalPages — step back a page
       // first when that happens; `page` is already one of
@@ -400,8 +418,10 @@ export function Suppliers() {
       }
     } catch (err) {
       setSuccessMessage(null)
-      setError(errorMessage(err, 'Could not delete supplier.'))
+      setError(errorMessage(err, deleteSupplierFailed(target.name)))
     } finally {
+      // closed either way: the confirm would cover the page's banner
+      setPendingDelete(null)
       setSaving(false)
     }
   }
@@ -413,7 +433,7 @@ export function Suppliers() {
         {isAdmin && (
           <button
             type="button"
-            onClick={() => setFormOpenFor('new')}
+            onClick={() => openForm('new')}
             className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
           >
             + Add Supplier
@@ -433,13 +453,19 @@ export function Suppliers() {
       />
 
       {successMessage && (
-        <p className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+        <p
+          role="status"
+          className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700"
+        >
           {successMessage}
         </p>
       )}
 
       {error && (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          role="alert"
+          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
           {error}
         </p>
       )}
@@ -490,7 +516,7 @@ export function Suppliers() {
                       <SupplierDetailPanel
                         supplier={selected}
                         isAdmin={isAdmin}
-                        onEdit={() => setFormOpenFor(selected)}
+                        onEdit={() => openForm(selected)}
                         onDelete={() => setPendingDelete(selected)}
                       />
                     </div>
@@ -522,7 +548,7 @@ export function Suppliers() {
             <SupplierDetailPanel
               supplier={selected}
               isAdmin={isAdmin}
-              onEdit={() => setFormOpenFor(selected)}
+              onEdit={() => openForm(selected)}
               onDelete={() => setPendingDelete(selected)}
             />
           </div>
@@ -535,6 +561,7 @@ export function Suppliers() {
           onCancel={() => setFormOpenFor(null)}
           onSave={handleSave}
           saving={saving}
+          error={formError}
         />
       )}
 

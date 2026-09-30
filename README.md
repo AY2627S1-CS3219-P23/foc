@@ -320,7 +320,9 @@ failures) chosen by the author via neutral-options Q&A and recorded in
 Add / Edit / Delete on the admin dashboard (reusing the Suppliers page's
 form and delete dialogs, with a retry after a failed load, and its
 failed saves and deletes shown where the admin can see them after the
-PR #156 review), recorded in `ai/usage-log.md`;
+PR #156 review, the same fix applied to the Suppliers page and the two
+pages' supplier messages and auto-dismiss shared after the re-review),
+recorded in `ai/usage-log.md`;
 and user-service OTP email sending (issue #88, PR
 #150) — sign-up reworked to the design doc's insert-after-verify shape
 (`POST /auth/signup` now parks a `pending_signups` row and emails a

@@ -18,6 +18,11 @@
 // page, with actions off until it reloads; the success line clears on a
 // page change and after 4s, like the Suppliers page. Success and error
 // texts reworded to match the Suppliers page's.
+// PR #156 re-review: those texts and the auto-dismiss now come from
+// ../messages and ../useAutoDismissed, shared with the Suppliers page; a
+// failed delete names the supplier (the confirm is gone by then); a
+// deleted row leaves the kept rows at once, so a failed reload after it
+// can't show it again.
 // Supplier-domain UI: flag changes to its owners.
 // Author review: Ryan to review via the PR.
 
@@ -31,7 +36,15 @@ import {
   listSuppliers,
   updateSupplier,
 } from '../api'
+import {
+  createdSupplier,
+  deletedSupplier,
+  deleteSupplierFailed,
+  SAVE_SUPPLIER_FAILED,
+  updatedSupplier,
+} from '../messages'
 import type { PagedResponse, Supplier, SupplierInput } from '../types'
+import { useAutoDismissed } from '../useAutoDismissed'
 import { DeleteSupplierModal } from './DeleteSupplierModal'
 import { SupplierFormModal } from './SupplierFormModal'
 
@@ -51,6 +64,10 @@ interface LoadResult {
 
 function hours(supplier: Supplier) {
   return `${supplier.openingTime}–${supplier.closingTime}`
+}
+
+function withoutSupplier(data: PagedResponse<Supplier>, id: string) {
+  return { ...data, content: data.content.filter((s) => s.id !== id) }
 }
 
 const linkClass =
@@ -110,16 +127,10 @@ export function SuppliersAdminSection() {
   // previous rows stay on screen meanwhile, and after a failed reload of
   // the same page (never under another page's number)
   const loading = result?.key !== queryKeyOf(page, reloadCount)
-  const data =
-    result?.data ?? (lastData?.page === page ? lastData.data : null)
+  const data = result?.data ?? (lastData?.page === page ? lastData.data : null)
   const loadError = loading ? null : (result?.error ?? null)
 
-  // a success line only describes the last action: clear it after a while
-  useEffect(() => {
-    if (!success) return
-    const timeout = window.setTimeout(() => setSuccess(null), 4000)
-    return () => window.clearTimeout(timeout)
-  }, [success])
+  useAutoDismissed(success, setSuccess)
 
   function handlePageChange(value: number) {
     setPage(value)
@@ -155,15 +166,11 @@ export function SuppliersAdminSection() {
       }
       setFormOpenFor(null)
       setSuccess(
-        editing
-          ? `Successfully updated Supplier "${input.name}".`
-          : `Successfully created Supplier "${input.name}".`,
+        editing ? updatedSupplier(input.name) : createdSupplier(input.name),
       )
       reload()
     } catch (err) {
-      setFormError(
-        errorMessage(err, 'Could not save supplier.'),
-      )
+      setFormError(errorMessage(err, SAVE_SUPPLIER_FAILED))
     } finally {
       setSaving(false)
     }
@@ -177,7 +184,15 @@ export function SuppliersAdminSection() {
     setSuccess(null)
     try {
       await deleteSupplier(target.id)
-      setSuccess(`Successfully deleted Supplier "${target.name}".`)
+      setSuccess(deletedSupplier(target.name))
+      // known gone, not just outdated: drop it from the rows kept on
+      // screen, so a failed reload doesn't bring it back
+      setResult((r) =>
+        r?.data ? { ...r, data: withoutSupplier(r.data, target.id) } : r,
+      )
+      setLastData(
+        (l) => l && { ...l, data: withoutSupplier(l.data, target.id) },
+      )
       // the page's only row, on a later page: go straight to the previous
       // page instead of fetching the emptied one. `data` is current:
       // actions are disabled while loading and after a failed load
@@ -187,7 +202,7 @@ export function SuppliersAdminSection() {
         reload()
       }
     } catch (err) {
-      setActionError(errorMessage(err, 'Could not delete supplier.'))
+      setActionError(errorMessage(err, deleteSupplierFailed(target.name)))
     } finally {
       // closed either way: the confirm would cover the section's alert
       setPendingDelete(null)

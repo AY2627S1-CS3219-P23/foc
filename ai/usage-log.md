@@ -26,6 +26,35 @@ Entry template:
 ```
 
 ---
+## 2026-09-30 — Ryan Ang (PR #156 re-review follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug + refactor (implementation + tests)
+- **Scope:** `web/` only; no backend changes. Covers the remaining
+  items from the second review of PR #156:
+  - Suppliers page (`routes/suppliers.tsx`): save errors are now
+    rendered in the supplier form instead of the page banner the form
+    hides, and the delete confirm closes after a failure so its error
+    can be read. The banners are marked as alert/status for screen
+    readers.
+  - Shared code: the create/update/delete messages and the 4-second
+    success timeout, previously duplicated in both supplier screens,
+    moved to `features/supplier/messages.ts` and
+    `features/supplier/useAutoDismissed.ts`. The delete-failure fallback
+    now includes the supplier's name.
+  - Admin Suppliers section (`SuppliersAdminSection.tsx`): switched to
+    the shared code; a successfully deleted supplier is removed from the
+    cached rows so it can't reappear if the follow-up reload fails;
+    formatted with prettier (this file only).
+  - Tests: 2 new cases in `test/admin.test.tsx` and a new
+    `test/suppliers.test.tsx` with 2 cases for the Suppliers page's
+    save/delete failures.
+- **Prompt(s):** Asked for an assessment of the open PR #156
+  review comments without making changes.
+- **Author review:** Changes follow the reviewer's suggestions,
+  including their proposed hook/messages split. Verified with the web
+  test suite (82 passing), `tsc -b` and `eslint .`. Ryan to review via
+  the PR.
+
 ## 2026-09-30 — Ryan Ang (PR #156 review fixes)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** debug (implementation + tests)

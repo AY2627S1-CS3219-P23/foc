@@ -18,6 +18,8 @@
 // PR #156 review: failed saves shown in the form, failed deletes closing
 // the confirm, retry after a failed save, no other page's rows after a
 // failed page load, and the success line clearing on a page change.
+// PR #156 re-review: a failed delete's fallback naming the supplier, and a
+// deleted row staying gone when the reload after it fails.
 // Scope: tests for the Admin Dashboard page — Users and Suppliers
 // sections, the route guard and the nav link.
 // Reviewed by: Ryan Ang
@@ -1019,6 +1021,57 @@ describe('Suppliers section', () => {
     expect(suppliers.queryByRole('status')).not.toBeInTheDocument()
     // the confirm closes, or it would cover the alert
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  test('a failed delete with no reason from the server names the supplier', async () => {
+    vi.mocked(deleteSupplier).mockRejectedValue(new TypeError('Failed to fetch'))
+    const user = userEvent.setup()
+    renderAdmin()
+    const suppliers = await findSection('Suppliers')
+    const table = await suppliers.findByRole('table')
+
+    await user.click(
+      rowFor(table, 'Fine Foods UTown').getByRole('button', {
+        name: 'Delete Fine Foods UTown',
+      }),
+    )
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Delete Supplier' })).getByRole(
+        'button',
+        { name: 'Delete' },
+      ),
+    )
+
+    // the confirm is gone by now, so the alert has to say which one
+    expect(await suppliers.findByRole('alert')).toHaveTextContent(
+      'Could not delete supplier "Fine Foods UTown".',
+    )
+  })
+
+  test('a deleted row stays gone when the reload after it fails', async () => {
+    vi.mocked(listSuppliers)
+      .mockResolvedValueOnce(supplierPage(seedSuppliers))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    const user = userEvent.setup()
+    renderAdmin()
+    const suppliers = await findSection('Suppliers')
+    const table = await suppliers.findByRole('table')
+
+    await user.click(
+      rowFor(table, 'Fine Foods UTown').getByRole('button', {
+        name: 'Delete Fine Foods UTown',
+      }),
+    )
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Delete Supplier' })).getByRole(
+        'button',
+        { name: 'Delete' },
+      ),
+    )
+
+    await suppliers.findByRole('button', { name: 'Try again' })
+    expect(suppliers.queryByText('Fine Foods UTown')).not.toBeInTheDocument()
+    expect(within(table).getByText('CoffeeBean@Com3')).toBeInTheDocument()
   })
 
   test('a failed save shows its reason inside the form, which stays open', async () => {
