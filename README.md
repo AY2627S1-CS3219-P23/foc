@@ -344,6 +344,11 @@ part of issue #109) without which registration through the site
 dead-ended at a failed login — with the fix-versus-restructure choice,
 the dialog's shape and the cooldown's route all decided by the author via
 neutral-options Q&A and recorded in `ai/usage-log.md`.
+`ai/usage-log.md`; and an
+opt-in demo-account seeder for user-service (`USER_SEED_DEMO`: 1
+owner, 3 admins, 100 users), with the mechanism, the off-by-default
+flag and per-role passwords decided by the team and recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

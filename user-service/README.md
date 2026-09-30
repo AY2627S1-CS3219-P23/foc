@@ -31,6 +31,8 @@
   rules that came out of it (a resend keeps the original expiry; verify
   discards a row whose identifiers were taken) and the 202's
   resendInSeconds, each with the reason it exists.
+  2026-09-29, Claude Code (Opus 5.5): "Demo accounts" section for the
+  USER_SEED_DEMO seeder
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -179,6 +181,35 @@ empty) `otps` table and creates `pending_signups` — #88 replaced one
 OTP table with a pending table per operation; `pending_email_changes`
 follows with #92. Schema changes go in a new `V<n>__<name>.sql`, never
 by editing an applied one.
+
+## Demo accounts (local only)
+
+With `USER_SEED_DEMO=true` (in `.env`; off by default), the service
+inserts demo accounts at startup (`DemoAccountsSeeder`), skipping any
+that already exist, so restarts are safe:
+
+| Accounts | Role | Password |
+| --- | --- | --- |
+| `demo_owner` (`e9000001@u.nus.edu`) | OWNER | `OwnerPass123` |
+| `demo_admin_1` … `demo_admin_3` (`e9000101`–`e9000103@u.nus.edu`) | ADMIN | `AdminPass123` |
+| `demo_user_001` … `demo_user_100` (`e9100001`–`e9100100@u.nus.edu`) | USER | `StudentPass123` |
+
+The passwords are public, so never set the flag on a real deployment.
+
+The seeder only inserts missing accounts, and soft-deleted rows count as
+present: an account that is changed (e.g. a demoted admin) or removed
+(soft-deleted, kept until the day-31 purge below) is not restored on
+restart. To get the originals back, reset the user database — remove the
+`user-db` container and its data volume, then start again:
+
+```sh
+docker compose rm -sf user-db
+docker volume rm foc_user-db-data   # "<project>_user-db-data"; foc = the repo folder name
+docker compose up -d user-db user-service
+```
+
+(`docker compose down -v` also works, but wipes every service's
+database.)
 
 ## Soft delete & day-31 purge (#93)
 
