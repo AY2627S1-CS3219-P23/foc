@@ -26,6 +26,33 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Leong Wei Zhi (#112 profile screens)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `web`: `routes/profile.tsx` + route-table entry (the
+  already-linked /profile nav destination); `features/user/profileApi.ts`
+  and `profileApiMock.ts`; `ProfileSection`, `ProfileDetailsCard`,
+  `EditAccountCard` (OTP flow), `ChangePasswordCard`,
+  `DeleteAccountModal` components; `PasswordChecklist.tsx` extracted
+  from register.tsx; `errorMessage` hoisted from its three page-local
+  copies into `lib/api/http.ts`; `test/profile.test.tsx`.
+- **Prompt(s):** Asked to plan and resolve issue #112 (profile.png
+  wireframe). Scope decided by the author via question rounds: full edit
+  UI now against a dev-only mock (VITE_MOCK_PROFILE_API, adminApiMock
+  pattern) since #92's endpoints don't exist yet; credits shown as
+  placeholder dashes (credit-service has no API); no My Settings sidebar
+  (single card stack) until a second settings page exists.
+- **Author review:** Key deviations the tool flagged: the OTP/update/
+  password API contract is PROVISIONAL, confined to profileApi.ts, to be
+  renegotiated with #92's owner (F2.1.4's second OTP to the new email
+  deferred to #92); the email helper text follows AccountRules
+  (eXXXXXXX@u.nus.edu), not the wireframe's looser copy; deleting the
+  account lands on the login page, not home — ProtectedRoute's redirect
+  wins over logout()'s navigation from any protected page (pre-existing
+  app-wide logout behavior). Vitest suite (39 tests incl. 14 new),
+  eslint, build + mock-absent-from-bundle check; reviewed via pull
+  request.
+
 ## 2026-09-29 — Leong Wei Zhi (#88 OTP email sending)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate

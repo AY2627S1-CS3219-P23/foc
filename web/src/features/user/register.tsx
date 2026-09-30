@@ -14,6 +14,9 @@
 // PR #142 Copilot review: role="alert" on the error message; checklist
 // moved outside the password <label> (a ul is not phrasing content and
 // was polluting the field's accessible name).
+// 2026-09-29, Claude Code (Fable 5), issue #112: errorMessage and the
+// password checklist moved out to shared homes (lib/api/http.ts and
+// PasswordChecklist.tsx) for reuse by the profile page; logic unchanged.
 // 2026-09-29, Claude Code (Opus 5.5), issue #147: errorMessage now comes
 // from lib/api/http; Prettier formatting.
 // 2026-09-29 (issue #147): the login page is told the account was created.
@@ -37,38 +40,7 @@ import { apiFetch, errorMessage } from '@/lib/api/http'
 import { router } from '../../routes/index'
 import { OtpVerificationModal } from './components/OtpVerificationModal'
 import type { SignupAccepted, SignupPending } from './types'
-
-// Mirrors user-service's AccountRules password policy (PASSWORD_PATTERN,
-// PASSWORD_MIN/MAX). Display-only: the server remains the validator.
-const passwordRules = [
-  {
-    label: 'Contains uppercase and lowercase',
-    met: (p: string) => /[a-z]/.test(p) && /[A-Z]/.test(p),
-  },
-  {
-    label: 'Contains numbers',
-    met: (p: string) => /\d/.test(p),
-  },
-  {
-    label: 'Length between 10 and 50 characters',
-    met: (p: string) => p.length >= 10 && p.length <= 50,
-  },
-]
-
-function PasswordChecklist({ password }: { password: string }) {
-  return (
-    <ul className="mt-2 space-y-0.5 text-xs font-normal">
-      {passwordRules.map(({ label, met }) => {
-        const ok = met(password)
-        return (
-          <li key={label} className={ok ? 'text-green-600' : 'text-red-600'}>
-            {ok ? '✓' : '✗'} {label}
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
+import { PasswordChecklist } from "./PasswordChecklist";
 
 export function Register() {
   const [email, setEmail] = useState('')
