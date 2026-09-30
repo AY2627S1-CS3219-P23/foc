@@ -8,6 +8,9 @@ Scope: integration tests for the JWT filter chain (issue #91) against the
        problem+json 403, /auth/** and /actuator/health ignore a stale token
        (author's decision) but /auth/logout does not, and no session is
        created.
+       2026-09-29, Claude Code (Fable 5), issue #88: sign-up answers 202
+       now (a code is emailed; no account yet), so the garbage-token
+       sign-up case expects that, with the email sender mocked out.
 Author review: Ryan to review via the PR.
 */
 
@@ -41,10 +44,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
 import foc.user.PostgresTestContainer;
 import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.repository.UserRepository;
+import foc.user.service.OtpEmailSender;
 import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest
@@ -72,6 +78,10 @@ class JwtAuthenticationTest extends PostgresTestContainer {
 
     @Autowired
     private SecurityProblemResponses problems;
+
+    // sign-up emails a code now (issue #88); no SMTP in these tests
+    @MockitoBean
+    private OtpEmailSender otpEmailSender;
 
     private User alex;
     private User admin;
@@ -290,7 +300,7 @@ class JwtAuthenticationTest extends PostgresTestContainer {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(JsonMapper.builder().build().writeValueAsString(
                     Map.of("email", "e7654321@u.nus.edu", "username", "new_student", "password", PASSWORD))))
-            .andExpect(status().isCreated());
+            .andExpect(status().isAccepted());
     }
 
     @Test

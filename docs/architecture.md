@@ -12,6 +12,13 @@
   2026-09-27: team decision to reduce the Supplier Service capacity
   target from 100,000 to 1,000 suppliers — updated here to match
   docs/supplier-service.md's NFR2.1/D7.
+  2026-09-29 (Claude Code, Fable 5), issue #88: three resolved TBDs
+  struck, per the D2 design doc's follow-up list — the email provider
+  (Gmail SMTP, with a Mailpit container as the local SMTP target,
+  chosen by Leong Wei Zhi via options Q&A in the issue #88 PR) and the
+  User/Supplier DB engines (PostgreSQL, decided when user-db and
+  supplier-db were wired into compose.yaml in issue #85 and the
+  supplier scaffolding).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -89,7 +96,7 @@ TBD = to be decided.
 | Web → Credit Service | sync REST | available + reserved balances (shown in the user's profile), filtered transaction history | Credit F4; User F8.1 |
 | Web → Notification Service | sync REST | list recent notifications in-app, mark read/unread, retention window | Notif F3.1, F3.2, F3.4 |
 | Notification Service → Web | async WebSocket (STOMP) push, per-user destinations | request state-change updates to requester and assigned courier within 5 seconds; the system's **only standing connection** — all other Web ↔ service traffic is stateless REST (see [`notification-service.md`](notification-service.md), "Connection topology") | Notif F1.2; Order NFR1.1–1.2 |
-| User Service → Email Provider | async email (provider TBD) | OTP for sign-up verification, email-change confirmation, password reset | User F1.1.3, F2.1.1, F2.1.3, F4.2 |
+| User Service → Email Provider | async email (Gmail SMTP; a Mailpit container is the local dev/demo target) | OTP for sign-up verification, email-change confirmation, password reset | User F1.1.3, F2.1.1, F2.1.3, F4.2 |
 | User Service → Credit Service | sync REST | allocate 5 starting credits (reserved balance 0) on sign-up | Credit F1.1 |
 | Order Service → Supplier Service | sync REST | validate pickup location is a known supplier/landmark; fetch supplier locations for the 1 km acceptance-proximity check | Order F1.1.1, F8.1 |
 | Order Service → Credit Service | sync REST | reserve on create, release on cancel/expiry, atomic transfer on completion; identical transfer requests for the same confirmation processed once | Credit F2.1, F2.1.1, F3.1, F5.1, NFR2.2, NFR2.2.1 |
@@ -131,12 +138,16 @@ These shape sizing and implementation rather than adding components:
 
 ## Decisions still open (team, not AI)
 
-- **Database engines** for the User, Supplier, Order and Credit
-  services — one database per service is decided; the Notification DB
-  is decided (PostgreSQL), the rest are not.
-- **Email provider** for OTP delivery (User F1.1.3).
+- **Database engines** for the Order and Credit services — one database
+  per service is decided; the User, Supplier and Notification DBs are
+  decided (PostgreSQL).
 - **Supplier caching mechanism** (Supplier NFR1.1.1) — in-process vs. a
   shared cache; drawn inside the Supplier Service until decided.
+
+Resolved 2026-09-29: the **email provider** for OTP delivery (User
+F1.1.3) is **Gmail SMTP**, with a Mailpit container in compose as the
+local dev/demo SMTP target — decided by the User Service owner in the
+issue #88 PR, as the D2 design doc's provider comparison left open.
 
 An exported image of this diagram (SVG/PNG) is kept with the D1
 document; this Mermaid source is the version of record.

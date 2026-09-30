@@ -17,11 +17,29 @@
 // 2026-09-29, Claude Code (Fable 5), issue #112: errorMessage and the
 // password checklist moved out to shared homes (lib/api/http.ts and
 // PasswordChecklist.tsx) for reuse by the profile page; logic unchanged.
+// 2026-09-29, Claude Code (Opus 5.5), issue #147: errorMessage now comes
+// from lib/api/http; Prettier formatting.
+// 2026-09-29 (issue #147): the login page is told the account was created.
+// 2026-09-30, Claude Code (Opus 5), issue #109 (PR #150): sign-up no longer
+// ends here. POST /auth/signup answers 202 and only emails a code (issue
+// #88), so this page opens the OTP dialog and the account is created by the
+// verify call inside it — before this, every registration through the site
+// dead-ended at a failed login (PR #150 review, @Sinnez1). The values that
+// were sent are snapshotted, because user-service treats only a repeat of
+// the identical request as the resend. Modal over this page rather than a
+// second route: Leong Wei Zhi's call via options Q&A.
+// PR #150 review (@Sinnez1): dismissing the dialog keeps the pending
+// sign-up and offers "Enter your code" to reopen it — discarding it
+// stranded the code already emailed behind the resend cooldown. The
+// snapshot holds absolute times so a reopened dialog counts from the
+// truth.
 // Reviewed by: Ryan Ang
 
-import React, { useState } from "react";
-import { apiFetch, errorMessage } from "@/lib/api/http";
-import { router } from "../../routes/index";
+import React, { useState } from 'react'
+import { apiFetch, errorMessage } from '@/lib/api/http'
+import { router } from '../../routes/index'
+import { OtpVerificationModal } from './components/OtpVerificationModal'
+import type { SignupAccepted, SignupPending } from './types'
 import { PasswordChecklist } from "./PasswordChecklist";
 
 export function Register() {
@@ -29,24 +47,53 @@ export function Register() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  // set once a code is on its way: the body that was sent, plus when that
+  // code dies and when it may be resent. A snapshot rather than a read of
+  // the live fields, so a resend repeats the identical request even if the
+  // form is edited behind the dialog — anything else would be refused 409
+  const [pending, setPending] = useState<SignupPending | null>(null)
+  // dismissing the dialog hides it but keeps the pending sign-up, so the
+  // code already emailed can still be entered — closing it used to strand
+  // that code behind a cooldown and a pointless resend (PR #150 review)
+  const [codeOpen, setCodeOpen] = useState(false)
 
   const register = async (event: React.SyntheticEvent) => {
     event.preventDefault()
+    setSubmitting(true)
     try {
-      await apiFetch('user', '/auth/signup', {
+      const accepted = await apiFetch<SignupAccepted>('user', '/auth/signup', {
         method: 'POST',
         body: JSON.stringify({ email, username, password }),
       })
 
       setError('')
-      setEmail('')
-      setUsername('')
-      setPassword('')
-      // the login page shows an "account created" notice (issue #147)
-      router.navigate('/login', { state: { accountCreated: true } })
+      // no account exists yet, and nothing is cleared: the dialog takes
+      // over from here, and its verify call is what creates the account
+      setPending({
+        email,
+        username,
+        password,
+        expiresAt: Date.now() + accepted.expiresInSeconds * 1000,
+        resendAt: Date.now() + accepted.resendInSeconds * 1000,
+      })
+      setCodeOpen(true)
     } catch (error: unknown) {
       setError(errorMessage(error, 'Could not register. Try again.'))
+    } finally {
+      setSubmitting(false)
     }
+  }
+
+  // the account exists now, so finish where sign-up always finished
+  const accountCreated = () => {
+    setPending(null)
+    setCodeOpen(false)
+    setEmail('')
+    setUsername('')
+    setPassword('')
+    // the login page shows an "account created" notice (issue #147)
+    router.navigate('/login', { state: { accountCreated: true } })
   }
 
   return (
@@ -97,11 +144,24 @@ export function Register() {
         </div>
         <button
           type="submit"
-          className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          disabled={submitting}
+          className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
         >
-          Sign Up
+          {submitting ? 'Sending code...' : 'Sign Up'}
         </button>
       </form>
+      {pending && !codeOpen && (
+        <p className="mt-4 text-center text-sm text-gray-600">
+          We emailed a code to {pending.email}.{' '}
+          <button
+            type="button"
+            onClick={() => setCodeOpen(true)}
+            className="font-medium text-gray-900 underline cursor-pointer"
+          >
+            Enter your code
+          </button>
+        </p>
+      )}
       <p className="mt-4 text-center text-sm text-gray-600">
         Already have an account?{' '}
         <button
@@ -111,6 +171,25 @@ export function Register() {
           Log in
         </button>
       </p>
+      {/* outside the <form>: the dialog holds a form of its own, and forms
+          may not nest */}
+      {pending && codeOpen && (
+        <OtpVerificationModal
+          pending={pending}
+          // hidden, not discarded: "Enter your code" brings it back
+          onClose={() => setCodeOpen(false)}
+          onVerified={accountCreated}
+          onResent={setPending}
+          onRestart={(message) => {
+            // the pending sign-up is dead (expired, or too many wrong
+            // codes): back to the still-filled form, one click from a
+            // fresh code
+            setPending(null)
+            setCodeOpen(false)
+            setError(message)
+          }}
+        />
+      )}
     </div>
   )
 }

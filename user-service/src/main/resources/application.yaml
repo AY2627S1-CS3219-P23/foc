@@ -17,9 +17,20 @@
 # 2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: user.jwt (login
 # token signing, design doc §3) and user.web-allowed-origin (CORS, reusing
 # supplier-service's WEB_ALLOWED_ORIGIN variable).
+# 2026-09-29, Claude Code (Fable 5), issue #88: spring.mail + user.mail/
+# user.otp for OTP email sending. Defaults target the compose Mailpit
+# container; Gmail SMTP (the chosen provider) is switched on via the
+# MAIL_* values documented in .env.example. PR #150 Copilot review:
+# finite SMTP timeouts so a stalled endpoint can't pin request threads.
+# PR #150 author review: user.otp.resend-cooldown, the gap enforced
+# between two codes for one pending sign-up (chosen by Leong Wei Zhi via
+# options Q&A).
 # 2026-09-29, Claude Code (Opus 5.5), issue #147: Flyway owns the schema
 # (team decision): ddl-auto none, and databases that ddl-auto built are
-# baselined at V1.
+# baselined at V1. V3 (2026-09-30, merge of this branch) drops the otps
+# table issue #88 removed and creates pending_signups.
+# 2026-09-29, Claude Code (Opus 5.5): user.seed.demo, the switch for the
+# demo-account seeder (team decision: off unless USER_SEED_DEMO=true).
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -34,6 +45,25 @@ spring:
       # Flyway (db/migration) owns the schema; Hibernate never changes it
       ddl-auto: none
     open-in-view: false
+  mail:
+    # SMTP target for OTP emails (issue #88). The defaults reach the
+    # compose Mailpit container (web inbox: http://localhost:8025); for
+    # real delivery set the Gmail values from .env.example. Unlike
+    # JWT_SECRET, empty credentials are legitimate — Mailpit is
+    # unauthenticated — so nothing fails loudly here.
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      "mail.smtp.auth": ${MAIL_SMTP_AUTH:false}
+      "mail.smtp.starttls.enable": ${MAIL_SMTP_STARTTLS:false}
+      # Finite timeouts (ms): the send runs inside the signup request,
+      # so a stalled SMTP endpoint must fail (502) rather than hold the
+      # request thread and its DB connection open indefinitely.
+      "mail.smtp.connectiontimeout": "5000"
+      "mail.smtp.timeout": "10000"
+      "mail.smtp.writetimeout": "10000"
   flyway:
     # a database ddl-auto built before Flyway has tables but no history:
     # record it as V1 (the baseline script's schema) and apply V2 onward
@@ -45,18 +75,28 @@ management:
     web:
       exposure:
         include: health
+  health:
+    mail:
+      # Don't let an SMTP outage mark the whole service down: everything
+      # but the email flows keeps working, and a failed send already
+      # surfaces as a 502 on sign-up (issue #88).
+      enabled: false
 
 user:
   retention:
     # Soft-deleted accounts keep their row — and so their unique email/
     # username — for this many days (design doc §2: 30-day reuse block).
-    # The purge scheduler hard-deletes them, with their otps and
-    # account_tokens rows, once deleted_at is older than this ("purge on
-    # day 31").
+    # The purge scheduler hard-deletes them, with their account_tokens
+    # rows, once deleted_at is older than this ("purge on day 31").
     days: ${USER_RETENTION_DAYS:30}
     # Cron schedule (Spring's 6-field format) controlling how often the
     # purge sweep runs. Default: daily at 03:00 server time.
     purge-cron: "${USER_PURGE_CRON:0 0 3 * * *}"
+  seed:
+    # true inserts the demo accounts (1 owner, 3 admins, 100 users) at
+    # startup, skipping any already present (DemoAccountsSeeder). Local
+    # testing and demos only: their passwords are public, in the README.
+    demo: ${USER_SEED_DEMO:false}
   jwt:
     # Shared HS256 secret (at least 32 bytes) that every service verifies
     # tokens with. Empty default: startup fails with a clear message
@@ -66,6 +106,22 @@ user:
     access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:1h}
   # Browser origin allowed by CORS (the web SPA).
   web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
+  mail:
+    # From-address on OTP emails. With Gmail SMTP this must equal
+    # MAIL_USERNAME (Gmail rewrites anything else).
+    from: ${MAIL_FROM:no-reply@foc.local}
+  otp:
+    # Sign-up verification code lifetime, as a Spring duration (10m); a
+    # bare number is seconds (OTP_TTL=600 is 10 min).
+    ttl: ${OTP_TTL:10m}
+    # Wrong codes allowed before the pending sign-up is discarded and a
+    # fresh sign-up is required (mirrors the login lockout's 5). Counted
+    # per pending sign-up, resends included.
+    max-attempts: ${OTP_MAX_ATTEMPTS:5}
+    # Shortest gap between two codes for the same pending sign-up; a
+    # repeat inside it is a 429 with Retry-After. Caps both inbox flooding
+    # and how fast fresh codes can be cycled. 0 disables it.
+    resend-cooldown: ${OTP_RESEND_COOLDOWN:60s}
 
 owner:
   setup:

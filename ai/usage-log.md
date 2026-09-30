@@ -53,6 +53,158 @@ Entry template:
   eslint, build + mock-absent-from-bundle check; reviewed via pull
   request.
 
+## 2026-09-29 — Leong Wei Zhi (#88 OTP email sending)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `user-service/` — sign-up reworked to the design doc's
+  insert-after-verify shape: `pending_signups` entity/repository (the
+  generic `otps` table removed with it), `OtpService` (code policy),
+  `OtpEmailSender`/`SmtpOtpEmailSender` (SMTP via
+  spring-boot-starter-mail), `POST /auth/signup` → 202 + emailed code,
+  new `POST /auth/signup/verify` → 201, purge scheduler sweep, unit +
+  integration tests; `compose.yaml` mailpit container + MAIL_*/OTP_*
+  wiring; `.env.example`, `AGENTS.md` port row.
+- **Prompt(s):** Asked to read the D2 design doc and plan/resolve #88.
+  The open design decisions were made by the author via options Q&A:
+  Gmail SMTP as the provider (over a transactional API and AWS SES),
+  scope including OTP issuance and the sign-up wiring, Mailpit as the
+  local SMTP default, and the pending-tables design (drop `otps`;
+  `pending_email_changes` to follow with #92).
+- **Author review:** Full test suite (213 tests) green; end-to-end
+  verified against the compose stack — sign-up 202, code read from the
+  Mailpit inbox, verify 201, login token issued. Reviewed via pull
+  request.
+
+## 2026-09-29 — Leong Wei Zhi (PR #150 review: repeat sign-ups can't hijack a pending sign-up)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** fix
+- **Scope:** `user-service/` — the review of #88 found that a repeat
+  `POST /auth/signup` overwrote the pending row's username and password
+  hash, so whoever received the code verified it into an account holding
+  someone else's password. A live `pending_signups` row is now only
+  advanced by a repeat of its own details (same username, password
+  matching the stored hash) — `renewCode`; anything else is a 409; an
+  expired row is dead and any sign-up may take it over
+  (`replaceExpired`). Added with it: a resend cooldown
+  (`OTP_RESEND_COOLDOWN`, default 60s → 429 + `Retry-After` via the new
+  `OtpResendTooSoonException`), wrong-code attempts that survive a
+  resend (so the limit caps guesses per pending sign-up, not per code),
+  a `last_sent_at` column, and the insert-race loser answering with the
+  same 409 as the up-front check instead of a near-identically worded
+  400. Tests: reworked sign-up cases in `AuthServiceTest`/
+  `AuthControllerTest` (including the hijack as a regression case) and a
+  new `SignupResendCooldownTest` at the real 60s default.
+- **Prompt(s):** Asked to resolve the review comments on PR #150. The
+  first Q&A round picked "first pending sign-up wins"; checking that
+  shape against the threat model showed it only reversed who had to move
+  first (a planted pending row would be what the real student's sign-up
+  completed into), which was reported back, and the author then chose
+  the match-to-resend rule above via a second options round, along with
+  carrying attempts over plus the 60s cooldown. The author also chose to
+  leave the web code-entry screen to issue #109 rather than build it in
+  this PR.
+- **Author review:** Full suite green (222 tests, up from 213). Reviewed
+  via pull request.
+
+## 2026-09-30 — Leong Wei Zhi (PR #150 re-review: bounded pending sign-ups + the web OTP step)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** fix + generate
+- **Scope:** `user-service/` — the re-review's two pending-row findings.
+  (1) `verifySignup` now discards a pending sign-up whose email or
+  username was taken while the code was in flight (new
+  `SignupIdentifierTakenException`, a `ResponseStatusException` subclass
+  named in `noRollbackFor` so the delete commits): such a row can never
+  complete, and leaving it locked whoever merely lost a username race out
+  of their own address for the rest of the TTL. (2) `renewCode` no longer
+  moves `expires_at`, so a row lives at most `OTP_TTL` from creation and
+  always becomes takeable — previously whoever pended an address first
+  could resend once per cooldown for ever; the email and the 202 now quote
+  the seconds actually left. Also `SignupResponse.resendInSeconds` and
+  `Retry-After` in the CORS `exposedHeaders`.
+  `web/` — the code-entry step the review's High finding demanded (the
+  sign-up/OTP half of #109): new `CodeInput` (six boxes per
+  `docs/wireframes/signup.png`) and `OtpVerificationModal` under
+  `features/user/components/`, `register.tsx` opening that dialog on the
+  202 instead of navigating to `/login`, `ApiError.retryAfter`, and ten
+  new cases in `src/test/auth.test.tsx`.
+  Docs: `user-service/README.md`, `web/AGENTS.md`, the wiki D2 design page
+  (§3 and its route table), this log and the README summary.
+- **Prompt(s):** Asked to resolve the PR comments, with the web dead-end
+  called out as needing a fix in this branch. Decisions by the author via
+  options Q&A: patch the two findings narrowly rather than restructuring
+  to one pending row per request; the code step as a modal over the
+  register page with a six-box input (wireframe fidelity); and the
+  cooldown carried in the 202 body. The tool's own finding, reported and
+  folded in: `Retry-After` is not CORS-safelisted, so the SPA could not
+  have read it without the `exposedHeaders` line.
+- **Author review:** user-service 230 tests pass; web 62 pass, build,
+  lint and Prettier clean. Reviewed via pull request.
+
+## 2026-09-30 — Leong Wei Zhi (merging main into feat/otp-email-sending)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** refactor (merge conflict resolution)
+- **Scope:** `user-service`: `AuthService` keeps both sides — login is
+  #147's (no transaction, `LoginAttempts` records the attempt under the
+  row lock, `pastRetention` replacing the branch's own retention check),
+  while #88's sign-up and verify stay `@Transactional` because the
+  pending row and its email must commit or roll back together (the
+  finite SMTP timeouts from PR #150's Copilot review answer #147's
+  reason for dropping the transaction). New
+  `V3__pending_signups.sql`, needed because #147 made Flyway the schema
+  owner: it drops the always-empty `otps` table #88 removed and creates
+  `pending_signups` (with `last_sent_at`). `FlywayMigrationTest`'s
+  migration counts, `EntityMappingTest`'s new table-emptying sweep
+  (`pending_signups` instead of `otps`), and #147's
+  `login_parallelFailuresLock` (which signed up expecting 201) updated
+  for the 202-plus-verify flow. `pom.xml`, both `application.yaml`s,
+  `.env.example` and `ai/usage-log.md` keep both sides. Docs corrected
+  where the merge made them wrong: `user-service/README.md` now
+  documents the insert-after-verify routes, the V3 migration and the
+  pending-sign-up sweep, and the purge's dependent-rows note (in the
+  README and `UserRepository`) no longer names the dropped `otps` table.
+- **Prompt(s):** Asked to pull and merge `origin/main` into the branch.
+  Nothing was dropped from either side.
+- **Author review:** user-service 228 tests pass; web 52 pass. Reviewed
+  via pull request.
+
+## 2026-09-29 — Leong Wei Zhi (architecture docs: resolved TBDs struck)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs
+- **Scope:** `docs/architecture.md`, `docs/architecture.mmd` — the
+  follow-up the D2 design doc lists: strike resolved TBDs (same PR as
+  the #88 implementation above).
+- **Prompt(s):** Asked to do the docs follow-up for issue #88.
+  Email provider recorded as Gmail SMTP (Mailpit locally) at the
+  User Service → Email Provider edge and moved out of "Decisions still
+  open"; User/Supplier DB engine TBDs replaced with PostgreSQL, matching
+  what compose.yaml has run since issue #85 and the supplier
+  scaffolding.
+- **Author review:** Transcription only — every decision recorded here
+  was made earlier by its owner (provider via options Q&A in the #88
+  PR; engines with the DB wiring PRs). Reviewed via pull request.
+## 2026-09-29 — Ryan Ang (demo-account seeder)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `user-service`: new `seed/DemoAccountsSeeder.java`
+  (CommandLineRunner, only when `user.seed.demo=true`: 1 OWNER, 3
+  ADMINs, 100 USERs, skipping accounts already present); the
+  `user.seed.demo` setting in `application.yaml`; `USER_SEED_DEMO` in
+  `compose.yaml` and `.env.example`; new `DemoAccountsSeederTest` (roles
+  and counts, each role's login, rerun, partial reseed, sign-up rules)
+  and an off-by-default check in `UserServiceApplicationTests`; README
+  "Demo accounts" section.
+- **Prompt(s):** Summary: Asked for a database seed of mock users in
+  user-service: at least one owner, 2-3 admins and 100 users, on a new
+  branch `feat/seed-users`. Team decisions: a startup seeder in
+  user-service (following supplier-service's `SuppliersSeeder`), off
+  unless a flag is set, and one password per role. Implementation
+  choices by the tool, to confirm in review: 3 admins; the passwords
+  `OwnerPass123` / `AdminPass123` / `StudentPass123`; `demo_*` usernames
+  and `e9…` emails; each role's password hashed once and the hash reused;
+  accounts matched by email or username when skipping.
+- **Author review:** Ryan to review via the PR. user-service: 204 tests
+  pass.
+
 ## 2026-09-29 — Ryan Ang (PR #152 Copilot review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor
@@ -272,6 +424,7 @@ Entry template:
   user-service + supplier-service containers (signup, login, then
   GET/POST /suppliers with no/invalid/valid tokens and non-admin/admin
   roles); `./mvnw test` passes (21/21). Reviewed by: [pending].
+
 ## 2026-09-29 — Leong Wei Zhi (#146 login errors that name their cause)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** generate (implementation + tests + docs)

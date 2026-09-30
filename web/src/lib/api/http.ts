@@ -7,6 +7,11 @@
 // 2026-09-29, Claude Code (Opus 5.5), issue #147: errorMessage added, the
 // one error-to-text helper for every feature (was copied in the admin
 // Users section, login, register and the suppliers page).
+// 2026-09-30, Claude Code (Opus 5), issue #109 (PR #150): ApiError carries
+// Retry-After, so a 429 can drive a countdown (the OTP resend cooldown;
+// login's lockout could use it next). It only arrives cross-origin because
+// user-service names the header in its CORS exposedHeaders — it is not
+// CORS-safelisted, so exposing it there and reading it here go together.
 
 import { serviceBaseUrls, type ServiceName } from './config'
 
@@ -31,22 +36,40 @@ export interface ProblemDetail {
 export class ApiError extends Error {
   readonly status: number
   readonly problem: ProblemDetail | null
+  // seconds to wait, from the response's Retry-After; null when the
+  // response carried none (or an HTTP-date, which nothing here sends)
+  readonly retryAfter: number | null
 
-  constructor(status: number, problem: ProblemDetail | null) {
+  constructor(
+    status: number,
+    problem: ProblemDetail | null,
+    retryAfter: number | null = null,
+  ) {
     super(problem?.detail ?? problem?.title ?? `Request failed (${status})`)
     this.name = 'ApiError'
     this.status = status
     this.problem = problem
+    this.retryAfter = retryAfter
   }
 }
 
-// ApiError carries the backend's problem+json reason, and apiFetch's own
-// Error names a missing VITE_*_SERVICE_URL; a TypeError is the network
-// failing, which gets the caller's friendlier fallback.
-export function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof ApiError) return error.message
-  if (error instanceof Error && !(error instanceof TypeError))
-    return error.message
+// Retry-After as whole seconds, or null if absent/not a number.
+function retryAfterSeconds(res: Response): number | null {
+  const header = res.headers?.get('Retry-After')
+  if (!header) return null
+  const seconds = Number(header)
+  return Number.isFinite(seconds) && seconds >= 0 ? Math.ceil(seconds) : null
+}
+
+// Text to show for an apiFetch failure: the server's problem+json reason
+// (ApiError), or apiFetch's own error (e.g. a missing base URL). A
+// TypeError is fetch's network failure, whose message ("Failed to fetch")
+// means nothing to users, so it gets the fallback.
+export function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) return err.message
+  if (err instanceof Error && !(err instanceof TypeError) && err.message) {
+    return err.message
+  }
   return fallback
 }
 
@@ -80,7 +103,7 @@ export async function apiFetch<T>(
 
   if (!res.ok) {
     const problem = (await res.json().catch(() => null)) as ProblemDetail | null
-    throw new ApiError(res.status, problem)
+    throw new ApiError(res.status, problem, retryAfterSeconds(res))
   }
   if (res.status === 204) {
     return undefined as T
