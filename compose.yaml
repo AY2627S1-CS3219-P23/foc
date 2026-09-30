@@ -45,6 +45,8 @@
 # supplier-service for its new JWT verification + role gate filter
 # chain (the shared platform secret, same var already used by
 # notification-service and user-service).
+# 2026-09-29, Claude Code (Opus 5.5): USER_SEED_DEMO passed to the user
+# service (demo-account seeder, off unless set).
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -217,6 +219,8 @@ services:
       # (issue #93, day-31 purge scheduler).
       USER_RETENTION_DAYS: ${USER_RETENTION_DAYS:-30}
       USER_PURGE_CRON: "${USER_PURGE_CRON:-0 0 3 * * *}"
+      # "true" seeds the demo accounts (local testing only; see .env.example)
+      USER_SEED_DEMO: ${USER_SEED_DEMO:-false}
       # Signs login tokens (issue #90); the same secret the other services
       # verify with.
       JWT_SECRET: ${JWT_SECRET:?set in .env}

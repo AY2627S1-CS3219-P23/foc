@@ -26,6 +26,29 @@ Entry template:
 ```
 
 ---
+## 2026-09-29 — Ryan Ang (demo-account seeder)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `user-service`: new `seed/DemoAccountsSeeder.java`
+  (CommandLineRunner, only when `user.seed.demo=true`: 1 OWNER, 3
+  ADMINs, 100 USERs, skipping accounts already present); the
+  `user.seed.demo` setting in `application.yaml`; `USER_SEED_DEMO` in
+  `compose.yaml` and `.env.example`; new `DemoAccountsSeederTest` (roles
+  and counts, each role's login, rerun, partial reseed, sign-up rules)
+  and an off-by-default check in `UserServiceApplicationTests`; README
+  "Demo accounts" section.
+- **Prompt(s):** Summary: Asked for a database seed of mock users in
+  user-service: at least one owner, 2-3 admins and 100 users, on a new
+  branch `feat/seed-users`. Team decisions: a startup seeder in
+  user-service (following supplier-service's `SuppliersSeeder`), off
+  unless a flag is set, and one password per role. Implementation
+  choices by the tool, to confirm in review: 3 admins; the passwords
+  `OwnerPass123` / `AdminPass123` / `StudentPass123`; `demo_*` usernames
+  and `e9…` emails; each role's password hashed once and the hash reused;
+  accounts matched by email or username when skipping.
+- **Author review:** Ryan to review via the PR. user-service: 204 tests
+  pass.
+
 ## 2026-09-29 — Ryan Ang (PR #152 Copilot review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor

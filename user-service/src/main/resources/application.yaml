@@ -20,6 +20,8 @@
 # 2026-09-29, Claude Code (Opus 5.5), issue #147: Flyway owns the schema
 # (team decision): ddl-auto none, and databases that ddl-auto built are
 # baselined at V1.
+# 2026-09-29, Claude Code (Opus 5.5): user.seed.demo, the switch for the
+# demo-account seeder (team decision: off unless USER_SEED_DEMO=true).
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -57,6 +59,11 @@ user:
     # Cron schedule (Spring's 6-field format) controlling how often the
     # purge sweep runs. Default: daily at 03:00 server time.
     purge-cron: "${USER_PURGE_CRON:0 0 3 * * *}"
+  seed:
+    # true inserts the demo accounts (1 owner, 3 admins, 100 users) at
+    # startup, skipping any already present (DemoAccountsSeeder). Local
+    # testing and demos only: their passwords are public, in the README.
+    demo: ${USER_SEED_DEMO:false}
   jwt:
     # Shared HS256 secret (at least 32 bytes) that every service verifies
     # tokens with. Empty default: startup fails with a clear message
