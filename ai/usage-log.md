@@ -26,6 +26,28 @@ Entry template:
 ```
 
 ---
+## 2026-09-30 — Ryan Ang (admin dashboard: Users section only)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (removal + tests + docs)
+- **Scope:** `web/` only; no backend changes.
+  - `routes/admin.tsx`: the Suppliers section is no longer rendered, so
+    the Admin Dashboard shows just the Users section. Admins still add,
+    edit and delete suppliers on the Suppliers page.
+  - `features/supplier/components/SuppliersAdminSection.tsx` deleted, as
+    nothing else used it (it stays in git history).
+  - `test/admin.test.tsx`: the Suppliers section's cases and its faked
+    supplier API removed; one case added checking the dashboard renders
+    only the Users section.
+  - GitHub wiki, *D2 Design — User and Supplier Services* Part 2 §4: the
+    note that supplier management also appears as an admin-dashboard
+    section updated to match.
+- **Prompt(s):** (summary) Asked for a PR removing the supplier listing
+  from the admin dashboard, keeping only users for now, and for the wiki
+  to be updated.
+- **Author review:** Removing the section is the author's decision; the
+  tool made the edits. Verified with the web test suite (63 passing),
+  `tsc -b` and `eslint .`. Ryan to review via the PR.
+
 ## 2026-09-29 — Leong Wei Zhi (#88 OTP email sending)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate

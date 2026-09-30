@@ -308,7 +308,9 @@ admin-only route guard on `/admin` that checks the role with
 `GET /users/me`, an Admin Dashboard nav link shown to admins and
 owners only, fixes to the admin Users section's reload after an
 action, and a read-only supplier list on the admin dashboard, with the
-behaviour decided by the team and recorded in `ai/usage-log.md`; and
+behaviour decided by the team and recorded in `ai/usage-log.md` (that
+supplier list later removed, leaving the dashboard with only the Users
+section for now, also recorded there); and
 the login errors that name their
 cause (issue #146) — an unknown account, a wrong password with the
 attempts left before the lock, and a lockout that counts down the
