@@ -15,6 +15,8 @@
 // the four dialog fixes — correcting a middle digit, reopening a dismissed
 // dialog, a 500 keeping the dialog open, and Verify being disabled while a
 // resend is in flight.
+// 2026-09-30, Claude Code (Opus 5), PR #150 approval notes: the expiry
+// line keeps up with the clock and says plainly when the code has run out.
 // Author review: Ryan to review via the PR.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -483,6 +485,19 @@ describe('sign-up page', () => {
       otpDialog().getByRole('button', { name: 'Verify & Activate' }),
     ).toBeDisabled()
     releaseResend(reply(202, { ...accepted, resendInSeconds: 0 }))
+  })
+
+  test('a code whose life has run out says so', async () => {
+    fetchMock.mockResolvedValue(
+      reply(202, { ...accepted, expiresInSeconds: 0 }),
+    )
+
+    await signUp()
+
+    // rather than "The code expires in 0 seconds."
+    expect(
+      await otpDialog().findByText('This code has expired — send a new one.'),
+    ).toBeInTheDocument()
   })
 
   test("shows the server's reason when sign-up is rejected", async () => {

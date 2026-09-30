@@ -29,7 +29,6 @@
 # (team decision): ddl-auto none, and databases that ddl-auto built are
 # baselined at V1. V3 (2026-09-30, merge of this branch) drops the otps
 # table issue #88 removed and creates pending_signups.
-# baselined at V1.
 # 2026-09-29, Claude Code (Opus 5.5): user.seed.demo, the switch for the
 # demo-account seeder (team decision: off unless USER_SEED_DEMO=true).
 # Reviewed by: Leong Wei Zhi (via pull request).

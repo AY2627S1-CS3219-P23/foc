@@ -16,9 +16,9 @@
 // the code being replaced burns an attempt; and the countdowns are
 // derived from absolute times owned by the page, so closing and reopening
 // the dialog shows what is really left rather than restarting at 60s.
-// The expiry is stated once rather than counted down — the wireframe
-// draws no timer and the server rejects a stale code with a sentence that
-// already says what to do.
+// The expiry is quoted in minutes rather than counted down to the second —
+// the wireframe draws no timer — but it does keep up with the clock, and
+// says so plainly once the code has run out.
 // Author review: Leong Wei Zhi to review via the PR.
 
 import { useEffect, useState } from 'react'
@@ -104,11 +104,21 @@ export function OtpVerificationModal({
   // pattern used elsewhere in web/ (features/user/components/UsersSection)
   // and cleaned up for free, which matters here because the dialog
   // unmounts on close, on success, and twice under StrictMode.
+  //
+  // It runs while either line is still moving. Keying it on the cooldown
+  // alone froze the expiry sentence the moment the cooldown ran out
+  // (PR #150 review) — the countdown stalled at whatever it read, usually
+  // "9 minutes", until the dialog was reopened. The cooldown needs
+  // per-second precision; the expiry is quoted in minutes, so on its own
+  // it doesn't deserve a ticking second hand.
   useEffect(() => {
-    if (cooldown <= 0) return
-    const timer = setTimeout(() => setNow(Date.now()), 1000)
+    if (cooldown <= 0 && expiresIn <= 0) return
+    const timer = setTimeout(
+      () => setNow(Date.now()),
+      cooldown > 0 ? 1000 : 15000,
+    )
     return () => clearTimeout(timer)
-  }, [cooldown])
+  }, [cooldown, expiresIn])
 
   const verify = async (event: React.SyntheticEvent) => {
     event.preventDefault()
@@ -207,7 +217,9 @@ export function OtpVerificationModal({
           autoFocus
         />
         <p className="text-center text-xs text-gray-500">
-          The code expires in {describeExpiry(expiresIn)}.
+          {expiresIn > 0
+            ? `The code expires in ${describeExpiry(expiresIn)}.`
+            : 'This code has expired — send a new one.'}
         </p>
         <button
           type="submit"
