@@ -91,6 +91,10 @@ Scope: sign-up (issue #87) and login (issue #89), replacing PR #139's
 Author review: Leong Wei Zhi to review via the PR.
 2026-09-30 (Claude Code, Fable 5), issue #92: SignupIdentifierTakenException
 now wraps the caught uniqueness refusal whole, carrying its problem type.
+2026-10-01 (Claude Code, Opus 5), PR #157 Copilot review: verify's expired
+branch builds its exception through OtpVerificationException.expired(), so
+sign-up's expiry carries otp-expired as documented — the default
+constructor it used types everything otp-invalid.
 */
 
 package foc.user.service;
@@ -314,7 +318,11 @@ public class AuthService {
 
         if (!pending.getExpiresAt().isAfter(clock.instant())) {
             pendingSignupRepository.delete(pending);
-            throw new OtpVerificationException("Code has expired; sign up again to get a new code");
+            // the expired factory, not the default constructor: signup's
+            // expiry must carry otp-expired, the type the SPA keys on to
+            // end the pending flow (PR #157 Copilot review)
+            throw OtpVerificationException.expired(
+                "Code has expired; sign up again to get a new code");
         }
 
         if (!otpService.matches(request.code(), pending.getCodeHash())) {

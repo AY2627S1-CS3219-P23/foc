@@ -33,6 +33,9 @@ Scope: unit tests for AuthService (issues #87/#89): sign-up normalisation
        the row instead of leaving it to block the address.
        PR #150 Copilot review: sign-up's pending-row read is stubbed on the
        locked finder, which is what it now uses.
+       PR #157 Copilot review: the verify refusals now assert their
+       problem+json type, pinning expiry to otp-expired — it had regressed
+       to otp-invalid when #92 gave the exception a typed default.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -47,6 +50,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -68,6 +72,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import foc.user.controller.ProblemTypes;
 import foc.user.dto.LoginRequest;
 import foc.user.dto.LoginResponse;
 import foc.user.dto.SignupRequest;
@@ -438,11 +443,28 @@ class AuthServiceTest {
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(pending));
 
-        assertThatThrownBy(() -> verifyCode("123456"))
-            .isInstanceOf(OtpVerificationException.class)
-            .hasMessage("Code has expired; sign up again to get a new code");
+        OtpVerificationException refusal = catchThrowableOfType(
+            OtpVerificationException.class, () -> verifyCode("123456"));
 
+        assertThat(refusal).hasMessage("Code has expired; sign up again to get a new code");
+        // the type is the contract the SPA keys on to end the pending flow:
+        // expiry must be otp-expired, never otp-invalid (PR #157 review)
+        assertThat(refusal.type()).isEqualTo(ProblemTypes.OTP_EXPIRED);
         verify(pendingSignupRepository).delete(pending);
+    }
+
+    @Test
+    @DisplayName("A wrong code is otp-invalid, not otp-expired")
+    void verify_wrongCodeIsTypedInvalid() {
+        PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
+            "hashed:" + PASSWORD, "hashed:123456", NOW, NOW.plus(OTP_TTL));
+        when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
+            .thenReturn(Optional.of(pending));
+
+        OtpVerificationException refusal = catchThrowableOfType(
+            OtpVerificationException.class, () -> verifyCode("999999"));
+
+        assertThat(refusal.type()).isEqualTo(ProblemTypes.OTP_INVALID);
     }
 
     @Test

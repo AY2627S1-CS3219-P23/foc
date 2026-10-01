@@ -62,6 +62,18 @@ final class NewAccountDetails {
         }
     }
 
+    // the update flows' concurrency fallbacks (#92): the unique index,
+    // not a pre-check, is what refused the write, so they build the same
+    // typed refusal by hand — every taken outcome carries its documented
+    // type, racing or not (PR #157 Copilot review)
+    static ResponseStatusException emailTaken(String reason) {
+        return taken(reason, ProblemTypes.EMAIL_TAKEN);
+    }
+
+    static ResponseStatusException usernameTaken(String reason) {
+        return taken(reason, ProblemTypes.USERNAME_TAKEN);
+    }
+
     private static ResponseStatusException taken(String reason, URI type) {
         ResponseStatusException e = new ResponseStatusException(HttpStatus.BAD_REQUEST, reason);
         e.getBody().setType(type);

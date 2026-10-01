@@ -15,6 +15,12 @@ Reviewed by: Leong Wei Zhi (via pull request).
 account-update gate codes and pending email changes — before the users
 delete, so no row of a purged account survives to trip its user_id FK
 (their 10-minute TTL means any such row expired weeks before day 31).
+2026-10-01 (Claude Code, Opus 5), PR #157 Copilot review: the FK cleanup no
+longer rides on that expiry sweep. OTP_TTL and USER_RETENTION_DAYS are
+independently configurable, so a TTL longer than the recovery window would
+leave a LIVE gate or pending row on a purged account and fail the whole
+purge transaction; the purged set's rows are now deleted by user, as the
+account_tokens cleanup already did, with the expiry sweep left as hygiene.
 */
 
 package foc.user.service;
@@ -40,11 +46,14 @@ import foc.user.repository.UserRepository;
  * passed (design doc §2: soft delete = 30-day reuse block, purge on
  * day 31). Until this job runs, a deleted row keeps occupying its
  * unique email/username; the purge is what releases them. Dependent
- * account_tokens rows are removed first, in the same transaction, so
- * the users delete never trips their user_id FK. The run also sweeps
- * pending sign-ups whose code has expired (issue #88), and expired
- * account-update gate codes and pending email changes (issue #92) —
- * those two before the users delete, for their user_id FKs.
+ * account_tokens, account_update_otps and pending_email_changes rows
+ * are removed first, in the same transaction, so the users delete never
+ * trips their user_id FKs — by purged user, not by expiry, since a
+ * TTL longer than the recovery window could leave a live row behind
+ * (PR #157 review). The run also sweeps rows whose code has expired,
+ * whoever owns them: pending sign-ups (issue #88) and the two
+ * account-update tables (issue #92). That sweep is hygiene only — the
+ * flows reject an expired row on sight.
  */
 @Component
 class AccountPurgeScheduler {
@@ -76,16 +85,23 @@ class AccountPurgeScheduler {
     void purgeExpiredDeletedAccounts() {
         Instant now = Instant.now();
         Instant cutoff = now.minus(retentionDays, ChronoUnit.DAYS);
+        // every dependent of a purged account goes first, selected by that
+        // account — not by expiry: a TTL longer than the retention window
+        // would leave a live row to trip the user_id FK (PR #157 review)
         int tokenCount = accountTokens.deleteByUserDeletedBefore(cutoff);
-        // the #92 rows go before the users delete: a purged account's
-        // rows here (necessarily long expired) would trip its user_id FK
-        int gateCount = accountUpdateOtps.deleteByExpiresAtBefore(now);
-        int emailChangeCount = pendingEmailChanges.deleteByExpiresAtBefore(now);
+        int purgedGateCount = accountUpdateOtps.deleteByUserDeletedBefore(cutoff);
+        int purgedChangeCount = pendingEmailChanges.deleteByUserDeletedBefore(cutoff);
         int userCount = users.deleteByDeletedBefore(cutoff);
+        // hygiene for the accounts that stay: anything already expired,
+        // inclusive of the exact boundary the flows call expired
         int pendingCount = pendingSignups.deleteByExpiresAtBefore(now);
-        log.info("purged {} account(s) deleted before {} (with {} account token(s))"
-                + " and {} expired pending sign-up(s), {} gate code(s),"
-                + " {} pending email change(s)",
-                userCount, cutoff, tokenCount, pendingCount, gateCount, emailChangeCount);
+        int gateCount = accountUpdateOtps.deleteByExpiresAtNotAfter(now);
+        int emailChangeCount = pendingEmailChanges.deleteByExpiresAtNotAfter(now);
+        log.info("purged {} account(s) deleted before {} (with {} account token(s),"
+                + " {} gate code(s), {} pending email change(s)) and swept"
+                + " {} expired pending sign-up(s), {} expired gate code(s),"
+                + " {} expired pending email change(s)",
+                userCount, cutoff, tokenCount, purgedGateCount, purgedChangeCount,
+                pendingCount, gateCount, emailChangeCount);
     }
 }

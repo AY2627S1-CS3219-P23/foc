@@ -16,6 +16,11 @@ Reviewed by: Leong Wei Zhi (via pull request).
        pending-email-change sweeps, including the FK-ordering proof — a
        purged user's (necessarily expired) rows go first, so the users
        delete never trips their user_id FKs.
+2026-10-01 (Claude Code, Opus 5), PR #157 Copilot review: that proof no
+       longer assumes the rows are expired — a case seeds LIVE ones on a
+       day-31 account, since the TTL and the retention window are
+       configured separately — and a case pins the expiry sweeps'
+       inclusive boundary.
 */
 
 package foc.user.service;
@@ -180,6 +185,51 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
         scheduler.purgeExpiredDeletedAccounts();
 
         assertThat(userRepository.findAll()).isEmpty();
+        assertThat(accountUpdateOtpRepository.findAll()).isEmpty();
+        assertThat(pendingEmailChangeRepository.findAll()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("A purged account's LIVE #92 rows go too: the FK can't depend on the TTL")
+    void purgedAccountsLiveRowsGoFirst() {
+        // OTP_TTL and USER_RETENTION_DAYS are configured independently, so
+        // a TTL past the recovery window would leave a live gate or pending
+        // row on a day-31 account and fail the whole purge transaction. The
+        // cleanup therefore selects by purged account, not by expiry
+        // (PR #157 Copilot review)
+        User expired = saveUser("e3333333@u.nus.edu", "expired_deleted",
+            Instant.now().minus(31, ChronoUnit.DAYS));
+        accountUpdateOtpRepository.save(new AccountUpdateOtp(expired.getId(), "code_hash",
+            Instant.now(), Instant.now().plus(60, ChronoUnit.DAYS)));
+        pendingEmailChangeRepository.save(new PendingEmailChange(expired.getId(),
+            "e4444444@u.nus.edu", "code_hash",
+            Instant.now(), Instant.now().plus(60, ChronoUnit.DAYS)));
+        userRepository.flush();
+
+        scheduler.purgeExpiredDeletedAccounts();
+
+        assertThat(userRepository.findAll()).isEmpty();
+        assertThat(accountUpdateOtpRepository.findAll()).isEmpty();
+        assertThat(pendingEmailChangeRepository.findAll()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("The #92 expiry sweeps include the exact boundary the flows call expired")
+    void expirySweepsIncludeTheExactBoundary() {
+        // the flows reject expires_at == now (!isAfter(now)), so the sweep
+        // must remove that row too — a strictly-before cutoff left it
+        // behind (PR #157 Copilot review). The scheduler reads its own
+        // Instant.now(), so the boundary is pinned on the queries directly
+        User alex = saveUser("e1111111@u.nus.edu", "active_user", null);
+        Instant boundary = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+        accountUpdateOtpRepository.save(new AccountUpdateOtp(alex.getId(), "code_hash",
+            boundary.minusSeconds(600), boundary));
+        pendingEmailChangeRepository.save(new PendingEmailChange(alex.getId(),
+            "e2222222@u.nus.edu", "code_hash", boundary.minusSeconds(600), boundary));
+        userRepository.flush();
+
+        assertThat(accountUpdateOtpRepository.deleteByExpiresAtNotAfter(boundary)).isEqualTo(1);
+        assertThat(pendingEmailChangeRepository.deleteByExpiresAtNotAfter(boundary)).isEqualTo(1);
         assertThat(accountUpdateOtpRepository.findAll()).isEmpty();
         assertThat(pendingEmailChangeRepository.findAll()).isEmpty();
     }

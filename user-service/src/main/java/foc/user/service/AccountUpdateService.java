@@ -12,6 +12,9 @@ Scope: the account-update flows for issue #92 (requirement F2), design
        attempt counters and discards, row locks, MailException → 502
        rollback, flush-race answers — mirror AuthService.signup/
        verifySignup and the PR #150 reviews that settled them.
+       PR #157 Copilot review: the two post-flush collision fallbacks
+       carry the same problem+json types as their pre-checks, so a
+       client identifies a taken name or address in the racing case too.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -211,9 +214,10 @@ public class AccountUpdateService {
             } catch (DataIntegrityViolationException e) {
                 // a concurrent request took the username after the check;
                 // rolls back, which also restores the gate row and drops
-                // the parked change — a clean retry (verifySignup's shape)
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Username was just taken; choose another");
+                // the parked change — a clean retry (verifySignup's shape).
+                // Typed like the pre-check's refusal, so username-taken is
+                // machine-readable racing or not (PR #157 Copilot review)
+                throw NewAccountDetails.usernameTaken("Username was just taken; choose another");
             }
         }
         return result;
@@ -320,9 +324,9 @@ public class AccountUpdateService {
         } catch (DataIntegrityViolationException e) {
             // a concurrent insert took the email after the check; rolls
             // back (the row survives) and the next verify's re-check
-            // discards it (verifySignup's exact race answer)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "Email was just taken; request the change again");
+            // discards it (verifySignup's exact race answer). Typed like
+            // the pre-check's refusal (PR #157 Copilot review)
+            throw NewAccountDetails.emailTaken("Email was just taken; request the change again");
         }
         pendingEmailChanges.delete(pending);
         return UserResponse.from(user);

@@ -10,6 +10,9 @@ Scope: unit tests for issue #92's AccountUpdateService, the clock-exact
        resetting attempts, the gate code's consume/count/limit ladder,
        and expiry's !isAfter(now) boundary (a code expiring exactly now
        is expired).
+       PR #157 Copilot review: the two post-flush collision fallbacks are
+       pinned to their problem+json types, so a client can identify a
+       taken name or address in the racing case as well as the checked one.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -36,9 +39,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.server.ResponseStatusException;
 
+import foc.user.controller.ProblemTypes;
 import foc.user.dto.UpdateAccountRequest;
 import foc.user.entity.AccountUpdateOtp;
 import foc.user.entity.PendingEmailChange;
@@ -266,5 +273,44 @@ class AccountUpdateServiceTest {
         assertThat(pending.getExpiresAt()).isEqualTo(NOW.plus(OTP_TTL));
         assertThat(result.expiresInSeconds()).isEqualTo(OTP_TTL.getSeconds());
         verify(gateOtps).delete(gate);
+    }
+
+    // ---- the post-flush collision fallbacks carry their documented types ----
+
+    @Test
+    @DisplayName("A username lost to a race is still typed username-taken")
+    void updateAccount_usernameRaceIsTyped() {
+        gateRow(0);
+        when(userRepository.existsByUsernameIgnoreCaseAndIdNot("renamed_alex", USER_ID))
+            .thenReturn(false);
+        // the pre-check passed and the unique index refused the write: the
+        // client must still be able to tell what collided (PR #157 review)
+        when(userRepository.saveAndFlush(user))
+            .thenThrow(new DataIntegrityViolationException("uq_users_username"));
+
+        ResponseStatusException refusal = catchThrowableOfType(
+            ResponseStatusException.class, () -> service.updateAccount(USER_ID, rename("111111")));
+
+        assertThat(refusal.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(refusal.getBody().getType()).isEqualTo(ProblemTypes.USERNAME_TAKEN);
+    }
+
+    @Test
+    @DisplayName("An email lost to a race at verify is still typed email-taken")
+    void verifyEmailChange_emailRaceIsTyped() {
+        PendingEmailChange pending = new PendingEmailChange(USER_ID, NEW_EMAIL,
+            PLAIN_ENCODER.encode("333333"), NOW, NOW.plus(OTP_TTL));
+        when(pendingEmailChanges.findWithLockByUserId(USER_ID)).thenReturn(Optional.of(pending));
+        when(userRepository.existsByEmailAndIdNot(NEW_EMAIL, USER_ID)).thenReturn(false);
+        when(userRepository.saveAndFlush(user))
+            .thenThrow(new DataIntegrityViolationException("uq_users_email"));
+
+        ResponseStatusException refusal = catchThrowableOfType(ResponseStatusException.class,
+            () -> service.verifyEmailChange(USER_ID, "333333"));
+
+        assertThat(refusal.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(refusal.getBody().getType()).isEqualTo(ProblemTypes.EMAIL_TAKEN);
+        // the row survives the rollback; the next verify's re-check discards it
+        verify(pendingEmailChanges, never()).delete(pending);
     }
 }
