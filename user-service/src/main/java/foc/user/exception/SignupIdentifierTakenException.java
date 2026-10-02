@@ -4,13 +4,15 @@ Tool: Claude Code (Opus 5), date: 2026-09-30
 Scope: PR #150 review (@Sinnez1): verify's answer when the email or
        username a pending sign-up reserved was taken by someone else
        while the code was in flight. A ResponseStatusException subclass,
-       not a new shape — AuthController's existing passthrough handler
-       maps it to the same 400 problem+json with the same reason — so
-       that AuthService.verifySignup can name it in noRollbackFor and
-       commit the one thing it must: discarding a pending sign-up that
-       can never complete, which would otherwise hold its email until
-       the code expired (a 10 minute lockout for a user who simply lost
-       a username race).
+       not a new shape — the existing passthrough handler (now in
+       ProblemDetailAdvice) maps it to the same 400 problem+json with the
+       same reason — so that AuthService.verifySignup can name it in
+       noRollbackFor and commit the one thing it must: discarding a
+       pending sign-up that can never complete, which would otherwise
+       hold its email until the code expired (a 10 minute lockout for a
+       user who simply lost a username race).
+       2026-10-02 (Claude Code, Opus 5.5), issue #154: comment updated for
+       the handler's move from AuthController to ProblemDetailAdvice.
 Author review: Leong Wei Zhi to review via the PR.
 */
 

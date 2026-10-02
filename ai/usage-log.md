@@ -46,6 +46,11 @@ Entry template:
   - `user-service/README.md`: "Old local databases" note on
     `baseline-on-migrate`; the wrong-type parameter 400 now mentions path
     parameters.
+  - `OwnerSetupService`: the 503 for an unconfigured setup token now says
+    only "Owner setup is unavailable", since the shared handler shows the
+    reason to unauthenticated callers; `OwnerSetupServiceTest` checks it.
+  - `SignupIdentifierTakenException`: header comment now names
+    `ProblemDetailAdvice` as the handler that maps it.
 - **Prompt(s):** Review #138 and #154 to determine fixes.
 - **Author review:** Reviewed via PR.
 

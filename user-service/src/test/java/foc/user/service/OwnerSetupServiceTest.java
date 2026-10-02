@@ -17,6 +17,8 @@ Author review: Ryan validated test assertions to match intended behaviour.
        uniqueness, lock and save calls.
 2026-09-29 (Claude Code, Opus 5.5), PR #141 review: username checks use
        existsByUsernameIgnoreCase (usernames now ignore case, team decision).
+2026-10-02 (Claude Code, Opus 5.5), issue #154: the 503's reason is checked
+       to be the generic "Owner setup is unavailable".
 */
 
 package foc.user.service;
@@ -116,6 +118,11 @@ class OwnerSetupServiceTest {
             .satisfies(ex ->
                 assertThat(((ResponseStatusException) ex).getStatusCode())
                     .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE)
+            )
+            // the reason reaches the caller, so it must not name the setting
+            .satisfies(ex ->
+                assertThat(((ResponseStatusException) ex).getReason())
+                    .isEqualTo("Owner setup is unavailable")
             );
     }
 

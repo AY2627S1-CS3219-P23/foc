@@ -19,6 +19,9 @@ Scope: Generated owner bootstrap logic (advisory lock, owner guard,
        2026-09-29 (Claude Code, Opus 5.5), PR #141 review: normalising and
        uniqueness checks moved to NewAccountDetails, shared with sign-up;
        usernames now compared ignoring case (team decision).
+       2026-10-02 (Claude Code, Opus 5.5), issue #154: the 503 for an
+       unconfigured setup token gives a generic reason (Ryan's request),
+       since ProblemDetailAdvice now shows it to the caller.
 Author review: Ryan validated that the endpoint logic matches the feature design.
 */
 
@@ -78,12 +81,13 @@ public class OwnerSetupService {
     }
 
     // guards against an unauthenticated caller. fails if the deploy forgot to set
-    // OWNER_SETUP_TOKEN.
+    // OWNER_SETUP_TOKEN; the reason is the caller's problem+json detail, so
+    // it doesn't say which setting is missing
     private void ensureValidSetupToken(String providedToken) {
         if (expectedSetupToken == null || expectedSetupToken.isBlank()) {
             throw new ResponseStatusException(
                 HttpStatus.SERVICE_UNAVAILABLE,
-                "Owner setup is disabled: OWNER_SETUP_TOKEN is not configured"
+                "Owner setup is unavailable"
             );
         }
 
