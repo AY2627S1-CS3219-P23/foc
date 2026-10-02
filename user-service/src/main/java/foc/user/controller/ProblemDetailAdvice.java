@@ -25,6 +25,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.server.ResponseStatusException;
 
 import foc.user.exception.UserNotFoundException;
 
@@ -62,5 +64,20 @@ class ProblemDetailAdvice {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ProblemDetail handleUnreadableBody(HttpMessageNotReadableException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request body is missing or malformed");
+    }
+
+    // refusals the services raise with a status and reason (blocked admin
+    // actions, invalid list parameters, a bad setup token, CallerId's 401)
+    @ExceptionHandler(ResponseStatusException.class)
+    ProblemDetail handleResponseStatus(ResponseStatusException e) {
+        return e.getBody();
+    }
+
+    // a query or path parameter of the wrong type: an unknown role or
+    // non-boolean includeDeleted, a non-numeric id. Body problems are
+    // handleUnreadableBody's
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ProblemDetail handleBadParameter(MethodArgumentTypeMismatchException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid request parameter");
     }
 }

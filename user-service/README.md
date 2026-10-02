@@ -33,6 +33,9 @@
   resendInSeconds, each with the reason it exists.
   2026-09-29, Claude Code (Opus 5.5): "Demo accounts" section for the
   USER_SEED_DEMO seeder
+  2026-10-02, Claude Code (Opus 5.5), issue #154: "Old local databases"
+  note on baseline-on-migrate; the 400 for a wrong-type parameter now
+  covers path parameters too.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -164,8 +167,8 @@ validation rules gets 400 with one sentence per broken rule, sorted by
 field (e.g. `"Email is required. Password is required."`), from
 `ProblemDetailAdvice`, on every endpoint. A missing or unreadable body
 (bad JSON, an unknown role) gets 400 `"Request body is missing or
-malformed"`; a query parameter of the wrong type gets 400 `"Invalid
-request parameter"`.
+malformed"`; a query or path parameter of the wrong type (e.g. a
+non-numeric id) gets 400 `"Invalid request parameter"`.
 
 ## Schema (Flyway)
 
@@ -181,6 +184,15 @@ empty) `otps` table and creates `pending_signups` — #88 replaced one
 OTP table with a pending table per operation; `pending_email_changes`
 follows with #92. Schema changes go in a new `V<n>__<name>.sql`, never
 by editing an applied one.
+
+**Old local databases.** `baseline-on-migrate` records *any* non-empty
+schema without Flyway history as V1, without checking that it matches
+`V1__baseline.sql`. A local `user-db` created by `ddl-auto` before
+`account_tokens`, `token_denylist` or the `users.version` column
+existed would be marked V1 with those missing, and the service then fails
+when it first touches them. If you haven't started user-service since
+the Flyway switch (#147), reset the user database before starting it
+(the steps are under [Demo accounts](#demo-accounts-local-only)).
 
 ## Demo accounts (local only)
 

@@ -16,6 +16,8 @@ shared with ProfileController.
 parameter on GET /users (team decision); invalid bodies now get
 ProblemDetailAdvice's per-field reasons like every other controller (team
 decision), so only the query-parameter type mismatch stays here.
+2026-10-02 (Claude Code, Opus 5.5), issue #154: the ResponseStatusException
+and type-mismatch handlers moved to ProblemDetailAdvice.
 */
 
 package foc.user.controller;
@@ -23,10 +25,8 @@ package foc.user.controller;
 import org.springframework.data.web.PagedModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,8 +35,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-import org.springframework.web.server.ResponseStatusException;
 
 import foc.user.dto.UpdateRoleRequest;
 import foc.user.dto.UserResponse;
@@ -75,21 +73,5 @@ public class AdminController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removeUser(@PathVariable Long id, Authentication authentication) {
         adminService.removeUser(CallerId.from(authentication), id);
-    }
-
-    // the web client reads RFC 9457 problem+json error bodies (404s and
-    // 409s are handled by ProblemDetailAdvice)
-
-    // blocked actions (403) and invalid list parameters (400)
-    @ExceptionHandler(ResponseStatusException.class)
-    public ProblemDetail handleResponseStatus(ResponseStatusException e) {
-        return e.getBody();
-    }
-
-    // unknown role or non-boolean includeDeleted in the query, non-numeric
-    // id. Body problems (unknown or missing role) are ProblemDetailAdvice's
-    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ProblemDetail handleBadParameter(MethodArgumentTypeMismatchException e) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid request parameter");
     }
 }

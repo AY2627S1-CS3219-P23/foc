@@ -5,11 +5,14 @@ Scope: tests for DemoAccountsSeeder with USER_SEED_DEMO on: 1 owner, 3
        admins and 100 users; each role logs in with its password; a rerun
        adds nothing; an account already present is skipped; every seeded
        email and username passes the sign-up rules.
+       2026-10-02 (Claude Code, Opus 5.5), issue #154: a soft-deleted demo
+       account is not re-seeded.
 Author review: Ryan to review via the PR.
 */
 
 package foc.user.seed;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -118,6 +121,24 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
         assertThat(userRepository.findByUsernameIgnoreCase("demo_admin_1").orElseThrow().getRole())
             .isEqualTo(Role.USER);
         assertThat(userRepository.count()).isEqualTo(1 + DemoAccountsSeeder.ADMINS + DemoAccountsSeeder.USERS);
+    }
+
+    @Test
+    @DisplayName("A soft-deleted demo account stays deleted after a rerun")
+    void softDeletedAccountStaysDeleted() {
+        // relies on existsByEmail / existsByUsernameIgnoreCase counting
+        // soft-deleted rows; narrowing them would re-insert the account and
+        // fail on the unique email
+        User user = userRepository.findByUsernameIgnoreCase("demo_user_010").orElseThrow();
+        user.softDelete(Instant.now());
+        userRepository.save(user);
+        long before = userRepository.count();
+
+        seeder.run();
+
+        assertThat(userRepository.findByUsernameIgnoreCase("demo_user_010").orElseThrow().getDeletedAt())
+            .isNotNull();
+        assertThat(userRepository.count()).isEqualTo(before);
     }
 
     @Test

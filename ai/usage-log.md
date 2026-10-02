@@ -26,6 +26,29 @@ Entry template:
 ```
 
 ---
+## 2026-10-02 — Ryan Ang (user-service: #154 review follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + tests + docs
+- **Scope:** `user-service/` only, four items from issue #154 (PR #152 and
+  PR #155 review follow-ups); no behaviour change beyond error bodies.
+  - `ProblemDetailAdvice`: the `ResponseStatusException` and
+    `MethodArgumentTypeMismatchException` handlers moved here from
+    `AuthController` and `AdminController`, so `OwnerSetupController` and
+    `ProfileController` answer those in problem+json too (e.g. a
+    non-numeric `GET /users/{id}`, a wrong setup token, `CallerId`'s 401).
+  - `DemoAccountsSeeder`: `Locale.ROOT` on the generated emails and
+    usernames; comment on the `ADMINS`/`USERS` limits.
+  - Tests: non-numeric id (400 problem+json) and a problem+json check on
+    the non-numeric-principal 401 in `ProfileControllerTest`; a
+    problem+json check on the wrong-token 403 in
+    `OwnerSetupControllerTest`; a soft-deleted demo account is not
+    re-seeded in `DemoAccountsSeederTest`.
+  - `user-service/README.md`: "Old local databases" note on
+    `baseline-on-migrate`; the wrong-type parameter 400 now mentions path
+    parameters.
+- **Prompt(s):** Review #138 and #154 to determine fixes.
+- **Author review:** Reviewed via PR.
+
 ## 2026-09-30 — Ryan Ang (admin dashboard: Users section only)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor (removal + tests + docs)
