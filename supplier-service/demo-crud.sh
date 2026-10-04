@@ -50,16 +50,16 @@ echo "Got both tokens."
 section "1. No token at all -> 401"
 curl -s -w "\nHTTP %{http_code}\n" "$SUPPLIER_SERVICE/suppliers"
 
-section "2. Regular USER can browse (GET is open to any authenticated user) -> 200"
+section "2. Regular USER can GET all suppliers -> 200"
 curl -s -w "\nHTTP %{http_code}\n" "$SUPPLIER_SERVICE/suppliers?size=2" \
   -H "Authorization: Bearer $USER_TOKEN"
 
-section "3. Regular USER CANNOT create a supplier -> 403 (role gate)"
+section "3. Regular USER CANNOT create a new supplier -> 403 (role gate)"
 curl -s -w "\nHTTP %{http_code}\n" -X POST "$SUPPLIER_SERVICE/suppliers" \
   -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
   -d '{"name":"Should Be Rejected","location":"Nowhere","categories":[],"openingTime":"09:00","closingTime":"18:00","latitude":1.3,"longitude":103.8}'
 
-section "4. ADMIN creates a supplier -> 201"
+section "4. ADMIN creates a new supplier -> 201"
 CREATE_RESPONSE=$(curl -s -X POST "$SUPPLIER_SERVICE/suppliers" \
   -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d '{"name":"Demo Cafe","location":"Demo Block, Level 1","categories":["Food","Coffee"],"openingTime":"08:00","closingTime":"20:00","description":"Created by demo-crud.sh","latitude":1.2966,"longitude":103.7764}')
@@ -67,29 +67,29 @@ echo "$CREATE_RESPONSE"
 SUPPLIER_ID=$(echo "$CREATE_RESPONSE" | extract id)
 echo "Created supplier id=$SUPPLIER_ID"
 
-section "5. Read it back -> 200, appears in a search"
+section "5. Search endpoint returns matching suppliers, including the one just created -> 200"
 curl -s -w "\nHTTP %{http_code}\n" "$SUPPLIER_SERVICE/suppliers?search=Demo" \
   -H "Authorization: Bearer $USER_TOKEN"
 
-section "6. ADMIN updates it -> 200"
+section "6. ADMIN updates new supplier created in point 4 -> 200"
 curl -s -w "\nHTTP %{http_code}\n" -X PUT "$SUPPLIER_SERVICE/suppliers/$SUPPLIER_ID" \
   -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
-  -d '{"name":"Demo Cafe (renamed)","location":"Demo Block, Level 2","categories":["Shopping"],"openingTime":"09:00","closingTime":"21:00","description":"Updated by demo-crud.sh","latitude":1.30,"longitude":103.80}'
+  -d '{"name":"Demo Cafe (renamed) ","location":"Demo Block, Level 2","categories":["Shopping"],"openingTime":"09:00","closingTime":"21:00","description":"Updated by demo-crud.sh","latitude":1.30,"longitude":103.80}'
 
-section "7. Regular USER cannot delete it -> 403 (role gate again)"
+section "7. Regular USER cannot delete the new supplier -> 403 (role gate again)"
 curl -s -w "\nHTTP %{http_code}\n" -X DELETE "$SUPPLIER_SERVICE/suppliers/$SUPPLIER_ID" \
   -H "Authorization: Bearer $USER_TOKEN"
 
-section "8. ADMIN deletes it -> 204"
+section "8. ADMIN deletes the new supplier -> 204"
 curl -s -w "\nHTTP %{http_code}\n" -X DELETE "$SUPPLIER_SERVICE/suppliers/$SUPPLIER_ID" \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 
-section "9. It's really gone -> 404 on update"
+section "9. ADMIN tries to update the deleted supplier -> 404 on update"
 curl -s -w "\nHTTP %{http_code}\n" -X PUT "$SUPPLIER_SERVICE/suppliers/$SUPPLIER_ID" \
   -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d '{"name":"Ghost","location":"Nowhere","categories":[],"openingTime":"09:00","closingTime":"18:00","latitude":1.3,"longitude":103.8}'
 
-section "10. Validation: missing required field -> 400"
+section "10. ADMIN tries to create new supplier with missing required name field -> 400"
 curl -s -w "\nHTTP %{http_code}\n" -X POST "$SUPPLIER_SERVICE/suppliers" \
   -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d '{"location":"Block A","categories":[],"openingTime":"09:00","closingTime":"18:00","latitude":1.3,"longitude":103.8}'
