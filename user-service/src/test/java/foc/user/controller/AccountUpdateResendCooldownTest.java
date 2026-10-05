@@ -10,6 +10,10 @@ Scope: issue #92's resend cooldown end to end at its real default (60s),
        that replacing a pending change with a different address is
        still a send and still waits.
 Author review: Leong Wei Zhi to review via the PR.
+2026-10-05 (Claude Code, Fable 5), PR #157 review (@Sinnez1): exhaustion
+now keeps an OTP row as spent instead of deleting it, so the resend
+cooldown still gates the next code — exhaustion/takeover tests updated
+and cooldown-bypass regressions added.
 */
 
 package foc.user.controller;
@@ -17,6 +21,7 @@ package foc.user.controller;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -87,6 +92,14 @@ class AccountUpdateResendCooldownTest extends PostgresTestContainer {
             new BCryptPasswordEncoder().encode(PASSWORD), Role.USER));
     }
 
+    // spent rows outlive their test now (PR #157 review), and other test
+    // classes delete users without knowing these FK'd tables: leave none
+    @AfterEach
+    void clearOtpRows() {
+        gateOtps.deleteAll();
+        pendingEmailChanges.deleteAll();
+    }
+
     private ResultActions requestOtp() throws Exception {
         return mockMvc.perform(post("/users/me/otp").with(user(alex.getId().toString())));
     }
@@ -145,5 +158,33 @@ class AccountUpdateResendCooldownTest extends PostgresTestContainer {
         // refused before anything was replaced: the original change survives
         assertThat(pendingEmailChanges.findByUserId(alex.getId()).orElseThrow().getNewEmail())
             .isEqualTo(NEW_EMAIL);
+    }
+
+    @Test
+    @DisplayName("Exhausting the gate's attempts is not a way around the cooldown (PR #157 review)")
+    void exhaustedGateStillCoolsDown() throws Exception {
+        requestOtp().andExpect(status().isAccepted());
+        String code = gateCode();
+        String wrong = code.equals("000000") ? "000001" : "000000";
+
+        for (int attempt = 1; attempt <= 4; attempt++) {
+            patchAccount(Map.of("username", "renamed_alex", "otp", wrong))
+                .andExpect(status().isBadRequest());
+        }
+        patchAccount(Map.of("username", "renamed_alex", "otp", wrong))
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-attempts-exceeded"))
+            // at the real 60s cooldown the 429 quotes the actual wait
+            // before a replacement code may be requested (PR #157 review)
+            .andExpect(header().exists(HttpHeaders.RETRY_AFTER));
+
+        // the attack this pins down: deleting the spent row let 5 wrong
+        // guesses mint a fresh code (and attempt budget) immediately —
+        // now the row's lastSentAt still holds the re-request to the
+        // cooldown (PR #157 review, @Sinnez1)
+        requestOtp()
+            .andExpect(status().isTooManyRequests())
+            .andExpect(header().exists(HttpHeaders.RETRY_AFTER))
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-resend-cooldown"));
     }
 }

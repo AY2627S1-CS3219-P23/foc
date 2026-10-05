@@ -95,6 +95,25 @@ now wraps the caught uniqueness refusal whole, carrying its problem type.
 branch builds its exception through OtpVerificationException.expired(), so
 sign-up's expiry carries otp-expired as documented — the default
 constructor it used types everything otp-invalid.
+2026-10-05 (Claude Code, Fable 5), PR #157 review (@Sinnez1): the guess
+that exhausts the attempts keeps the pending row as spent instead of
+deleting it, so its lastSentAt still holds the next sign-up behind the
+resend cooldown — deleted, 5 wrong guesses bought an immediate fresh code,
+cycling attempt budgets and flooding the inbox. A spent row is dead like
+an expired one (any sign-up takes it over once the cooldown passes), and
+verify answers it exactly like no row at all, so nothing new is revealed
+(spent-until-cooldown shape chosen by Leong Wei Zhi via options Q&A).
+Same day, PR #157 Copilot re-review: treating a spent row as dead-and-
+takeable resurrected the PR #150 hijack — verify is anonymous, so anyone
+could spend a stranger's pending row with 5 wrong guesses and swap in
+their own password after the cooldown. A spent row now revives only for
+a repeat of its own request (fresh code and attempt budget, original
+expiry kept so the row's life stays bounded); everyone else keeps the
+409 until it expires (same-request-revival shape chosen by Leong Wei Zhi
+via options Q&A over freezing the row until expiry).
+Also: verify's exhausting guess now carries the cooldown left until a
+re-sign-up may replace the spent row, for the 429's Retry-After
+(PR #157 Copilot review).
 */
 
 package foc.user.service;
@@ -218,8 +237,18 @@ public class AuthService {
         PendingSignup pending = pendingSignupRepository.findWithLockByEmail(email).orElse(null);
         Instant now = clock.instant();
         // an expired row is dead — verify rejects it on sight — so it
-        // guards nothing and any sign-up may take it over
+        // guards nothing and any sign-up may take it over. A row whose
+        // attempts are spent is kept, not deleted, exactly so its
+        // lastSentAt still feeds the cooldown check below — deleting it
+        // on exhaustion let 5 wrong guesses buy an immediate fresh code
+        // (PR #157 review, @Sinnez1). But spent is NOT expired: until the
+        // expiry only the request that pended the row may revive it —
+        // verify is anonymous, so treating spent as takeable let anyone
+        // burn a stranger's pending sign-up with 5 wrong guesses and then
+        // swap in their own password, the exact hijack the same-request
+        // rule exists for (PR #157 Copilot review)
         boolean expired = pending != null && !pending.getExpiresAt().isAfter(now);
+        boolean spent = pending != null && pending.getAttempts() >= otpService.maxAttempts();
 
         if (pending != null && !expired && !isSameRequest(request, username, pending)) {
             // refused, not merged, and not silently replaced: only the
@@ -245,6 +274,12 @@ public class AuthService {
         } else if (expired) {
             pending.replaceExpired(username, passwordEncoder.encode(request.password()),
                 codeHash, now, now.plus(otpService.ttl()));
+        } else if (spent) {
+            // the row's own requester (proven same-request above) gets a
+            // fresh code and attempt budget behind the cooldown — but the
+            // original expiry: a revival that renewed it could hold the
+            // address for ever (the PR #150 re-review rule)
+            pending.reviveSpent(codeHash, now);
         } else {
             // the resend: a fresh code for the details already stored,
             // with the attempt count carried over, so the limit caps
@@ -294,8 +329,9 @@ public class AuthService {
             && passwordEncoder.matches(request.password(), pending.getPasswordHash());
     }
 
-    // noRollbackFor: a wrong code must still commit its attempt counter,
-    // and a spent, expired or unusable pending row must stay deleted (same
+    // noRollbackFor: a wrong code must still commit its attempt counter
+    // (the exhausting one included — its row persists as spent), and an
+    // expired or unusable pending row's delete must commit too (same
     // trick as login's failure counters). Deliberately not the plain
     // ResponseStatusException the insert race below throws: that one comes
     // after a failed flush, and a transaction Hibernate has already marked
@@ -325,16 +361,33 @@ public class AuthService {
                 "Code has expired; sign up again to get a new code");
         }
 
+        // a spent row answers exactly like no row at all — same message,
+        // same BCrypt cost — so it reveals no more than the deleted row it
+        // replaces; the guess that exhausted it already said so with a 429.
+        // It is kept only so its lastSentAt holds the next sign-up behind
+        // the cooldown (PR #157 review, @Sinnez1)
+        if (pending.getAttempts() >= otpService.maxAttempts()) {
+            otpService.matches(request.code(), unknownPendingCodeHash);
+            throw new OtpVerificationException();
+        }
+
         if (!otpService.matches(request.code(), pending.getCodeHash())) {
             pending.incrementAttempts();
-            // the attempt that exhausts the codes also discards the pending
-            // sign-up, so the caller learns immediately (login's lockout
-            // reports on the tripping attempt for the same reason)
-            if (pending.getAttempts() >= otpService.maxAttempts()) {
-                pendingSignupRepository.delete(pending);
-                throw new OtpAttemptsExceededException();
-            }
+            // saved, never deleted, even on the attempt that exhausts the
+            // codes (which still reports the exhaustion immediately, like
+            // login's lockout on the tripping attempt): deleted, the next
+            // sign-up found no lastSentAt to measure the cooldown from, so
+            // burning the attempts bought an immediate fresh code
+            // (PR #157 review, @Sinnez1)
             pendingSignupRepository.save(pending);
+            if (pending.getAttempts() >= otpService.maxAttempts()) {
+                // Retry-After: how long the cooldown holds the re-sign-up
+                // that replaces this spent row (PR #157 Copilot review)
+                Duration untilResend = Duration.between(clock.instant(),
+                    pending.getLastSentAt().plus(otpService.resendCooldown()));
+                throw new OtpAttemptsExceededException(
+                    untilResend.isNegative() ? Duration.ZERO : untilResend);
+            }
             throw new OtpVerificationException();
         }
 

@@ -9,6 +9,9 @@ Scope: machine-readable problem+json type URIs for issue #92 (decision
        as the durable fix — these are that fix. URN scheme, so there is
        no host or path to rot.
 Author review: Leong Wei Zhi to review via the PR.
+2026-10-05 (Claude Code, Fable 5), PR #157 Copilot review:
+OTP_ATTEMPTS_EXCEEDED's doc now describes the spent/cooldown-gated
+lifecycle instead of the discarded-operation one it replaced.
 */
 
 package foc.user.controller;
@@ -32,7 +35,12 @@ public final class ProblemTypes {
     /** The code (or the pending operation holding it) has expired; request a new one. */
     public static final URI OTP_EXPIRED = URI.create("urn:foc:user:otp-expired");
 
-    /** Too many wrong codes; the pending operation was discarded. */
+    /**
+     * Too many wrong codes; the row is spent — nothing matches it any
+     * more, not even the right code. Not terminal: a replacement code can
+     * be requested (or the sign-up repeated) once the resend cooldown
+     * passes, and Retry-After quotes that wait (PR #157 reviews).
+     */
     public static final URI OTP_ATTEMPTS_EXCEEDED = URI.create("urn:foc:user:otp-attempts-exceeded");
 
     /** Resend requested inside the cooldown; Retry-After says how long. */

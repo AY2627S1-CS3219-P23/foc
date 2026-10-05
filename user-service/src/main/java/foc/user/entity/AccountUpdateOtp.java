@@ -77,10 +77,12 @@ public class AccountUpdateOtp {
     }
 
     /**
-     * Takes an expired row over for a new request: everything fresh,
-     * attempts reset — the code it held is dead (rejected on sight by
-     * the verify path). Reuse in place keeps the row in its unique
-     * index slot ({@link PendingSignup#replaceExpired}'s reasoning).
+     * Takes a dead row — expired, or spent (attempts exhausted, kept so
+     * {@code lastSentAt} still gates the resend cooldown; PR #157
+     * review) — over for a new request: everything fresh, attempts
+     * reset, because the code it held can never match again. Reuse in
+     * place keeps the row in its unique index slot
+     * ({@link PendingSignup#replaceExpired}'s reasoning).
      */
     public void replaceExpired(String codeHash, Instant sentAt, Instant expiresAt) {
         this.codeHash = codeHash;

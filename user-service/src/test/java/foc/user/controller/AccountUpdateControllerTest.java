@@ -12,6 +12,10 @@ Scope: integration tests for issue #92's account-update routes against
        pattern); the resend cooldown is 0s here (test yaml) —
        AccountUpdateResendCooldownTest runs the real default.
 Author review: Leong Wei Zhi to review via the PR.
+2026-10-05 (Claude Code, Fable 5), PR #157 review (@Sinnez1): exhaustion
+now keeps an OTP row as spent instead of deleting it, so the resend
+cooldown still gates the next code — exhaustion/takeover tests updated
+and cooldown-bypass regressions added.
 */
 
 package foc.user.controller;
@@ -21,6 +25,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -37,6 +42,7 @@ import static org.hamcrest.Matchers.containsString;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.mail.MailSendException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -47,6 +53,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -99,6 +106,14 @@ class AccountUpdateControllerTest extends PostgresTestContainer {
         // email-change flows run against the account this suite edits
         alex = userRepository.save(new User(EMAIL, "student_alex",
             new BCryptPasswordEncoder().encode(PASSWORD), Role.USER));
+    }
+
+    // spent rows outlive their test now (PR #157 review), and other test
+    // classes delete users without knowing these FK'd tables: leave none
+    @AfterEach
+    void clearOtpRows() {
+        gateOtps.deleteAll();
+        pendingEmailChanges.deleteAll();
     }
 
     // ---- request helpers, all as alex unless a caller is given ----
@@ -266,7 +281,7 @@ class AccountUpdateControllerTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("The fifth wrong code discards the gate with a 429; even the right code is dead")
+    @DisplayName("The fifth wrong code spends the gate with a 429; even the right code is dead")
     void patch_attemptsExhausted() throws Exception {
         String code = freshGateCode();
 
@@ -279,15 +294,28 @@ class AccountUpdateControllerTest extends PostgresTestContainer {
         patchAccount(Map.of("username", "renamed_alex", "otp", not(code)))
             .andExpect(status().isTooManyRequests())
             .andExpect(jsonPath("$.type").value("urn:foc:user:otp-attempts-exceeded"))
+            // Retry-After quotes the cooldown left before a replacement
+            // code may be requested — 0 here, the test yaml's cooldown
+            // (PR #157 Copilot review)
+            .andExpect(header().string(HttpHeaders.RETRY_AFTER, "0"))
             .andExpect(jsonPath("$.detail").value("Too many incorrect codes; request a new code"));
 
-        assertThat(gateOtps.findByUserId(alex.getId())).isEmpty();
+        // the row stays, spent, so its lastSentAt keeps gating the next
+        // code behind the cooldown — deleting it let 5 wrong guesses buy
+        // a fresh code at once (PR #157 review, @Sinnez1); even the right
+        // code is dead now
+        assertThat(gateOtps.findByUserId(alex.getId())).isPresent();
         patchAccount(Map.of("username", "renamed_alex", "otp", code))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-required"));
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-attempts-exceeded"));
         // nothing ever applied
         assertThat(userRepository.findById(alex.getId()).orElseThrow().getUsername())
             .isEqualTo("student_alex");
+
+        // a fresh code (the test cooldown is 0) replaces the spent row
+        // with a fresh attempt budget and works
+        patchAccount(Map.of("username", "renamed_alex", "otp", freshGateCode()))
+            .andExpect(status().isOk());
     }
 
     @Test
@@ -451,7 +479,7 @@ class AccountUpdateControllerTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("The fifth wrong code discards the pending change with a 429")
+    @DisplayName("The fifth wrong code spends the pending change with a 429")
     void verify_attemptsExhausted() throws Exception {
         patchAccount(Map.of("email", NEW_EMAIL, "otp", freshGateCode()))
             .andExpect(status().isAccepted());
@@ -466,7 +494,16 @@ class AccountUpdateControllerTest extends PostgresTestContainer {
             .andExpect(jsonPath("$.detail").value(
                 "Too many incorrect codes; request the email change again for a new code"));
 
-        assertThat(pendingEmailChanges.findByUserId(alex.getId())).isEmpty();
+        // the row stays, spent, so its lastSentAt keeps gating the next
+        // send (PR #157 review, @Sinnez1); even the right code is dead,
+        // and resending the dead code is refused too
+        assertThat(pendingEmailChanges.findByUserId(alex.getId())).isPresent();
+        verifyEmailChange(code)
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-attempts-exceeded"));
+        resendEmailChange()
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-attempts-exceeded"));
         assertThat(userRepository.findById(alex.getId()).orElseThrow().getEmail()).isEqualTo(EMAIL);
     }
 

@@ -26,6 +26,87 @@ Entry template:
 ```
 
 ---
+## 2026-10-05 — Leong Wei Zhi (PR #157 Copilot review: Retry-After on exhaustion + spent-row docs)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (review fixes: contract + docs)
+- **Scope:** `user-service/` — the Copilot findings on the spent-row
+  follow-up. (1) The attempts-exceeded 429 now carries `Retry-After`:
+  the exhausted row survives as spent and its replacement waits out the
+  resend cooldown, so there is a real wait to quote (0 = request now).
+  `OtpAttemptsExceededException` carries the remaining cooldown
+  (`OtpResendTooSoonException`'s pattern), set at every throw site from
+  the row's `lastSentAt`; `ProblemDetailAdvice` emits the header.
+  (2) Docs caught up with the spent lifecycle: `ProblemTypes`'
+  attempts-exceeded description no longer claims the operation was
+  discarded, and the `AccountUpdateService` javadoc/comments that said a
+  spent row "stays deleted" now describe the persisted-spent,
+  cooldown-gated state. README's type table mentions the header.
+- **Prompt(s):** (summary) Asked to address the latest Copilot comments
+  on the PR (three "previously missed" findings; the two threads the
+  overview lists as open were fixed in earlier commits and await
+  resolution on GitHub).
+- **Author review:** Full suite green (299 tests); the exhaustion 429s
+  now pin Retry-After in both cooldown regimes (0 in the shared yaml,
+  present at the real 60s), and the service tests pin the quoted
+  seconds. Reviewed via pull request.
+
+## 2026-10-05 — Leong Wei Zhi (PR #157 Copilot re-review: spent-row takeover + stale-email send)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (review fixes + tests)
+- **Scope:** `user-service/` — the Copilot review of the spent-row
+  change, two findings. (1) Treating a spent pending sign-up as
+  dead-and-takeable resurrected the PR #150 hijack: `/auth/signup/verify`
+  is anonymous, so anyone could burn a stranger's pending row with 5
+  wrong guesses, wait out the cooldown, and replace it with their own
+  password. A spent row now revives only for a repeat of its own request
+  (`PendingSignup.reviveSpent`: fresh code and attempt budget, original
+  expiry kept so the row's life stays bounded — no forever-hold); anyone
+  else keeps the 409 until expiry. (2) `requestOtp` read the user row
+  unlocked, so a concurrent email-change verify could commit between the
+  read and the SMTP send, mailing a live gate code to the address the
+  account just left (F2.1.1). All five account-update flows now take a
+  `PESSIMISTIC_WRITE` lock on the caller's user row first
+  (`getActiveUserWithLock`), one consistent lock order (user, then
+  gate/pending rows) so the flows serialize without deadlock.
+- **Prompt(s):** (summary) Asked to address the latest Copilot comments
+  on the PR. The sign-up spent-row shape (same-request revival with the
+  original expiry, over freezing the row until expiry) decided by
+  Leong Wei Zhi via options Q&A; the tool flagged that Copilot's literal
+  suggestion (spent rows take the expired branch for the same requester)
+  would have reintroduced the PR #150 forever-hold, hence the kept expiry.
+- **Author review:** Full suite green (299 tests, 1 new: a spent row
+  with other details stays 409; the takeover test became the
+  same-request revival case). Reviewed via pull request.
+
+## 2026-10-05 — Leong Wei Zhi (PR #157 review: spent OTP rows + combined-PATCH race)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (review fixes + tests + docs)
+- **Scope:** `user-service/` — @Sinnez1's PR #157 review, two fixes.
+  (1) The guess that exhausts `OTP_MAX_ATTEMPTS` keeps its row as
+  **spent** instead of deleting it, in all three OTP tables (gate codes,
+  pending sign-ups, pending email changes): deleted, the next request
+  found no `lastSentAt`, skipped the resend cooldown, and minted a fresh
+  code and attempt budget at once — unlimited guesses and inbox
+  flooding on a stolen JWT. A spent row refuses everything (sign-up's
+  verify answers it like no row at all, same message and BCrypt cost, so
+  nothing new is revealed) and is taken over like an expired one once
+  the cooldown passes. (2) `updateAccount` flushes a username change
+  through its typed catch before the email branch's uniqueness query
+  auto-flushes the dirty row, so losing a username race in a combined
+  username+email PATCH answers the documented `username-taken` 400
+  instead of an unhandled 500. README's OTP sections updated; the two
+  account-update test classes now clear their FK'd OTP tables after each
+  test since spent rows survive. Also merged `main` into the branch
+  (conflict in this log: both sides' entries kept).
+- **Prompt(s):** (summary) Asked to resolve the latest PR #157 review
+  comments and fix the merge conflict. The exhaustion shape
+  (spent-until-cooldown over spent-until-TTL or delete-plus-separate-
+  timestamp) and the scope (all three OTP flows, not just the two the
+  review named) decided by Leong Wei Zhi via options Q&A.
+- **Author review:** Full suite green (298 tests, 11 new — including
+  end-to-end regressions in both real-cooldown classes pinning that
+  exhaustion no longer bypasses the cooldown). Reviewed via pull request.
+
 ## 2026-09-30 — Leong Wei Zhi (#92 account update flows)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate
@@ -58,6 +139,28 @@ Entry template:
   verify) rather than re-deciding them.
 - **Author review:** Full suite green (280 tests, 43 new); manual
   Mailpit run of all five routes. Reviewed via pull request.
+
+## 2026-09-30 — Ryan Ang (admin dashboard: Users section only)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (removal + tests + docs)
+- **Scope:** `web/` only; no backend changes.
+  - `routes/admin.tsx`: the Suppliers section is no longer rendered, so
+    the Admin Dashboard shows just the Users section. Admins still add,
+    edit and delete suppliers on the Suppliers page.
+  - `features/supplier/components/SuppliersAdminSection.tsx` deleted, as
+    nothing else used it (it stays in git history).
+  - `test/admin.test.tsx`: the Suppliers section's cases and its faked
+    supplier API removed; one case added checking the dashboard renders
+    only the Users section.
+  - GitHub wiki, *D2 Design — User and Supplier Services* Part 2 §4: the
+    note that supplier management also appears as an admin-dashboard
+    section updated to match.
+- **Prompt(s):** (summary) Asked for a PR removing the supplier listing
+  from the admin dashboard, keeping only users for now, and for the wiki
+  to be updated.
+- **Author review:** Removing the section is the author's decision; the
+  tool made the edits. Verified with the web test suite (63 passing),
+  `tsc -b` and `eslint .`. Ryan to review via the PR.
 
 ## 2026-09-29 — Leong Wei Zhi (#88 OTP email sending)
 - **Tool:** Claude Code (Fable 5)

@@ -15,6 +15,25 @@ Scope: the account-update flows for issue #92 (requirement F2), design
        PR #157 Copilot review: the two post-flush collision fallbacks
        carry the same problem+json types as their pre-checks, so a
        client identifies a taken name or address in the racing case too.
+2026-10-05 (Claude Code, Fable 5), PR #157 review (@Sinnez1): (1) the
+guess that exhausts the attempts now keeps its row as spent instead of
+deleting it, so lastSentAt still gates the next code behind the resend
+cooldown — deleting it let 5 wrong guesses buy an immediate fresh code,
+cycling attempt budgets and flooding the inbox (spent-until-cooldown
+shape chosen over spent-until-TTL by Leong Wei Zhi via options Q&A;
+applied to all three OTP tables); (2) a combined username+email PATCH
+flushes the username through its typed catch before the email branch's
+queries auto-flush it, so losing a username race there is the documented
+username-taken 400, not a 500.
+Same day, PR #157 Copilot re-review: every flow now locks the caller's
+user row first (getActiveUserWithLock; one lock order, user then
+gate/pending rows) — read unlocked, requestOtp could mail a live gate
+code to an address a concurrent email-change verify had just replaced,
+violating F2.1.1's current-email guarantee.
+Also: the attempts-exceeded refusals now carry the cooldown left until a
+replacement code may be requested, for the 429's Retry-After, and the
+javadoc/comments that still said a spent row "stays deleted" describe
+the persisted-spent lifecycle instead (PR #157 Copilot review).
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -59,8 +78,10 @@ import foc.user.repository.UserRepository;
  * that applies the change: a failure that rolls the change back (mail
  * 502, uniqueness refusal) rolls the consumption back too, so the caller
  * retries on the code they have. Only the failures named in noRollbackFor
- * commit — a wrong guess keeps its attempt count, a spent or unusable row
- * stays deleted (AuthService.verifySignup's rules).
+ * commit — a wrong guess keeps its attempt count (the guess that exhausts
+ * the limit leaves the row persisted as spent, refusing everything until
+ * the resend cooldown lets a replacement be requested; PR #157 reviews),
+ * and an expired row's sweep stays deleted (verifySignup's rules).
  */
 @Service
 public class AccountUpdateService {
@@ -126,13 +147,24 @@ public class AccountUpdateService {
     // parks (or renews) the gate code and emails it to the account's
     // CURRENT address. @Transactional so the row and its email commit or
     // roll back together (AuthService.signup's reasoning); the row lock
-    // makes concurrent requests for one account queue
+    // makes concurrent requests for one account queue.
+    // Every flow here locks the caller's user row FIRST (one lock order,
+    // user then gate/pending): read unlocked, the address could be
+    // swapped by a concurrent email-change verify between this read and
+    // the send, mailing a live gate code to the address the account just
+    // left (PR #157 Copilot review)
     @Transactional
     public UpdateOtpResponse requestOtp(Long userId) {
-        User user = userRepository.getActiveUser(userId);
+        User user = userRepository.getActiveUserWithLock(userId);
         AccountUpdateOtp gate = gateOtps.findWithLockByUserId(userId).orElse(null);
         Instant now = clock.instant();
         boolean expired = gate != null && !gate.getExpiresAt().isAfter(now);
+        // a row whose attempts are spent is dead too — kept, not deleted,
+        // exactly so it still carries lastSentAt into the cooldown check
+        // below: deleting it let 5 wrong guesses buy an immediate fresh
+        // code, cycling attempt budgets and flooding the inbox the codes
+        // go to (PR #157 review, @Sinnez1)
+        boolean spent = gate != null && gate.getAttempts() >= otpService.maxAttempts();
 
         if (gate != null) {
             ensureCooldownPassed(gate.getLastSentAt(), now);
@@ -142,7 +174,7 @@ public class AccountUpdateService {
         String codeHash = otpService.hash(code);
         if (gate == null) {
             gate = new AccountUpdateOtp(userId, codeHash, now, now.plus(otpService.ttl()));
-        } else if (expired) {
+        } else if (expired || spent) {
             gate.replaceExpired(codeHash, now, now.plus(otpService.ttl()));
         } else {
             // the resend: fresh code, same expiry and attempts —
@@ -172,15 +204,16 @@ public class AccountUpdateService {
         return new UpdateOtpResponse(validity.toSeconds(), otpService.resendCooldown().toSeconds());
     }
 
-    // noRollbackFor: a wrong gate code must commit its attempt counter,
-    // and a spent or expired gate row must stay deleted. Deliberately not
+    // noRollbackFor: a wrong gate code must commit its attempt counter
+    // (the exhausting one included — its row persists as spent), and an
+    // expired gate row's delete must commit too. Deliberately not
     // the plain ResponseStatusExceptions the uniqueness checks and flush
     // races throw: those must roll back — which restores the gate row, so
     // a caller refused for a taken name retries on the code they have
     // (AuthService.verifySignup's exact reasoning about rollback-only)
     @Transactional(noRollbackFor = {OtpVerificationException.class, OtpAttemptsExceededException.class})
     public UpdateResult updateAccount(Long userId, UpdateAccountRequest request) {
-        User user = userRepository.getActiveUser(userId);
+        User user = userRepository.getActiveUserWithLock(userId);
         consumeGateOtp(userId, request.otp());
 
         String username = request.username() == null
@@ -197,30 +230,28 @@ public class AccountUpdateService {
             // except-self: renaming bob to Bob must pass (F2.1.2)
             NewAccountDetails.ensureUsernameUniqueExceptSelf(userRepository, userId, username);
             user.setUsername(username);
-        }
-
-        UpdateResult result;
-        if (newEmail == null) {
-            result = UpdateResult.applied(user);
-        } else {
-            NewAccountDetails.ensureEmailUniqueExceptSelf(userRepository, userId, newEmail);
-            Duration validity = parkEmailChange(userId, newEmail);
-            result = UpdateResult.parked(user, newEmail, validity, otpService.resendCooldown());
-        }
-
-        if (username != null) {
+            // flushed before the email branch runs: its uniqueness query
+            // auto-flushes this now-dirty row, so a racing duplicate used
+            // to surface there as an uncaught 500 instead of in this catch
+            // (PR #157 review, @Sinnez1)
             try {
                 userRepository.saveAndFlush(user);
             } catch (DataIntegrityViolationException e) {
                 // a concurrent request took the username after the check;
-                // rolls back, which also restores the gate row and drops
-                // the parked change — a clean retry (verifySignup's shape).
-                // Typed like the pre-check's refusal, so username-taken is
-                // machine-readable racing or not (PR #157 Copilot review)
+                // rolls back, which also restores the gate row — a clean
+                // retry (verifySignup's shape). Typed like the pre-check's
+                // refusal, so username-taken is machine-readable racing or
+                // not (PR #157 Copilot review)
                 throw NewAccountDetails.usernameTaken("Username was just taken; choose another");
             }
         }
-        return result;
+
+        if (newEmail == null) {
+            return UpdateResult.applied(user);
+        }
+        NewAccountDetails.ensureEmailUniqueExceptSelf(userRepository, userId, newEmail);
+        Duration validity = parkEmailChange(userId, newEmail);
+        return UpdateResult.parked(user, newEmail, validity, otpService.resendCooldown());
     }
 
     // parks (or renews/replaces) the pending email change under its row
@@ -230,6 +261,10 @@ public class AccountUpdateService {
         PendingEmailChange pending = pendingEmailChanges.findWithLockByUserId(userId).orElse(null);
         Instant now = clock.instant();
         boolean expired = pending != null && !pending.getExpiresAt().isAfter(now);
+        // spent rows are kept, not deleted, so lastSentAt still feeds the
+        // cooldown check below (PR #157 review, @Sinnez1); like an expired
+        // row, one is dead and gets replaced outright, never renewed
+        boolean spent = pending != null && pending.getAttempts() >= otpService.maxAttempts();
 
         if (pending != null) {
             // one send per cooldown whatever the address: replacing the
@@ -241,15 +276,16 @@ public class AccountUpdateService {
         String codeHash = otpService.hash(code);
         if (pending == null) {
             pending = new PendingEmailChange(userId, newEmail, codeHash, now, now.plus(otpService.ttl()));
-        } else if (!expired && pending.getNewEmail().equals(newEmail)) {
+        } else if (!expired && !spent && pending.getNewEmail().equals(newEmail)) {
             // the same change again is a resend: fresh code, same expiry
             // and attempts (PendingSignup.renewCode's anti-cycling rules —
             // repeating the PATCH must not buy fresh attempt budgets)
             pending.renewCode(codeHash, now);
         } else {
-            // a different address (or an expired row, whatever it held) is
-            // a genuinely new change: the caller's login token proves the
-            // old row is their own to discard, unlike a pending sign-up's
+            // a different address (or a dead row — expired or spent —
+            // whatever it held) is a genuinely new change: the caller's
+            // login token proves the old row is their own to discard,
+            // unlike a pending sign-up's
             pending.replace(newEmail, codeHash, now, now.plus(otpService.ttl()));
         }
         Duration validity = Duration.between(now, pending.getExpiresAt());
@@ -278,7 +314,7 @@ public class AccountUpdateService {
     @Transactional(noRollbackFor = {OtpVerificationException.class, OtpAttemptsExceededException.class,
         SignupIdentifierTakenException.class})
     public UserResponse verifyEmailChange(Long userId, String code) {
-        User user = userRepository.getActiveUser(userId);
+        User user = userRepository.getActiveUserWithLock(userId);
         PendingEmailChange pending = pendingEmailChanges.findWithLockByUserId(userId).orElse(null);
         Instant now = clock.instant();
         // no pending row is an honest answer, not a guessing game: the
@@ -293,16 +329,24 @@ public class AccountUpdateService {
             throw OtpVerificationException.expired(
                 "Code has expired; request the email change again");
         }
+        // a spent row refuses everything without counting; it stays only
+        // so its lastSentAt gates the next send (PR #157 review, @Sinnez1)
+        if (pending.getAttempts() >= otpService.maxAttempts()) {
+            throw new OtpAttemptsExceededException(
+                "Too many incorrect codes; request the email change again for a new code",
+                untilResendAllowed(pending.getLastSentAt(), now));
+        }
         if (!otpService.matches(code, pending.getCodeHash())) {
             pending.incrementAttempts();
-            // the attempt that exhausts the codes also discards the
-            // pending change, so the caller learns immediately
-            if (pending.getAttempts() >= otpService.maxAttempts()) {
-                pendingEmailChanges.delete(pending);
-                throw new OtpAttemptsExceededException(
-                    "Too many incorrect codes; request the email change again for a new code");
-            }
+            // saved, never deleted, even on the guess that exhausts the
+            // limit: deleting it let the next PATCH skip the cooldown and
+            // send a fresh code at once (PR #157 review, @Sinnez1)
             pendingEmailChanges.save(pending);
+            if (pending.getAttempts() >= otpService.maxAttempts()) {
+                throw new OtpAttemptsExceededException(
+                    "Too many incorrect codes; request the email change again for a new code",
+                    untilResendAllowed(pending.getLastSentAt(), now));
+            }
             throw new OtpVerificationException();
         }
 
@@ -341,7 +385,7 @@ public class AccountUpdateService {
     // the request is answered with a 400
     @Transactional(noRollbackFor = OtpVerificationException.class)
     public EmailChangePendingResponse resendEmailChange(Long userId) {
-        User user = userRepository.getActiveUser(userId);
+        User user = userRepository.getActiveUserWithLock(userId);
         PendingEmailChange pending = pendingEmailChanges.findWithLockByUserId(userId).orElse(null);
         Instant now = clock.instant();
         if (pending == null) {
@@ -352,6 +396,13 @@ public class AccountUpdateService {
             pendingEmailChanges.delete(pending);
             throw OtpVerificationException.expired(
                 "Code has expired; request the email change again");
+        }
+        // a spent row's code is dead — renewing it would hand out a code
+        // no attempt budget can ever match (PR #157 review, @Sinnez1)
+        if (pending.getAttempts() >= otpService.maxAttempts()) {
+            throw new OtpAttemptsExceededException(
+                "Too many incorrect codes; request the email change again for a new code",
+                untilResendAllowed(pending.getLastSentAt(), now));
         }
         ensureCooldownPassed(pending.getLastSentAt(), now);
 
@@ -372,7 +423,7 @@ public class AccountUpdateService {
 
     @Transactional(noRollbackFor = {OtpVerificationException.class, OtpAttemptsExceededException.class})
     public void changePassword(Long userId, ChangePasswordRequest request) {
-        User user = userRepository.getActiveUser(userId);
+        User user = userRepository.getActiveUserWithLock(userId);
         consumeGateOtp(userId, request.otp());
         // the match (F2.1.4) and the policy (F2.1.5) were enforced by the
         // record's annotations before this runs; only the hash is stored
@@ -383,7 +434,8 @@ public class AccountUpdateService {
     // presents the gate code (F2.1.1): single-use, so a match deletes the
     // row — inside the caller's transaction, so a change that fails to
     // commit un-consumes it. Wrong guesses count and commit; the guess
-    // that exhausts the limit discards the row (verifySignup's rules)
+    // that exhausts the limit leaves the row spent, refusing everything
+    // until the cooldown lets a replacement in (PR #157 reviews)
     private void consumeGateOtp(Long userId, String code) {
         AccountUpdateOtp gate = gateOtps.findWithLockByUserId(userId).orElse(null);
         Instant now = clock.instant();
@@ -398,17 +450,37 @@ public class AccountUpdateService {
             throw OtpVerificationException.expired(
                 "Code has expired; request a new code");
         }
+        // a spent row refuses everything, the right code included, without
+        // counting: it only exists to keep lastSentAt gating the next
+        // request (PR #157 review, @Sinnez1)
+        if (gate.getAttempts() >= otpService.maxAttempts()) {
+            throw new OtpAttemptsExceededException(
+                "Too many incorrect codes; request a new code",
+                untilResendAllowed(gate.getLastSentAt(), now));
+        }
         if (!otpService.matches(code, gate.getCodeHash())) {
             gate.incrementAttempts();
-            if (gate.getAttempts() >= otpService.maxAttempts()) {
-                gateOtps.delete(gate);
-                throw new OtpAttemptsExceededException(
-                    "Too many incorrect codes; request a new code");
-            }
+            // saved, never deleted, even on the guess that exhausts the
+            // limit: deleted, the next request found no lastSentAt to
+            // measure the cooldown from, so exhausting the attempts was a
+            // way around it (PR #157 review, @Sinnez1)
             gateOtps.save(gate);
+            if (gate.getAttempts() >= otpService.maxAttempts()) {
+                throw new OtpAttemptsExceededException(
+                    "Too many incorrect codes; request a new code",
+                    untilResendAllowed(gate.getLastSentAt(), now));
+            }
             throw new OtpVerificationException();
         }
         gateOtps.delete(gate);
+    }
+
+    // the spent row's Retry-After: how long until the resend cooldown
+    // lets a replacement code be requested — zero once it has passed
+    // (PR #157 Copilot review)
+    private Duration untilResendAllowed(Instant lastSentAt, Instant now) {
+        Duration remaining = Duration.between(now, lastSentAt.plus(otpService.resendCooldown()));
+        return remaining.isNegative() ? Duration.ZERO : remaining;
     }
 
     // one send per cooldown (flood and attempt-cycling guard, PR #150)
