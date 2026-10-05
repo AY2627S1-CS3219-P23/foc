@@ -9,6 +9,10 @@ Scope: PR #150 author review: the resend cooldown end to end at its real
 Author review: Leong Wei Zhi to review via the PR.
 2026-09-30 (Claude Code, Fable 5), issue #92: the 429 also pins its new
 problem+json type URI.
+2026-10-05 (Claude Code, Fable 5), PR #157 review (@Sinnez1): exhaustion
+now keeps an OTP row as spent instead of deleting it, so the resend
+cooldown still gates the next code — exhaustion/takeover tests updated
+and cooldown-bypass regressions added.
 */
 
 package foc.user.controller;
@@ -117,5 +121,34 @@ class SignupResendCooldownTest extends PostgresTestContainer {
         // told to wait; anyone else is refused outright, so the 429 never
         // becomes a way to probe for a pending sign-up with a wrong password
         signup("attacker_x", "AttackerPass123").andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("Exhausting the attempts is not a way around the cooldown (PR #157 review)")
+    void exhaustedPendingStillCoolsDown() throws Exception {
+        signup("student_alex", PASSWORD).andExpect(status().isAccepted());
+        String code = emailedCode();
+        String wrong = code.equals("000000") ? "000001" : "000000";
+
+        for (int attempt = 1; attempt <= 4; attempt++) {
+            verifySignup(wrong).andExpect(status().isBadRequest());
+        }
+        verifySignup(wrong).andExpect(status().isTooManyRequests());
+
+        // the attack this pins down: deleting the spent row let 5 wrong
+        // guesses buy an immediate fresh code (and attempt budget) — now
+        // its lastSentAt still holds the repeat sign-up to the cooldown
+        // (PR #157 review, @Sinnez1); the dead row guards nothing beyond
+        // that, so once the cooldown passes any sign-up takes it over
+        signup("student_alex", PASSWORD)
+            .andExpect(status().isTooManyRequests())
+            .andExpect(header().exists(HttpHeaders.RETRY_AFTER))
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-resend-cooldown"));
+    }
+
+    private ResultActions verifySignup(String code) throws Exception {
+        return mockMvc.perform(post("/auth/signup/verify")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(Map.of("email", EMAIL, "code", code))));
     }
 }

@@ -121,13 +121,15 @@ public class PendingSignup {
     }
 
     /**
-     * Takes an expired row over for a new sign-up: every field replaced
-     * and the attempts reset, because the sign-up it held is dead (verify
-     * rejects an expired row on sight). Reuse rather than delete-and-
-     * insert keeps the row in its unique index slot, which a flush
-     * ordering inserts before deletes would otherwise trip.
+     * Takes a dead row over for a new sign-up: every field replaced and
+     * the attempts reset, because the sign-up it held can never complete
+     * — expired (verify rejects it on sight) or spent (attempts
+     * exhausted; kept rather than deleted so {@code lastSentAt} still
+     * gates the resend cooldown, PR #157 review). Reuse rather than
+     * delete-and-insert keeps the row in its unique index slot, which a
+     * flush ordering inserts before deletes would otherwise trip.
      *
-     * <p>Only for an expired row: doing this to a live one is the
+     * <p>Only for a dead row: doing this to a live one is the
      * hijack PR #150's review found.
      */
     public void replaceExpired(String username, String passwordHash, String codeHash,

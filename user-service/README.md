@@ -112,8 +112,12 @@ sign-up never reserves an email or username.
   "Invalid verification code" — deliberately the same answer, at the same
   bcrypt cost; an expired code is 400 "sign up again". Wrong codes are
   counted per pending sign-up, resends included (`OTP_MAX_ATTEMPTS`,
-  default 5): the attempt that exhausts them is 429 and discards the
-  pending sign-up.
+  default 5): the attempt that exhausts them is 429, and the row stays
+  behind as **spent** — dead like an expired one (any sign-up takes it
+  over, but only once the resend cooldown passes; to a verify it answers
+  like no row at all). Deleting it instead let 5 wrong guesses buy an
+  immediate fresh code, cycling attempt budgets and flooding the inbox
+  (PR #157 review).
   If the email or username was taken while the code was in flight, verify
   answers 400 with that reason **and discards the pending row** — a
   sign-up that can never complete must not keep holding its email, which
@@ -185,7 +189,10 @@ name taken) un-consumes the code, and only wrong guesses and discards
 commit. Codes share sign-up's knobs and storage rules: 6 digits,
 BCrypt-hashed, never logged, `OTP_TTL` (10 min) / `OTP_MAX_ATTEMPTS`
 (5, resends included) / `OTP_RESEND_COOLDOWN` (60s, 429 + `Retry-After`
-inside it), resends replace the code but never the expiry.
+inside it), resends replace the code but never the expiry. Sign-up's
+spent rule is shared too: the guess that exhausts the attempts leaves
+the row behind, refusing everything, so the next code still waits out
+the cooldown instead of being minted at once (PR #157 review).
 
 - `POST /users/me/otp` (no body) → **202**
   `{ expiresInSeconds, resendInSeconds }`; a code went to the account's
@@ -224,7 +231,7 @@ may change). The sign-up OTP errors carry them too:
 | --- | --- |
 | `urn:foc:user:otp-invalid` | wrong code (400) |
 | `urn:foc:user:otp-expired` | code/operation expired; request anew (400) |
-| `urn:foc:user:otp-attempts-exceeded` | limit hit, operation discarded (429) |
+| `urn:foc:user:otp-attempts-exceeded` | limit hit; the row is spent — request anew once the cooldown passes (429) |
 | `urn:foc:user:otp-resend-cooldown` | resend too soon; `Retry-After` says when (429) |
 | `urn:foc:user:otp-required` | no gate code requested yet (400) |
 | `urn:foc:user:email-change-none` | nothing pending to verify/resend (400) |

@@ -26,6 +26,35 @@ Entry template:
 ```
 
 ---
+## 2026-10-05 — Leong Wei Zhi (PR #157 review: spent OTP rows + combined-PATCH race)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (review fixes + tests + docs)
+- **Scope:** `user-service/` — @Sinnez1's PR #157 review, two fixes.
+  (1) The guess that exhausts `OTP_MAX_ATTEMPTS` keeps its row as
+  **spent** instead of deleting it, in all three OTP tables (gate codes,
+  pending sign-ups, pending email changes): deleted, the next request
+  found no `lastSentAt`, skipped the resend cooldown, and minted a fresh
+  code and attempt budget at once — unlimited guesses and inbox
+  flooding on a stolen JWT. A spent row refuses everything (sign-up's
+  verify answers it like no row at all, same message and BCrypt cost, so
+  nothing new is revealed) and is taken over like an expired one once
+  the cooldown passes. (2) `updateAccount` flushes a username change
+  through its typed catch before the email branch's uniqueness query
+  auto-flushes the dirty row, so losing a username race in a combined
+  username+email PATCH answers the documented `username-taken` 400
+  instead of an unhandled 500. README's OTP sections updated; the two
+  account-update test classes now clear their FK'd OTP tables after each
+  test since spent rows survive. Also merged `main` into the branch
+  (conflict in this log: both sides' entries kept).
+- **Prompt(s):** (summary) Asked to resolve the latest PR #157 review
+  comments and fix the merge conflict. The exhaustion shape
+  (spent-until-cooldown over spent-until-TTL or delete-plus-separate-
+  timestamp) and the scope (all three OTP flows, not just the two the
+  review named) decided by Leong Wei Zhi via options Q&A.
+- **Author review:** Full suite green (298 tests, 11 new — including
+  end-to-end regressions in both real-cooldown classes pinning that
+  exhaustion no longer bypasses the cooldown). Reviewed via pull request.
+
 ## 2026-09-30 — Leong Wei Zhi (#92 account update flows)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate

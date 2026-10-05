@@ -37,6 +37,10 @@ Scope: unit tests for AuthService (issues #87/#89): sign-up normalisation
        problem+json type, pinning expiry to otp-expired — it had regressed
        to otp-invalid when #92 gave the exception a typed default.
 Author review: Leong Wei Zhi to review via the PR.
+2026-10-05 (Claude Code, Fable 5), PR #157 review (@Sinnez1): exhaustion
+now keeps an OTP row as spent instead of deleting it, so the resend
+cooldown still gates the next code — exhaustion/takeover tests updated
+and cooldown-bypass regressions added.
 */
 
 package foc.user.service;
@@ -289,6 +293,46 @@ class AuthServiceTest {
     }
 
     @Test
+    @DisplayName("Exhausting the attempts does not get around the resend cooldown (PR #157 review)")
+    void signup_spentRowStillCoolsDown() {
+        // the attack: 5 wrong guesses used to delete the row, so the very
+        // next sign-up found nothing to measure the cooldown from and got
+        // a fresh code (and a fresh attempt budget) immediately
+        PendingSignup existing = existingPending("student_alex", PASSWORD, NOW.minusSeconds(20));
+        for (int i = 0; i < OTP_MAX_ATTEMPTS; i++) {
+            existing.incrementAttempts();
+        }
+
+        Throwable thrown = catchThrowable(() -> signupAgain("student_alex", PASSWORD));
+
+        assertThat(thrown).isInstanceOf(OtpResendTooSoonException.class);
+        assertThat(((OtpResendTooSoonException) thrown).retryAfterSeconds()).isEqualTo(40);
+        verify(otpEmailSender, never()).sendSignupCode(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Once the cooldown passes, a spent row is dead: any sign-up takes it over fresh")
+    void signup_spentRowTakenOverAfterCooldown() {
+        PendingSignup existing = existingPending("old_name", "OldPassword1",
+            NOW.minus(OTP_RESEND_COOLDOWN));
+        for (int i = 0; i < OTP_MAX_ATTEMPTS; i++) {
+            existing.incrementAttempts();
+        }
+        when(pendingSignupRepository.saveAndFlush(any(PendingSignup.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+
+        // different details: a spent row guards nothing, like an expired
+        // one — its sign-up can never complete
+        SignupResponse response = signupAgain("student_alex", PASSWORD);
+
+        assertThat(existing.getUsername()).isEqualTo("student_alex");
+        assertThat(existing.getPasswordHash()).isEqualTo("hashed:" + PASSWORD);
+        assertThat(existing.getAttempts()).isZero();
+        assertThat(existing.getExpiresAt()).isEqualTo(NOW.plus(OTP_TTL));
+        assertThat(response.expiresInSeconds()).isEqualTo(OTP_TTL.toSeconds());
+    }
+
+    @Test
     @DisplayName("An expired pending sign-up is dead: a new sign-up takes its row over outright")
     void signup_expiredPendingTakenOver() {
         // expired an hour ago, so it guards nothing — including against
@@ -468,7 +512,7 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("The wrong code that exhausts the attempts discards the pending sign-up")
+    @DisplayName("The wrong code that exhausts the attempts keeps the row as spent, not deleted")
     void verify_attemptsExhausted() {
         PendingSignup pending = pendingWithCode("123456");
         for (int i = 0; i < OTP_MAX_ATTEMPTS - 1; i++) {
@@ -479,7 +523,32 @@ class AuthServiceTest {
             .isInstanceOf(OtpAttemptsExceededException.class)
             .hasMessage("Too many incorrect codes; sign up again to get a new code");
 
-        verify(pendingSignupRepository).delete(pending);
+        // kept so its lastSentAt still holds the next sign-up behind the
+        // cooldown: deleting it here let 5 wrong guesses buy an immediate
+        // fresh code (PR #157 review, @Sinnez1)
+        assertThat(pending.getAttempts()).isEqualTo(OTP_MAX_ATTEMPTS);
+        verify(pendingSignupRepository).save(pending);
+        verify(pendingSignupRepository, never()).delete(any(PendingSignup.class));
+        verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("A spent pending sign-up answers like no row at all — even to the right code")
+    void verify_spentRowAnswersLikeUnknown() {
+        PendingSignup pending = pendingWithCode("123456");
+        for (int i = 0; i < OTP_MAX_ATTEMPTS; i++) {
+            pending.incrementAttempts();
+        }
+
+        assertThatThrownBy(() -> verifyCode("123456"))
+            .isInstanceOf(OtpVerificationException.class)
+            .hasMessage("Invalid verification code");
+
+        // nothing counted, nothing deleted, nothing created: the row only
+        // exists to carry lastSentAt into the cooldown check
+        assertThat(pending.getAttempts()).isEqualTo(OTP_MAX_ATTEMPTS);
+        verify(pendingSignupRepository, never()).save(any(PendingSignup.class));
+        verify(pendingSignupRepository, never()).delete(any(PendingSignup.class));
         verify(userRepository, never()).saveAndFlush(any());
     }
 

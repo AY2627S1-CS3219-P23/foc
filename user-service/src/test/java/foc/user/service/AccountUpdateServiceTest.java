@@ -14,6 +14,10 @@ Scope: unit tests for issue #92's AccountUpdateService, the clock-exact
        pinned to their problem+json types, so a client can identify a
        taken name or address in the racing case as well as the checked one.
 Author review: Leong Wei Zhi to review via the PR.
+2026-10-05 (Claude Code, Fable 5), PR #157 review (@Sinnez1): exhaustion
+now keeps an OTP row as spent instead of deleting it, so the resend
+cooldown still gates the next code — exhaustion/takeover tests updated
+and cooldown-bypass regressions added.
 */
 
 package foc.user.service;
@@ -207,8 +211,8 @@ class AccountUpdateServiceTest {
     }
 
     @Test
-    @DisplayName("The wrong guess that reaches the limit deletes the row")
-    void updateAccount_limitDiscardsGate() {
+    @DisplayName("The wrong guess that reaches the limit keeps the row as spent, not deleted")
+    void updateAccount_limitKeepsGateSpent() {
         AccountUpdateOtp gate = gateRow(0);
         for (int i = 0; i < OTP_MAX_ATTEMPTS - 1; i++) {
             gate.incrementAttempts();
@@ -217,7 +221,60 @@ class AccountUpdateServiceTest {
         assertThatThrownBy(() -> service.updateAccount(USER_ID, rename("222222")))
             .isInstanceOf(OtpAttemptsExceededException.class);
 
-        verify(gateOtps).delete(gate);
+        // kept so its lastSentAt still holds the next request behind the
+        // cooldown: deleting it here let 5 wrong guesses buy an immediate
+        // fresh code (PR #157 review, @Sinnez1)
+        assertThat(gate.getAttempts()).isEqualTo(OTP_MAX_ATTEMPTS);
+        verify(gateOtps).save(gate);
+        verify(gateOtps, never()).delete(any(AccountUpdateOtp.class));
+    }
+
+    @Test
+    @DisplayName("A spent gate refuses even the right code, without counting or deleting")
+    void updateAccount_spentGateRefusesRightCode() {
+        AccountUpdateOtp gate = gateRow(0);
+        for (int i = 0; i < OTP_MAX_ATTEMPTS; i++) {
+            gate.incrementAttempts();
+        }
+
+        assertThatThrownBy(() -> service.updateAccount(USER_ID, rename("111111")))
+            .isInstanceOf(OtpAttemptsExceededException.class)
+            .hasMessage("Too many incorrect codes; request a new code");
+
+        assertThat(gate.getAttempts()).isEqualTo(OTP_MAX_ATTEMPTS);
+        verify(gateOtps, never()).delete(any(AccountUpdateOtp.class));
+        verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("Exhausting the attempts does not get around the resend cooldown (PR #157 review)")
+    void requestOtp_spentRowStillCoolsDown() {
+        AccountUpdateOtp gate = gateRow(OTP_RESEND_COOLDOWN.getSeconds() - 1);
+        for (int i = 0; i < OTP_MAX_ATTEMPTS; i++) {
+            gate.incrementAttempts();
+        }
+
+        OtpResendTooSoonException refusal = catchThrowableOfType(
+            OtpResendTooSoonException.class, () -> service.requestOtp(USER_ID));
+
+        assertThat(refusal.retryAfterSeconds()).isEqualTo(1);
+        verify(otpEmailSender, never()).sendAccountUpdateCode(anyString(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("Once the cooldown passes, a spent gate row is replaced fresh: new TTL, attempts reset")
+    void requestOtp_spentRowReplacedAfterCooldown() {
+        AccountUpdateOtp gate = gateRow(OTP_RESEND_COOLDOWN.getSeconds());
+        for (int i = 0; i < OTP_MAX_ATTEMPTS; i++) {
+            gate.incrementAttempts();
+        }
+        when(gateOtps.saveAndFlush(gate)).thenReturn(gate);
+
+        var response = service.requestOtp(USER_ID);
+
+        assertThat(response.expiresInSeconds()).isEqualTo(OTP_TTL.getSeconds());
+        assertThat(gate.getExpiresAt()).isEqualTo(NOW.plus(OTP_TTL));
+        assertThat(gate.getAttempts()).isZero();
     }
 
     @Test
@@ -275,6 +332,48 @@ class AccountUpdateServiceTest {
         verify(gateOtps).delete(gate);
     }
 
+    @Test
+    @DisplayName("Repeating the change on a spent pending row replaces it fresh instead of renewing")
+    void updateAccount_spentPendingChangeReplaced() {
+        gateRow(0);
+        PendingEmailChange pending = new PendingEmailChange(USER_ID, NEW_EMAIL,
+            PLAIN_ENCODER.encode("333333"), NOW.minus(OTP_RESEND_COOLDOWN), NOW.plusSeconds(300));
+        for (int i = 0; i < OTP_MAX_ATTEMPTS; i++) {
+            pending.incrementAttempts();
+        }
+        when(pendingEmailChanges.findWithLockByUserId(USER_ID)).thenReturn(Optional.of(pending));
+        when(pendingEmailChanges.saveAndFlush(pending)).thenReturn(pending);
+        when(userRepository.existsByEmailAndIdNot(NEW_EMAIL, USER_ID)).thenReturn(false);
+
+        var result = service.updateAccount(USER_ID,
+            new UpdateAccountRequest(null, NEW_EMAIL, "111111"));
+
+        // renewing would hand out a code no attempt budget could match;
+        // a spent row is dead like an expired one, so the same address
+        // gets a genuinely new change (PR #157 review, @Sinnez1)
+        assertThat(result.emailParked()).isTrue();
+        assertThat(pending.getAttempts()).isZero();
+        assertThat(pending.getExpiresAt()).isEqualTo(NOW.plus(OTP_TTL));
+    }
+
+    @Test
+    @DisplayName("A spent pending change cannot resend its dead code")
+    void resendEmailChange_spentRefused() {
+        PendingEmailChange pending = new PendingEmailChange(USER_ID, NEW_EMAIL,
+            PLAIN_ENCODER.encode("333333"), NOW.minus(OTP_RESEND_COOLDOWN), NOW.plusSeconds(300));
+        for (int i = 0; i < OTP_MAX_ATTEMPTS; i++) {
+            pending.incrementAttempts();
+        }
+        when(pendingEmailChanges.findWithLockByUserId(USER_ID)).thenReturn(Optional.of(pending));
+
+        assertThatThrownBy(() -> service.resendEmailChange(USER_ID))
+            .isInstanceOf(OtpAttemptsExceededException.class)
+            .hasMessage("Too many incorrect codes; request the email change again for a new code");
+
+        verify(otpEmailSender, never()).sendEmailChangeCode(anyString(), anyString(), any());
+        verify(pendingEmailChanges, never()).delete(any(PendingEmailChange.class));
+    }
+
     // ---- the post-flush collision fallbacks carry their documented types ----
 
     @Test
@@ -293,6 +392,31 @@ class AccountUpdateServiceTest {
 
         assertThat(refusal.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(refusal.getBody().getType()).isEqualTo(ProblemTypes.USERNAME_TAKEN);
+    }
+
+    @Test
+    @DisplayName("A username race in a combined username+email PATCH is typed too, not a 500")
+    void updateAccount_combinedPatchUsernameRaceIsTyped() {
+        gateRow(0);
+        when(userRepository.existsByUsernameIgnoreCaseAndIdNot("renamed_alex", USER_ID))
+            .thenReturn(false);
+        when(userRepository.saveAndFlush(user))
+            .thenThrow(new DataIntegrityViolationException("uq_users_username"));
+
+        // before the fix the email branch's uniqueness query ran first and
+        // Hibernate's auto-flush wrote the dirty username there, so the
+        // unique-index violation escaped this catch as a 500
+        // (PR #157 review, @Sinnez1)
+        ResponseStatusException refusal = catchThrowableOfType(ResponseStatusException.class,
+            () -> service.updateAccount(USER_ID,
+                new UpdateAccountRequest("renamed_alex", NEW_EMAIL, "111111")));
+
+        assertThat(refusal.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(refusal.getBody().getType()).isEqualTo(ProblemTypes.USERNAME_TAKEN);
+        // the username flushed through its typed catch before anything
+        // parked: no email change started, no code went out
+        verify(pendingEmailChanges, never()).findWithLockByUserId(USER_ID);
+        verify(otpEmailSender, never()).sendEmailChangeCode(anyString(), anyString(), any());
     }
 
     @Test

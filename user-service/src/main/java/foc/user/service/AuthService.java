@@ -95,6 +95,14 @@ now wraps the caught uniqueness refusal whole, carrying its problem type.
 branch builds its exception through OtpVerificationException.expired(), so
 sign-up's expiry carries otp-expired as documented — the default
 constructor it used types everything otp-invalid.
+2026-10-05 (Claude Code, Fable 5), PR #157 review (@Sinnez1): the guess
+that exhausts the attempts keeps the pending row as spent instead of
+deleting it, so its lastSentAt still holds the next sign-up behind the
+resend cooldown — deleted, 5 wrong guesses bought an immediate fresh code,
+cycling attempt budgets and flooding the inbox. A spent row is dead like
+an expired one (any sign-up takes it over once the cooldown passes), and
+verify answers it exactly like no row at all, so nothing new is revealed
+(spent-until-cooldown shape chosen by Leong Wei Zhi via options Q&A).
 */
 
 package foc.user.service;
@@ -218,10 +226,16 @@ public class AuthService {
         PendingSignup pending = pendingSignupRepository.findWithLockByEmail(email).orElse(null);
         Instant now = clock.instant();
         // an expired row is dead — verify rejects it on sight — so it
-        // guards nothing and any sign-up may take it over
+        // guards nothing and any sign-up may take it over. A row whose
+        // attempts are spent is dead the same way: it is kept, not
+        // deleted, exactly so its lastSentAt still feeds the cooldown
+        // check below — deleting it on exhaustion let 5 wrong guesses buy
+        // an immediate fresh code (PR #157 review, @Sinnez1)
         boolean expired = pending != null && !pending.getExpiresAt().isAfter(now);
+        boolean spent = pending != null && pending.getAttempts() >= otpService.maxAttempts();
+        boolean dead = expired || spent;
 
-        if (pending != null && !expired && !isSameRequest(request, username, pending)) {
+        if (pending != null && !dead && !isSameRequest(request, username, pending)) {
             // refused, not merged, and not silently replaced: only the
             // request that pended this email can move it along, and it
             // proves that by repeating its own details
@@ -242,7 +256,7 @@ public class AuthService {
         if (pending == null) {
             pending = new PendingSignup(email, username, passwordEncoder.encode(request.password()),
                 codeHash, now, now.plus(otpService.ttl()));
-        } else if (expired) {
+        } else if (dead) {
             pending.replaceExpired(username, passwordEncoder.encode(request.password()),
                 codeHash, now, now.plus(otpService.ttl()));
         } else {
@@ -325,16 +339,28 @@ public class AuthService {
                 "Code has expired; sign up again to get a new code");
         }
 
+        // a spent row answers exactly like no row at all — same message,
+        // same BCrypt cost — so it reveals no more than the deleted row it
+        // replaces; the guess that exhausted it already said so with a 429.
+        // It is kept only so its lastSentAt holds the next sign-up behind
+        // the cooldown (PR #157 review, @Sinnez1)
+        if (pending.getAttempts() >= otpService.maxAttempts()) {
+            otpService.matches(request.code(), unknownPendingCodeHash);
+            throw new OtpVerificationException();
+        }
+
         if (!otpService.matches(request.code(), pending.getCodeHash())) {
             pending.incrementAttempts();
-            // the attempt that exhausts the codes also discards the pending
-            // sign-up, so the caller learns immediately (login's lockout
-            // reports on the tripping attempt for the same reason)
+            // saved, never deleted, even on the attempt that exhausts the
+            // codes (which still reports the exhaustion immediately, like
+            // login's lockout on the tripping attempt): deleted, the next
+            // sign-up found no lastSentAt to measure the cooldown from, so
+            // burning the attempts bought an immediate fresh code
+            // (PR #157 review, @Sinnez1)
+            pendingSignupRepository.save(pending);
             if (pending.getAttempts() >= otpService.maxAttempts()) {
-                pendingSignupRepository.delete(pending);
                 throw new OtpAttemptsExceededException();
             }
-            pendingSignupRepository.save(pending);
             throw new OtpVerificationException();
         }
 
