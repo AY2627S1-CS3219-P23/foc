@@ -2089,3 +2089,21 @@ Entry template:
 - **Author review:** Requirements, priorities, allocation, and tech stack
   were decided by the team beforehand (D1 document/presentation); the tool
   transcribed and formatted them. Output reviewed via pull requests.
+
+## 2026-10-05 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** debugging assistance, implementation (unit test)
+- **Prompt(s):** Asked to fix supplier category storage: sync
+  `Suppliers.category` on create/update (categories joined with `/`),
+  capitalise category names on save (`Food`/`food`/`fOOD` -> `Food`), and
+  refresh the category filter after a save. Issue #160, branch
+  `fix/supplier-category-sync`.
+- **Scope:** `supplier-service` `SupplierService` (save/create/update),
+  `SupplierCategories` (new `normalizeCategory` helper), `SuppliersSeeder`
+  (same normalisation), new `SupplierCategoriesTest`; `web`
+  `suppliers.tsx` (category effect re-runs on `refreshKey`).
+- **Author review:** Required the team-decided format (`/`-joined names,
+  first-letter capitalisation) beforehand; the schema of
+  `SupplierCategories` and whether `Suppliers.category` stays were left to
+  the team and are not changed here. Backend tests pass (39, Java 21 via
+  Docker); web `tsc` passes. Pending author review of the diff.

@@ -64,6 +64,10 @@
  * set without diffing. Delete removes the category rows first — no
  * cascade is declared from Suppliers, and the FK would otherwise
  * reject the supplier row's deletion.
+ * 2026-10-05 (issue #160, Claude Code (Sonnet 5)): createSupplier and
+ * updateSupplier now also write the category names, joined with "/", to
+ * Suppliers.category, and saveCategories normalises each name via
+ * SupplierCategories.normalizeCategory and de-duplicates before saving.
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
@@ -81,6 +85,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -151,6 +156,7 @@ public class SupplierService {
         applyRequest(supplier, request);
         Suppliers saved = suppliersRepository.save(supplier);
         List<String> categories = saveCategories(saved, request.categories());
+        saved.setCategory(String.join("/", categories));
         return toResponse(saved, categories);
     }
 
@@ -162,6 +168,7 @@ public class SupplierService {
         Suppliers saved = suppliersRepository.save(supplier);
         supplierCategoriesRepository.deleteBySupplierId(id);
         List<String> categories = saveCategories(saved, request.categories());
+        saved.setCategory(String.join("/", categories));
         return toResponse(saved, categories);
     }
 
@@ -188,20 +195,27 @@ public class SupplierService {
         supplier.setImageURL(request.imageUrl());
     }
 
-    // Saves one SupplierCategories row per non-blank category and
-    // returns exactly the set that was persisted, for the response.
+    // Saves one SupplierCategories row per distinct, normalised category
+    // and returns exactly the set that was persisted, for the response.
+    // Normalising before de-duplicating means "Food" and "food" in the
+    // same request collapse into one row, since they are the same
+    // category once stored.
     private List<String> saveCategories(Suppliers supplier, List<String> categories) {
         if (categories == null) {
             return List.of();
         }
-        List<String> nonBlank = categories.stream().filter(c -> c != null && !c.isBlank()).toList();
-        for (String category : nonBlank) {
+        List<String> normalized = categories.stream()
+                .map(SupplierCategories::normalizeCategory)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        for (String category : normalized) {
             SupplierCategories sc = new SupplierCategories();
             sc.setSupplier(supplier);
             sc.setCategory(category);
             supplierCategoriesRepository.save(sc);
         }
-        return nonBlank;
+        return normalized;
     }
 
     private static SupplierResponse toResponse(Suppliers s, List<String> categories) {
