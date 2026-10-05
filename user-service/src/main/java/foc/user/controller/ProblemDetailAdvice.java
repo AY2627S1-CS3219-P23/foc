@@ -18,6 +18,10 @@ decision via options Q&A: machine-readable types in scope, so the SPA can
 stop string-matching detail sentences), and a ResponseStatusException
 passthrough renders typed bodies (uniqueness refusals) for controllers
 without a local one.
+2026-10-05 (Claude Code, Fable 5), PR #157 Copilot review: the
+attempts-exceeded 429 now carries Retry-After — the exhausted row
+survives as spent, so there is a real wait (the resend cooldown) to
+quote before a replacement code may be requested.
 */
 
 package foc.user.controller;
@@ -89,14 +93,17 @@ class ProblemDetailAdvice {
         return problem;
     }
 
-    // 429 like the login lockout (issue #145 precedent), but without
-    // Retry-After: waiting won't help — the pending operation is discarded
-    // and the remedy is starting again for a fresh code
+    // 429 like the login lockout (issue #145 precedent). The exhausted
+    // row now survives as spent and its replacement waits out the resend
+    // cooldown (PR #157 reviews), so there IS a wait to quote: Retry-After
+    // carries it, 0 meaning a fresh code can be requested right away
     @ExceptionHandler(OtpAttemptsExceededException.class)
-    ProblemDetail handleOtpAttemptsExceeded(OtpAttemptsExceededException e) {
+    ResponseEntity<ProblemDetail> handleOtpAttemptsExceeded(OtpAttemptsExceededException e) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
         problem.setType(ProblemTypes.OTP_ATTEMPTS_EXCEEDED);
-        return problem;
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
+            .body(problem);
     }
 
     // 429 with Retry-After, the lockout's shape: here waiting is exactly

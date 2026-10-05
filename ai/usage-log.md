@@ -26,6 +26,30 @@ Entry template:
 ```
 
 ---
+## 2026-10-05 — Leong Wei Zhi (PR #157 Copilot review: Retry-After on exhaustion + spent-row docs)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (review fixes: contract + docs)
+- **Scope:** `user-service/` — the Copilot findings on the spent-row
+  follow-up. (1) The attempts-exceeded 429 now carries `Retry-After`:
+  the exhausted row survives as spent and its replacement waits out the
+  resend cooldown, so there is a real wait to quote (0 = request now).
+  `OtpAttemptsExceededException` carries the remaining cooldown
+  (`OtpResendTooSoonException`'s pattern), set at every throw site from
+  the row's `lastSentAt`; `ProblemDetailAdvice` emits the header.
+  (2) Docs caught up with the spent lifecycle: `ProblemTypes`'
+  attempts-exceeded description no longer claims the operation was
+  discarded, and the `AccountUpdateService` javadoc/comments that said a
+  spent row "stays deleted" now describe the persisted-spent,
+  cooldown-gated state. README's type table mentions the header.
+- **Prompt(s):** (summary) Asked to address the latest Copilot comments
+  on the PR (three "previously missed" findings; the two threads the
+  overview lists as open were fixed in earlier commits and await
+  resolution on GitHub).
+- **Author review:** Full suite green (299 tests); the exhaustion 429s
+  now pin Retry-After in both cooldown regimes (0 in the shared yaml,
+  present at the real 60s), and the service tests pin the quoted
+  seconds. Reviewed via pull request.
+
 ## 2026-10-05 — Leong Wei Zhi (PR #157 Copilot re-review: spent-row takeover + stale-email send)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor (review fixes + tests)

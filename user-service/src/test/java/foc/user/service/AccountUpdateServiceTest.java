@@ -223,9 +223,14 @@ class AccountUpdateServiceTest {
             gate.incrementAttempts();
         }
 
-        assertThatThrownBy(() -> service.updateAccount(USER_ID, rename("222222")))
-            .isInstanceOf(OtpAttemptsExceededException.class);
+        OtpAttemptsExceededException refusal = catchThrowableOfType(
+            OtpAttemptsExceededException.class,
+            () -> service.updateAccount(USER_ID, rename("222222")));
 
+        // the 429 quotes the cooldown left before a replacement code may
+        // be requested — the code was just sent, so the full 60s
+        // (PR #157 Copilot review)
+        assertThat(refusal.retryAfterSeconds()).isEqualTo(OTP_RESEND_COOLDOWN.getSeconds());
         // kept so its lastSentAt still holds the next request behind the
         // cooldown: deleting it here let 5 wrong guesses buy an immediate
         // fresh code (PR #157 review, @Sinnez1)

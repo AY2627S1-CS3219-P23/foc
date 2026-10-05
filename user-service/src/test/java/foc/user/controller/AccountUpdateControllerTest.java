@@ -42,6 +42,7 @@ import static org.hamcrest.Matchers.containsString;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.mail.MailSendException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -52,6 +53,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -292,6 +294,10 @@ class AccountUpdateControllerTest extends PostgresTestContainer {
         patchAccount(Map.of("username", "renamed_alex", "otp", not(code)))
             .andExpect(status().isTooManyRequests())
             .andExpect(jsonPath("$.type").value("urn:foc:user:otp-attempts-exceeded"))
+            // Retry-After quotes the cooldown left before a replacement
+            // code may be requested — 0 here, the test yaml's cooldown
+            // (PR #157 Copilot review)
+            .andExpect(header().string(HttpHeaders.RETRY_AFTER, "0"))
             .andExpect(jsonPath("$.detail").value("Too many incorrect codes; request a new code"));
 
         // the row stays, spent, so its lastSentAt keeps gating the next

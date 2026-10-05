@@ -240,7 +240,7 @@ may change). The sign-up OTP errors carry them too:
 | --- | --- |
 | `urn:foc:user:otp-invalid` | wrong code (400) |
 | `urn:foc:user:otp-expired` | code/operation expired; request anew (400) |
-| `urn:foc:user:otp-attempts-exceeded` | limit hit; the row is spent — request anew once the cooldown passes (429) |
+| `urn:foc:user:otp-attempts-exceeded` | limit hit; the row is spent — request anew once the cooldown passes, `Retry-After` says when (429) |
 | `urn:foc:user:otp-resend-cooldown` | resend too soon; `Retry-After` says when (429) |
 | `urn:foc:user:otp-required` | no gate code requested yet (400) |
 | `urn:foc:user:email-change-none` | nothing pending to verify/resend (400) |

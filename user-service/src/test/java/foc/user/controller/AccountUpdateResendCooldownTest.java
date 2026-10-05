@@ -173,7 +173,10 @@ class AccountUpdateResendCooldownTest extends PostgresTestContainer {
         }
         patchAccount(Map.of("username", "renamed_alex", "otp", wrong))
             .andExpect(status().isTooManyRequests())
-            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-attempts-exceeded"));
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-attempts-exceeded"))
+            // at the real 60s cooldown the 429 quotes the actual wait
+            // before a replacement code may be requested (PR #157 review)
+            .andExpect(header().exists(HttpHeaders.RETRY_AFTER));
 
         // the attack this pins down: deleting the spent row let 5 wrong
         // guesses mint a fresh code (and attempt budget) immediately —

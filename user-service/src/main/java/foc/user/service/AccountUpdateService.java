@@ -30,6 +30,10 @@ user row first (getActiveUserWithLock; one lock order, user then
 gate/pending rows) — read unlocked, requestOtp could mail a live gate
 code to an address a concurrent email-change verify had just replaced,
 violating F2.1.1's current-email guarantee.
+Also: the attempts-exceeded refusals now carry the cooldown left until a
+replacement code may be requested, for the 429's Retry-After, and the
+javadoc/comments that still said a spent row "stays deleted" describe
+the persisted-spent lifecycle instead (PR #157 Copilot review).
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -74,8 +78,10 @@ import foc.user.repository.UserRepository;
  * that applies the change: a failure that rolls the change back (mail
  * 502, uniqueness refusal) rolls the consumption back too, so the caller
  * retries on the code they have. Only the failures named in noRollbackFor
- * commit — a wrong guess keeps its attempt count, a spent or unusable row
- * stays deleted (AuthService.verifySignup's rules).
+ * commit — a wrong guess keeps its attempt count (the guess that exhausts
+ * the limit leaves the row persisted as spent, refusing everything until
+ * the resend cooldown lets a replacement be requested; PR #157 reviews),
+ * and an expired row's sweep stays deleted (verifySignup's rules).
  */
 @Service
 public class AccountUpdateService {
@@ -198,8 +204,9 @@ public class AccountUpdateService {
         return new UpdateOtpResponse(validity.toSeconds(), otpService.resendCooldown().toSeconds());
     }
 
-    // noRollbackFor: a wrong gate code must commit its attempt counter,
-    // and a spent or expired gate row must stay deleted. Deliberately not
+    // noRollbackFor: a wrong gate code must commit its attempt counter
+    // (the exhausting one included — its row persists as spent), and an
+    // expired gate row's delete must commit too. Deliberately not
     // the plain ResponseStatusExceptions the uniqueness checks and flush
     // races throw: those must roll back — which restores the gate row, so
     // a caller refused for a taken name retries on the code they have
@@ -326,7 +333,8 @@ public class AccountUpdateService {
         // so its lastSentAt gates the next send (PR #157 review, @Sinnez1)
         if (pending.getAttempts() >= otpService.maxAttempts()) {
             throw new OtpAttemptsExceededException(
-                "Too many incorrect codes; request the email change again for a new code");
+                "Too many incorrect codes; request the email change again for a new code",
+                untilResendAllowed(pending.getLastSentAt(), now));
         }
         if (!otpService.matches(code, pending.getCodeHash())) {
             pending.incrementAttempts();
@@ -336,7 +344,8 @@ public class AccountUpdateService {
             pendingEmailChanges.save(pending);
             if (pending.getAttempts() >= otpService.maxAttempts()) {
                 throw new OtpAttemptsExceededException(
-                    "Too many incorrect codes; request the email change again for a new code");
+                    "Too many incorrect codes; request the email change again for a new code",
+                    untilResendAllowed(pending.getLastSentAt(), now));
             }
             throw new OtpVerificationException();
         }
@@ -387,7 +396,8 @@ public class AccountUpdateService {
         // no attempt budget can ever match (PR #157 review, @Sinnez1)
         if (pending.getAttempts() >= otpService.maxAttempts()) {
             throw new OtpAttemptsExceededException(
-                "Too many incorrect codes; request the email change again for a new code");
+                "Too many incorrect codes; request the email change again for a new code",
+                untilResendAllowed(pending.getLastSentAt(), now));
         }
         ensureCooldownPassed(pending.getLastSentAt(), now);
 
@@ -419,7 +429,8 @@ public class AccountUpdateService {
     // presents the gate code (F2.1.1): single-use, so a match deletes the
     // row — inside the caller's transaction, so a change that fails to
     // commit un-consumes it. Wrong guesses count and commit; the guess
-    // that exhausts the limit discards the row (verifySignup's rules)
+    // that exhausts the limit leaves the row spent, refusing everything
+    // until the cooldown lets a replacement in (PR #157 reviews)
     private void consumeGateOtp(Long userId, String code) {
         AccountUpdateOtp gate = gateOtps.findWithLockByUserId(userId).orElse(null);
         Instant now = clock.instant();
@@ -439,7 +450,8 @@ public class AccountUpdateService {
         // request (PR #157 review, @Sinnez1)
         if (gate.getAttempts() >= otpService.maxAttempts()) {
             throw new OtpAttemptsExceededException(
-                "Too many incorrect codes; request a new code");
+                "Too many incorrect codes; request a new code",
+                untilResendAllowed(gate.getLastSentAt(), now));
         }
         if (!otpService.matches(code, gate.getCodeHash())) {
             gate.incrementAttempts();
@@ -450,11 +462,20 @@ public class AccountUpdateService {
             gateOtps.save(gate);
             if (gate.getAttempts() >= otpService.maxAttempts()) {
                 throw new OtpAttemptsExceededException(
-                    "Too many incorrect codes; request a new code");
+                    "Too many incorrect codes; request a new code",
+                    untilResendAllowed(gate.getLastSentAt(), now));
             }
             throw new OtpVerificationException();
         }
         gateOtps.delete(gate);
+    }
+
+    // the spent row's Retry-After: how long until the resend cooldown
+    // lets a replacement code be requested — zero once it has passed
+    // (PR #157 Copilot review)
+    private Duration untilResendAllowed(Instant lastSentAt, Instant now) {
+        Duration remaining = Duration.between(now, lastSentAt.plus(otpService.resendCooldown()));
+        return remaining.isNegative() ? Duration.ZERO : remaining;
     }
 
     // one send per cooldown (flood and attempt-cycling guard, PR #150)

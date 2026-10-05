@@ -549,10 +549,13 @@ class AuthServiceTest {
             pending.incrementAttempts();
         }
 
-        assertThatThrownBy(() -> verifyCode("654321"))
-            .isInstanceOf(OtpAttemptsExceededException.class)
-            .hasMessage("Too many incorrect codes; sign up again to get a new code");
+        OtpAttemptsExceededException refusal = catchThrowableOfType(
+            OtpAttemptsExceededException.class, () -> verifyCode("654321"));
 
+        assertThat(refusal).hasMessage("Too many incorrect codes; sign up again to get a new code");
+        // the 429 quotes the cooldown left before a re-sign-up may replace
+        // the spent row (PR #157 Copilot review)
+        assertThat(refusal.retryAfterSeconds()).isEqualTo(OTP_RESEND_COOLDOWN.getSeconds());
         // kept so its lastSentAt still holds the next sign-up behind the
         // cooldown: deleting it here let 5 wrong guesses buy an immediate
         // fresh code (PR #157 review, @Sinnez1)

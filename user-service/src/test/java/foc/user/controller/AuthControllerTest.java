@@ -239,6 +239,10 @@ class AuthControllerTest extends PostgresTestContainer {
         verifySignup("e1234567@u.nus.edu", wrong)
             .andExpect(status().isTooManyRequests())
             .andExpect(jsonPath("$.type").value("urn:foc:user:otp-attempts-exceeded"))
+            // Retry-After quotes the cooldown left before a re-sign-up may
+            // replace the spent row — 0 here, the test yaml's cooldown
+            // (PR #157 Copilot review)
+            .andExpect(header().string(HttpHeaders.RETRY_AFTER, "0"))
             .andExpect(jsonPath("$.detail").value(
                 "Too many incorrect codes; sign up again to get a new code"));
 

@@ -111,6 +111,9 @@ a repeat of its own request (fresh code and attempt budget, original
 expiry kept so the row's life stays bounded); everyone else keeps the
 409 until it expires (same-request-revival shape chosen by Leong Wei Zhi
 via options Q&A over freezing the row until expiry).
+Also: verify's exhausting guess now carries the cooldown left until a
+re-sign-up may replace the spent row, for the 429's Retry-After
+(PR #157 Copilot review).
 */
 
 package foc.user.service;
@@ -326,8 +329,9 @@ public class AuthService {
             && passwordEncoder.matches(request.password(), pending.getPasswordHash());
     }
 
-    // noRollbackFor: a wrong code must still commit its attempt counter,
-    // and a spent, expired or unusable pending row must stay deleted (same
+    // noRollbackFor: a wrong code must still commit its attempt counter
+    // (the exhausting one included — its row persists as spent), and an
+    // expired or unusable pending row's delete must commit too (same
     // trick as login's failure counters). Deliberately not the plain
     // ResponseStatusException the insert race below throws: that one comes
     // after a failed flush, and a transaction Hibernate has already marked
@@ -377,7 +381,12 @@ public class AuthService {
             // (PR #157 review, @Sinnez1)
             pendingSignupRepository.save(pending);
             if (pending.getAttempts() >= otpService.maxAttempts()) {
-                throw new OtpAttemptsExceededException();
+                // Retry-After: how long the cooldown holds the re-sign-up
+                // that replaces this spent row (PR #157 Copilot review)
+                Duration untilResend = Duration.between(clock.instant(),
+                    pending.getLastSentAt().plus(otpService.resendCooldown()));
+                throw new OtpAttemptsExceededException(
+                    untilResend.isNegative() ? Duration.ZERO : untilResend);
             }
             throw new OtpVerificationException();
         }
