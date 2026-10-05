@@ -9,6 +9,8 @@ Scope: demo accounts for local testing and demos — 1 OWNER, 3 ADMINs and
        in a seed package).
        2026-10-02 (Claude Code, Opus 5.5), issue #154: Locale.ROOT for the
        generated emails and usernames; comment on the ADMINS/USERS limits.
+       2026-10-05 (issue #154): a seeding run that loses an insert race
+       is logged as a warning instead of stopping the service.
 Author review: Ryan to review via the PR.
 */
 
@@ -22,9 +24,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import foc.user.entity.Role;
 import foc.user.entity.User;
@@ -53,10 +57,15 @@ public class DemoAccountsSeeder implements CommandLineRunner {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TransactionTemplate transaction;
 
-    public DemoAccountsSeeder(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public DemoAccountsSeeder(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            PlatformTransactionManager transactionManager) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.transaction = new TransactionTemplate(transactionManager);
     }
 
     // e9xxxxxx emails (NUS format), clear of the hand-made dev accounts;
@@ -80,10 +89,23 @@ public class DemoAccountsSeeder implements CommandLineRunner {
     // Inserts every demo account that isn't there yet, so a restart (or a
     // database that already holds some of them) doesn't duplicate or fail.
     // Each role's password is hashed once and the hash reused: bcrypt per
-    // account would add seconds to startup for no benefit in demo data
+    // account would add seconds to startup for no benefit in demo data.
+    // One transaction, so a failed run leaves nothing half-seeded
     @Override
-    @Transactional
     public void run(String... args) {
+        try {
+            transaction.executeWithoutResult(status -> seed());
+        } catch (DataIntegrityViolationException e) {
+            // another instance starting at the same time inserted an account
+            // between the check and the insert. Caught outside the
+            // transaction (it is already rolled back) so the service still
+            // starts; the other instance seeds the accounts
+            log.warn("Demo accounts not seeded: another instance is seeding them ({})",
+                e.getMostSpecificCause().getMessage());
+        }
+    }
+
+    private void seed() {
         String ownerHash = passwordEncoder.encode(OWNER_PASSWORD);
         String adminHash = passwordEncoder.encode(ADMIN_PASSWORD);
         String userHash = passwordEncoder.encode(USER_PASSWORD);

@@ -26,6 +26,43 @@ Entry template:
 ```
 
 ---
+## 2026-10-05 — Ryan Ang (user-service + web: remaining #154 and #138 follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + debug + tests + docs
+- **Scope:** `user-service/` and `web/`; the seven items still open on
+  issues #154 and #138, as listed in those issues (review follow-ups from
+  PR #152, PR #155 and PR #135).
+  - Test config: `src/test/resources/application.yaml` renamed to
+    `application-test.yaml` and `PostgresTestContainer` activates the
+    `test` profile, so tests load the main `application.yaml` (open-in-view
+    off, the main Flyway settings) and the test file keeps only the setup
+    token, the JWT secret and the 0s resend cooldown.
+  - `FlywayMigrationTest` runs with the Spring-configured Flyway pointed
+    at its own schema, so its baseline settings come from
+    `application.yaml` instead of a hand-typed copy.
+  - `PostgresTestContainer` pins `user.seed.demo=false` for every test
+    class; `DemoAccountsSeederTest` turns it on with `@TestPropertySource`;
+    the pin on `UserServiceApplicationTests` is gone.
+  - `ProblemDetailAdvice`: 415 problem+json for an unsupported
+    `Content-Type` (#138), with a test in `AuthControllerTest` and a line
+    in `user-service/README.md`.
+  - `LoginAttempts.record`: one locked `find` instead of `find` plus
+    `refresh`; `AuthServiceTest`'s stub follows.
+  - `DemoAccountsSeeder`: a run that loses an insert race to another
+    instance is rolled back and logged as a warning instead of stopping
+    startup; test in `DemoAccountsSeederTest`.
+  - `web/src/features/user/login.tsx`: the "account created" navigation
+    state is cleared once read, so a reload doesn't show the notice again;
+    test in `auth.test.tsx`.
+  - `web/src/shared/shell/NavBar.tsx`: the broken `border-gray-5=800`
+    class on the Log In / Logout buttons replaced with `border-gray-300`,
+    the credits badge's border.
+- **Prompt(s):** Asked which #154, #138 and #147 items were still open,
+  then to fix the seven open code items (the `jwt.ts` clean-up left out).
+- **Author review:** Full user-service suite (241 tests, also with
+  `USER_SEED_DEMO=true` exported) and the web suite (64 tests) run green;
+  to be reviewed via PR.
+
 ## 2026-10-02 — Ryan Ang (user-service: #154 review follow-ups)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor + tests + docs

@@ -29,6 +29,8 @@ Scope: integration tests for POST /auth/signup and POST /auth/login
        2026-09-30, Claude Code (Opus 5), PR #150 re-review: the
        identifier-taken case now also proves the email is released, and the
        202 body carries resendInSeconds for the SPA's resend button.
+       2026-10-05, Claude Code (Opus 5.5), issue #138: an unsupported
+       Content-Type is 415 problem+json.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -90,7 +92,7 @@ import tools.jackson.databind.json.JsonMapper;
 @AutoConfigureMockMvc
 class AuthControllerTest extends PostgresTestContainer {
 
-    // matches src/test/resources/application.yaml
+    // matches src/test/resources/application-test.yaml
     private static final String JWT_SECRET = "test-jwt-secret-that-is-at-least-32-bytes-long";
     private static final String WEB_ORIGIN = "http://localhost:5173";
     private static final String PASSWORD = "ValidPassword123";
@@ -400,6 +402,16 @@ class AuthControllerTest extends PostgresTestContainer {
         mockMvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.detail").value("Request body is missing or malformed"));
+    }
+
+    @Test
+    @DisplayName("A body that isn't JSON is 415 problem+json (#138)")
+    void unsupportedContentType() throws Exception {
+        mockMvc.perform(post("/auth/login").contentType(MediaType.TEXT_PLAIN).content("student_alex"))
+            .andExpect(status().isUnsupportedMediaType())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.status").value(415))
+            .andExpect(jsonPath("$.detail").value("Content-Type 'text/plain' is not supported."));
     }
 
     // ---- login ----

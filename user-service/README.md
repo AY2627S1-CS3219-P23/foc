@@ -168,7 +168,8 @@ field (e.g. `"Email is required. Password is required."`), from
 `ProblemDetailAdvice`, on every endpoint. A missing or unreadable body
 (bad JSON, an unknown role) gets 400 `"Request body is missing or
 malformed"`; a query or path parameter of the wrong type (e.g. a
-non-numeric id) gets 400 `"Invalid request parameter"`.
+non-numeric id) gets 400 `"Invalid request parameter"`; a body sent
+with a Content-Type other than JSON gets 415 naming that type.
 
 ## Schema (Flyway)
 

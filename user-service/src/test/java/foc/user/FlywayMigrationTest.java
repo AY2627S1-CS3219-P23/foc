@@ -10,6 +10,10 @@ Scope: issue #147. Runs the Flyway migrations against their own schemas in
        2026-09-30, Claude Code (Opus 5), issue #88 (PR #150): V3 joins
        them (drops otps, creates pending_signups), so the counts move to
        2 for a baselined database and MIGRATION_SCRIPTS for a fresh one.
+       2026-10-05, Claude Code (Opus 5.5), issue #154: the migrations run
+       with the application's own Flyway settings (the Spring-configured
+       Flyway, pointed at the test's schema) instead of a hand-copied
+       baseline-on-migrate / baseline-version.
 Author review: Ryan to review via the PR.
 */
 
@@ -30,12 +34,19 @@ import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.output.MigrateResult;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 
+@SpringBootTest
 class FlywayMigrationTest extends PostgresTestContainer {
 
     // scripts in db/migration; a new V<n> bumps this
     private static final int MIGRATION_SCRIPTS = 3;
+
+    // the application's Flyway, built from application.yaml's spring.flyway
+    @Autowired
+    private Flyway flyway;
 
     private static Connection connect(String schema) throws SQLException {
         Connection connection = DriverManager.getConnection(
@@ -48,13 +59,12 @@ class FlywayMigrationTest extends PostgresTestContainer {
         return connection;
     }
 
-    // the same settings as application.yaml's spring.flyway
-    private static MigrateResult migrate(String schema) {
+    // the application's settings (baseline-on-migrate, baseline-version),
+    // copied so they can't drift from application.yaml; only the schema differs
+    private MigrateResult migrate(String schema) {
         return Flyway.configure()
-            .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+            .configuration(flyway.getConfiguration())
             .schemas(schema)
-            .baselineOnMigrate(true)
-            .baselineVersion("1")
             .load()
             .migrate();
     }

@@ -7,6 +7,9 @@ Scope: tests for DemoAccountsSeeder with USER_SEED_DEMO on: 1 owner, 3
        email and username passes the sign-up rules.
        2026-10-02 (Claude Code, Opus 5.5), issue #154: a soft-deleted demo
        account is not re-seeded.
+       2026-10-05 (Claude Code, Opus 5.5), issue #154: the switch is set
+       with @TestPropertySource, to override PostgresTestContainer's pin;
+       a lost insert race is logged, not thrown.
 Author review: Ryan to review via the PR.
 */
 
@@ -19,6 +22,10 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import org.junit.jupiter.api.AfterEach;
@@ -28,8 +35,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import foc.user.PostgresTestContainer;
 import foc.user.dto.AccountRules;
@@ -37,7 +48,10 @@ import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.repository.UserRepository;
 
-@SpringBootTest(properties = "user.seed.demo=true")
+// @TestPropertySource, not @SpringBootTest(properties): it has to outrank
+// the user.seed.demo=false that PostgresTestContainer sets the same way
+@SpringBootTest
+@TestPropertySource(properties = "user.seed.demo=true")
 @AutoConfigureMockMvc
 class DemoAccountsSeederTest extends PostgresTestContainer {
 
@@ -49,6 +63,12 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
 
     @Autowired
     private DemoAccountsSeeder seeder;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     // the seeder already ran at startup; start each test from a known state
     @BeforeEach
@@ -138,6 +158,21 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
 
         assertThat(userRepository.findByUsernameIgnoreCase("demo_user_010").orElseThrow().getDeletedAt())
             .isNotNull();
+        assertThat(userRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("Losing an insert race to another instance is logged, not thrown")
+    void lostInsertRaceDoesNotThrow() {
+        // every account looks missing, then the insert hits the unique index
+        UserRepository racing = mock(UserRepository.class);
+        when(racing.save(any(User.class)))
+            .thenThrow(new DataIntegrityViolationException("idx_users_email"));
+        long before = userRepository.count();
+
+        assertThatCode(() -> new DemoAccountsSeeder(racing, passwordEncoder, transactionManager).run())
+            .doesNotThrowAnyException();
+
         assertThat(userRepository.count()).isEqualTo(before);
     }
 

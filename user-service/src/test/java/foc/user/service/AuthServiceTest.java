@@ -33,6 +33,8 @@ Scope: unit tests for AuthService (issues #87/#89): sign-up normalisation
        the row instead of leaving it to block the address.
        PR #150 Copilot review: sign-up's pending-row read is stubbed on the
        locked finder, which is what it now uses.
+       2026-10-05, Claude Code (Opus 5.5), issue #154: the stub follows
+       LoginAttempts' single locked read.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -87,6 +89,7 @@ import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
 import foc.user.security.JwtIssuer;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -136,8 +139,8 @@ class AuthServiceTest {
 
         user = new User("e1234567@u.nus.edu", "student_alex", PLAIN_ENCODER.encode(PASSWORD), Role.USER);
         ReflectionTestUtils.setField(user, "id", 42L);
-        // LoginAttempts re-reads the account with the row locked (refresh is a no-op here)
-        lenient().when(entityManager.find(User.class, 42L)).thenReturn(user);
+        // LoginAttempts re-reads the account with the row locked
+        lenient().when(entityManager.find(User.class, 42L, LockModeType.PESSIMISTIC_WRITE)).thenReturn(user);
     }
 
     private void userFoundByUsername() {

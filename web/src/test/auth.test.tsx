@@ -17,6 +17,8 @@
 // resend is in flight.
 // 2026-09-30, Claude Code (Opus 5), PR #150 approval notes: the expiry
 // line keeps up with the clock and says plainly when the code has run out.
+// 2026-10-05, Claude Code (Opus 5.5), issue #154: the "account created"
+// notice clears its navigation state, so a reload doesn't show it again.
 // Author review: Ryan to review via the PR.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -172,6 +174,20 @@ describe('login page', () => {
   test('says the account was created when arriving from sign-up', () => {
     renderAt('/login', { accountCreated: true })
 
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Account created. Log in to continue.',
+    )
+  })
+
+  test('clears the sign-up state once read, so a reload shows no notice', async () => {
+    const memoryRouter = createMemoryRouter(routes, {
+      initialEntries: [{ pathname: '/login', state: { accountCreated: true } }],
+    })
+    render(<RouterProvider router={memoryRouter} />)
+
+    await waitFor(() => expect(memoryRouter.state.location.state).toBeNull())
+    expect(memoryRouter.state.location.pathname).toBe('/login')
+    // still shown on this visit
     expect(screen.getByRole('status')).toHaveTextContent(
       'Account created. Log in to continue.',
     )
