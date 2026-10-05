@@ -313,4 +313,20 @@ class AccountUpdateServiceTest {
         // the row survives the rollback; the next verify's re-check discards it
         verify(pendingEmailChanges, never()).delete(pending);
     }
+
+    @Test
+    @DisplayName("Changing email nullifies OTPs sent to the old email")
+    void verifyEmailChangeClearsGate() {
+        PendingEmailChange pending = new PendingEmailChange(USER_ID, NEW_EMAIL,
+            PLAIN_ENCODER.encode("333333"), NOW, NOW.plus(OTP_TTL));
+        when(pendingEmailChanges.findWithLockByUserId(USER_ID)).thenReturn(Optional.of(pending));
+        when(userRepository.existsByEmailAndIdNot(NEW_EMAIL, USER_ID)).thenReturn(false);
+        when(userRepository.saveAndFlush(user)).thenReturn(user);
+        
+        AccountUpdateOtp gate = gateRow(1);
+        service.verifyEmailChange(USER_ID, "333333");
+        
+        verify(pendingEmailChanges).delete(pending);
+        verify(gateOtps).delete(gate);
+    }
 }

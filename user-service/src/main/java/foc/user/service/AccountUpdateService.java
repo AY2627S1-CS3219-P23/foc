@@ -329,6 +329,11 @@ public class AccountUpdateService {
             throw NewAccountDetails.emailTaken("Email was just taken; request the change again");
         }
         pendingEmailChanges.delete(pending);
+        // Delete gates in old email, if any
+        AccountUpdateOtp gate = gateOtps.findWithLockByUserId(userId).orElse(null);
+        if (gate != null) {
+            gateOtps.delete(gate);
+        }
         return UserResponse.from(user);
     }
 
