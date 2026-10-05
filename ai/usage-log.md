@@ -2105,5 +2105,5 @@ Entry template:
 - **Author review:** Required the team-decided format (`/`-joined names,
   first-letter capitalisation) beforehand; the schema of
   `SupplierCategories` and whether `Suppliers.category` stays were left to
-  the team and are not changed here. Backend tests pass (39, Java 21 via
+  * the team and are not changed here. Backend tests pass (42, Java 21 via
   Docker); web `tsc` passes. Pending author review of the diff.
