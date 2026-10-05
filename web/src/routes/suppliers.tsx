@@ -327,7 +327,12 @@ export function Suppliers() {
 
     listCategories()
       .then((result) => {
-        if (!cancelled) setCategories(result)
+        if (cancelled) return
+        setCategories(result)
+        // If the selected filter's category vanished (e.g. its last
+        // supplier was deleted), clear it — otherwise the dropdown shows
+        // "All" while the list stays filtered by a value it can't show.
+        setCategory((current) => (current && !result.includes(current) ? '' : current))
       })
       .catch(() => {
         // Non-fatal: the filter dropdown just falls back to "All" only.
