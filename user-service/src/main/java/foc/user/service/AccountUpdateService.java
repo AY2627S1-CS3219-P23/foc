@@ -25,6 +25,11 @@ applied to all three OTP tables); (2) a combined username+email PATCH
 flushes the username through its typed catch before the email branch's
 queries auto-flush it, so losing a username race there is the documented
 username-taken 400, not a 500.
+Same day, PR #157 Copilot re-review: every flow now locks the caller's
+user row first (getActiveUserWithLock; one lock order, user then
+gate/pending rows) — read unlocked, requestOtp could mail a live gate
+code to an address a concurrent email-change verify had just replaced,
+violating F2.1.1's current-email guarantee.
 Author review: Leong Wei Zhi to review via the PR.
 */
 
@@ -136,10 +141,15 @@ public class AccountUpdateService {
     // parks (or renews) the gate code and emails it to the account's
     // CURRENT address. @Transactional so the row and its email commit or
     // roll back together (AuthService.signup's reasoning); the row lock
-    // makes concurrent requests for one account queue
+    // makes concurrent requests for one account queue.
+    // Every flow here locks the caller's user row FIRST (one lock order,
+    // user then gate/pending): read unlocked, the address could be
+    // swapped by a concurrent email-change verify between this read and
+    // the send, mailing a live gate code to the address the account just
+    // left (PR #157 Copilot review)
     @Transactional
     public UpdateOtpResponse requestOtp(Long userId) {
-        User user = userRepository.getActiveUser(userId);
+        User user = userRepository.getActiveUserWithLock(userId);
         AccountUpdateOtp gate = gateOtps.findWithLockByUserId(userId).orElse(null);
         Instant now = clock.instant();
         boolean expired = gate != null && !gate.getExpiresAt().isAfter(now);
@@ -196,7 +206,7 @@ public class AccountUpdateService {
     // (AuthService.verifySignup's exact reasoning about rollback-only)
     @Transactional(noRollbackFor = {OtpVerificationException.class, OtpAttemptsExceededException.class})
     public UpdateResult updateAccount(Long userId, UpdateAccountRequest request) {
-        User user = userRepository.getActiveUser(userId);
+        User user = userRepository.getActiveUserWithLock(userId);
         consumeGateOtp(userId, request.otp());
 
         String username = request.username() == null
@@ -297,7 +307,7 @@ public class AccountUpdateService {
     @Transactional(noRollbackFor = {OtpVerificationException.class, OtpAttemptsExceededException.class,
         SignupIdentifierTakenException.class})
     public UserResponse verifyEmailChange(Long userId, String code) {
-        User user = userRepository.getActiveUser(userId);
+        User user = userRepository.getActiveUserWithLock(userId);
         PendingEmailChange pending = pendingEmailChanges.findWithLockByUserId(userId).orElse(null);
         Instant now = clock.instant();
         // no pending row is an honest answer, not a guessing game: the
@@ -361,7 +371,7 @@ public class AccountUpdateService {
     // the request is answered with a 400
     @Transactional(noRollbackFor = OtpVerificationException.class)
     public EmailChangePendingResponse resendEmailChange(Long userId) {
-        User user = userRepository.getActiveUser(userId);
+        User user = userRepository.getActiveUserWithLock(userId);
         PendingEmailChange pending = pendingEmailChanges.findWithLockByUserId(userId).orElse(null);
         Instant now = clock.instant();
         if (pending == null) {
@@ -398,7 +408,7 @@ public class AccountUpdateService {
 
     @Transactional(noRollbackFor = {OtpVerificationException.class, OtpAttemptsExceededException.class})
     public void changePassword(Long userId, ChangePasswordRequest request) {
-        User user = userRepository.getActiveUser(userId);
+        User user = userRepository.getActiveUserWithLock(userId);
         consumeGateOtp(userId, request.otp());
         // the match (F2.1.4) and the policy (F2.1.5) were enforced by the
         // record's annotations before this runs; only the hash is stored

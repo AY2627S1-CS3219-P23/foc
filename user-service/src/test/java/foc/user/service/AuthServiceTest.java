@@ -41,6 +41,9 @@ Author review: Leong Wei Zhi to review via the PR.
 now keeps an OTP row as spent instead of deleting it, so the resend
 cooldown still gates the next code — exhaustion/takeover tests updated
 and cooldown-bypass regressions added.
+Same day, PR #157 Copilot re-review: a spent row revives only for its own
+request (original expiry kept); other details stay 409 — takeover test
+split accordingly.
 */
 
 package foc.user.service;
@@ -311,9 +314,9 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Once the cooldown passes, a spent row is dead: any sign-up takes it over fresh")
-    void signup_spentRowTakenOverAfterCooldown() {
-        PendingSignup existing = existingPending("old_name", "OldPassword1",
+    @DisplayName("Once the cooldown passes, a spent row revives for its own request: fresh code and budget, same expiry")
+    void signup_spentRowRevivedBySameRequest() {
+        PendingSignup existing = existingPending("student_alex", PASSWORD,
             NOW.minus(OTP_RESEND_COOLDOWN));
         for (int i = 0; i < OTP_MAX_ATTEMPTS; i++) {
             existing.incrementAttempts();
@@ -321,15 +324,42 @@ class AuthServiceTest {
         when(pendingSignupRepository.saveAndFlush(any(PendingSignup.class)))
             .thenAnswer(inv -> inv.getArgument(0));
 
-        // different details: a spent row guards nothing, like an expired
-        // one — its sign-up can never complete
         SignupResponse response = signupAgain("student_alex", PASSWORD);
 
+        assertThat(existing.getAttempts()).isZero();
+        // the expiry the row was created with, untouched: a revival that
+        // renewed it could hold the address for ever (the PR #150
+        // re-review rule renewCode follows)
+        assertThat(existing.getExpiresAt())
+            .isEqualTo(NOW.minus(OTP_RESEND_COOLDOWN).plus(OTP_TTL));
+        assertThat(response.expiresInSeconds())
+            .isEqualTo(OTP_TTL.minus(OTP_RESEND_COOLDOWN).toSeconds());
         assertThat(existing.getUsername()).isEqualTo("student_alex");
         assertThat(existing.getPasswordHash()).isEqualTo("hashed:" + PASSWORD);
-        assertThat(existing.getAttempts()).isZero();
-        assertThat(existing.getExpiresAt()).isEqualTo(NOW.plus(OTP_TTL));
-        assertThat(response.expiresInSeconds()).isEqualTo(OTP_TTL.toSeconds());
+    }
+
+    @Test
+    @DisplayName("A spent row is not up for grabs: other details still get the 409 until it expires")
+    void signup_spentRowOtherDetailsStillConflict() {
+        // the hijack the PR #157 Copilot re-review caught: verify is
+        // anonymous, so anyone can spend a stranger's pending row with 5
+        // wrong guesses — were spent takeable, they could then swap in
+        // their own password and let the code's recipient complete it
+        PendingSignup existing = existingPending("student_alex", PASSWORD,
+            NOW.minus(OTP_RESEND_COOLDOWN));
+        for (int i = 0; i < OTP_MAX_ATTEMPTS; i++) {
+            existing.incrementAttempts();
+        }
+
+        Throwable thrown = catchThrowable(() -> signupAgain("attacker_x", "AttackerPass123"));
+
+        assertThat(thrown).isInstanceOf(ResponseStatusException.class);
+        assertThat(((ResponseStatusException) thrown).getStatusCode())
+            .isEqualTo(HttpStatus.CONFLICT);
+        assertThat(existing.getUsername()).isEqualTo("student_alex");
+        assertThat(existing.getPasswordHash()).isEqualTo("hashed:" + PASSWORD);
+        assertThat(existing.getAttempts()).isEqualTo(OTP_MAX_ATTEMPTS);
+        verify(otpEmailSender, never()).sendSignupCode(any(), any(), any());
     }
 
     @Test

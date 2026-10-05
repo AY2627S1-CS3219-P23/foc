@@ -26,6 +26,34 @@ Entry template:
 ```
 
 ---
+## 2026-10-05 — Leong Wei Zhi (PR #157 Copilot re-review: spent-row takeover + stale-email send)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (review fixes + tests)
+- **Scope:** `user-service/` — the Copilot review of the spent-row
+  change, two findings. (1) Treating a spent pending sign-up as
+  dead-and-takeable resurrected the PR #150 hijack: `/auth/signup/verify`
+  is anonymous, so anyone could burn a stranger's pending row with 5
+  wrong guesses, wait out the cooldown, and replace it with their own
+  password. A spent row now revives only for a repeat of its own request
+  (`PendingSignup.reviveSpent`: fresh code and attempt budget, original
+  expiry kept so the row's life stays bounded — no forever-hold); anyone
+  else keeps the 409 until expiry. (2) `requestOtp` read the user row
+  unlocked, so a concurrent email-change verify could commit between the
+  read and the SMTP send, mailing a live gate code to the address the
+  account just left (F2.1.1). All five account-update flows now take a
+  `PESSIMISTIC_WRITE` lock on the caller's user row first
+  (`getActiveUserWithLock`), one consistent lock order (user, then
+  gate/pending rows) so the flows serialize without deadlock.
+- **Prompt(s):** (summary) Asked to address the latest Copilot comments
+  on the PR. The sign-up spent-row shape (same-request revival with the
+  original expiry, over freezing the row until expiry) decided by
+  Leong Wei Zhi via options Q&A; the tool flagged that Copilot's literal
+  suggestion (spent rows take the expired branch for the same requester)
+  would have reintroduced the PR #150 forever-hold, hence the kept expiry.
+- **Author review:** Full suite green (299 tests, 1 new: a spent row
+  with other details stays 409; the takeover test became the
+  same-request revival case). Reviewed via pull request.
+
 ## 2026-10-05 — Leong Wei Zhi (PR #157 review: spent OTP rows + combined-PATCH race)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor (review fixes + tests + docs)

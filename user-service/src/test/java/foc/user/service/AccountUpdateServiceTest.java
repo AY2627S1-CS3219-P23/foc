@@ -18,6 +18,8 @@ Author review: Leong Wei Zhi to review via the PR.
 now keeps an OTP row as spent instead of deleting it, so the resend
 cooldown still gates the next code — exhaustion/takeover tests updated
 and cooldown-bypass regressions added.
+Same day, PR #157 Copilot re-review: the harness stubs the locked
+active-user lookup the flows now take first.
 */
 
 package foc.user.service;
@@ -110,7 +112,10 @@ class AccountUpdateServiceTest {
 
         user = new User(EMAIL, "student_alex", PLAIN_ENCODER.encode("ValidPassword123"), Role.USER);
         ReflectionTestUtils.setField(user, "id", USER_ID);
-        when(userRepository.getActiveUser(USER_ID)).thenReturn(user);
+        // the locked variant: every flow takes the user-row lock first, so
+        // the address a gate code is mailed to cannot go stale between the
+        // read and the send (PR #157 Copilot review)
+        when(userRepository.getActiveUserWithLock(USER_ID)).thenReturn(user);
     }
 
     // a live gate row whose current code was sent secondsAgo

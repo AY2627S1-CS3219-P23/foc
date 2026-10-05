@@ -138,8 +138,8 @@ class SignupResendCooldownTest extends PostgresTestContainer {
         // the attack this pins down: deleting the spent row let 5 wrong
         // guesses buy an immediate fresh code (and attempt budget) — now
         // its lastSentAt still holds the repeat sign-up to the cooldown
-        // (PR #157 review, @Sinnez1); the dead row guards nothing beyond
-        // that, so once the cooldown passes any sign-up takes it over
+        // (PR #157 review, @Sinnez1); once the cooldown passes, only the
+        // row's own request may revive it (PR #157 Copilot re-review)
         signup("student_alex", PASSWORD)
             .andExpect(status().isTooManyRequests())
             .andExpect(header().exists(HttpHeaders.RETRY_AFTER))

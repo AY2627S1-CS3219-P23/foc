@@ -251,8 +251,9 @@ class AuthControllerTest extends PostgresTestContainer {
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.detail").value("Invalid verification code"));
 
-        // a fresh sign-up (the test cooldown is 0) takes the spent row
-        // over, issues a fresh code and completes
+        // repeating the same request (the test cooldown is 0) revives the
+        // spent row — only its own details may; a stranger's sign-up gets
+        // the 409 until expiry — with a fresh code, and completes
         createAccount("e1234567@u.nus.edu", "student_alex");
     }
 

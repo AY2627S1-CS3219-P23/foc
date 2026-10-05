@@ -31,6 +31,9 @@ replace the exact-match versions.
 lower(username), matching the V2 migration's unique index.
 2026-09-30 (Claude Code, Fable 5), issue #92: except-self uniqueness checks
 added for the account-update flows (NewAccountDetails' except-self variants).
+2026-10-05 (Claude Code, Fable 5), PR #157 Copilot review: locked
+active-user lookup added; the account-update flows take it first so a
+gate code cannot be mailed to a just-replaced address.
 */
 
 package foc.user.repository;
@@ -38,8 +41,11 @@ package foc.user.repository;
 import java.time.Instant;
 import java.util.Optional;
 
+import jakarta.persistence.LockModeType;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -83,6 +89,20 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     // soft-deleted user is a 404
     default User getActiveUser(Long id) {
         return findByIdAndDeletedAtIsNull(id).orElseThrow(UserNotFoundException::new);
+    }
+
+    // the account-update flows' variant (#92): FOR UPDATE, taken FIRST in
+    // every flow so operations on one account serialize in one lock order
+    // (user row, then gate/pending rows). Unlocked, a gate code could be
+    // read from the row, then mailed after a concurrent email-change
+    // verify committed — a valid code sent to the address the account
+    // just left (PR #157 Copilot review)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.id = :id and u.deletedAt is null")
+    Optional<User> findWithLockByIdAndDeletedAtIsNull(@Param("id") Long id);
+
+    default User getActiveUserWithLock(Long id) {
+        return findWithLockByIdAndDeletedAtIsNull(id).orElseThrow(UserNotFoundException::new);
     }
 
     // serialises owner setup calls so two concurrent requests can't both pass
