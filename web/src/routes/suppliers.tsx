@@ -395,14 +395,15 @@ export function Suppliers() {
       setSuccessMessage(`Successfully deleted Supplier "${pendingDelete.name}".`)
       // Deleting the last item on the last page would otherwise leave
       // `page` pointing past the new totalPages — step back a page
-      // first when that happens; `page` is already one of
-      // fetchCurrentPage's own dependencies, so that alone re-triggers
-      // the load effect without also bumping refreshKey.
+      // first when that happens. `page` is already one of
+      // fetchCurrentPage's own dependencies, so that re-triggers the
+      // supplier load; refreshKey is bumped on both paths so the
+      // category list also reloads (a deleted supplier may have been the
+      // only one with some category).
       if (page > 0 && suppliers.length === 1) {
         setPage((p) => p - 1)
-      } else {
-        setRefreshKey((k) => k + 1)
       }
+      setRefreshKey((k) => k + 1)
     } catch (err) {
       setSuccessMessage(null)
       setError(errorMessage(err, 'Could not delete supplier.'))
