@@ -15,7 +15,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D4 | Expiry model | Earned credits live in lots that expire 3 months after they are earned into a common pool. Lots are spent in first-in, first-out order.| F6.1–F6.1.2 |
 | D5 | Credit history | **Append-only**: each row has type, amount, timestamp and request reference. Filters will use JPA. | F4.1.1, F4.1.2, F4.1.3 |
 | D6 | Account provisioning | **User Service calls the Credit Service synchronously at sign-up** (as in `architecture.md`). Call is made idempotent by a unique user ID | F1.1, F1.1.1 F1.1.2 |
-| D7 | Credit transfer and reservation | **Synchronous REST** | F2.1, F2.1.1, F3.1, NFR1.1 | Decided |
+| D7 | Credit transfer and reservation | **synchronous REST** for reservation, because Credit can refuse it and the requester is waiting. **Asynchronous AMQP events** for transfer and release, because Credit cannot refuse them and Order must not depend on Credit being up. | F2.1, F2.1.1, F3.1, NFR1.1 | Decided |
 | D8 | Scheduler | Done by a **cron job** through use of `@Scheduled` | F6.1.1, F6.1.2 |
 
 ## Components
@@ -27,6 +27,7 @@ service. Its state lives only in its own PostgreSQL database (database-per-servi
 | --- | --- |
 | **Credit account REST API** (Spring Boot) | For the Web App: returns the caller's available and reserved balance (F4.1) and their transaction history with amount and date-range filters (F4.1.2, F4.1.3).|
 | **Internal credit operations API** (Spring Boot) | For Order and User Service only: provision account with credits (F1.1), reserve (F2.1), release (F2.1.1), transfer (F3.1). |
+| **Request event listener** (Spring AMQP `@RabbitListener`) | Bound to the `request-events` exchange. Consumes `request.completed` to transfer (F3.1), and `request.cancelled` / `request.expired` to release (F2.1.1). Acknowledges only after the database transaction commits. |
 | **Amount validation and error mapping** (Spring Boot, `@RestControllerAdvice`) | Rejects non-integer and non-positive amounts (F1.2, F1.2.1) and maps validation and domain failures (insufficient balance, unknown request, already released) to HTTP error responses. |
 | **Idempotent credit operations service** (Spring Boot, `@Transactional`) | Core logic: provisions accounts with 5 available / 0 reserved, once per user (F1.1.1, F1.1.2). It reserves only if available credit >= amount needed (F2.1, F2.1.2, F2.1.3) and releases or transfers each request's held credits at most once (F2.1.1, F3.1.1, F3.1.2, NFR2.2.1). It spends the oldest credit lots first and commits balance change, held credits state and credit histories in one transaction (F5.1, NFR2.1) |
 | **Credit history** (Spring Boot) | Appends one immutable row per transaction such as account provision, reservation, release, transfer, expiry, redistribution, with timestamps and request reference (F4.1.1). It will also serve the filtered history queries. (F4.1.2, F4.1.3). |
@@ -61,6 +62,26 @@ Same notation as [`architecture.md`](architecture.md):
 
 **Glossary:** FIFO = first-in, first-out, JPA = Java Persistence API,  REST = HTTP/JSON web APIs, held = credits held for one request between reservation and
 transfer or release.
+
+## Contract with the Order Service
+
+| # | Order Service must | Why |
+| --- | --- | --- |
+| 1 | Save the request with its `requestRef` in a pending state before calling reserve, and show it to couriers only after reserve succeeds | Every held-credits record then has a request behind it |
+| 2 | On a reserve timeout, retry with the same `requestRef` | Reserve is idempotent, so a retry cannot reserve twice |
+| 3 | Cancel any pending request that reserve did not confirm, and publish `request.cancelled` for it.| Releases a reservation that Credit committed but Order never saw. Example: Order crashes before it gets a response on whether Credit commits reservation |
+| 4 | Publish each event in the same database transaction as the state change | A crash between the state change and the publish would strand credits in `HELD` forever |
+| 5 | Publish a courier's cancellation (accepted back to created, Order F5.2) under a **different** routing key, such as `request.unassigned` | The reward must stay held |
+
+### Events consumed
+
+| Routing key | Published when | Fields Credit uses |
+| --- | --- | --- |
+| `request.completed` | Requester confirms delivery, or auto-completion (Order F7) | `requestRef`, `courierId` |
+| `request.cancelled` | Requester cancels (Order F5.1), or a pending request is abandoned | `requestRef` |
+| `request.expired` | Deadline passes before collection (Order F6.1, F6.2) | `requestRef` |
+
+Every event also carries `eventId` and `occurredAt` for logging. Credit takes the amount and the requester from its own `Reserved` record, never from the event.
 
 ## Requirement traceability
 
@@ -97,26 +118,43 @@ transfer or release.
 
 ## Atomicity, idempotency and concurrency
 
-1. The Order Service calls `transfer(requestRef, courierId)` when the
-   requester confirms delivery (or if request is auto-completed).
-2. In **one transaction**, the operations service loads the held credits by
-   `requestRef`:
-   - `TRANSFERRED` → return the recorded outcome; nothing changes.
-   - `RELEASED` → reject; a released request cannot be paid.
-   - `HELD` → reduce the requester's `reserved`, add the amount to the
-     courier's `available` as a new lot, set the status to `TRANSFERRED`,
-     append the credit history rows.
-3. Commit the changes.
+### Reserve (synchronous, at request creation)
+
+1. Order saves the request as pending and calls `POST /credits/reserve` with `requestRef`, `requesterId` and `amount`.
+2. In **one transaction**, the service looks up `Reserved` by `requestRef`:
+   - No record, available >= amount → reduce `available`, increase `reserved`, create a `HELD` record, append a history row. Return success.
+   - No record, available < amount → change nothing. Return an insufficient-balance error.
+   - `HELD` with the same requester and amount → return success without changing anything (repeat call).
+   - Any other existing record → return a conflict error.
+3. On success Order moves the request to `created`. On rejection Order discards the pending request.
+
+### Transfer (asynchronous, at completion)
+
+1. Order moves the request to `completed`, publishes `request.completed` and responds to the requester immediately.
+2. The listener consumes the event and, in **one transaction**, looks up `Reserved` by `requestRef`:
+   - `HELD` → reduce the requester's `reserved`, add the amount to the courier's `available` as a new lot, set `courierId` and status `TRANSFERRED`, append history rows for both users.
+   - `TRANSFERRED` → nothing to do (repeat event).
+3. After the commit, the event is acknowledged.
+
+### Release (asynchronous, at cancellation or expiry)
+
+1. Order moves the request to `cancelled` or `expired` and publishes the matching event.
+2. The listener consumes the event and, in **one transaction**, looks up `Reserved` by `requestRef`:
+   - `HELD` → reduce the requester's `reserved`, return the amount to `available` and to the lots it came from, set status `RELEASED`, append a history row.
+   - `RELEASED` → nothing to do (repeat event).
+3. After the commit, the event is acknowledged.
+
 
 **Failure and retry behaviour:**
 
 | Scenario | Outcome |
 | --- | --- |
-| Credit Service crashes mid-transfer | PostgreSQL discards the uncommitted transaction (F5.1.1, NFR2.1) |
+| Credit Service is down when a request is created | Reserve fails fast. Order rejects the creation and the requester is asked to try again. |
+| Credit Service is down when delivery is confirmed | The request completes. The event waits in a durable queue and the transfer happens when Credit recovers. |
+| Credit Service crashes mid-transfer | PostgreSQL discards the uncommitted transaction. The unacknowledged event is redelivered. |
 | Order Service times out after Credit already committed, then retries | Same request reference so the original outcome is returned, with no second transfer (NFR2.2.1) |
 | Requester double-clicks confirm and two identical transfers arrive together | Both load `HELD` so the `@Version` lets one commit while the other is retried, and sees `TRANSFERRED` and returns the recorded outcome |
 | Two reservations by the same requester race past the balance | `@Version` conflict so one attempt is retried and rejected if balance is insufficient (F2.1.2) |
-| Credit Service is down when delivery is confirmed | The Order Service must keep retrying with the same request reference |
 | Scheduler runs twice for one month (due to restarts, or overlap) | A unique key prevents the second run from happening |
 
 ## Closed-economy
@@ -131,3 +169,4 @@ Credits are created only by the sign-up allocation (F1.1). The credit operation 
 - **Account closure**: when a user account is deleted (User F3.1.3) or
   removed by an admin (User F6.1.3), the user's balance must move to the
   common pool, otherwise credits vanish. 
+- **Sign-up while Credit is down**: provisioning is synchronous, so User Service needs a retry or the user has no credit account.

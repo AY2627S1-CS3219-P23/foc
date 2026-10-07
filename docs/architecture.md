@@ -38,8 +38,9 @@ styles). Each service owns exactly one business domain (users,
 suppliers, orders, credits, notifications) and its own database
 (database-per-service); services interact only through their published
 APIs. The request-event workflow is **event-driven** through the message
-broker (course milestone M6), decoupling the Notification Service from
-the services that produce events.
+broker (course milestone M6), decoupling the Notification Service and
+the Credit Service's transfer and release from the Order Service that
+produces the events.
 
 **Scope:** committed functional and non-functional requirements (F/NFR)
 only. The selected nice-to-haves (N1 ratings, N2 request history, N3
@@ -99,15 +100,16 @@ TBD = to be decided.
 | User Service → Email Provider | async email (Gmail SMTP; a Mailpit container is the local dev/demo target) | OTP for sign-up verification, email-change confirmation, password reset | User F1.1.3, F2.1.1, F2.1.3, F4.2 |
 | User Service → Credit Service | sync REST | allocate 5 starting credits (reserved balance 0) on sign-up | Credit F1.1 |
 | Order Service → Supplier Service | sync REST | validate pickup location is a known supplier/landmark; fetch supplier locations for the 1 km acceptance-proximity check | Order F1.1.1, F8.1 |
-| Order Service → Credit Service | sync REST | reserve on create, release on cancel/expiry, atomic transfer on completion; identical transfer requests for the same confirmation processed once | Credit F2.1, F2.1.1, F3.1, F5.1, NFR2.2, NFR2.2.1 |
+| Order Service → Credit Service | sync REST | reserve the reward on create; creation is rejected if the available balance is insufficient | Credit F2.1, F2.1.3 |
+| Order Service → Broker (RabbitMQ) → Credit Service | **async events** | transfer on `request.completed`, release on `request.cancelled` / `request.expired`; repeated events for the same request processed once (see [`credit-service.md`](credit-service.md)) | Credit F2.1.1, F3.1, F5.1, NFR1.1, NFR2.2, NFR2.2.1; **M6** |
 | Order Service → Broker (RabbitMQ) → Notification Service | **async events** | event on every request state transition (created/accepted/collected/completed/cancelled/expired); at-least-once, persisted across restarts; consumer deduplicates, retries, dead-letters exhausted retries; delivery failure never affects the producing operation; new event types need no publisher changes | Order F0.2; Notif F1.1, F1.3, F1.4, F2.1–F2.3, NFR1.1–1.2; **M6** |
 
 Timer-driven behaviors stay **inside** the owning service (no arrow):
 request expiry from the created or accepted state at the deadline, with
-credits released via the existing Order → Credit release call (Order
+credits released when Credit Service consumes resulting `request.expired` event (Order
 F6.1–F6.2; Credit F2.1.1), auto-completion 1 hour after the courier
-marks arrival (Order F7.2, which triggers the same Order → Credit
-transfer as a manual confirmation), deleted-account purge on the 31st
+marks arrival (Order F7.2, which publishes the same `request.completed` event
+as a manual confirmation), deleted-account purge on the 31st
 day (User F3.1.3), and earned-credit expiry after 3 months into a common
 pool with monthly redistribution (Credit F6.1–F6.1.2).
 
