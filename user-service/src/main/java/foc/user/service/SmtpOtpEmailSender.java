@@ -18,6 +18,9 @@ Scope: SMTP OtpEmailSender for issue #88, resolving the design doc's
        "534 seconds" while the sign-up dialog called the same code
        "9 minutes".
 Reviewed by: Leong Wei Zhi (via pull request).
+2026-09-30 (Claude Code, Fable 5), issue #92: the account-update gate
+and email-change confirmation messages, same shape as sign-up's; the
+new-address message says what to do if the change wasn't yours.
 */
 
 package foc.user.service;
@@ -49,6 +52,34 @@ class SmtpOtpEmailSender implements OtpEmailSender {
         message.setText("Your FoC sign-up verification code is " + code + ".\n\n"
             + "It expires in " + describe(validity) + ".\n\n"
             + "If you didn't sign up for FoC, you can ignore this email.");
+        mailSender.send(message);
+    }
+
+    @Override
+    public void sendAccountUpdateCode(String toEmail, String code, Duration validity) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(from);
+        message.setTo(toEmail);
+        message.setSubject("Your FoC account update code");
+        message.setText("Your FoC account update code is " + code + ".\n\n"
+            + "Enter it to confirm the change you requested to your account.\n\n"
+            + "It expires in " + describe(validity) + ".\n\n"
+            + "If you didn't request a change to your FoC account, you can "
+            + "ignore this email; without this code nothing changes.");
+        mailSender.send(message);
+    }
+
+    @Override
+    public void sendEmailChangeCode(String toEmail, String code, Duration validity) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(from);
+        message.setTo(toEmail);
+        message.setSubject("Confirm your new FoC email");
+        message.setText("Your FoC email confirmation code is " + code + ".\n\n"
+            + "Enter it to make this address your FoC account email.\n\n"
+            + "It expires in " + describe(validity) + ".\n\n"
+            + "If you didn't ask to use this address for a FoC account, you "
+            + "can ignore this email; the change won't happen.");
         mailSender.send(message);
     }
 
