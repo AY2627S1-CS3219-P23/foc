@@ -2203,3 +2203,44 @@ Entry template:
 - **Author review:** Requirements, priorities, allocation, and tech stack
   were decided by the team beforehand (D1 document/presentation); the tool
   transcribed and formatted them. Output reviewed via pull requests.
+
+## 2026-10-05 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** debugging assistance, implementation (unit test)
+- **Prompt(s):** Asked to fix supplier category storage: sync
+  `Suppliers.category` on create/update (categories joined with `/`),
+  capitalise category names on save (`Food`/`food`/`fOOD` -> `Food`), and
+  refresh the category filter after a save. Issue #160, branch
+  `fix/supplier-category-sync`.
+- **Scope:** `supplier-service` `SupplierService` (save/create/update),
+  `SupplierCategories` (new `normalizeCategory` helper), `SuppliersSeeder`
+  (same normalisation), new `SupplierCategoriesTest`; `web`
+  `suppliers.tsx` (category effect re-runs on `refreshKey`).
+- **Author review:** Required the team-decided format (`/`-joined names,
+  first-letter capitalisation) beforehand; the schema of
+  `SupplierCategories` and whether `Suppliers.category` stays were left to
+  * the team and are not changed here. Backend tests pass (42, Java 21 via
+  Docker); web `tsc` passes. Pending author review of the diff.
+
+## 2026-10-07 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** refactoring, implementation
+- **Prompt(s):** Asked to apply PR #161 review feedback (LeongWZ): write
+  `null` rather than `""` to `Suppliers.category` when a supplier has no
+  categories, reject `/` in category names, and set the flat column before
+  `save()` to avoid a second UPDATE per create.
+- **Scope:** `supplier-service` `SupplierService` (categories normalised and
+  validated before save; flat column set in `applyRequest`), new
+  `InvalidCategoryException`, `SupplierController` (400 handler).
+- **Author review:** Rejecting `/` in category names is a validation-rule
+  choice made by the author. Pending author review of the diff.
+
+## 2026-10-07 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** debugging assistance
+- **Prompt(s):** Asked to apply PR #161 review feedback (LeongWZ): guard
+  `SuppliersSeeder` against a null `Suppliers.category` (empty CSV `Type`
+  cell) so seeding doesn't throw an NPE and abort startup.
+- **Scope:** `supplier-service` `SuppliersSeeder` (null check around the
+  category split loop).
+- **Author review:** Pending author review of the diff.

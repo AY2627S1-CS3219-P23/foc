@@ -20,16 +20,35 @@
  * full consistency. @IdClass field names must match the entity's @Id
  * field names exactly, so SupplierCategoryId's field was renamed to
  * match.
+ * 2026-10-05 (issue #160, Claude Code (Sonnet 5)): added the static
+ * normalizeCategory helper (trim, capitalise first letter, lowercase the
+ * rest) used when storing category names.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.supplier.model;
 
 import jakarta.persistence.*;
+import java.util.Locale;
 
 @Entity
 @Table(name = "SupplierCategories")
 @IdClass(SupplierCategoryId.class)
 public class SupplierCategories {
+
+    // Standard form for every stored category name: trimmed, first letter
+    // capitalised, the rest lowercased, so "Food", "food" and "fOOD" all
+    // store as "Food". Returns null for blank input so callers can skip it.
+    public static String normalizeCategory(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
+    }
 
     @Id
     private Long id;

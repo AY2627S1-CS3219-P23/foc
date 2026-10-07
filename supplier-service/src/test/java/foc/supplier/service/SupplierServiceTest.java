@@ -19,11 +19,15 @@
  * the old building), category reconciliation (old rows deleted before
  * the new set is saved), not-found on update/delete, and the FK-safe
  * delete order (categories before the supplier row).
+ * 2026-10-07 (PR #161 review, LeongWZ): added tests for the flat
+ * Suppliers.category column (set pre-save, null when empty) and for
+ * rejecting a category name containing "/".
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
 
 import foc.supplier.dto.SupplierRequest;
+import foc.supplier.exception.InvalidCategoryException;
 import foc.supplier.exception.InvalidSortException;
 import foc.supplier.exception.SupplierNotFoundException;
 import foc.supplier.model.Suppliers;
@@ -194,6 +198,58 @@ class SupplierServiceTest {
         InOrder order = inOrder(supplierCategoriesRepository);
         order.verify(supplierCategoriesRepository).deleteBySupplierId(7L);
         order.verify(supplierCategoriesRepository).save(any());
+    }
+
+    @Test
+    @DisplayName("createSupplier should write the '/'-joined categories to the flat column before saving")
+    void createSupplier_setsFlatCategoryColumnBeforeSave() {
+        ArgumentCaptor<Suppliers> captor = ArgumentCaptor.forClass(Suppliers.class);
+        when(suppliersRepository.save(captor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
+        SupplierRequest request = new SupplierRequest("Cafe", "Loc",
+                List.of("food", "Coffee"), "09:00", "18:00", null, null, null, null);
+
+        supplierService.createSupplier(request);
+
+        assertThat(captor.getValue().getCategory()).isEqualTo("Food/Coffee");
+    }
+
+    @Test
+    @DisplayName("createSupplier should write null, not an empty string, to the flat column when there are no categories")
+    void createSupplier_flatCategoryColumnNullWhenNoCategories() {
+        ArgumentCaptor<Suppliers> captor = ArgumentCaptor.forClass(Suppliers.class);
+        when(suppliersRepository.save(captor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        supplierService.createSupplier(new SupplierRequest("Cafe", "Loc",
+                List.of(), "09:00", "18:00", null, null, null, null));
+        supplierService.createSupplier(new SupplierRequest("Cafe", "Loc",
+                null, "09:00", "18:00", null, null, null, null));
+
+        assertThat(captor.getAllValues()).extracting(Suppliers::getCategory).containsOnlyNulls();
+    }
+
+    @Test
+    @DisplayName("createSupplier should reject a category containing '/' before saving anything")
+    void createSupplier_rejectsCategoryContainingSlash() {
+        SupplierRequest request = new SupplierRequest("Cafe", "Loc",
+                List.of("Food/Drinks"), "09:00", "18:00", null, null, null, null);
+
+        assertThatThrownBy(() -> supplierService.createSupplier(request))
+                .isInstanceOf(InvalidCategoryException.class);
+
+        verify(suppliersRepository, never()).save(any());
+        verify(supplierCategoriesRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("updateSupplier should reject a category containing '/' without deleting the old categories")
+    void updateSupplier_rejectsCategoryContainingSlash() {
+        SupplierRequest request = new SupplierRequest("Cafe", "Loc",
+                List.of("Food/Drinks"), "09:00", "18:00", null, null, null, null);
+
+        assertThatThrownBy(() -> supplierService.updateSupplier(7L, request))
+                .isInstanceOf(InvalidCategoryException.class);
+
+        verify(supplierCategoriesRepository, never()).deleteBySupplierId(any());
     }
 
     @Test
