@@ -15,6 +15,9 @@ Scope: Generated controller tests for the admin endpoints (issue #96)
        case added (USER gets 403, admin gets 200); the literal _ search
        switched to "o_n", which a wildcard _ would match.
 Author review: Ryan reviewed and ensured tests run successfully.
+2026-09-30 (Claude Code, Fable 5), issue #92: PATCH /users/me is a real
+route now, so the unlisted-methods case expects its validation 400 (role
+still untouched) instead of the old fail-closed 403.
        2026-09-29 (Claude Code, Opus 5.5), PR #140 review: GET /users now
        hides soft-deleted accounts (team decision); list expectations
        updated and a case added that a deleted account is left out.
@@ -140,10 +143,13 @@ class AdminControllerTest extends PostgresTestContainer {
     @Test
     @DisplayName("Methods the user routes don't open to everyone should return 403 to a USER caller")
     void unlistedMethodsRestricted() throws Exception {
-        // no profile PATCH yet (#92), so this would reach the admin PATCH handler
+        // PATCH /users/me is #92's own route now (no longer the admin
+        // handler): a body that is only a role fails its validation — the
+        // allow-list DTO has no role field to land in — and the role is
+        // untouched (the full proof lives in AccountUpdateControllerTest)
         mockMvc.perform(patch("/users/me").with(as(alex))
                 .contentType(MediaType.APPLICATION_JSON).content(roleBody("ADMIN")))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isBadRequest());
         // would otherwise answer 200 / 405 and reveal the admin endpoints
         mockMvc.perform(options("/users").with(as(alex)))
             .andExpect(status().isForbidden());

@@ -25,7 +25,9 @@ CORS in this PR per team decision.
 to the chain (bearer JWT -> ROLE_ authority, design doc §3), stateless
 sessions, and problem+json 401/403 from SecurityProblemResponses (a missing
 token is now 401, not Spring's default 403).
-
+2026-09-30 (Claude Code, Fable 5), issue #92: the five account-update
+routes opened to any signed-in caller, each by its own line above the
+fail-closed admin catch-all.
 */
 
 package foc.user.config;
@@ -109,10 +111,17 @@ public class SecurityConfig {
                 // health checks (compose depends_on / probes) carry no credentials
                 .requestMatchers("/actuator/health").permitAll()
                 // routes open to any signed-in user, each listed by method:
-                // own and public profile, and self-deletion. A new /users/me
-                // route (e.g. PATCH from #92) needs its own line here.
+                // own and public profile, self-deletion, and the account-
+                // update flows (#92). A new /users/me route needs its own
+                // line here, ABOVE the admin catch-all — without one it
+                // fails closed to 403
                 .requestMatchers(HttpMethod.GET, "/users/*").authenticated()
                 .requestMatchers(HttpMethod.DELETE, "/users/me").authenticated()
+                .requestMatchers(HttpMethod.PATCH, "/users/me").authenticated()
+                .requestMatchers(HttpMethod.POST, "/users/me/otp").authenticated()
+                .requestMatchers(HttpMethod.POST, "/users/me/email/verify").authenticated()
+                .requestMatchers(HttpMethod.POST, "/users/me/email/resend").authenticated()
+                .requestMatchers(HttpMethod.POST, "/users/me/password").authenticated()
                 // everything else under /users, whatever the method, is an
                 // admin endpoint (#96). Method-less so unlisted methods (HEAD,
                 // OPTIONS, POST, ...) fail closed, and checked here rather
