@@ -40,6 +40,9 @@
  * 2026-10-05 (issue #160, Claude Code (Sonnet 5)): seeded category names
  * are normalised with SupplierCategories.normalizeCategory and
  * de-duplicated per supplier before their rows are saved.
+ * 2026-10-07 (PR #161 review, LeongWZ): a CSV row with an empty Type cell
+ * (category bound to null) no longer throws an NPE that aborts startup;
+ * that supplier is seeded with no categories.
  * Reviewed by: [pending]
  */
 package foc.supplier.seed;
@@ -86,10 +89,14 @@ public class SuppliersSeeder implements CommandLineRunner {
                     Suppliers savedSupplier = suppliersRepository.save(supplier);
 
                     Set<String> categories = new LinkedHashSet<>();
-                    for (String raw : savedSupplier.getCategory().split("/")) {
-                        String category = SupplierCategories.normalizeCategory(raw);
-                        if (category != null) {
-                            categories.add(category);
+                    // an empty Type cell binds to null; such a supplier just has no categories
+                    String rawCategories = savedSupplier.getCategory();
+                    if (rawCategories != null) {
+                        for (String raw : rawCategories.split("/")) {
+                            String category = SupplierCategories.normalizeCategory(raw);
+                            if (category != null) {
+                                categories.add(category);
+                            }
                         }
                     }
                     for (String category : categories) {

@@ -2120,3 +2120,13 @@ Entry template:
   `InvalidCategoryException`, `SupplierController` (400 handler).
 - **Author review:** Rejecting `/` in category names is a validation-rule
   choice made by the author. Pending author review of the diff.
+
+## 2026-10-07 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** debugging assistance
+- **Prompt(s):** Asked to apply PR #161 review feedback (LeongWZ): guard
+  `SuppliersSeeder` against a null `Suppliers.category` (empty CSV `Type`
+  cell) so seeding doesn't throw an NPE and abort startup.
+- **Scope:** `supplier-service` `SuppliersSeeder` (null check around the
+  category split loop).
+- **Author review:** Pending author review of the diff.
