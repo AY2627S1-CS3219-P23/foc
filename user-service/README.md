@@ -37,6 +37,11 @@
   note on baseline-on-migrate; the 400 for a wrong-type parameter now
   covers path parameters too.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-09-30, Claude Code (Fable 5), issue #92: the "Account updates"
+  section (gate code, PATCH, new-email confirm, password change), the
+  problem+json type-URI table, V4/V5 in the Flyway paragraph, and the
+  purge's two new sweeps. Contract decisions by Leong Wei Zhi via
+  options Q&A.
 -->
 
 # User Service
@@ -53,7 +58,10 @@ Currently: actuator health endpoint, `POST /auth/signup` /
 `POST /auth/setup-owner` (creates an
 OWNER for any caller with the setup token, #97), `GET /users/me` /
 `GET /users/{id}` (own and public profile, #95), `DELETE /users/me`
-(self-deletion, #93), and the admin endpoints
+(self-deletion, #93), the account-update flows `POST /users/me/otp` /
+`PATCH /users/me` / `POST /users/me/email/verify` /
+`POST /users/me/email/resend` / `POST /users/me/password` (#92 — see
+below), and the admin endpoints
 `GET /users` (list, search, role filter, sort, 20/50/100 page sizes,
 `includeDeleted=true` to list removed accounts with their `deletedAt`),
 `PATCH /users/{id}` (promote/demote) and `DELETE /users/{id}` (soft
@@ -107,8 +115,17 @@ sign-up never reserves an email or username.
   "Invalid verification code" — deliberately the same answer, at the same
   bcrypt cost; an expired code is 400 "sign up again". Wrong codes are
   counted per pending sign-up, resends included (`OTP_MAX_ATTEMPTS`,
-  default 5): the attempt that exhausts them is 429 and discards the
-  pending sign-up.
+  default 5): the attempt that exhausts them is 429, and the row stays
+  behind as **spent** — to a verify it answers like no row at all, and
+  only a repeat of its own request (same username, matching password)
+  may revive it for a fresh code once the resend cooldown passes,
+  keeping the original expiry so its life stays bounded. Anyone else
+  keeps getting the 409 until it expires: verify is anonymous, so a
+  spent row that were up for grabs would let 5 wrong guesses burn a
+  stranger's pending sign-up and swap in the guesser's password.
+  Deleting it instead (the pre-review behavior) let 5 wrong guesses buy
+  an immediate fresh code, cycling attempt budgets and flooding the
+  inbox (PR #157 reviews).
   If the email or username was taken while the code was in flight, verify
   answers 400 with that reason **and discards the pending row** — a
   sign-up that can never complete must not keep holding its email, which
@@ -160,6 +177,79 @@ sign-up never reserves an email or username.
 - No sessions: each request stands on its own token. The logout
   denylist (`token_denylist`) isn't checked yet (deferred).
 
+## Account updates (#92)
+
+Editing an account is gated the way the design doc's §5 asks: a code to
+the **current** email proves the inbox before anything changes (F2.1.1),
+new values are re-validated like sign-up — uniqueness ignoring the
+caller's own row, password policy (F2.1.2/F2.1.5) — and a new email only
+applies once a second code sent to the **new** address is verified
+(F2.1.3), so a typo'd address can never lock the account out. All routes
+take the caller from the bearer token; the request DTOs are
+**allow-lists** (`PATCH /users/me` binds only `username`, `email`,
+`otp`), so a `role`, `id` or `deletedAt` in the body has no field to
+land in.
+
+The gate code is **single-use** — the mutating call that matches it
+consumes it, so each operation requests its own — and consumption rides
+the write transaction: a refusal that rolls the change back (mail 502,
+name taken) un-consumes the code, and only wrong guesses and discards
+commit. Codes share sign-up's knobs and storage rules: 6 digits,
+BCrypt-hashed, never logged, `OTP_TTL` (10 min) / `OTP_MAX_ATTEMPTS`
+(5, resends included) / `OTP_RESEND_COOLDOWN` (60s, 429 + `Retry-After`
+inside it), resends replace the code but never the expiry. Sign-up's
+spent rule is shared too: the guess that exhausts the attempts leaves
+the row behind, refusing everything, so the next code still waits out
+the cooldown instead of being minted at once (PR #157 review). Every
+flow locks the caller's user row first (one lock order: user, then
+gate/pending rows), so concurrent operations on one account serialize —
+without it, a gate code could be mailed to an address a concurrent
+email-change verify had just replaced (PR #157 review).
+
+- `POST /users/me/otp` (no body) → **202**
+  `{ expiresInSeconds, resendInSeconds }`; a code went to the account's
+  current email. Repeating the call is the resend.
+- `PATCH /users/me` `{ username?, email?, otp }` → **200** with the
+  account when everything applied (username changes apply at once;
+  asking for the email you already have is a no-op), or **202**
+  `{ user, email, expiresInSeconds, resendInSeconds }` when an email
+  change parked in `pending_email_changes` and a confirmation code went
+  to the new address. One pending change per account: repeating the
+  PATCH with the same address resends its code, a different address
+  replaces the change outright (the bearer token proves the row is the
+  caller's own — sign-up's stricter same-request rule guards anonymous
+  rows, which these are not), both behind the send cooldown.
+- `POST /users/me/email/verify` `{ code }` → **200** with the account,
+  new email applied. An address taken while the code was in flight is
+  400 "Email is already registered" **and discards the pending change**
+  (sign-up's rule, same reason). No pending change / expired code get
+  honest, distinct 400s — the caller is signed in, so there is no
+  existence to hide and no dummy-hash timing game to play.
+- `POST /users/me/email/resend` (no body) → **202**, same shape as the
+  PATCH's; it exists because the gate code was consumed when the change
+  parked, and re-sending to an address the gated PATCH already chose
+  needs no second gate.
+- `POST /users/me/password` `{ newPassword, confirmPassword, otp }` →
+  **204**. Both entries must match (checked server-side, F2.1.4) and the
+  new password passes sign-up's policy (F2.1.5); there is no
+  `currentPassword` — the gate code is the authentication.
+
+OTP-flavoured errors carry a stable problem+json `type` URI, so clients
+can match failures by machine instead of by `detail` wording (the SPA's
+OTP dialog used to string-match sentences; match `type`, the sentences
+may change). The sign-up OTP errors carry them too:
+
+| `type` | Meaning (status) |
+| --- | --- |
+| `urn:foc:user:otp-invalid` | wrong code (400) |
+| `urn:foc:user:otp-expired` | code/operation expired; request anew (400) |
+| `urn:foc:user:otp-attempts-exceeded` | limit hit; the row is spent — request anew once the cooldown passes, `Retry-After` says when (429) |
+| `urn:foc:user:otp-resend-cooldown` | resend too soon; `Retry-After` says when (429) |
+| `urn:foc:user:otp-required` | no gate code requested yet (400) |
+| `urn:foc:user:email-change-none` | nothing pending to verify/resend (400) |
+| `urn:foc:user:email-taken` | email already registered (400) |
+| `urn:foc:user:username-taken` | username already taken (400) |
+
 ## Errors
 
 Every error body is RFC 9457 problem+json. A request body that breaks
@@ -182,8 +272,11 @@ in case (the oldest keeps its name, later ones get `_2`, `_3`, …) and
 replaces the username constraint with a unique index on
 `lower(username)`. `V3__pending_signups` drops the generic (always
 empty) `otps` table and creates `pending_signups` — #88 replaced one
-OTP table with a pending table per operation; `pending_email_changes`
-follows with #92. Schema changes go in a new `V<n>__<name>.sql`, never
+OTP table with a pending table per operation.
+`V4__pending_email_changes` and `V5__account_update_otps` are #92's two
+tables in that shape: the parked email change awaiting the new address's
+code, and the account-update gate codes (one row per account each, FK to
+`users`). Schema changes go in a new `V<n>__<name>.sql`, never
 by editing an applied one.
 
 **Old local databases.** `baseline-on-migrate` records *any* non-empty
@@ -233,8 +326,10 @@ user can recover within 30 days (#94). Repeat deletion, like every other
 (`AccountPurgeScheduler`, default 03:00) hard-deletes accounts whose
 `deleted_at` is older than the retention window, together with their
 `account_tokens` rows — that purge is what frees the identifiers. The
-same daily run sweeps expired `pending_signups` rows (hygiene only:
-verify rejects an expired row on sight).
+same daily run sweeps expired `pending_signups`, `account_update_otps`
+and `pending_email_changes` rows (hygiene only: every flow rejects an
+expired row on sight; the two #92 sweeps run before the account delete
+so a purged user's rows never trip their FKs).
 Configure via `USER_RETENTION_DAYS` (default 30) and `USER_PURGE_CRON`
 (Spring 6-field cron).
 

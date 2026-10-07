@@ -11,6 +11,18 @@ Scope: problem+json handlers shared by ProfileController and AdminController
        rules one sentence per field (team decision; #138 contract).
        2026-10-05 (issue #138): 415 for an unsupported Content-Type.
 Author review: Ryan to review via the PR.
+2026-09-30 (Claude Code, Fable 5), issue #92: the three OTP handlers moved
+here from AuthController — the account-update routes fail the same ways
+sign-up's OTP does, and one handler set keeps the statuses and details in
+lockstep. They now attach problem+json type URIs (ProblemTypes; owner
+decision via options Q&A: machine-readable types in scope, so the SPA can
+stop string-matching detail sentences), and a ResponseStatusException
+passthrough renders typed bodies (uniqueness refusals) for controllers
+without a local one.
+2026-10-05 (Claude Code, Fable 5), PR #157 Copilot review: the
+attempts-exceeded 429 now carries Retry-After — the exhausted row
+survives as spent, so there is a real wait (the resend cooldown) to
+quote before a replacement code may be requested.
 */
 
 package foc.user.controller;
@@ -19,8 +31,10 @@ import java.util.Comparator;
 import java.util.stream.Collectors;
 
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
@@ -30,6 +44,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 
+import foc.user.exception.OtpAttemptsExceededException;
+import foc.user.exception.OtpResendTooSoonException;
+import foc.user.exception.OtpVerificationException;
 import foc.user.exception.UserNotFoundException;
 
 // the web client reads RFC 9457 problem+json error bodies
@@ -75,8 +92,45 @@ class ProblemDetailAdvice {
         return e.getBody();
     }
 
+    // the OTP failures, moved from AuthController (issue #92): sign-up and
+    // the account-update routes fail the same ways, with the same bodies.
+    // The exception names the type (wrong code / expired / no code yet /
+    // no pending change), the status stays 400
+    @ExceptionHandler(OtpVerificationException.class)
+    ProblemDetail handleOtpVerification(OtpVerificationException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+        problem.setType(e.type());
+        return problem;
+    }
+
+    // 429 like the login lockout (issue #145 precedent). The exhausted
+    // row now survives as spent and its replacement waits out the resend
+    // cooldown (PR #157 reviews), so there IS a wait to quote: Retry-After
+    // carries it, 0 meaning a fresh code can be requested right away
+    @ExceptionHandler(OtpAttemptsExceededException.class)
+    ResponseEntity<ProblemDetail> handleOtpAttemptsExceeded(OtpAttemptsExceededException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
+        problem.setType(ProblemTypes.OTP_ATTEMPTS_EXCEEDED);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
+            .body(problem);
+    }
+
+    // 429 with Retry-After, the lockout's shape: here waiting is exactly
+    // the remedy, and the wait is seconds, so the SPA can count it down
+    @ExceptionHandler(OtpResendTooSoonException.class)
+    ResponseEntity<ProblemDetail> handleOtpResendTooSoon(OtpResendTooSoonException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
+        problem.setType(ProblemTypes.OTP_RESEND_COOLDOWN);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
+            .body(problem);
+    }
+
     // refusals the services raise with a status and reason (blocked admin
-    // actions, invalid list parameters, a bad setup token, CallerId's 401)
+    // actions, invalid list parameters, a bad setup token, CallerId's 401,
+    // the typed uniqueness refusals); returning the exception's own body
+    // keeps the type it was built with
     @ExceptionHandler(ResponseStatusException.class)
     ProblemDetail handleResponseStatus(ResponseStatusException e) {
         return e.getBody();

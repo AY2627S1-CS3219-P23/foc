@@ -21,6 +21,9 @@ Scope: pending-signup row for issue #88, implementing the design doc's
        resend cannot extend the row's life (decision by Leong Wei Zhi via
        options Q&A).
 Reviewed by: Leong Wei Zhi (via pull request).
+2026-10-05 (Claude Code, Fable 5), PR #157 Copilot re-review: reviveSpent
+added — a spent row revives only for its own requester, with fresh code
+and attempts but the original expiry (no forever-hold).
 */
 
 package foc.user.entity;
@@ -127,8 +130,10 @@ public class PendingSignup {
      * insert keeps the row in its unique index slot, which a flush
      * ordering inserts before deletes would otherwise trip.
      *
-     * <p>Only for an expired row: doing this to a live one is the
-     * hijack PR #150's review found.
+     * <p>Only for an expired row: doing this to a live one is the hijack
+     * PR #150's review found — a spent row is still live in that sense
+     * (verify is anonymous, so anyone can spend a stranger's row) and
+     * revives only for its own requester via {@link #reviveSpent}.
      */
     public void replaceExpired(String username, String passwordHash, String codeHash,
             Instant sentAt, Instant expiresAt) {
@@ -137,6 +142,24 @@ public class PendingSignup {
         this.codeHash = codeHash;
         this.lastSentAt = sentAt;
         this.expiresAt = expiresAt;
+        this.attempts = 0;
+    }
+
+    /**
+     * Revives a spent row (attempts exhausted; kept rather than deleted
+     * so {@code lastSentAt} still gates the resend cooldown — PR #157
+     * review, @Sinnez1) for the request that pended it, and only that
+     * request (AuthService proves the same details first): fresh code,
+     * fresh attempt budget, same details — and deliberately NOT a fresh
+     * expiry, so the row's life stays bounded by the TTL it was created
+     * with (the PR #150 re-review rule renewCode follows). The budget
+     * reset is confined by that bound: at most maxAttempts guesses per
+     * cooldown until the row dies for real (PR #157 Copilot review,
+     * shape chosen by Leong Wei Zhi via options Q&A).
+     */
+    public void reviveSpent(String codeHash, Instant sentAt) {
+        this.codeHash = codeHash;
+        this.lastSentAt = sentAt;
         this.attempts = 0;
     }
 

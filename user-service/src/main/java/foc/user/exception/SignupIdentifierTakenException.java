@@ -14,6 +14,10 @@ Scope: PR #150 review (@Sinnez1): verify's answer when the email or
        2026-10-02 (Claude Code, Opus 5.5), issue #154: comment updated for
        the handler's move from AuthController to ProblemDetailAdvice.
 Author review: Leong Wei Zhi to review via the PR.
+2026-09-30 (Claude Code, Fable 5), issue #92: also thrown by the email-
+change verify (the same taken-while-pending discard); the problem body
+now carries a type URI, set here so every handler — AuthController's
+local passthrough and the shared advice's — renders it for free.
 */
 
 package foc.user.exception;
@@ -23,7 +27,14 @@ import org.springframework.web.server.ResponseStatusException;
 
 public class SignupIdentifierTakenException extends ResponseStatusException {
 
-    public SignupIdentifierTakenException(String reason) {
-        super(HttpStatus.BAD_REQUEST, reason);
+    /**
+     * Wraps the uniqueness refusal caught from
+     * {@code NewAccountDetails}, keeping its reason and its problem
+     * type (email-taken or username-taken — set there, the one place
+     * that knows which check failed).
+     */
+    public SignupIdentifierTakenException(ResponseStatusException taken) {
+        super(HttpStatus.BAD_REQUEST, taken.getReason());
+        getBody().setType(taken.getBody().getType());
     }
 }

@@ -14,6 +14,9 @@ Scope: issue #147. Runs the Flyway migrations against their own schemas in
        with the application's own Flyway settings (the Spring-configured
        Flyway, pointed at the test's schema) instead of a hand-copied
        baseline-on-migrate / baseline-version.
+       2026-09-30, Claude Code (Fable 5), issue #92: V4 and V5 join them
+       (pending_email_changes and account_update_otps), moving the counts
+       to 4 and 5.
 Author review: Ryan to review via the PR.
 */
 
@@ -42,7 +45,7 @@ import org.springframework.core.io.ClassPathResource;
 class FlywayMigrationTest extends PostgresTestContainer {
 
     // scripts in db/migration; a new V<n> bumps this
-    private static final int MIGRATION_SCRIPTS = 3;
+    private static final int MIGRATION_SCRIPTS = 5;
 
     // the application's Flyway, built from application.yaml's spring.flyway
     @Autowired
@@ -105,8 +108,8 @@ class FlywayMigrationTest extends PostgresTestContainer {
 
             MigrateResult result = migrate(schema);
 
-            // V1 is recorded as the baseline, not run again; V2 and V3 run
-            assertThat(result.migrationsExecuted).isEqualTo(2);
+            // V1 is recorded as the baseline, not run again; V2..V5 run
+            assertThat(result.migrationsExecuted).isEqualTo(MIGRATION_SCRIPTS - 1);
             assertThat(usernamesByEmail(statement)).containsExactly(
                 Map.entry("e1000001@u.nus.edu", "Bob"),
                 Map.entry("e1000002@u.nus.edu", "bob_2"),
