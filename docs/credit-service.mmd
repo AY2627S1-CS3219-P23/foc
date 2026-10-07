@@ -6,84 +6,69 @@
 
 %% AI generated (edited by Ryan Ang)
 
-%% Title: "Credit Service Component Diagram"
-
-%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 50, "rankSpacing": 60, "wrappingWidth": 420, "subGraphTitleMargin": {"top": 8, "bottom": 28}}}}%%
+%% Title: Credit Service Component Diagram
 flowchart TD
     %% Styling Classes
     classDef container fill:#438dd5,stroke:#2e6295,stroke-width:2px,color:#ffffff;
     classDef component fill:#85bbf0,stroke:#5d82a8,stroke-width:2px,color:#000000;
     classDef database fill:#438dd5,stroke:#2e6295,stroke-width:2px,color:#ffffff;
-    classDef broker fill:#f2a900,stroke:#b37d00,stroke-width:2px,color:#000000;
-    classDef legend fill:#ffffff,stroke:#888888,stroke-width:1px,color:#000000;
-
-    %% External Containers (ordered left to right to match the controllers they call)
+ 
+    %% External Containers
     SPA["<b>Web App</b><br/>[Container: TypeScript and React]<br/>Shows user balances (User F8.1) and<br/>filterable transaction history (Credit F4)."]:::container
-    US["<b>User Service</b><br/>[Container: Java and Spring Boot]<br/>Provisions a new credit account synchronously<br/>when a user registers (F1.1)."]:::container
-    OS["<b>Order Service</b><br/>[Container: Java and Spring Boot]<br/>Reserves the reward by sync REST at creation (F2.1).<br/>Publishes request events from its outbox."]:::container
-
-    BROKER[/"<b>Message Broker</b><br/>[Container: RabbitMQ]<br/>request-events exchange: request.completed,<br/>request.cancelled, request.expired.<br/>Durable queue."/]:::broker
-
+    OS["<b>Order Service</b><br/>[Container: Java and Spring Boot]<br/>Owns the request's status, which is the saga state.<br/>Publishes request events; reacts to credit replies."]:::container
+    BRK["<b>Message Broker</b><br/>[Container: RabbitMQ]<br/>request-events and credit-events exchanges, plus each<br/>consumer's own work, retry and dead-letter queues."]:::container
+ 
     %% Credit Service Container Boundary
-    subgraph CSA ["<b>Credit Service</b>"]
+    subgraph CSA ["<b>Credit Service</b><br/>[Container: Java and Spring Boot]"]
         direction TB
-
-        subgraph Controllers
-            CAC["<b>Credit Account Controller</b><br/>[Component: Spring MVC RestController]<br/>Exposes the caller's available and reserved<br/>balances (F4.1) and date/amount filtered<br/>history (F4.1.2, F4.1.3)."]:::component
-            IOC["<b>Internal Operations Controller</b><br/>[Component: Spring MVC RestController]<br/>Sync APIs for sign-up provisioning (F1.1)<br/>and credit reservation (F2.1, F2.1.3)."]:::component
-            CEL["<b>Request Event Listener</b><br/>[Component: Spring AMQP RabbitListener]<br/>Consumes completion events to transfer (F3.1) and<br/>cancellation/expiry events to release (F2.1.1).<br/>Acknowledges after the transaction commits."]:::component
+ 
+        subgraph Entry ["Entry points"]
+            CAC["<b>Credit Account Controller</b><br/>[Component: Spring MVC RestController]<br/>Exposes the caller's available/reserved balances (F4.1)<br/>and date/amount filtered history (F4.1.2, F4.1.3)."]:::component
+            CVH["<b>Error Handler</b><br/>[Component: Spring @RestControllerAdvice]<br/>Maps validation and domain errors<br/>to HTTP responses."]:::component
+            REL["<b>Request Event Listener</b><br/>[Component: Spring AMQP RabbitListener]<br/>submitted: reserve (F2.1). completed: transfer (F3.1).<br/>cancelled / expired: release (F2.1.1).<br/>Acknowledges after commit; retries, then dead-letters."]:::component
         end
-
-        CVH["<b>Validation and Error Handler</b><br/>[Component: Spring RestControllerAdvice]<br/>Rejects non-integer and non-positive amounts (F1.2.1)<br/>and maps failures to HTTP errors. REST path only."]:::component
-
+ 
         subgraph Services
-            SCH["<b>Expiry and Redistribution Scheduler</b><br/>[Component: Spring Scheduled]<br/>Moves lots older than 3 months to the common pool (F6.1)<br/>and redistributes the pool monthly (F6.1.1, F6.1.2)."]:::component
-            OPS["<b>Credit Operations Service</b><br/>[Component: Spring Service]<br/>Idempotent core logic keyed by requestRef (NFR2.2.1):<br/>enforces balance checks (F2.1.2), spends oldest<br/>lots first, commits balances, held state and<br/>history in one transaction (F5.1, NFR2.1)."]:::component
-            HIS["<b>Credit History Service</b><br/>[Component: Spring Service]<br/>Appends immutable history rows per transaction (F4.1.1)."]:::component
+            OPS["<b>Credit Operations Service</b><br/>[Component: Spring @Service]<br/>Idempotent core logic: get-or-create account (F1.1), integer amounts (F1.2),<br/>balance check (F2.1.2), one held-credits record per request (NFR2.2.1).<br/>One @Transactional unit per operation, reply included (F5.1, NFR2.1)."]:::component
+            HIS["<b>Credit History Service</b><br/>[Component: Spring @Service]<br/>Appends immutable history rows per transaction (F4.1.1)<br/>and serves paginated/filtered queries."]:::component
+            SCH["<b>Expiry & Redistribution Scheduler</b><br/>[Component: Spring @Scheduled]<br/>Moves expired lots to the common pool (F6.1).<br/>Monthly: shares pool equally (F6.1.1), rest random (F6.1.2)."]:::component
+            OBX["<b>Outbox Publisher</b><br/>[Component: Spring @Scheduled]<br/>Publishes unsent replies and marks each one sent<br/>once the broker confirms it."]:::component
         end
-
+ 
         subgraph Persistence
-            REPO["<b>Credit Data Repositories</b><br/>[Component: Spring Data JPA]<br/>Handles database reads and writes, and enforces<br/>concurrent update protection with a version column."]:::component
+            REPO["<b>Credit Data Repositories</b><br/>[Component: Spring Data JPA]<br/>Database reads/writes, row locks taken in a fixed order,<br/>and JPA Specifications for history filters."]:::component
         end
     end
-
+ 
     %% Database Container
-    DB[("<b>Credit Database</b><br/>[Container: PostgreSQL Schema]<br/>Stores CreditAccount, Reserved (unique requestRef),<br/>CreditLot, CommonPool and CreditHistoryEntry.")]:::database
+    DB[("<b>Credit Database</b><br/>[Container: PostgreSQL]<br/>CreditAccount, Reserved, CreditLot, CommonPool, History,<br/>RedistributionRun, Outbox. Unique keys prevent duplicates (NFR2.2);<br/>CHECK constraints keep balances at or above zero.")]:::database
+ 
+    %% Inter-Container Connections
+    SPA -->|"Reads balance and history<br/>[JSON/HTTPS + user JWT]"| CAC
+    OS ==>|"Publishes request events<br/>[AMQP, from its outbox]"| BRK
+    BRK ==>|"Delivers submitted / completed / cancelled / expired<br/>[AMQP, at-least-once]"| REL
+    REL ==>|"Failed events to retry<br/>or dead-letter queue"| BRK
+    OBX ==>|"Publishes reserved / reservation-rejected<br/>[AMQP, publisher confirms]"| BRK
+    BRK ==>|"Delivers credit replies<br/>[AMQP, at-least-once]"| OS
+ 
+    %% Entry -> Validation
+    CAC -.->|"Errors handled by"| CVH
+ 
+    %% Entry -> Service
+    CAC -->|"Reads balance from"| OPS
+    CAC -->|"Reads history from"| HIS
+    REL -->|"Reserve / transfer / release"| OPS
+ 
+    %% Service -> Service
+    OPS -->|"Appends entries via<br/>[In-transaction]"| HIS
+    SCH -->|"Triggers logic in"| OPS
+ 
+    %% Service -> Persistence
+    OPS -->|"Reads/Writes, incl. outbox rows"| REPO
+    HIS -->|"Reads/Writes"| REPO
+    OBX -->|"Reads unsent, marks sent"| REPO
+ 
+    %% Persistence -> DB
+    REPO -->|"Persists to<br/>[JDBC]"| DB
 
-    %% Control flow: synchronous calls between containers
-    SPA -->|"Requests balances<br/>and history<br/>[JSON/HTTP]"| CAC
-    US -->|"Requests account<br/>provisioning<br/>[JSON/HTTP]"| IOC
-    OS -->|"Requests credit<br/>reservation<br/>[JSON/HTTP]"| IOC
-
-    %% Data flow: asynchronous events
-    OS ==>|"Request events<br/>[AMQP]"| BROKER
-    BROKER ==>|"Request events<br/>[AMQP]"| CEL
-
-    %% Control flow: calls inside the Credit Service
-    CAC --->|"Reads balance"| OPS
-    CAC -->|"Reads history"| HIS
-    IOC --->|"Provision and reserve"| OPS
-    CEL --->|"Transfer and release"| OPS
-    SCH -->|"Expiry and redistribution"| OPS
-    OPS -->|"Appends entries<br/>[In-transaction]"| HIS
-    OPS -->|"Loads and saves entities"| REPO
-    HIS -->|"Loads and saves entries"| REPO
-
-    %% Data flow: persistence
-    REPO <==>|"Rows read and written<br/>[JDBC / Port 5432]"| DB
-
-    %% Layout only: invisible link keeps the scheduler beside the history service
-    OPS ~~~ SCH
-
-    %% Error paths
-    CAC -.->|"Exceptions"| CVH
-    IOC -.->|"Exceptions"| CVH
-
-    %% Legend (the invisible link only places it below the database)
-    DB ~~~ LEGEND
-    subgraph LEGEND ["<b>Legend</b>"]
-        direction LR
-        LC1["Caller"]:::legend -->|"Control flow:<br/>synchronous call"| LC2["Callee"]:::legend
-        LD1["Source"]:::legend ==>|"Data flow: events or<br/>stored data in transit"| LD2["Destination"]:::legend
-        LE1["Component"]:::legend -.->|"Error path"| LE2["Error handler"]:::legend
-    end
+ 
