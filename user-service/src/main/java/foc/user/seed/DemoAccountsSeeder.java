@@ -11,11 +11,15 @@ Scope: demo accounts for local testing and demos — 1 OWNER, 3 ADMINs and
        generated emails and usernames; comment on the ADMINS/USERS limits.
        2026-10-05 (issue #154): a seeding run that loses an insert race
        is logged as a warning instead of stopping the service.
+       2026-10-07 (Claude Code, Opus 5.5), PR #162 Copilot review: only a
+       unique violation counts as that race; any other integrity
+       failure is rethrown.
 Author review: Ryan to review via the PR.
 */
 
 package foc.user.seed;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -50,6 +54,8 @@ public class DemoAccountsSeeder implements CommandLineRunner {
     // (accountsFollowTheSignupRules catches it)
     public static final int ADMINS = 3;
     public static final int USERS = 100;
+
+    private static final String UNIQUE_VIOLATION = "23505";
 
     // one seeded account
     record DemoAccount(String email, String username, Role role) {
@@ -96,6 +102,11 @@ public class DemoAccountsSeeder implements CommandLineRunner {
         try {
             transaction.executeWithoutResult(status -> seed());
         } catch (DataIntegrityViolationException e) {
+            // anything but a duplicate key (a missing column, a broken
+            // constraint) is a real problem and must stop startup
+            if (!isUniqueViolation(e)) {
+                throw e;
+            }
             // another instance starting at the same time inserted an account
             // between the check and the insert. Caught outside the
             // transaction (it is already rolled back) so the service still
@@ -103,6 +114,17 @@ public class DemoAccountsSeeder implements CommandLineRunner {
             log.warn("Demo accounts not seeded: another instance is seeding them ({})",
                 e.getMostSpecificCause().getMessage());
         }
+    }
+
+    // SQLState 23505 is unique_violation: the users table's email and
+    // username indexes
+    private static boolean isUniqueViolation(DataIntegrityViolationException e) {
+        for (Throwable cause = e; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sql && UNIQUE_VIOLATION.equals(sql.getSQLState())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void seed() {

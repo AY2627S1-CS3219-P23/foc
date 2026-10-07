@@ -10,11 +10,15 @@ Scope: tests for DemoAccountsSeeder with USER_SEED_DEMO on: 1 owner, 3
        2026-10-05 (Claude Code, Opus 5.5), issue #154: the switch is set
        with @TestPropertySource, to override PostgresTestContainer's pin;
        a lost insert race is logged, not thrown.
+       2026-10-07 (Claude Code, Opus 5.5), PR #162 Copilot review: the race
+       stub carries the unique-violation SQLState; any other integrity
+       failure is rethrown.
 Author review: Ryan to review via the PR.
 */
 
 package foc.user.seed;
 
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Map;
 import java.util.function.Function;
@@ -23,6 +27,7 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -167,13 +172,27 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
         // every account looks missing, then the insert hits the unique index
         UserRepository racing = mock(UserRepository.class);
         when(racing.save(any(User.class)))
-            .thenThrow(new DataIntegrityViolationException("idx_users_email"));
+            .thenThrow(new DataIntegrityViolationException("idx_users_email",
+                new SQLException("duplicate key", "23505")));
         long before = userRepository.count();
 
         assertThatCode(() -> new DemoAccountsSeeder(racing, passwordEncoder, transactionManager).run())
             .doesNotThrowAnyException();
 
         assertThat(userRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("An integrity failure that is not a duplicate key still stops startup")
+    void otherIntegrityFailureIsRethrown() {
+        // 23502 is not_null_violation: not the race, so not swallowed
+        UserRepository broken = mock(UserRepository.class);
+        when(broken.save(any(User.class)))
+            .thenThrow(new DataIntegrityViolationException("users.email",
+                new SQLException("null value", "23502")));
+
+        assertThatThrownBy(() -> new DemoAccountsSeeder(broken, passwordEncoder, transactionManager).run())
+            .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

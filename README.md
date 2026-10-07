@@ -61,6 +61,8 @@
   #109) by Claude Code (Opus 5).
   2026-09-30: AI Use Summary extended for the user-service account-update
   flows (issue #92) by Claude Code (Fable 5).
+  2026-10-07: AI Use Summary extended for the user-service and web review
+  follow-ups (issues #154 and #138, PR #162) by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -362,7 +364,17 @@ sign-up policy re-checked, machine-readable problem+json `type` URIs
 on the OTP errors (sign-up's included), the V4/V5 migrations, purge
 sweeps, and unit and integration tests, with the scope, endpoint
 shapes, gating and response choices made by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`.
+neutral-options Q&A and recorded in `ai/usage-log.md`; and the
+user-service and web review follow-ups (issues #154 and #138, PR #162)
+— problem+json on every user-service endpoint (the shared
+`ResponseStatusException`, wrong-type-parameter and 415 handlers), a
+generic owner-setup 503, a single locked read in the login attempt
+counter, the demo seeder's `Locale.ROOT` formatting and its handling of
+a lost insert race (a duplicate key only; any other integrity failure
+still stops startup), tests that load the main `application.yaml`
+through a `test` profile, the "account created" notice on the login
+page showing once, and the nav bar border class — with the items taken
+from the team's review issues and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
