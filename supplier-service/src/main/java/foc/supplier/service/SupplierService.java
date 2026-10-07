@@ -68,6 +68,11 @@
  * updateSupplier now also write the category names, joined with "/", to
  * Suppliers.category, and saveCategories normalises each name via
  * SupplierCategories.normalizeCategory and de-duplicates before saving.
+ * 2026-10-07 (PR #161 review, LeongWZ): categories are now normalised
+ * (and rejected with InvalidCategoryException if they contain "/", the
+ * flat column's delimiter) before the supplier is saved, so the flat
+ * column is set pre-save in applyRequest — no second UPDATE per create —
+ * and is null, not "", when a supplier has no categories.
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
@@ -75,6 +80,7 @@ package foc.supplier.service;
 import foc.supplier.dto.PageResponse;
 import foc.supplier.dto.SupplierRequest;
 import foc.supplier.dto.SupplierResponse;
+import foc.supplier.exception.InvalidCategoryException;
 import foc.supplier.exception.InvalidSortException;
 import foc.supplier.exception.SupplierNotFoundException;
 import foc.supplier.model.SupplierCategories;
@@ -152,23 +158,23 @@ public class SupplierService {
 
     @Transactional
     public SupplierResponse createSupplier(SupplierRequest request) {
+        List<String> categories = normalizeCategories(request.categories());
         Suppliers supplier = new Suppliers();
-        applyRequest(supplier, request);
+        applyRequest(supplier, request, categories);
         Suppliers saved = suppliersRepository.save(supplier);
-        List<String> categories = saveCategories(saved, request.categories());
-        saved.setCategory(String.join("/", categories));
+        saveCategories(saved, categories);
         return toResponse(saved, categories);
     }
 
     @Transactional
     public SupplierResponse updateSupplier(Long id, SupplierRequest request) {
+        List<String> categories = normalizeCategories(request.categories());
         Suppliers supplier = suppliersRepository.findById(id)
                 .orElseThrow(() -> new SupplierNotFoundException(id));
-        applyRequest(supplier, request);
+        applyRequest(supplier, request, categories);
         Suppliers saved = suppliersRepository.save(supplier);
         supplierCategoriesRepository.deleteBySupplierId(id);
-        List<String> categories = saveCategories(saved, request.categories());
-        saved.setCategory(String.join("/", categories));
+        saveCategories(saved, categories);
         return toResponse(saved, categories);
     }
 
@@ -181,7 +187,8 @@ public class SupplierService {
         suppliersRepository.deleteById(id);
     }
 
-    private static void applyRequest(Suppliers supplier, SupplierRequest request) {
+    private static void applyRequest(Suppliers supplier, SupplierRequest request,
+            List<String> categories) {
         supplier.setName(request.name());
         // the form has one free-text location field, not separate
         // building/description inputs — see class header
@@ -193,14 +200,17 @@ public class SupplierService {
         supplier.setLatitude(request.latitude());
         supplier.setLongitude(request.longitude());
         supplier.setImageURL(request.imageUrl());
+        // redundant flat copy of the categories ("/"-joined, null when
+        // none); set here so it goes out in the same INSERT/UPDATE
+        supplier.setCategory(categories.isEmpty() ? null : String.join("/", categories));
     }
 
-    // Saves one SupplierCategories row per distinct, normalised category
-    // and returns exactly the set that was persisted, for the response.
-    // Normalising before de-duplicating means "Food" and "food" in the
-    // same request collapse into one row, since they are the same
+    // Returns the distinct, normalised categories of a request, rejecting
+    // any that contain "/" (the delimiter of the flat Suppliers.category
+    // column). Normalising before de-duplicating means "Food" and "food"
+    // in the same request collapse into one, since they are the same
     // category once stored.
-    private List<String> saveCategories(Suppliers supplier, List<String> categories) {
+    private static List<String> normalizeCategories(List<String> categories) {
         if (categories == null) {
             return List.of();
         }
@@ -210,12 +220,21 @@ public class SupplierService {
                 .distinct()
                 .toList();
         for (String category : normalized) {
+            if (category.contains("/")) {
+                throw new InvalidCategoryException(category);
+            }
+        }
+        return normalized;
+    }
+
+    // Saves one SupplierCategories row per (already normalised) category.
+    private void saveCategories(Suppliers supplier, List<String> categories) {
+        for (String category : categories) {
             SupplierCategories sc = new SupplierCategories();
             sc.setSupplier(supplier);
             sc.setCategory(category);
             supplierCategoriesRepository.save(sc);
         }
-        return normalized;
     }
 
     private static SupplierResponse toResponse(Suppliers s, List<String> categories) {

@@ -2107,3 +2107,16 @@ Entry template:
   `SupplierCategories` and whether `Suppliers.category` stays were left to
   * the team and are not changed here. Backend tests pass (42, Java 21 via
   Docker); web `tsc` passes. Pending author review of the diff.
+
+## 2026-10-07 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** refactoring, implementation
+- **Prompt(s):** Asked to apply PR #161 review feedback (LeongWZ): write
+  `null` rather than `""` to `Suppliers.category` when a supplier has no
+  categories, reject `/` in category names, and set the flat column before
+  `save()` to avoid a second UPDATE per create.
+- **Scope:** `supplier-service` `SupplierService` (categories normalised and
+  validated before save; flat column set in `applyRequest`), new
+  `InvalidCategoryException`, `SupplierController` (400 handler).
+- **Author review:** Rejecting `/` in category names is a validation-rule
+  choice made by the author. Pending author review of the diff.
