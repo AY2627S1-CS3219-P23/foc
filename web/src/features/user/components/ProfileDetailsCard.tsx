@@ -3,6 +3,11 @@
 // Scope: Profile Details card of the profile page, per
 // web/docs/wireframes/profile.png — username, NUS email, role, credit
 // status, Edit Profile button.
+// 2026-10-07, Claude Code (Opus 5), issue #112 (PR #149): an email
+// change parked by #92's PATCH (PR #157) shows under the address with a
+// way back into its code dialog — the dialog can be dismissed without
+// discarding the change, so there has to be a way to reopen it
+// (register.tsx's "Enter your code" link, same reasoning).
 // Reviewed by: [pending]
 
 import type { AdminUser } from '../types'
@@ -18,12 +23,17 @@ interface ProfileDetailsCardProps {
   user: AdminUser
   editing: boolean
   onEdit: () => void
+  // the address waiting on its own code, if a change is parked
+  pendingEmail?: string
+  onEnterCode?: () => void
 }
 
 export function ProfileDetailsCard({
   user,
   editing,
   onEdit,
+  pendingEmail,
+  onEnterCode,
 }: ProfileDetailsCardProps) {
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
@@ -40,6 +50,18 @@ export function ProfileDetailsCard({
             NUS Email Address
           </dt>
           <dd className="mt-0.5 text-sm text-gray-900">{user.email}</dd>
+          {pendingEmail && (
+            <dd className="mt-1 text-xs text-gray-500">
+              Waiting on a code sent to {pendingEmail}.{' '}
+              <button
+                type="button"
+                onClick={onEnterCode}
+                className="cursor-pointer font-medium text-gray-900 underline"
+              >
+                Enter your code
+              </button>
+            </dd>
+          )}
         </div>
         <div>
           <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">

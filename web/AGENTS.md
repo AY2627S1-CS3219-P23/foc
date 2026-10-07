@@ -10,6 +10,10 @@
   row records where the shipped OTP dialog goes beyond the wireframe (the
   resend cooldown label and the expiry line), same convention as the
   suppliers.png note above.
+  2026-10-07, Claude Code (Opus 5), issue #112 (PR #149): the profile.png
+  row records the two deviations #92's shipped contract (PR #157) forces
+  on the profile page — no Current Password field, and a second code step
+  for a new email address. Both were the author's call via options Q&A.
   Author review: Leong Wei Zhi to review via PR #150 — which also closes
   the pending marker the 2026-09-27 entry above was left with.
 -->
@@ -49,7 +53,7 @@ first**; they cost nothing to read, unlike Figma MCP calls:
 | `docs/wireframes/login.png` | Login — username/email + password |
 | `docs/wireframes/dashboard.png` | Dashboard — credit balance, requester/courier mode toggle, quick actions, active requests with status chips, recent activity |
 | `docs/wireframes/suppliers.png` | Suppliers — search and category filters, supplier detail panel, empty state (wireframe image still shows a campus-zone filter; team dropped the zone feature, see `docs/supplier-service.md` D4 — the image is directional, not a spec, per this file's own note above) |
-| `docs/wireframes/profile.png` | Profile — account details, edit flows, delete-account modal |
+| `docs/wireframes/profile.png` | Profile — account details, edit flows, delete-account modal (built in PR #149; two deviations the shipped #92 endpoints force, same convention as the signup.png note above: **Change Password has no Current Password field** — `POST /users/me/password` takes `{newPassword, confirmPassword, otp}` and the code emailed to the current address *is* the authentication, so the card ends in a code step instead; and a **second code step** the wireframe doesn't draw confirms a new email address from that address before it replaces the old one, F2.1.3) |
 | `docs/wireframes/credit-history.png` | Credit history — balances and transaction list |
 | `docs/wireframes/order-history.png` | Order history — past/current orders |
 | `docs/wireframes/create-request.png` | Create request — new errand form |

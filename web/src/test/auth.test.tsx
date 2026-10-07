@@ -23,6 +23,10 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
+import {
+  OTP_ATTEMPTS_EXCEEDED,
+  OTP_EXPIRED,
+} from '@/features/user/problemTypes'
 import { router, routes } from '../routes'
 
 // user-service's URL is empty in tests; give apiFetch one to call
@@ -55,8 +59,11 @@ function problem(
   status: number,
   detail: string,
   headers?: Record<string, string>,
+  // the stable problem+json type URI user-service attaches to its OTP and
+  // uniqueness refusals (PR #157); the dialog matches on it, not on detail
+  type?: string,
 ) {
-  return reply(status, { status, detail }, headers)
+  return reply(status, { status, detail, ...(type && { type }) }, headers)
 }
 
 // the method, URL and parsed body of the n-th request sent
@@ -309,18 +316,20 @@ describe('sign-up page', () => {
       'an expired code',
       400,
       'Code has expired; sign up again to get a new code',
+      OTP_EXPIRED,
     ],
     [
       'too many wrong codes',
       429,
       'Too many incorrect codes; sign up again to get a new code',
+      OTP_ATTEMPTS_EXCEEDED,
     ],
   ])(
     '%s sends the user back to the filled form',
-    async (_case, status, detail) => {
+    async (_case, status, detail, type) => {
       fetchMock
         .mockResolvedValueOnce(reply(202, accepted))
-        .mockResolvedValueOnce(problem(status, detail))
+        .mockResolvedValueOnce(problem(status, detail, {}, type))
 
       const user = await signUp()
       await typeCode(user, '482910')

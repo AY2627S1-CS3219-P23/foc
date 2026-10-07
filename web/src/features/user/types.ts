@@ -11,6 +11,9 @@
 // includeDeleted for listing removed accounts (team decision).
 // 2026-09-30, Claude Code (Opus 5), issue #109 (PR #150): SignupAccepted
 // and SignupPending, for the sign-up step that waits on an emailed code.
+// 2026-10-07, Claude Code (Opus 5), issue #112 (PR #149): OtpTimings,
+// EmailChangeAccepted and PendingEmailChange, for #92's account-update
+// endpoints (PR #157) now that they exist.
 // Reviewed by: Ryan Ang
 
 // POST /auth/login body (user-service's LoginResponse DTO) — the
@@ -75,4 +78,36 @@ export interface ListUsersParams {
   size: number // user-service accepts 20, 50 or 100
   // also list removed accounts (still within their 30-day window)
   includeDeleted?: boolean
+}
+
+// What POST /users/me/otp answers with (UpdateOtpResponse): a gate code
+// went to the account's CURRENT email. expiresInSeconds is what that code
+// has left — less than a full OTP_TTL after a resend, which replaces the
+// code but never the expiry — and resendInSeconds is the cooldown before
+// another may be requested.
+export interface OtpTimings {
+  expiresInSeconds: number
+  resendInSeconds: number
+}
+
+// The 202 body of PATCH /users/me (EmailChangePendingResponse): the email
+// change parked and a confirmation code went to the NEW address. `user` is
+// the account as it stands now — a username change in the same PATCH is
+// already applied, the email is still the old one until the new address
+// confirms.
+export interface EmailChangeAccepted extends OtpTimings {
+  user: AdminUser
+  email: string
+}
+
+// An email change parked server-side in `pending_email_changes`, as the
+// profile page remembers it. user-service has no GET for the row, so the
+// page keeps this snapshot in localStorage: a reload mid-confirm still
+// offers the code step instead of making the user redo the PATCH (and pay
+// for a fresh gate code). Absolute times rather than the durations the API
+// returns, for the reason SignupPending above gives.
+export interface PendingEmailChange {
+  email: string
+  expiresAt: number // epoch ms
+  resendAt: number // epoch ms
 }

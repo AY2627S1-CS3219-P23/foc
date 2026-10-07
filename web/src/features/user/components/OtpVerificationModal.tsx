@@ -19,18 +19,29 @@
 // The expiry is quoted in minutes rather than counted down to the second —
 // the wireframe draws no timer — but it does keep up with the clock, and
 // says so plainly once the code has run out.
+// 2026-10-07, Claude Code (Opus 5), issue #112 (PR #149): the failures
+// that end a pending sign-up are matched by problem+json `type` URI
+// (PR #157 added them to the sign-up errors too) instead of by the
+// wording of `detail` — the durable fix this file's own comment asked
+// for. The two countdowns moved to the shared otpCountdown module, which
+// the profile page's code steps use as well; behaviour unchanged.
 // Author review: Leong Wei Zhi to review via the PR.
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ApiError, apiFetch, errorMessage } from '@/lib/api/http'
 import { Modal } from '@/shared/components/Modal'
 import { CodeInput } from './CodeInput'
+import { CODE_LENGTH, describeExpiry, emptyCode, useOtpCountdown } from '../otp'
+import {
+  EMAIL_TAKEN,
+  OTP_ATTEMPTS_EXCEEDED,
+  OTP_EXPIRED,
+  USERNAME_TAKEN,
+  problemType,
+} from '../problemTypes'
 import type { SignupAccepted, SignupPending } from '../types'
 
-const CODE_LENGTH = 6
 const CODE_FIELD_LABEL = 'Verification code'
-
-const emptyCode = () => Array<string>(CODE_LENGTH).fill('')
 
 // The verify failures that really end the pending sign-up: after these the
 // row is gone server-side (or needs a detail the form owns), so the dialog
@@ -38,34 +49,29 @@ const emptyCode = () => Array<string>(CODE_LENGTH).fill('')
 // blip, a wrong code — keeps the dialog, because the code in the inbox is
 // still good and the user can just try again (PR #150 review).
 //
-// Keyed on the sentences user-service/README.md documents, because a wrong
-// code and an unknown email are deliberately given the same answer there,
-// so the copy is the only signal. A machine-readable "type" in the
-// problem+json body is the durable fix; noted as a follow-up.
-const ENDS_THE_SIGNUP = [
-  'Code has expired; sign up again to get a new code',
-  'Email is already registered',
-  'Username is already taken',
-  // the row survives this one (its transaction rolls back), but the
-  // remedy is to change a field, and only the form has fields
-  'Email or username was just taken; choose another',
+// Matched on the problem+json `type` URIs user-service attaches (#92 /
+// PR #157), not on the `detail` sentence this used to compare: a wrong
+// code and an unknown email are deliberately given the same answer, so
+// the copy was the only signal available before, and copy may be reworded.
+const ENDING_TYPES = [
+  OTP_EXPIRED,
+  OTP_ATTEMPTS_EXCEEDED,
+  EMAIL_TAKEN,
+  USERNAME_TAKEN,
 ]
+
+// The one refusal still thrown untyped: AuthService's post-flush race,
+// where a concurrent sign-up took the email or username after the checks.
+// The remedy is to change a field, and only the form has fields. Giving it
+// a type is a one-line user-service follow-up; until then it is matched by
+// its sentence, as everything here used to be.
+const UNTYPED_ENDING_DETAIL = 'Email or username was just taken; choose another'
 
 function endsTheSignup(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false
-  // 429 on verify is the attempt limit, which discards the sign-up
-  return (
-    error.status === 429 ||
-    ENDS_THE_SIGNUP.includes(error.problem?.detail ?? '')
-  )
-}
-
-function describeExpiry(seconds: number): string {
-  if (seconds >= 60) {
-    const minutes = Math.round(seconds / 60)
-    return minutes === 1 ? '1 minute' : `${minutes} minutes`
-  }
-  return seconds === 1 ? '1 second' : `${seconds} seconds`
+  const type = problemType(error)
+  if (type) return ENDING_TYPES.includes(type)
+  return error.problem?.detail === UNTYPED_ENDING_DETAIL
 }
 
 interface OtpVerificationModalProps {
@@ -93,32 +99,15 @@ export function OtpVerificationModal({
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [resending, setResending] = useState(false)
-  const [now, setNow] = useState(() => Date.now())
 
   const code = digits.join('')
   const complete = code.length === CODE_LENGTH
-  const cooldown = Math.max(0, Math.ceil((pending.resendAt - now) / 1000))
-  const expiresIn = Math.max(0, Math.ceil((pending.expiresAt - now) / 1000))
-
-  // One pending timeout at a time, re-armed by its own state change — the
-  // pattern used elsewhere in web/ (features/user/components/UsersSection)
-  // and cleaned up for free, which matters here because the dialog
-  // unmounts on close, on success, and twice under StrictMode.
-  //
-  // It runs while either line is still moving. Keying it on the cooldown
-  // alone froze the expiry sentence the moment the cooldown ran out
-  // (PR #150 review) — the countdown stalled at whatever it read, usually
-  // "9 minutes", until the dialog was reopened. The cooldown needs
-  // per-second precision; the expiry is quoted in minutes, so on its own
-  // it doesn't deserve a ticking second hand.
-  useEffect(() => {
-    if (cooldown <= 0 && expiresIn <= 0) return
-    const timer = setTimeout(
-      () => setNow(Date.now()),
-      cooldown > 0 ? 1000 : 15000,
-    )
-    return () => clearTimeout(timer)
-  }, [cooldown, expiresIn])
+  // absolute times owned by the page, so a dialog closed and reopened
+  // later shows what is really left rather than restarting at 60s
+  const { cooldown, expiresIn } = useOtpCountdown(
+    pending.expiresAt,
+    pending.resendAt,
+  )
 
   const verify = async (event: React.SyntheticEvent) => {
     event.preventDefault()
@@ -166,14 +155,12 @@ export function OtpVerificationModal({
         resendAt: Date.now() + accepted.resendInSeconds * 1000,
       })
       setDigits(emptyCode())
-      setNow(Date.now())
       setNotice('A new code has been sent.')
     } catch (err: unknown) {
       // 429 means the cooldown had not elapsed after all (a stale tab, or
       // clock skew): the header says how long is left
       if (err instanceof ApiError && err.retryAfter) {
         onResent({ ...pending, resendAt: Date.now() + err.retryAfter * 1000 })
-        setNow(Date.now())
       }
       setError(errorMessage(err, 'Could not send a new code. Try again.'))
     } finally {
@@ -217,7 +204,7 @@ export function OtpVerificationModal({
           autoFocus
         />
         <p className="text-center text-xs text-gray-500">
-          {expiresIn > 0
+          {expiresIn
             ? `The code expires in ${describeExpiry(expiresIn)}.`
             : 'This code has expired — send a new one.'}
         </p>

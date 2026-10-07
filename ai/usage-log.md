@@ -26,6 +26,42 @@ Entry template:
 ```
 
 ---
+## 2026-10-07 — Leong Wei Zhi (#112 profile screens on #92's real endpoints)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** refactor (contract swap) + generate (the two new code steps)
+- **Scope:** `web`: `features/user/profileApi.ts` rewritten on the
+  endpoints PR #157 shipped and `profileApiMock.ts` + the
+  `VITE_MOCK_PROFILE_API` switch deleted; new `problemTypes.ts`,
+  `otpCountdown.ts`, `components/CodeStep.tsx` and
+  `components/EmailChangeModal.tsx`; `EditAccountCard`,
+  `ChangePasswordCard`, `ProfileDetailsCard`, `ProfileSection` and
+  `types.ts` updated; `OtpVerificationModal` now matches problem+json
+  type URIs instead of detail sentences; `routes/index.tsx` AdminRoute
+  wrapper restored; `test/profile.test.tsx` rewritten,
+  `test/auth.test.tsx` problem helper extended; `web/AGENTS.md`.
+- **Prompt(s):** Asked to plan and execute the swap of PR #149's
+  provisional contract for the one #92 (PR #157) actually shipped.
+  Design decided by the author via an options Q&A round (2026-10-07):
+  (1) Change Password drops the wireframe's Current Password field and
+  gains an OTP step, because the shipped `POST /users/me/password` takes
+  `{newPassword, confirmPassword, otp}` and has no `currentPassword`;
+  (2) the new-email confirmation is a modal, matching the sign-up
+  dialog, rather than a third phase inside the Edit card;
+  (3) the parked email change is snapshotted in localStorage, since
+  user-service has no GET for the row and a reload would otherwise cost
+  the user a fresh gate code; (4) all four ride-along follow-ups PR #157
+  listed were taken in this PR.
+- **Author review:** Deviations from `docs/wireframes/profile.png` are
+  recorded in `web/AGENTS.md` next to the wireframe. The tool flagged two
+  things found while swapping: this branch had flattened `/admin`'s
+  `AdminRoute` wrapper (restored — main's role gate from issue #147), and
+  one sign-up uniqueness refusal is still thrown untyped in
+  `AuthService`, so the dialog keeps a single sentence fallback and the
+  one-line user-service fix is left as a follow-up. Vitest (80 tests),
+  eslint and build clean; walked end to end against docker compose +
+  Mailpit; reviewed via pull request.
+
+---
 ## 2026-10-05 — Leong Wei Zhi (PR #157 Copilot review: Retry-After on exhaustion + spent-row docs)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor (review fixes: contract + docs)

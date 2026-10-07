@@ -4,17 +4,29 @@
 // flow, change password, delete account — against a spied profileApi,
 // following admin.test.tsx's harness (memory router over the real route
 // table, stored session seeded to pass ProtectedRoute).
+// 2026-10-07, Claude Code (Opus 5), issue #112 (PR #149): rewritten for
+// #92's real endpoints (PR #157) — the 202 email-change branch and its
+// dialog, the localStorage snapshot that survives a reload, the
+// problem+json type URIs that decide whether a card retries, amends or
+// restarts, and the password call's { newPassword, confirmPassword, otp }.
 // Reviewed by: [pending]
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
 import { profileApi } from '@/features/user/profileApi'
+import {
+  OTP_ATTEMPTS_EXCEEDED,
+  OTP_INVALID,
+  USERNAME_TAKEN,
+} from '@/features/user/problemTypes'
 import type { AdminUser } from '@/features/user/types'
+import { ApiError } from '@/lib/api/http'
 import { routes } from '../routes'
 
 const OTP = '000000'
+const NEW_EMAIL = 'e9999999@u.nus.edu'
 
 let me: AdminUser
 
@@ -24,6 +36,11 @@ function renderProfile() {
       router={createMemoryRouter(routes, { initialEntries: ['/profile'] })}
     />,
   )
+}
+
+// user-service's problem+json refusals, as apiFetch throws them.
+function refusal(status: number, detail: string, type?: string, wait?: number) {
+  return new ApiError(status, { status, detail, type }, wait ?? null)
 }
 
 beforeEach(() => {
@@ -41,14 +58,27 @@ beforeEach(() => {
   vi.spyOn(profileApi, 'getCurrentUser').mockImplementation(async () => ({
     ...me,
   }))
-  vi.spyOn(profileApi, 'requestOtp').mockResolvedValue(undefined)
+  vi.spyOn(profileApi, 'requestOtp').mockResolvedValue({
+    expiresInSeconds: 600,
+    resendInSeconds: 60,
+  })
   vi.spyOn(profileApi, 'updateAccount').mockImplementation(
     async (changes, otp) => {
-      if (otp !== OTP) throw new Error('Invalid or expired OTP.')
+      if (otp !== OTP) throw refusal(400, 'Invalid code', OTP_INVALID)
       me = { ...me, ...changes }
-      return { ...me }
+      return { kind: 'applied', user: { ...me } }
     },
   )
+  vi.spyOn(profileApi, 'verifyEmailChange').mockImplementation(async () => {
+    me = { ...me, email: NEW_EMAIL }
+    return { ...me }
+  })
+  vi.spyOn(profileApi, 'resendEmailChange').mockResolvedValue({
+    user: { ...me },
+    email: NEW_EMAIL,
+    expiresInSeconds: 600,
+    resendInSeconds: 60,
+  })
   vi.spyOn(profileApi, 'changePassword').mockResolvedValue(undefined)
   vi.spyOn(profileApi, 'deleteAccount').mockResolvedValue(undefined)
 })
@@ -57,19 +87,32 @@ afterEach(() => {
   localStorage.clear()
 })
 
+// Both cards carry a "Verify & Continue" button and a set of code boxes,
+// so every interaction is scoped to the card it belongs to.
+const card = (heading: string) =>
+  within(screen.getByRole('heading', { name: heading }).closest('section')!)
+
+const editCard = () => card('Edit Account Info')
+const passwordCard = () => card('Change Password')
+
 async function openEditCard(user: ReturnType<typeof userEvent.setup>) {
   renderProfile()
-  await user.click(
-    await screen.findByRole('button', { name: 'Edit Profile' }),
-  )
-  return screen.getByRole('textbox', { name: 'Desired Username' })
+  await user.click(await screen.findByRole('button', { name: 'Edit Profile' }))
+  return editCard().getByRole('textbox', { name: 'Desired Username' })
 }
 
-async function typeOtp(user: ReturnType<typeof userEvent.setup>, otp: string) {
-  for (let i = 0; i < otp.length; i++) {
-    await user.type(screen.getByLabelText(`OTP digit ${i + 1}`), otp[i])
-  }
+// the boxes advance focus themselves, so one keyboard burst fills them
+async function typeCode(
+  user: ReturnType<typeof userEvent.setup>,
+  code: string,
+  scope: { getByLabelText: typeof screen.getByLabelText },
+) {
+  await user.click(scope.getByLabelText('Digit 1 of 6'))
+  await user.keyboard(code)
 }
+
+const snapshot = () =>
+  JSON.parse(localStorage.getItem('pendingEmailChange') ?? 'null')
 
 describe('profile page', () => {
   it('redirects to the login page without a session', async () => {
@@ -89,9 +132,7 @@ describe('profile page', () => {
   })
 
   it('shows an error when the profile fails to load', async () => {
-    vi.mocked(profileApi.getCurrentUser).mockRejectedValue(
-      new Error('boom'),
-    )
+    vi.mocked(profileApi.getCurrentUser).mockRejectedValue(new Error('boom'))
     renderProfile()
     expect(await screen.findByRole('alert')).toHaveTextContent('boom')
   })
@@ -104,11 +145,13 @@ describe('edit account info', () => {
 
     await user.clear(usernameInput)
     await user.type(usernameInput, 'utown_runner')
-    await user.click(screen.getByRole('button', { name: 'Verify & Continue' }))
+    await user.click(
+      editCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
     expect(profileApi.requestOtp).toHaveBeenCalled()
 
-    await typeOtp(user, OTP)
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await typeCode(user, OTP, editCard())
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
 
     await waitFor(() =>
       expect(
@@ -125,32 +168,134 @@ describe('edit account info', () => {
   it('rejects verification when nothing changed', async () => {
     const user = userEvent.setup()
     await openEditCard(user)
-    await user.click(screen.getByRole('button', { name: 'Verify & Continue' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    await user.click(
+      editCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+    expect(await editCard().findByRole('alert')).toHaveTextContent(
       'Nothing to change.',
     )
     expect(profileApi.requestOtp).not.toHaveBeenCalled()
   })
 
-  it('shows the server error when saving fails', async () => {
+  it('reuses the still-live code when a username is refused as taken', async () => {
     const user = userEvent.setup()
-    vi.mocked(profileApi.updateAccount).mockRejectedValue(
-      new Error('Username is already taken.'),
+    vi.mocked(profileApi.updateAccount).mockRejectedValueOnce(
+      refusal(400, 'Username is already taken', USERNAME_TAKEN),
     )
     const usernameInput = await openEditCard(user)
 
     await user.clear(usernameInput)
     await user.type(usernameInput, 'taken_name')
-    await user.click(screen.getByRole('button', { name: 'Verify & Continue' }))
-    await typeOtp(user, OTP)
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(
+      editCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+    await typeCode(user, OTP, editCard())
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Username is already taken.',
+    // the refusal rolled the gate code's consumption back with it, so the
+    // card edits again holding a code that still works
+    expect(await editCard().findByRole('alert')).toHaveTextContent(
+      'Username is already taken',
     )
     expect(
-      screen.getByRole('heading', { name: 'Edit Account Info' }),
+      screen.getByRole('textbox', { name: 'Desired Username' }),
+    ).toBeEnabled()
+    expect(
+      editCard().getByText(/still valid — Save to use it again/),
     ).toBeInTheDocument()
+
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(profileApi.requestOtp).toHaveBeenCalledTimes(1))
+    expect(profileApi.updateAccount).toHaveBeenLastCalledWith(
+      { username: 'taken_name' },
+      OTP,
+    )
+  })
+
+  it('sends the card back and quotes the wait once the attempts are spent', async () => {
+    const user = userEvent.setup()
+    vi.mocked(profileApi.updateAccount).mockRejectedValue(
+      refusal(429, 'Too many incorrect codes', OTP_ATTEMPTS_EXCEEDED, 45),
+    )
+    const usernameInput = await openEditCard(user)
+
+    await user.clear(usernameInput)
+    await user.type(usernameInput, 'utown_runner')
+    await user.click(
+      editCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+    await typeCode(user, OTP, editCard())
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
+
+    expect(await editCard().findByRole('alert')).toHaveTextContent(
+      'Too many incorrect codes',
+    )
+    const retry = await editCard().findByRole('button', {
+      name: /Try again in \d+s/,
+    })
+    expect(retry).toBeDisabled()
+  })
+
+  it('parks an email change and applies it from the confirm dialog', async () => {
+    const user = userEvent.setup()
+    vi.mocked(profileApi.updateAccount).mockResolvedValueOnce({
+      kind: 'emailPending',
+      pending: {
+        user: { ...me },
+        email: NEW_EMAIL,
+        expiresInSeconds: 600,
+        resendInSeconds: 60,
+      },
+    })
+    await openEditCard(user)
+
+    const emailInput = editCard().getByRole('textbox', { name: 'NUS Email' })
+    await user.clear(emailInput)
+    await user.type(emailInput, NEW_EMAIL)
+    await user.click(
+      editCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+    await typeCode(user, OTP, editCard())
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
+
+    const dialog = within(
+      await screen.findByRole('dialog', { name: 'Confirm New Email' }),
+    )
+    expect(dialog.getByText(new RegExp(NEW_EMAIL))).toBeInTheDocument()
+    expect(snapshot().email).toBe(NEW_EMAIL)
+
+    await typeCode(user, OTP, dialog)
+    await user.click(dialog.getByRole('button', { name: 'Verify & Apply' }))
+
+    expect(await screen.findByText(NEW_EMAIL)).toBeInTheDocument()
+    expect(profileApi.verifyEmailChange).toHaveBeenCalledWith(OTP)
+    expect(snapshot()).toBeNull()
+  })
+
+  it('still offers the code step after a reload mid-confirm', async () => {
+    const user = userEvent.setup()
+    // user-service has no GET for the parked row, so the page remembers it
+    localStorage.setItem(
+      'pendingEmailChange',
+      JSON.stringify({
+        email: NEW_EMAIL,
+        expiresAt: Date.now() + 600_000,
+        resendAt: Date.now() + 60_000,
+      }),
+    )
+    renderProfile()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Enter your code' }),
+    )
+    const dialog = within(
+      screen.getByRole('dialog', { name: 'Confirm New Email' }),
+    )
+    await typeCode(user, OTP, dialog)
+    await user.click(dialog.getByRole('button', { name: 'Verify & Apply' }))
+
+    expect(await screen.findByText(NEW_EMAIL)).toBeInTheDocument()
+    expect(profileApi.updateAccount).not.toHaveBeenCalled()
   })
 
   it('discards changes on cancel', async () => {
@@ -158,7 +303,7 @@ describe('edit account info', () => {
     const usernameInput = await openEditCard(user)
     await user.clear(usernameInput)
     await user.type(usernameInput, 'someone_else')
-    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(editCard().getByRole('button', { name: 'Cancel' }))
 
     expect(
       screen.queryByRole('heading', { name: 'Edit Account Info' }),
@@ -170,52 +315,72 @@ describe('edit account info', () => {
 describe('change password', () => {
   async function fillPasswords(
     user: ReturnType<typeof userEvent.setup>,
-    current: string,
     next: string,
     confirm: string,
   ) {
-    await user.type(screen.getByLabelText('Current Password'), current)
-    await user.type(screen.getByLabelText('New Password'), next)
-    await user.type(screen.getByLabelText('Confirm New Password'), confirm)
-    await user.click(screen.getByRole('button', { name: 'Update Password' }))
+    await user.type(passwordCard().getByLabelText('New Password'), next)
+    await user.type(
+      passwordCard().getByLabelText('Confirm New Password'),
+      confirm,
+    )
+    await user.click(
+      passwordCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
   }
 
   it('blocks mismatched passwords without calling the API', async () => {
     const user = userEvent.setup()
     renderProfile()
     await screen.findByText('nus_courier_99')
-    await fillPasswords(user, 'OldPassword1', 'NewPassword1', 'Different1')
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    await fillPasswords(user, 'NewPassword1', 'Different1')
+    expect(await passwordCard().findByRole('alert')).toHaveTextContent(
       'New passwords do not match.',
     )
-    expect(profileApi.changePassword).not.toHaveBeenCalled()
+    expect(profileApi.requestOtp).not.toHaveBeenCalled()
   })
 
-  it('updates the password and clears the form', async () => {
+  it('sends the confirmation and the code to the server', async () => {
     const user = userEvent.setup()
     renderProfile()
     await screen.findByText('nus_courier_99')
-    await fillPasswords(user, 'OldPassword1', 'NewPassword1', 'NewPassword1')
+    await fillPasswords(user, 'NewPassword1', 'NewPassword1')
+    expect(profileApi.requestOtp).toHaveBeenCalled()
 
-    expect(await screen.findByText('Password updated.')).toBeInTheDocument()
-    expect(profileApi.changePassword).toHaveBeenCalledWith(
-      'OldPassword1',
-      'NewPassword1',
+    await typeCode(user, OTP, passwordCard())
+    await user.click(
+      passwordCard().getByRole('button', { name: 'Update Password' }),
     )
-    expect(screen.getByLabelText('New Password')).toHaveValue('')
+
+    expect(
+      await passwordCard().findByText('Password updated.'),
+    ).toBeInTheDocument()
+    // the double-entry check is the server's (F2.1.4), so the confirmation
+    // travels with the request instead of dying in the form
+    expect(profileApi.changePassword).toHaveBeenCalledWith(
+      'NewPassword1',
+      'NewPassword1',
+      OTP,
+    )
+    expect(passwordCard().getByLabelText('New Password')).toHaveValue('')
   })
 
-  it('shows the server error when the update fails', async () => {
+  it('keeps the code step when the code is wrong', async () => {
     const user = userEvent.setup()
     vi.mocked(profileApi.changePassword).mockRejectedValue(
-      new Error('Current password is incorrect.'),
+      refusal(400, 'Invalid verification code', OTP_INVALID),
     )
     renderProfile()
     await screen.findByText('nus_courier_99')
-    await fillPasswords(user, 'WrongPassword1', 'NewPassword1', 'NewPassword1')
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Current password is incorrect.',
+    await fillPasswords(user, 'NewPassword1', 'NewPassword1')
+    await typeCode(user, OTP, passwordCard())
+    await user.click(
+      passwordCard().getByRole('button', { name: 'Update Password' }),
     )
+
+    expect(await passwordCard().findByRole('alert')).toHaveTextContent(
+      'Invalid verification code',
+    )
+    expect(passwordCard().getByLabelText('Digit 1 of 6')).toBeInTheDocument()
   })
 })
 
@@ -247,9 +412,7 @@ describe('delete account', () => {
   it('deletes the account and ends the session', async () => {
     const user = userEvent.setup()
     await openDeleteModal(user)
-    await user.click(
-      screen.getByRole('button', { name: 'Delete My Account' }),
-    )
+    await user.click(screen.getByRole('button', { name: 'Delete My Account' }))
 
     // Logging out from a protected page lands on the login page:
     // ProtectedRoute's redirect wins over logout()'s navigation home
@@ -265,9 +428,7 @@ describe('delete account', () => {
     const user = userEvent.setup()
     vi.mocked(profileApi.deleteAccount).mockRejectedValue(new Error('boom'))
     const dialog = await openDeleteModal(user)
-    await user.click(
-      screen.getByRole('button', { name: 'Delete My Account' }),
-    )
+    await user.click(screen.getByRole('button', { name: 'Delete My Account' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('boom')
     expect(dialog).toBeInTheDocument()
