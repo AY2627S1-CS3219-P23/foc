@@ -62,19 +62,138 @@ service. Its state lives only in its own PostgreSQL database (database-per-servi
 | **Expiry and redistribution scheduler** (Spring Boot, `@Scheduled`) | Move earned credits older than 3 months into the common pool (F6.1). At the start of each month, it shares the pool equally in integer amounts (F6.1.1) and gives the remainder to random users. (F6.1.2). |
 | **Credit Database** (PostgreSQL) | Holds credit accounts, held credits records, credit lots, common pool and history. |
 
-## Entities (fields required by the decisions above)
-
-Each field exists because a decision or requirement demands it:
-
-| Entity | Key fields | Why it must be present |
+## Database
+ 
+### Choice: relational (PostgreSQL)
+ 
+| What the Credit Service needs | Why a relational database fits |
+| --- | --- |
+| **Multi-row atomic updates** A transfer changes two accounts, one reservation, a credit lot, two history rows, and nothing if any part fails (F5.1, NFR2.1). | One ACID transaction spans all of those rows and tables. |
+| **Safe concurrent updates** Two requests from the same requester, or a duplicate completion event, must not overdraw or pay twice (F2.1.2, NFR2.2). | `SELECT … FOR UPDATE` makes competing operations on the same account or reservation run one after the other. |
+| **Strong consistency on reads** A user who has just reserved credits must see the reduced balance (F4.1). | Reads see committed data immediately. |
+| **The queries** Balance by user, history by user filtered by amount or date range (F4.1.2, F4.1.3); lots by owner in expiry order; lots past their expiry. | All are simple indexed lookups and range scans on structured rows.  |
+ 
+### Schema
+ 
+User and request IDs are stored as opaque strings, since they belong to
+other services. All amounts are integers (F1.2).
+ 
+```mermaid
+erDiagram
+    credit_account ||--o{ credit_reservation : "requester of"
+    credit_account ||--o{ credit_lot : owns
+    credit_account ||--o{ credit_history : "has"
+    credit_reservation ||--o{ credit_reservation_slice : "taken from"
+ 
+    credit_account {
+        varchar user_id PK
+        integer available "CHECK >= 0"
+        integer reserved "CHECK >= 0"
+        timestamptz created_at
+    }
+    credit_reservation {
+        varchar request_ref PK "the order's ID"
+        varchar requester_id FK
+        varchar courier_id FK "null until transfer"
+        integer amount
+        varchar status "HELD, REJECTED, TRANSFERRED, RELEASED"
+        timestamptz created_at
+        timestamptz settled_at "null while HELD"
+    }
+    credit_reservation_slice {
+        bigint id PK
+        varchar request_ref FK
+        integer amount
+        timestamptz earned_at
+        timestamptz expires_at "null = never"
+    }
+    credit_lot {
+        bigint id PK
+        varchar owner_id FK
+        integer remaining "CHECK > 0"
+        timestamptz earned_at
+        timestamptz expires_at "null = never"
+    }
+    credit_history {
+        bigint id PK
+        varchar user_id FK
+        varchar type
+        integer amount "CHECK > 0"
+        varchar request_ref "null if not for a request"
+        timestamptz occurred_at
+    }
+    common_pool {
+        smallint id PK "always 1"
+        integer balance "CHECK >= 0"
+    }
+    redistribution_run {
+        char period PK "e.g. 2026-10"
+        integer distributed
+        integer remainder
+        timestamptz ran_at
+    }
+    outbox_event {
+        uuid event_id PK
+        varchar event_type
+        text payload
+        timestamptz created_at
+        timestamptz sent_at "null = not yet published"
+    }
+```
+ 
+| Table (entity) | Represents | Why  |
 | --- | --- | --- |
-| `CreditAccount` | `userId` (unique), `available`, `reserved` | (F4.1, F1.1.1–F1.1.2) Unique user ID allows for idempotent provisioning (get-or-create) |
-| `Reserved` | `requestRef` (unique), `requesterId`, `courierId` (set at transfer), `amount`, `status` (`HELD` / `REJECTED` / `TRANSFERRED` / `RELEASED`), lot slices the amount came from (amount, `earnedAt`, `expiresAt` of each lot the amount came from) | OOne record per request makes duplicates and release-versus-transfer conflicts detectable (D3, NFR2.2.1). `REJECTED` records a refusal, so a redelivered `request.submitted` cannot be approved the second time. The slices let a release return credits with their original expiry (D4). |
-| `CreditLot` | `lotId`, `ownerId`, `remaining`, `earnedAt`, `expiresAt` (nullable) | FIFO spending and 3-month expiry (F6.1). Nullable expiry lets a non-expiring lot exist (eg. for sign up credits that should not expire) |
-| Common pool | single system row: `balance` | Holds expired credits until redistribution (F6.1–F6.1.2) |
-| `CreditHistoryEntry` | `id`, `userId`, `type`, `amount`, `requestRef` (null for non-request events), `timestamp` | F4.1.1 (record), F4.1.2–F4.1.3 (history and filters); a transfer writes one row per affected account |
-| `RedistributionRun` | `period` (unique, e.g. `2026-10`), `distributed`, `remainder` | Monthly redistribution of credits |
-| `OutboxEvent` | `eventId`, `eventType`, `payload`, `createdAt`, `sentAt` (nullable) | A reply that is committed with the balance change cannot be lost if the service crashes before publishing (D10). |
+| `credit_account` (`CreditAccount`) | **A user's credit balances.** One row per user. | The primary key on `user_id` makes get-or-create happen once per user (D6). `available` and `reserved` are columns so that the balance read is one row and the non-negative rule is a `CHECK` (F2.1.2). |
+| `credit_reservation` (`Reserved`) | **The reservation for one order.** One row per request. | The primary key on `request_ref` is the duplicate check (D3, NFR2.2.1). `status` records the outcome; `REJECTED` records a refusal so a redelivery gets the same answer. `courier_id` is filled in at transfer. |
+| `credit_reservation_slice` | Which lots a reservation's credits came from. | Lets a release return credits with their original expiry (D4). |
+| `credit_lot` (`CreditLot`) | A user's available credits, split by expiry date. | Needed for 3-month expiry (F6.1). A null `expires_at` marks the sign-up credits, which never expire. A row is deleted when spent to zero. |
+| `credit_history` (`CreditHistoryEntry`) | **The record of every credit operation.** Append-only. | One row per affected account per operation (F4.1.1). `amount` is always positive and `type` says which way it moved. Indexed by user and time for the history view (F4.1.2, F4.1.3). |
+| `common_pool` | Expired credits awaiting redistribution. | A single row, enforced by `CHECK (id = 1)` (F6.1). |
+| `redistribution_run` (`RedistributionRun`) | Months already redistributed. | The primary key on `period` lets only one run per month commit (F6.1.1). |
+| `outbox_event` (`OutboxEvent`) | Replies waiting to be published. | Written in the same transaction as the balance change (D10). |
+ 
+History `type` values and what each does to the account's balances:
+ 
+| Type | `available` | `reserved` |
+| --- | --- | --- |
+| `PROVISION` | + amount | |
+| `RESERVE` | − amount | + amount |
+| `RELEASE` | + amount | − amount |
+| `TRANSFER_OUT` (requester) | | − amount |
+| `TRANSFER_IN` (courier) | + amount | |
+| `EXPIRY` | − amount | |
+| `REDISTRIBUTION` | + amount | |
+ 
+### How available, reserved and total are stored
+ 
+- **Available** and **reserved** are two integer columns on the user's
+  `credit_account` row.
+- **Total is not stored.** It is always `available + reserved`, computed
+  when read.
+- Reserving moves an amount from `available` to `reserved` in a single
+  `UPDATE` of one row, so the total is unchanged by construction.
+`available` and `reserved` could be derived by summing lots and held
+reservations instead. 
+ 
+### How their consistency is maintained
+ 
+1. **One transaction per operation.** The account row, the reservation,
+   the lots, the history rows and any outgoing reply are written
+   together or not at all (F5.1, NFR2.1).
+2. **Row locks in a fixed order** (D2): reservation, then accounts by
+   ascending user ID, then the common pool. Concurrent operations on the
+   same rows queue up instead of reading stale balances.
+3. **Database constraints.** A negative balance, a second reservation
+   for the same request, a held reservation with no amount, or a
+   transfer with no courier is rejected by PostgreSQL even if the
+   service code is wrong.
+4. **Two invariants** that every operation preserves, and that can be
+   checked at any time (both queries must return no rows)
+5. **The history is an independent second record.** Replaying a user's
+   history rows with the table above reproduces their `available` and
+   `reserved`, so the two can be reconciled against each other. Across
+   all users, `sum(available + reserved) + common_pool.balance` equals
+   the sum of all `PROVISION` rows
 
 ## Diagram legend
 
