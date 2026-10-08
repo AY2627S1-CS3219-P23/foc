@@ -59,6 +59,8 @@
   hijack a pending sign-up; resend cooldown) by Claude Code (Opus 5); and
   again for its re-review fixes and the web sign-up OTP screen (issue
   #109) by Claude Code (Opus 5).
+  2026-09-30: AI Use Summary extended for the user-service account-update
+  flows (issue #92) by Claude Code (Fable 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -350,7 +352,17 @@ neutral-options Q&A and recorded in `ai/usage-log.md`.
 opt-in demo-account seeder for user-service (`USER_SEED_DEMO`: 1
 owner, 3 admins, 100 users), with the mechanism, the off-by-default
 flag and per-role passwords decided by the team and recorded in
-`ai/usage-log.md`.
+`ai/usage-log.md`; and the user-service account-update flows
+(issue #92) — a gate code emailed to the account's current address
+before any change, `PATCH /users/me` as an allow-list DTO (username
+applies at once, an email change parks in `pending_email_changes`
+until a second code sent to the new address is verified), an
+OTP-gated password change with server-side double-entry and the
+sign-up policy re-checked, machine-readable problem+json `type` URIs
+on the OTP errors (sign-up's included), the V4/V5 migrations, purge
+sweeps, and unit and integration tests, with the scope, endpoint
+shapes, gating and response choices made by the author via
+neutral-options Q&A and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

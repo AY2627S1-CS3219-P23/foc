@@ -51,6 +51,120 @@ Entry template:
   The tool made no contract decisions. `./mvnw test` passes in
   `foc-contracts`. 
 
+## 2026-10-05 — Leong Wei Zhi (PR #157 Copilot review: Retry-After on exhaustion + spent-row docs)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (review fixes: contract + docs)
+- **Scope:** `user-service/` — the Copilot findings on the spent-row
+  follow-up. (1) The attempts-exceeded 429 now carries `Retry-After`:
+  the exhausted row survives as spent and its replacement waits out the
+  resend cooldown, so there is a real wait to quote (0 = request now).
+  `OtpAttemptsExceededException` carries the remaining cooldown
+  (`OtpResendTooSoonException`'s pattern), set at every throw site from
+  the row's `lastSentAt`; `ProblemDetailAdvice` emits the header.
+  (2) Docs caught up with the spent lifecycle: `ProblemTypes`'
+  attempts-exceeded description no longer claims the operation was
+  discarded, and the `AccountUpdateService` javadoc/comments that said a
+  spent row "stays deleted" now describe the persisted-spent,
+  cooldown-gated state. README's type table mentions the header.
+- **Prompt(s):** (summary) Asked to address the latest Copilot comments
+  on the PR (three "previously missed" findings; the two threads the
+  overview lists as open were fixed in earlier commits and await
+  resolution on GitHub).
+- **Author review:** Full suite green (299 tests); the exhaustion 429s
+  now pin Retry-After in both cooldown regimes (0 in the shared yaml,
+  present at the real 60s), and the service tests pin the quoted
+  seconds. Reviewed via pull request.
+
+## 2026-10-05 — Leong Wei Zhi (PR #157 Copilot re-review: spent-row takeover + stale-email send)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (review fixes + tests)
+- **Scope:** `user-service/` — the Copilot review of the spent-row
+  change, two findings. (1) Treating a spent pending sign-up as
+  dead-and-takeable resurrected the PR #150 hijack: `/auth/signup/verify`
+  is anonymous, so anyone could burn a stranger's pending row with 5
+  wrong guesses, wait out the cooldown, and replace it with their own
+  password. A spent row now revives only for a repeat of its own request
+  (`PendingSignup.reviveSpent`: fresh code and attempt budget, original
+  expiry kept so the row's life stays bounded — no forever-hold); anyone
+  else keeps the 409 until expiry. (2) `requestOtp` read the user row
+  unlocked, so a concurrent email-change verify could commit between the
+  read and the SMTP send, mailing a live gate code to the address the
+  account just left (F2.1.1). All five account-update flows now take a
+  `PESSIMISTIC_WRITE` lock on the caller's user row first
+  (`getActiveUserWithLock`), one consistent lock order (user, then
+  gate/pending rows) so the flows serialize without deadlock.
+- **Prompt(s):** (summary) Asked to address the latest Copilot comments
+  on the PR. The sign-up spent-row shape (same-request revival with the
+  original expiry, over freezing the row until expiry) decided by
+  Leong Wei Zhi via options Q&A; the tool flagged that Copilot's literal
+  suggestion (spent rows take the expired branch for the same requester)
+  would have reintroduced the PR #150 forever-hold, hence the kept expiry.
+- **Author review:** Full suite green (299 tests, 1 new: a spent row
+  with other details stays 409; the takeover test became the
+  same-request revival case). Reviewed via pull request.
+
+## 2026-10-05 — Leong Wei Zhi (PR #157 review: spent OTP rows + combined-PATCH race)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor (review fixes + tests + docs)
+- **Scope:** `user-service/` — @Sinnez1's PR #157 review, two fixes.
+  (1) The guess that exhausts `OTP_MAX_ATTEMPTS` keeps its row as
+  **spent** instead of deleting it, in all three OTP tables (gate codes,
+  pending sign-ups, pending email changes): deleted, the next request
+  found no `lastSentAt`, skipped the resend cooldown, and minted a fresh
+  code and attempt budget at once — unlimited guesses and inbox
+  flooding on a stolen JWT. A spent row refuses everything (sign-up's
+  verify answers it like no row at all, same message and BCrypt cost, so
+  nothing new is revealed) and is taken over like an expired one once
+  the cooldown passes. (2) `updateAccount` flushes a username change
+  through its typed catch before the email branch's uniqueness query
+  auto-flushes the dirty row, so losing a username race in a combined
+  username+email PATCH answers the documented `username-taken` 400
+  instead of an unhandled 500. README's OTP sections updated; the two
+  account-update test classes now clear their FK'd OTP tables after each
+  test since spent rows survive. Also merged `main` into the branch
+  (conflict in this log: both sides' entries kept).
+- **Prompt(s):** (summary) Asked to resolve the latest PR #157 review
+  comments and fix the merge conflict. The exhaustion shape
+  (spent-until-cooldown over spent-until-TTL or delete-plus-separate-
+  timestamp) and the scope (all three OTP flows, not just the two the
+  review named) decided by Leong Wei Zhi via options Q&A.
+- **Author review:** Full suite green (298 tests, 11 new — including
+  end-to-end regressions in both real-cooldown classes pinning that
+  exhaustion no longer bypasses the cooldown). Reviewed via pull request.
+
+## 2026-09-30 — Leong Wei Zhi (#92 account update flows)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `user-service/` — the F2 account-update flows:
+  `POST /users/me/otp` (gate code to the current email, F2.1.1),
+  `PATCH /users/me` (allow-list DTO — username applies, email parks in
+  the new `pending_email_changes` table with a code to the new address,
+  F2.1.2/F2.1.3), `POST /users/me/email/verify` + `/email/resend`,
+  `POST /users/me/password` (server-side double-entry + policy re-check,
+  F2.1.4/F2.1.5). New `AccountUpdateOtp`/`PendingEmailChange` entities +
+  repos, `AccountUpdateService`, V4/V5 migrations, SecurityConfig route
+  lines, purge sweeps, and problem+json `type` URIs on the OTP errors
+  (the three OTP handlers moved from `AuthController` to
+  `ProblemDetailAdvice`). Tests: `AccountUpdateControllerTest` (29),
+  `AccountUpdateResendCooldownTest` (2), `AccountUpdateServiceTest` (10),
+  plus purge/Flyway/auth/admin suites updated. README section.
+- **Prompt(s):** Asked to plan and resolve #92. Contract decisions made
+  by the author via two AskUserQuestion options rounds (options
+  presented neutrally, no recommendations): backend-only scope; password
+  change on its own OTP-gated endpoint with no `currentPassword`;
+  double-entry checked server-side too; the gate code carried in the
+  mutating request (verify-and-apply in one call); username+email may
+  combine in one PATCH; a parked email change answers 202 with the OTP
+  timings; machine-readable problem `type` URIs in scope including the
+  existing sign-up errors. The tool flagged `POST /users/me/email/resend`
+  as the one route beyond the decided list (mechanically required: the
+  gate code is consumed when the change parks) for author veto at
+  review. OTP semantics reuse the PR #150 decisions (single table per
+  operation, resend keeps expiry and attempts, discard-if-taken at
+  verify) rather than re-deciding them.
+- **Author review:** Full suite green (280 tests, 43 new); manual
+  Mailpit run of all five routes. Reviewed via pull request.
+
 ## 2026-09-30 — Ryan Ang (admin dashboard: Users section only)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor (removal + tests + docs)
@@ -2114,3 +2228,44 @@ Entry template:
 - **Author review:** Requirements, priorities, allocation, and tech stack
   were decided by the team beforehand (D1 document/presentation); the tool
   transcribed and formatted them. Output reviewed via pull requests.
+
+## 2026-10-05 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** debugging assistance, implementation (unit test)
+- **Prompt(s):** Asked to fix supplier category storage: sync
+  `Suppliers.category` on create/update (categories joined with `/`),
+  capitalise category names on save (`Food`/`food`/`fOOD` -> `Food`), and
+  refresh the category filter after a save. Issue #160, branch
+  `fix/supplier-category-sync`.
+- **Scope:** `supplier-service` `SupplierService` (save/create/update),
+  `SupplierCategories` (new `normalizeCategory` helper), `SuppliersSeeder`
+  (same normalisation), new `SupplierCategoriesTest`; `web`
+  `suppliers.tsx` (category effect re-runs on `refreshKey`).
+- **Author review:** Required the team-decided format (`/`-joined names,
+  first-letter capitalisation) beforehand; the schema of
+  `SupplierCategories` and whether `Suppliers.category` stays were left to
+  * the team and are not changed here. Backend tests pass (42, Java 21 via
+  Docker); web `tsc` passes. Pending author review of the diff.
+
+## 2026-10-07 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** refactoring, implementation
+- **Prompt(s):** Asked to apply PR #161 review feedback (LeongWZ): write
+  `null` rather than `""` to `Suppliers.category` when a supplier has no
+  categories, reject `/` in category names, and set the flat column before
+  `save()` to avoid a second UPDATE per create.
+- **Scope:** `supplier-service` `SupplierService` (categories normalised and
+  validated before save; flat column set in `applyRequest`), new
+  `InvalidCategoryException`, `SupplierController` (400 handler).
+- **Author review:** Rejecting `/` in category names is a validation-rule
+  choice made by the author. Pending author review of the diff.
+
+## 2026-10-07 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** debugging assistance
+- **Prompt(s):** Asked to apply PR #161 review feedback (LeongWZ): guard
+  `SuppliersSeeder` against a null `Suppliers.category` (empty CSV `Type`
+  cell) so seeding doesn't throw an NPE and abort startup.
+- **Scope:** `supplier-service` `SuppliersSeeder` (null check around the
+  category split loop).
+- **Author review:** Pending author review of the diff.

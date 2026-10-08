@@ -30,6 +30,9 @@ Scope: POST /auth/signup (issue #87) and POST /auth/login (issues #89/#90),
        request (which used to be silently merged, a hijack), and 429 with
        Retry-After when a resend is inside the cooldown.
 Author review: Leong Wei Zhi to review via the PR.
+2026-09-30 (Claude Code, Fable 5), issue #92: the three OTP handlers moved
+to ProblemDetailAdvice, shared with the account-update routes (same statuses,
+same details; they now also carry problem+json type URIs).
 */
 
 package foc.user.controller;
@@ -56,9 +59,6 @@ import foc.user.dto.SignupVerifyRequest;
 import foc.user.dto.UserResponse;
 import foc.user.exception.AccountLockedException;
 import foc.user.exception.LoginFailedException;
-import foc.user.exception.OtpAttemptsExceededException;
-import foc.user.exception.OtpResendTooSoonException;
-import foc.user.exception.OtpVerificationException;
 import foc.user.service.AuthService;
 import jakarta.validation.Valid;
 
@@ -112,28 +112,6 @@ public class AuthController {
     // the standard defines for it
     @ExceptionHandler(AccountLockedException.class)
     public ResponseEntity<ProblemDetail> handleAccountLocked(AccountLockedException e) {
-        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-            .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
-            .body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage()));
-    }
-
-    @ExceptionHandler(OtpVerificationException.class)
-    public ProblemDetail handleOtpVerification(OtpVerificationException e) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
-    }
-
-    // 429 like the login lockout (issue #145 precedent), but without
-    // Retry-After: waiting won't help — the pending sign-up is discarded
-    // and the remedy is signing up again for a fresh code
-    @ExceptionHandler(OtpAttemptsExceededException.class)
-    public ProblemDetail handleOtpAttemptsExceeded(OtpAttemptsExceededException e) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
-    }
-
-    // 429 with Retry-After, the lockout's shape: here waiting is exactly
-    // the remedy, and the wait is seconds, so the SPA can count it down
-    @ExceptionHandler(OtpResendTooSoonException.class)
-    public ResponseEntity<ProblemDetail> handleOtpResendTooSoon(OtpResendTooSoonException e) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
             .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
             .body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage()));

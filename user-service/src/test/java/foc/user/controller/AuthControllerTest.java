@@ -30,6 +30,13 @@ Scope: integration tests for POST /auth/signup and POST /auth/login
        identifier-taken case now also proves the email is released, and the
        202 body carries resendInSeconds for the SPA's resend button.
 Author review: Leong Wei Zhi to review via the PR.
+2026-09-30, Claude Code (Fable 5), issue #92: the OTP failures now carry
+problem+json type URIs (handlers shared via ProblemDetailAdvice), so the
+OTP cases pin $.type alongside the unchanged details.
+2026-10-05 (Claude Code, Fable 5), PR #157 review (@Sinnez1): exhaustion
+now keeps an OTP row as spent instead of deleting it, so the resend
+cooldown still gates the next code — exhaustion/takeover tests updated
+and cooldown-bypass regressions added.
 */
 
 package foc.user.controller;
@@ -213,13 +220,14 @@ class AuthControllerTest extends PostgresTestContainer {
         verifySignup("e1234567@u.nus.edu", wrong)
             .andExpect(status().isBadRequest())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-invalid"))
             .andExpect(jsonPath("$.detail").value("Invalid verification code"));
 
         verifySignup("e1234567@u.nus.edu", code).andExpect(status().isCreated());
     }
 
     @Test
-    @DisplayName("The fifth wrong code discards the pending sign-up with a 429; re-signing up recovers")
+    @DisplayName("The fifth wrong code spends the pending sign-up with a 429; re-signing up recovers")
     void signup_attemptsExhausted() throws Exception {
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isAccepted());
         String code = emailedCode("e1234567@u.nus.edu");
@@ -230,15 +238,26 @@ class AuthControllerTest extends PostgresTestContainer {
         }
         verifySignup("e1234567@u.nus.edu", wrong)
             .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-attempts-exceeded"))
+            // Retry-After quotes the cooldown left before a re-sign-up may
+            // replace the spent row — 0 here, the test yaml's cooldown
+            // (PR #157 Copilot review)
+            .andExpect(header().string(HttpHeaders.RETRY_AFTER, "0"))
             .andExpect(jsonPath("$.detail").value(
                 "Too many incorrect codes; sign up again to get a new code"));
 
-        // the row is gone, so even the right code is just a wrong code now
+        // the row stays, spent, so its lastSentAt keeps gating the next
+        // code behind the cooldown (PR #157 review, @Sinnez1) — but to a
+        // verify it answers exactly like no row at all, so even the right
+        // code is just a wrong code now
+        assertThat(pendingSignupRepository.findByEmail("e1234567@u.nus.edu")).isPresent();
         verifySignup("e1234567@u.nus.edu", code)
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.detail").value("Invalid verification code"));
 
-        // a fresh sign-up issues a fresh code and completes
+        // repeating the same request (the test cooldown is 0) revives the
+        // spent row — only its own details may; a stranger's sign-up gets
+        // the 409 until expiry — with a fresh code, and completes
         createAccount("e1234567@u.nus.edu", "student_alex");
     }
 
@@ -298,7 +317,9 @@ class AuthControllerTest extends PostgresTestContainer {
             .andExpect(status().isTooManyRequests())
             .andExpect(jsonPath("$.detail").value(
                 "Too many incorrect codes; sign up again to get a new code"));
-        assertThat(pendingSignupRepository.findByEmail("e1234567@u.nus.edu")).isEmpty();
+        // kept as spent, not deleted, so the cooldown still gates the
+        // next code (PR #157 review, @Sinnez1)
+        assertThat(pendingSignupRepository.findByEmail("e1234567@u.nus.edu")).isPresent();
     }
 
     @Test
@@ -306,6 +327,7 @@ class AuthControllerTest extends PostgresTestContainer {
     void signup_verifyWithoutSignup() throws Exception {
         verifySignup("e1234567@u.nus.edu", "123456")
             .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-invalid"))
             .andExpect(jsonPath("$.detail").value("Invalid verification code"));
     }
 

@@ -4,6 +4,10 @@
 // web/docs/wireframes/suppliers.png and add-edit-supplier.png.
 // Implements F1.2, F1.2.1, F2.1, F2.2, F2.2.1, F1.1-F1.1.4.
 //
+// 2026-10-05, Claude Code (Sonnet 5), issue #160: the category filter
+// list is re-fetched on refreshKey, so a category added by a create or
+// update appears in the dropdown without a page reload.
+//
 // 2026-09-29, Claude Code (Sonnet 5): the hardcoded IS_ADMIN constant
 // (a TEMPORARY stand-in noted here since auth didn't exist yet) is
 // replaced with useAuth()'s real role — supplier-service's role gate
@@ -314,15 +318,21 @@ export function Suppliers() {
     }
   }, [fetchCurrentPage, refreshKey])
 
-  // Fetched once, independent of the current search/category filter —
-  // this must always offer every category that exists, not just those
-  // present on the currently filtered/paginated suppliers.
+  // Independent of the current search/category filter — this must always
+  // offer every category that exists, not just those present on the
+  // currently filtered/paginated suppliers. Re-fetched on refreshKey too,
+  // so a category added by a create/update shows up without a reload.
   useEffect(() => {
     let cancelled = false
 
     listCategories()
       .then((result) => {
-        if (!cancelled) setCategories(result)
+        if (cancelled) return
+        setCategories(result)
+        // If the selected filter's category vanished (e.g. its last
+        // supplier was deleted), clear it — otherwise the dropdown shows
+        // "All" while the list stays filtered by a value it can't show.
+        setCategory((current) => (current && !result.includes(current) ? '' : current))
       })
       .catch(() => {
         // Non-fatal: the filter dropdown just falls back to "All" only.
@@ -331,7 +341,7 @@ export function Suppliers() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [refreshKey])
 
   // Auto-dismisses a create/update/delete success banner after a few
   // seconds — errors stay until the next action, but a success message
@@ -390,14 +400,15 @@ export function Suppliers() {
       setSuccessMessage(`Successfully deleted Supplier "${pendingDelete.name}".`)
       // Deleting the last item on the last page would otherwise leave
       // `page` pointing past the new totalPages — step back a page
-      // first when that happens; `page` is already one of
-      // fetchCurrentPage's own dependencies, so that alone re-triggers
-      // the load effect without also bumping refreshKey.
+      // first when that happens. `page` is already one of
+      // fetchCurrentPage's own dependencies, so that re-triggers the
+      // supplier load; refreshKey is bumped on both paths so the
+      // category list also reloads (a deleted supplier may have been the
+      // only one with some category).
       if (page > 0 && suppliers.length === 1) {
         setPage((p) => p - 1)
-      } else {
-        setRefreshKey((k) => k + 1)
       }
+      setRefreshKey((k) => k + 1)
     } catch (err) {
       setSuccessMessage(null)
       setError(errorMessage(err, 'Could not delete supplier.'))

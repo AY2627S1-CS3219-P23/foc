@@ -32,6 +32,8 @@
  * (PUT/DELETE on an unknown id) and bad request bodies both render as
  * problem+json, matching this controller's existing InvalidSortException
  * handler.
+ * 2026-10-07 (PR #161 review, LeongWZ): added a 400 handler for
+ * InvalidCategoryException (a category name containing "/").
  * Reviewed by: [pending]
  */
 package foc.supplier.controller;
@@ -39,6 +41,7 @@ package foc.supplier.controller;
 import foc.supplier.dto.PageResponse;
 import foc.supplier.dto.SupplierRequest;
 import foc.supplier.dto.SupplierResponse;
+import foc.supplier.exception.InvalidCategoryException;
 import foc.supplier.exception.InvalidSortException;
 import foc.supplier.exception.SupplierNotFoundException;
 import foc.supplier.service.SupplierService;
@@ -113,6 +116,11 @@ public class SupplierController {
     // the web client reads RFC 9457 problem+json error bodies
     @ExceptionHandler(InvalidSortException.class)
     public ProblemDetail handleInvalidSort(InvalidSortException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+
+    @ExceptionHandler(InvalidCategoryException.class)
+    public ProblemDetail handleInvalidCategory(InvalidCategoryException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
     }
 
