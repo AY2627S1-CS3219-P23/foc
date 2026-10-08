@@ -26,6 +26,31 @@ Entry template:
 ```
 
 ---
+## 2026-10-08 — Ryan Ang (foc-contracts: saga event contracts)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (records, fixtures, tests, docs)
+- **Scope:** `foc-contracts/` only; no service code changed.
+  - New records `RequestSubmitted`, `RequestRejected`
+    (`events/request/`) and `CreditReserved`,
+    `CreditReservationRejected` with the `CreditEvent` marker
+    (`events/credit/`), one fixture each under `contracts/`.
+  - `EventContracts.CREDIT_EVENTS_EXCHANGE` and four
+    `EventTypeRegistry` entries.
+  - `EventTypeRegistryTest` and `RequestEventRecordsTest`: the entry
+    count, the identity-prefix check and the domain-marker check now
+    cover the credit domain.
+  - `README.md` and `AGENTS.md` of the module: record, exchange and
+    package lists.
+- **Prompt(s):** Asked to read the credit-service design doc and
+  diagram, check a list of proposed contract additions against the
+  current library, and then add them.
+- **Author review:** The saga, the four identity strings and the
+  exchange name are the team's design (`docs/credit-service.md` D7-D8);
+  the field lists and the empty `parties` on the credit events are team
+  decisions, confirmed by the author before the tool wrote anything.
+  The tool made no contract decisions. `./mvnw test` passes in
+  `foc-contracts`. 
+
 ## 2026-09-30 — Ryan Ang (admin dashboard: Users section only)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor (removal + tests + docs)

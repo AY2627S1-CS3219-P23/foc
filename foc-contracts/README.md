@@ -6,6 +6,10 @@
   recorded in docs/notification-service.md). Restructured 2026-09-21:
   implementation checklists moved to AGENTS.md, history pruned.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-10-08, Claude Code (Opus 5.5): record, exchange and package
+  lists updated for the four saga events (team design,
+  docs/credit-service.md D7-D8); author review: Ryan Ang, pending
+  pull request review.
 -->
 
 # foc-contracts
@@ -17,12 +21,14 @@ Shared **cross-service contracts** — the one deliberate exception
 Only things that are a *contract between services* belong here:
 
 - **Contract names** both producer and consumer must agree on, e.g.
-  the broker exchange name (`EventContracts.REQUEST_EVENTS_EXCHANGE`).
+  the broker exchange names (`EventContracts.REQUEST_EVENTS_EXCHANGE`,
+  `EventContracts.CREDIT_EVENTS_EXCHANGE`).
 - **The typed event contracts** (D17): the `DomainEvent` /
-  `RequestEvent` interfaces and one flat record per broker event —
-  `RequestCreated`, `RequestAccepted`, `RequestCollected`,
-  `RequestCompleted`, `RequestCancelled`, `RequestExpired`,
-  `CourierArrived`.
+  `RequestEvent` / `CreditEvent` interfaces and one flat record per
+  broker event — `RequestCreated`, `RequestAccepted`,
+  `RequestCollected`, `RequestCompleted`, `RequestCancelled`,
+  `RequestExpired`, `CourierArrived`, `RequestSubmitted`,
+  `RequestRejected`, `CreditReserved`, `CreditReservationRejected`.
 - **The `EventTypeRegistry`** (D18): the single source of truth
   pairing each record class with its canonical identity string
   (e.g. `request.accepted`), which serves as both the JSON body's
@@ -37,7 +43,8 @@ Package layout (D22): shared machinery — `DomainEvent`,
 `EventTypeRegistry`, `EventContracts`, `Nullable` — lives in
 `foc.contracts.events.core`; each producing domain's marker interface
 and records live in a sibling package (`foc.contracts.events.request`
-today; a future domain adds its own).
+and `foc.contracts.events.credit` today; a future domain adds its
+own).
 
 Service-private names (queue names, table names, internal config) stay
 in their service. The published jar has **no dependencies** — plain
@@ -92,7 +99,7 @@ Leong Wei Zhi — D16–D19 in
    these dead-letter to the consumer's DLQ for replay).
 
 5. **Topology naming.** One durable **topic exchange per producing
-   domain** (`request-events`); consumer queues are
+   domain** (`request-events`, `credit-events`); consumer queues are
    `<service>.<domain>-events` (+ `.retry` / `.dlq` per D13);
    consumers bind patterns (`request.#` for a consumer that wants
    every request event).

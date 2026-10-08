@@ -13,9 +13,14 @@
  * 2026-09-20: order→request rename and events.core/.request package
  * split applied (author decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-08, Claude Code (Opus 5.5): four saga event entries added
+ * (team design, docs/credit-service.md D7-D8); author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.contracts.events.core;
 
+import foc.contracts.events.credit.CreditReservationRejected;
+import foc.contracts.events.credit.CreditReserved;
 import foc.contracts.events.request.CourierArrived;
 import foc.contracts.events.request.RequestAccepted;
 import foc.contracts.events.request.RequestCancelled;
@@ -23,6 +28,8 @@ import foc.contracts.events.request.RequestCollected;
 import foc.contracts.events.request.RequestCompleted;
 import foc.contracts.events.request.RequestCreated;
 import foc.contracts.events.request.RequestExpired;
+import foc.contracts.events.request.RequestRejected;
+import foc.contracts.events.request.RequestSubmitted;
 
 import java.util.HashMap;
 import java.util.List;
@@ -62,7 +69,11 @@ public final class EventTypeRegistry {
 			new Entry(RequestCompleted.class, "request.completed"),
 			new Entry(RequestCancelled.class, "request.cancelled"),
 			new Entry(RequestExpired.class, "request.expired"),
-			new Entry(CourierArrived.class, "request.courier-arrived"));
+			new Entry(CourierArrived.class, "request.courier-arrived"),
+			new Entry(RequestSubmitted.class, "request.submitted"),
+			new Entry(RequestRejected.class, "request.rejected"),
+			new Entry(CreditReserved.class, "credit.reserved"),
+			new Entry(CreditReservationRejected.class, "credit.reservation-rejected"));
 
 	private static final Map<String, Entry> BY_EVENT_TYPE = new HashMap<>();
 	private static final Map<Class<?>, Entry> BY_CLASS = new HashMap<>();

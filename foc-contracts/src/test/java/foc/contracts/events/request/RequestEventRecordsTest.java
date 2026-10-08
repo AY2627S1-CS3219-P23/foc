@@ -7,10 +7,14 @@
  * 2026-09-20: order→request rename and events.core/.request package
  * split applied (author decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-08, Claude Code (Opus 5.5): domain-marker test widened to the credit domain
+ * (team design, docs/credit-service.md D7-D8); author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.contracts.events.request;
 
 import foc.contracts.events.core.DomainEvent;
+import foc.contracts.events.credit.CreditEvent;
 import foc.contracts.events.core.EventTypeRegistry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,10 +39,11 @@ class RequestEventRecordsTest {
 	}
 
 	@Test
-	void everyRecordIsARequestEventWithARequestId() {
+	void everyRecordIsARequestOrCreditEventWithARequestId() {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
-			assertTrue(RequestEvent.class.isAssignableFrom(entry.eventClass()),
-					entry.eventClass() + " must implement RequestEvent");
+			assertTrue(RequestEvent.class.isAssignableFrom(entry.eventClass())
+					|| CreditEvent.class.isAssignableFrom(entry.eventClass()),
+					entry.eventClass() + " must implement RequestEvent or CreditEvent");
 			assertTrue(componentNames(entry.eventClass()).contains("requestId"));
 		}
 	}
