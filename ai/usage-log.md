@@ -49,7 +49,17 @@ Entry template:
   the field lists and the empty `parties` on the credit events are team
   decisions, confirmed by the author before the tool wrote anything.
   The tool made no contract decisions. `./mvnw test` passes in
-  `foc-contracts`. 
+  `foc-contracts`.
+- **2026-10-09, PR #163 Copilot review:** `docs/credit-service.md`:
+  typo and punctuation fixes, and D3 reworded to the author's own text
+  (duplicates are detected by the one held-credits record per request,
+  not by event ID). The schema is unchanged. The tool wrote no design
+  content.
+  `foc-contracts`: `reward` and both `amount` components changed
+  from `int` to `Integer` (team decision) so a missing value is
+  rejected. `docs/architecture.md` and `.mmd`: Credit Service rows and
+  edges transcribed from the team's saga design (D6-D9). Root
+  `README.md`: AI Use Summary clause for this PR.
 
 ## 2026-10-05 — Leong Wei Zhi (PR #157 Copilot review: Retry-After on exhaustion + spent-row docs)
 - **Tool:** Claude Code (Fable 5)

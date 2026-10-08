@@ -1,3 +1,12 @@
+<!--
+  AI-assisted (CS3219 AI Usage Policy disclosure):
+  Tool: Claude Code (Opus 5.5), 2026-10-09.
+  Scope: typo and punctuation fixes, and the author's own rewording of
+  D3 applied verbatim (PR #163 Copilot review). No design content was
+  written or decided by the tool in this change.
+  Author review: Ryan Ang, pending pull request review.
+-->
+
 # FoC Credit Service — Architecture Design
 
 **Scope:** component-level design of `credit-service/`, covering
@@ -10,11 +19,11 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | # | Concern | Decision | Serves |
 | --- | --- | --- | --- |
 | D1 | Persistence | **PostgreSQL** accessed via Spring Data JPA and use of `@Transactional`| F5, NFR2.1 |
-| D2 | Concurrency control | **Pessimitic row locks** | F2.1.2, NFR2.1 |
-| D3 | Duplicate detection | Duplicates are identified by **unique event ID** | NFR2.2, NFR2.2.1 |
+| D2 | Concurrency control | **Pessimistic row locks** | F2.1.2, NFR2.1 |
+| D3 | Duplicate detection | **One held-credits record per request**, with a unique request reference. Its status records what has already been decided and done, so a redelivered event changes nothing and never produces a second, different reply. | NFR2.2, NFR2.2.1 |
 | D4 | Expiry model | Earned credits live in lots that expire 3 months after they are earned into a common pool. Lots are spent in soonest expiry order first. Redistributed credits expiry are started the date they are received | F6.1–F6.1.2 |
 | D5 | Credit history | **Append-only**: each row has type, amount, timestamp and request reference. Filters will use JPA. | F4.1.1, F4.1.2, F4.1.3 |
-| D6 | Account provisioning | **Get or create method inside Credit Service**. Call is made idempotent by a unique user ID. Account with 5 available credits is created the first time a trusted ID is seen | F1.1, F1.1.1 F1.1.2 |
+| D6 | Account provisioning | **Get or create method inside Credit Service**. Call is made idempotent by a unique user ID. Account with 5 available credits is created the first time a trusted ID is seen | F1.1, F1.1.1, F1.1.2 |
 | D7 | Cross-service consistency | **Saga between the Order and Credit Services, by choreography.** Each service reacts to the other's events, and the request's status in the Order Service is the saga's state. No synchronous call exists between the two services. | F2, F3, NFR2 |
 | D8 | Reservation | Saga step 1. The Credit Service consumes `request.submitted`, reserves or refuses, and replies with `credit.reserved` or `credit.reservation-rejected`. | F2.1, F2.1.2, F2.1.3 |
 | D9 | Transfer and release | Saga endings. `request.completed` transfers the held credits. `request.cancelled` and `request.expired` release them, with release being the compensation for a reservation. | F2.1.1, F3.1, NFR1.1 |
@@ -57,9 +66,9 @@ service. Its state lives only in its own PostgreSQL database (database-per-servi
 | **Request event listener** (Spring AMQP) | Consumes `request.submitted`, `request.completed`, `request.cancelled` and `request.expired` from the Credit Service's own queue and turns them into reserve (F2.1), transfer (F3.1) or release (F2.1.1) operations. Acknowledges manually after commit. Routes failures to the retry or dead-letter queue (D11). |
 | **Amount validation and error mapping** (Spring Boot, `@RestControllerAdvice`) | Rejects non-integer and non-positive amounts (F1.2, F1.2.1) and maps validation and domain failures (insufficient balance, unknown request, already released) to HTTP error responses. |
 | **Idempotent credit operations service** (Spring Boot, `@Transactional`) | Core logic: provisions accounts with 5 available / 0 reserved, once per user (F1.1.1, F1.1.2). It reserves only if available credit >= amount needed (F2.1, F2.1.2, F2.1.3) and releases or transfers each request's held credits at most once (F2.1.1, F3.1.1, F3.1.2, NFR2.2.1). It spends the oldest credit lots first and commits balance change, held-credits status, lots, history rows and the outgoing reply in one transaction (F5.1, NFR2.1) |
-| **Credit history** (Spring Boot) | Appends one immutable row per transaction such as account provision, reservation, release, transfer, expiry, redistribution, with timestamps and request reference (F4.1.1). It will also serve the filtered history queries. (F4.1.2, F4.1.3). |
+| **Credit history** (Spring Boot) | Appends one immutable row per transaction such as account provision, reservation, release, transfer, expiry, redistribution, with timestamps and request reference (F4.1.1). It will also serve the filtered history queries (F4.1.2, F4.1.3). |
 | **Outbox publisher** (Spring Boot, `@Scheduled`) | Reads unsent replies from the outbox table, publishes them to the `credit-events` exchange, and marks each one sent once the broker confirms it (D10). |
-| **Expiry and redistribution scheduler** (Spring Boot, `@Scheduled`) | Move earned credits older than 3 months into the common pool (F6.1). At the start of each month, it shares the pool equally in integer amounts (F6.1.1) and gives the remainder to random users. (F6.1.2). |
+| **Expiry and redistribution scheduler** (Spring Boot, `@Scheduled`) | Moves earned credits older than 3 months into the common pool (F6.1). At the start of each month, it shares the pool equally in integer amounts (F6.1.1) and gives the remainder to random users (F6.1.2). |
 | **Credit Database** (PostgreSQL) | Holds credit accounts, held credits records, credit lots, common pool and history. |
 
 ## Database
@@ -193,7 +202,7 @@ reservations instead.
    history rows with the table above reproduces their `available` and
    `reserved`, so the two can be reconciled against each other. Across
    all users, `sum(available + reserved) + common_pool.balance` equals
-   the sum of all `PROVISION` rows
+   the sum of all `PROVISION` rows.
 
 ## Diagram legend
 

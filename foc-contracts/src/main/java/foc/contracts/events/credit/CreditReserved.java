@@ -5,6 +5,8 @@
  * from the team's design (docs/credit-service.md D7-D8). The identity
  * string and the fields are the team's decisions; the tool transcribed
  * them into the existing record pattern.
+ * 2026-10-09, PR #163 Copilot review: amount changed from int to Integer
+ * (team decision) so a missing value is null and consumers reject it.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.contracts.events.credit;
@@ -27,5 +29,5 @@ public record CreditReserved(
 		List<String> parties,
 		String requestId,
 		String requesterId,
-		int amount) implements CreditEvent {
+		Integer amount) implements CreditEvent {
 }

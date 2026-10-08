@@ -20,6 +20,12 @@
   supplier-db were wired into compose.yaml in issue #85 and the
   supplier scaffolding).
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-10-09 (Claude Code, Opus 5.5), PR #163 Copilot review: the
+  Credit Service rows and the style paragraph brought in line with
+  the team's saga design (docs/credit-service.md D6-D9) — no sign-up
+  call from the User Service, and reservation, transfer and release
+  all by events. Transcription only; no decisions made by the tool.
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # Favours on Campus (FoC) — High-Level Service Architecture
@@ -39,8 +45,8 @@ suppliers, orders, credits, notifications) and its own database
 (database-per-service); services interact only through their published
 APIs. The request-event workflow is **event-driven** through the message
 broker (course milestone M6), decoupling the Notification Service and
-the Credit Service's transfer and release from the Order Service that
-produces the events.
+the Credit Service's reservation, transfer and release from the Order
+Service that produces the events.
 
 **Scope:** committed functional and non-functional requirements (F/NFR)
 only. The selected nice-to-haves (N1 ratings, N2 request history, N3
@@ -94,14 +100,13 @@ TBD = to be decided.
 | Web → User Service | sync REST | sign-up, login/logout, OTP flows, account update/delete/recover, roles (user/admin/owner), admin user management, profiles; JWT issued here | User F1–F8 |
 | Web → Supplier Service | sync REST | browse/search/filter vendors; admin vendor CRUD | Supplier F1–F2 |
 | Web → Order Service | sync REST | create/list/accept/collect–arrive/cancel/complete requests; re-release expired requests | Order F1–F8 (re-release: F6.4) |
-| Web → Credit Service | sync REST | available + reserved balances (shown in the user's profile), filtered transaction history | Credit F4; User F8.1 |
+| Web → Credit Service | sync REST | available + reserved balances (shown in the user's profile), filtered transaction history; the account with its 5 starting credits (reserved balance 0) is created the first time the user is seen (see [`credit-service.md`](credit-service.md), D6) | Credit F1.1, F4; User F8.1 |
 | Web → Notification Service | sync REST | list recent notifications in-app, mark read/unread, retention window | Notif F3.1, F3.2, F3.4 |
 | Notification Service → Web | async WebSocket (STOMP) push, per-user destinations | request state-change updates to requester and assigned courier within 5 seconds; the system's **only standing connection** — all other Web ↔ service traffic is stateless REST (see [`notification-service.md`](notification-service.md), "Connection topology") | Notif F1.2; Order NFR1.1–1.2 |
 | User Service → Email Provider | async email (Gmail SMTP; a Mailpit container is the local dev/demo target) | OTP for sign-up verification, email-change confirmation, password reset | User F1.1.3, F2.1.1, F2.1.3, F4.2 |
-| User Service → Credit Service | sync REST | allocate 5 starting credits (reserved balance 0) on sign-up | Credit F1.1 |
 | Order Service → Supplier Service | sync REST | validate pickup location is a known supplier/landmark; fetch supplier locations for the 1 km acceptance-proximity check | Order F1.1.1, F8.1 |
-| Order Service → Credit Service | sync REST | reserve the reward on create; creation is rejected if the available balance is insufficient | Credit F2.1, F2.1.3 |
-| Order Service → Broker (RabbitMQ) → Credit Service | **async events** | transfer on `request.completed`, release on `request.cancelled` / `request.expired`; repeated events for the same request processed once (see [`credit-service.md`](credit-service.md)) | Credit F2.1.1, F3.1, F5.1, NFR1.1, NFR2.2, NFR2.2.1; **M6** |
+| Order Service → Broker (RabbitMQ) → Credit Service | **async events** | reserve the reward on `request.submitted`, transfer on `request.completed`, release on `request.cancelled` / `request.expired`; repeated events for the same request processed once (see [`credit-service.md`](credit-service.md)) | Credit F2.1, F2.1.1, F3.1, F5.1, NFR1.1, NFR2.2, NFR2.2.1; **M6** |
+| Credit Service → Broker (RabbitMQ) → Order Service | **async events** | reservation reply: `credit.reserved` moves the request from pending to created, `credit.reservation-rejected` moves it to rejected when the available balance is insufficient (see [`credit-service.md`](credit-service.md), D7–D8) | Credit F2.1.3; Order F1.1.4; **M6** |
 | Order Service → Broker (RabbitMQ) → Notification Service | **async events** | event on every request state transition (created/accepted/collected/completed/cancelled/expired); at-least-once, persisted across restarts; consumer deduplicates, retries, dead-letters exhausted retries; delivery failure never affects the producing operation; new event types need no publisher changes | Order F0.2; Notif F1.1, F1.3, F1.4, F2.1–F2.3, NFR1.1–1.2; **M6** |
 
 Timer-driven behaviors stay **inside** the owning service (no arrow):

@@ -362,7 +362,15 @@ sign-up policy re-checked, machine-readable problem+json `type` URIs
 on the OTP errors (sign-up's included), the V4/V5 migrations, purge
 sweeps, and unit and integration tests, with the scope, endpoint
 shapes, gating and response choices made by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`.
+neutral-options Q&A and recorded in `ai/usage-log.md`; and the
+Credit Service saga event contracts in `foc-contracts` (PR #163) —
+four event records, the `credit-events` exchange name, their
+fixtures and the registry tests — together with that PR's review
+fixes to `docs/credit-service.md` and the high-level architecture
+doc and diagram, which were brought in line with it; the saga, the
+event names and fields, and the database schema are the team's
+decisions, recorded in `docs/credit-service.md` and
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
