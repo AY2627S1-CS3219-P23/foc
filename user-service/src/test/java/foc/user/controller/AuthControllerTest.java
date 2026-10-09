@@ -31,6 +31,8 @@ Scope: integration tests for POST /auth/signup and POST /auth/login
        202 body carries resendInSeconds for the SPA's resend button.
        2026-10-05, Claude Code (Opus 5.5), issue #138: an unsupported
        Content-Type is 415 problem+json.
+       2026-10-09, Claude Code (Opus 5.5), PR #162 review (Leong Wei Zhi): the 415 also
+       carries the Accept header.
 Author review: Leong Wei Zhi to review via the PR.
 2026-09-30, Claude Code (Fable 5), issue #92: the OTP failures now carry
 problem+json type URIs (handlers shared via ProblemDetailAdvice), so the
@@ -431,6 +433,7 @@ class AuthControllerTest extends PostgresTestContainer {
     void unsupportedContentType() throws Exception {
         mockMvc.perform(post("/auth/login").contentType(MediaType.TEXT_PLAIN).content("student_alex"))
             .andExpect(status().isUnsupportedMediaType())
+            .andExpect(header().string("Accept", containsString("application/json")))
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath("$.status").value(415))
             .andExpect(jsonPath("$.detail").value("Content-Type 'text/plain' is not supported."));

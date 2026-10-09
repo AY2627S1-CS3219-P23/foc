@@ -12,6 +12,9 @@ Scope: issue #147. The database write for a login attempt, split out of
        left and the lock's remaining time for its messages, and the
        retention check runs before anything else (pastRetention).
        2026-10-05 (issue #154): the row is read and locked in one query.
+       2026-10-09, PR #162 review (Leong Wei Zhi): back to find + refresh (author's
+       choice), so the read is fresh even if the User is already
+       loaded in the persistence context.
 Author review: Ryan to review via the PR.
 */
 
@@ -28,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import foc.user.entity.User;
 import foc.user.repository.UserRepository;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.LockModeType;
 
 @Component
@@ -76,12 +80,18 @@ public class LoginAttempts {
     // transaction the row lock ends with the read
     @Transactional
     public Result record(Long userId, boolean passwordMatched, Instant now) {
-        // read and lock the row in one query (SELECT ... FOR UPDATE). The
-        // read is fresh: login runs outside a transaction and open-in-view
-        // is off, so no copy loaded earlier in the request is reused
-        User user = entityManager.find(User.class, userId, LockModeType.PESSIMISTIC_WRITE);
+        User user = entityManager.find(User.class, userId);
         if (user == null) {
             // purged between the lookup and now
+            return Result.gone();
+        }
+        try {
+            // lock the row (SELECT ... FOR UPDATE) and re-read it: find()
+            // returns the copy already in the persistence context if there
+            // is one (open-in-view, or a caller's transaction), which would
+            // miss a parallel attempt's count. One extra query per attempt
+            entityManager.refresh(user, LockModeType.PESSIMISTIC_WRITE);
+        } catch (EntityNotFoundException e) {
             return Result.gone();
         }
 

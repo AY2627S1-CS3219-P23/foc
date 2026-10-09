@@ -368,13 +368,15 @@ neutral-options Q&A and recorded in `ai/usage-log.md`; and the
 user-service and web review follow-ups (issues #154 and #138, PR #162)
 — problem+json on every user-service endpoint (the shared
 `ResponseStatusException`, wrong-type-parameter and 415 handlers), a
-generic owner-setup 503, a single locked read in the login attempt
-counter, the demo seeder's `Locale.ROOT` formatting and its handling of
+generic owner-setup 503, the demo seeder's `Locale.ROOT` formatting and its handling of
 a lost insert race (a duplicate key only; any other integrity failure
 still stops startup), tests that load the main `application.yaml`
 through a `test` profile, the "account created" notice on the login
 page showing once, and the nav bar border class — with the items taken
-from the team's review issues and recorded in `ai/usage-log.md`.
+from the team's review issues and recorded in `ai/usage-log.md`,
+and that PR's review fixes (test values pinned against the
+environment, the 415's `Accept` header kept, and the login attempt
+counter's read-then-refresh restored by the author's choice).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

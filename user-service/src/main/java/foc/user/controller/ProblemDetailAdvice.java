@@ -19,6 +19,8 @@ decision via options Q&A: machine-readable types in scope, so the SPA can
 stop string-matching detail sentences), and a ResponseStatusException
 passthrough renders typed bodies (uniqueness refusals) for controllers
 without a local one.
+2026-10-09 (Claude Code, Opus 5.5), PR #162 review (Leong Wei Zhi): the 415 keeps
+Spring's Accept header, which names the types the endpoint takes.
 2026-10-05 (Claude Code, Fable 5), PR #157 Copilot review: the
 attempts-exceeded 429 now carries Retry-After — the exhausted row
 survives as spent, so there is a real wait (the resend cooldown) to
@@ -86,10 +88,11 @@ class ProblemDetailAdvice {
     }
 
     // a body that isn't JSON (or has no Content-Type): Spring's own
-    // problem body for it, which names the type that was sent
+    // problem body for it, which names the type that was sent, and its
+    // Accept header, which names the types the endpoint takes
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
-    ProblemDetail handleUnsupportedMediaType(HttpMediaTypeNotSupportedException e) {
-        return e.getBody();
+    ResponseEntity<ProblemDetail> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException e) {
+        return ResponseEntity.status(e.getStatusCode()).headers(e.getHeaders()).body(e.getBody());
     }
 
     // the OTP failures, moved from AuthController (issue #92): sign-up and

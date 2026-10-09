@@ -50,8 +50,8 @@ import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
 
 /**
- * The retention window is 30 days (the default in
- * {@code src/main/resources/application.yaml}). {@code @Transactional}
+ * The retention window is 30 days (pinned for every test class in
+ * {@code PostgresTestContainer}, matching the main yaml's default). {@code @Transactional}
  * lets the purge's bulk deletes and the assertions share one
  * transaction; the seeding flushes explicitly since bulk JPQL deletes
  * bypass the persistence context.

@@ -26,6 +26,37 @@ Entry template:
 ```
 
 ---
+## 2026-10-09 — Ryan Ang (PR #162 review fixes, Leong Wei Zhi's review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (review fixes: code + tests + docs)
+- **Scope:** `user-service/` only.
+  - `PostgresTestContainer`: the values the tests assert on
+    (`user.retention.days`, `user.jwt.access-token-ttl`,
+    `user.web-allowed-origin`, `user.mail.from`, `user.otp.ttl`,
+    `user.otp.max-attempts`, `spring.mail.host` / `port`) pinned with
+    `@TestPropertySource`, so exported or empty environment variables
+    can't change them or stop the context starting.
+  - `ProblemDetailAdvice`: the 415 returns Spring's headers with the
+    body, keeping `Accept`; `AuthControllerTest` asserts it.
+  - `LoginAttempts.record`: back to `find` then
+    `refresh(PESSIMISTIC_WRITE)`, so the read is fresh even when the
+    `User` is already in the persistence context; `AuthServiceTest`'s
+    stub follows.
+  - Root `README.md`: AI Use Summary clause updated.
+- **Prompt(s):** Asked to look at the review on PR #162, then to fix
+  all of it on the PR branch.
+- **Author review:** The login read was a performance-versus-
+  robustness trade-off; the author chose restoring `refresh` (one
+  extra query per attempt) over a guard test or no change, via
+  options Q&A. The other two fixes follow the reviewer's own
+  suggestions. `./mvnw clean test`: 305 tests, 0 failures. The four
+  environment-sensitive classes (`AuthControllerTest`,
+  `AccountPurgeSchedulerTest`, `AccountUpdateControllerTest`,
+  `DemoAccountsSeederTest`) also pass with `OTP_TTL`,
+  `OTP_MAX_ATTEMPTS`, `JWT_ACCESS_TOKEN_TTL`, `MAIL_PORT` and
+  `MAIL_FROM` exported empty and non-default `WEB_ALLOWED_ORIGIN`,
+  `USER_RETENTION_DAYS` and `USER_SEED_DEMO`.
+
 ## 2026-10-05 — Ryan Ang (user-service + web: remaining #154 and #138 follow-ups)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor + debug + tests + docs
