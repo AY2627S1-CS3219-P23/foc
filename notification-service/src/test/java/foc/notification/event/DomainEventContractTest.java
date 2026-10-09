@@ -10,6 +10,11 @@
  * 2026-09-20: order→request event vocabulary rename applied (author
  * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-09, Claude Code (Opus 5.5), PR #163 review (Leong Wei Zhi): the catalog
+ * now spans the request and credit domains, so the producer and
+ * requestId checks go through each event's domain marker, and
+ * parties is required present rather than non-empty (credit events
+ * notify no one). Author review: Ryan Ang, pending pull request review.
  */
 package foc.notification.event;
 
@@ -17,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import foc.contracts.events.core.DomainEvent;
 import foc.contracts.events.core.EventTypeRegistry;
+import foc.contracts.events.credit.CreditEvent;
 import foc.contracts.events.request.RequestAccepted;
 import foc.contracts.events.request.RequestEvent;
 import java.io.IOException;
@@ -33,7 +39,9 @@ import tools.jackson.databind.ObjectMapper;
  * {@code /contracts/<eventType dots&rarr;hyphens>.example.json}, and
  * that fixture must bind to the registered record class. Iterating the
  * registry means a newly added event is covered the moment its entry
- * exists — or fails loudly if its fixture is missing.
+ * exists — or fails loudly if its fixture is missing. The catalog spans
+ * two producing domains (request and credit), so the expected producer
+ * and the request reference come from each event's domain marker.
  *
  * <p>{@code @JsonTest} injects Boot's auto-configured
  * {@link ObjectMapper} — the same mapper the AMQP message converter
@@ -61,12 +69,31 @@ class DomainEventContractTest {
 			assertThat(event.eventType()).isEqualTo(entry.eventType());
 			assertThat(event.eventId()).isNotBlank();
 			assertThat(event.occurredAt()).isNotNull();
-			assertThat(event.producer()).isEqualTo("order-service");
+			assertThat(event.producer()).isEqualTo(expectedProducer(event));
 			assertThat(event.correlationId()).isNotBlank();
-			assertThat(event.parties()).isNotEmpty();
-			assertThat(event).isInstanceOf(RequestEvent.class);
-			assertThat(((RequestEvent) event).requestId()).isEqualTo("req-20260919-0042");
+			assertThat(event.parties()).isNotNull();
+			assertThat(requestIdOf(event)).isEqualTo("req-20260919-0042");
 		}
+	}
+
+	private static String expectedProducer(DomainEvent event) {
+		if (event instanceof RequestEvent) {
+			return "order-service";
+		}
+		if (event instanceof CreditEvent) {
+			return "credit-service";
+		}
+		throw new AssertionError(event.eventType() + " implements no domain marker interface");
+	}
+
+	private static String requestIdOf(DomainEvent event) {
+		if (event instanceof RequestEvent requestEvent) {
+			return requestEvent.requestId();
+		}
+		if (event instanceof CreditEvent creditEvent) {
+			return creditEvent.requestId();
+		}
+		throw new AssertionError(event.eventType() + " implements no domain marker interface");
 	}
 
 	@Test

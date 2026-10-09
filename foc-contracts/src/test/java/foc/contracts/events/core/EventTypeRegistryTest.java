@@ -6,6 +6,9 @@
  * 2026-09-20: order→request rename and events.core/.request package
  * split applied (author decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-08, Claude Code (Opus 5.5): count and domain-prefix tests updated for the credit domain
+ * (team design, docs/credit-service.md D7-D8); author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.contracts.events.core;
 
@@ -13,6 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import foc.contracts.events.credit.CreditEvent;
+import foc.contracts.events.request.RequestEvent;
 import java.util.HashSet;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -20,8 +25,8 @@ import org.junit.jupiter.api.Test;
 class EventTypeRegistryTest {
 
 	@Test
-	void catalogsExactlySevenRequestEvents() {
-		assertEquals(7, EventTypeRegistry.entries().size());
+	void catalogsExactlyElevenEvents() {
+		assertEquals(11, EventTypeRegistry.entries().size());
 	}
 
 	@Test
@@ -35,10 +40,11 @@ class EventTypeRegistryTest {
 	}
 
 	@Test
-	void allEventTypesBelongToTheRequestDomain() {
+	void everyEventTypeIsPrefixedWithItsDomain() {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
-			assertTrue(entry.eventType().startsWith("request."),
-					entry.eventType() + " must start with \"request.\"");
+			String prefix = domainPrefix(entry.eventClass());
+			assertTrue(entry.eventType().startsWith(prefix),
+					entry.eventType() + " must start with \"" + prefix + "\"");
 		}
 	}
 
@@ -59,6 +65,16 @@ class EventTypeRegistryTest {
 	void unregisteredClassIsRejected() {
 		assertThrows(IllegalArgumentException.class,
 				() -> EventTypeRegistry.routingKeyFor(DomainEvent.class));
+	}
+
+	private static String domainPrefix(Class<?> eventClass) {
+		if (RequestEvent.class.isAssignableFrom(eventClass)) {
+			return "request.";
+		}
+		if (CreditEvent.class.isAssignableFrom(eventClass)) {
+			return "credit.";
+		}
+		throw new AssertionError(eventClass + " implements no domain marker interface");
 	}
 
 }
