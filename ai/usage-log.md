@@ -2244,3 +2244,25 @@ Entry template:
 - **Scope:** `supplier-service` `SuppliersSeeder` (null check around the
   category split loop).
 - **Author review:** Pending author review of the diff.
+
+## 2026-10-09 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** documentation (D3 milestone writeup)
+- **Prompt(s):** Asked to plan and write the D3 technical-solution
+  writeup on the GitHub wiki from the D3 instructions PDF, the D1
+  FR/NFR document, the in-repo design docs on main and the D2 wiki
+  pages; undecided technical choices to be presented as pros/cons
+  comparison tables, plus a D3 task-allocation plan.
+- **Scope:** wiki pages `D3-Design-Order-and-Credit-Services.md` (new),
+  `D3-Demo-Script.md` (new, skeleton) and `Home.md` (links) on
+  `foc.wiki.git`; this log entry. No code changed.
+- **Author review:** The tool transcribed existing team decisions from
+  the cited docs/PRs/issues and made no design decisions: all open
+  choices (Order DB engine, single-winner mechanism, snapshot vs
+  reference, save-vs-publish pattern, expiry mechanism, initial credit
+  amount and provisioning failure path, migration standardization,
+  account closure, Alastair's N2H) are recorded as "(open)"
+  factual-properties comparison tables for the team — the author chose
+  this open-table treatment explicitly (options Q&A, 2026-10-09). Task
+  allocation records the README table against the live issue list;
+  unassigned work is flagged, not assigned. Reviewed at wiki publish.
