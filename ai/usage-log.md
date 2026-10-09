@@ -26,6 +26,43 @@ Entry template:
 ```
 
 ---
+## 2026-10-09 — Leong Wei Zhi (PR #149 Copilot re-review: expired email change, test strength, disclosures)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debug (review fixes) + docs (disclosures)
+- **Scope:** `web`: `features/user/components/EmailChangeModal.tsx`,
+  `register.tsx`, `test/profile.test.tsx`, and the author-review note
+  filled in on the thirteen files added for #112; `README.md` AI Use
+  Summary.
+- **Prompt(s):** Asked to address the second round of Copilot findings on
+  PR #149. (1) The confirm dialog offered "Resend code" once the parked
+  change expired, but `AccountUpdateService.resendEmailChange` deletes an
+  expired `pending_email_changes` row and answers `OTP_EXPIRED` — unlike a
+  gate code, a dead row cannot be renewed — so the CTA could only fail;
+  the dialog now says so and offers "Start over", which drops the
+  snapshot (where the doomed call ended up anyway, a round trip later).
+  (2) Two retained-code tests asserted `toHaveBeenLastCalledWith` with
+  arguments the previous failed save had already produced, so they passed
+  whether or not the second Save ran; they assert the call count now, and
+  the same gap was fixed in the pre-existing taken-name test.
+  (3) The `PasswordChecklist` import in `register.tsx` used double quotes
+  and a semicolon, which `format:check` rewrites. (4) The disclosure
+  duties in AGENTS.md were incomplete: the thirteen files added for #112
+  still carried `Reviewed by: [pending]`, and the README AI Use Summary
+  had no #112 entry at all.
+- **Author review:** The review-note wording was the author's choice via
+  an options round (2026-10-09) — `Author review: Leong Wei Zhi (via
+  PR #149).`, the form already used for author-reviewed files in this
+  repo, rather than a claim of completed teammate review (the PR's
+  2026-09-29 approval predates the endpoint rewrite). The expiry case has
+  its own test, rendering the dialog on a dead snapshot — the state it
+  really meets, since the page's sweep clears expired snapshots on mount
+  — checked to fail before the fix. The `about:blank` finding Copilot
+  still lists as open was answered in the previous round inside
+  `problemType()` and is covered by the `auth.test.tsx` case using that
+  response shape. Vitest (87 tests), eslint, tsc and prettier clean;
+  reviewed via pull request.
+
+---
 ## 2026-10-09 — Leong Wei Zhi (PR #149 Copilot review: snapshot ownership + failure recovery)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** debug (review fixes) + generate (regression tests)

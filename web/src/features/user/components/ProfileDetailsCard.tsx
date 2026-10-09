@@ -8,7 +8,7 @@
 // way back into its code dialog — the dialog can be dismissed without
 // discarding the change, so there has to be a way to reopen it
 // (register.tsx's "Enter your code" link, same reasoning).
-// Reviewed by: [pending]
+// Author review: Leong Wei Zhi (via PR #149).
 
 import type { AdminUser } from '../types'
 

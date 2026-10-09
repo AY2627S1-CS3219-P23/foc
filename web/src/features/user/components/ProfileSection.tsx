@@ -20,7 +20,7 @@
 // (logout and account deletion leave it behind), so an unowned snapshot
 // let the next account to sign in see — and confirm, against its own
 // account — an address somebody else had parked.
-// Reviewed by: [pending]
+// Author review: Leong Wei Zhi (via PR #149).
 
 import { useEffect, useState } from 'react'
 

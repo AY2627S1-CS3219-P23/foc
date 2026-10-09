@@ -10,7 +10,7 @@
 // left rather than restarting at 60s, and the timer keeps running while
 // EITHER line is still moving (keyed on the cooldown alone, the expiry
 // sentence froze the moment the cooldown ran out).
-// Reviewed by: [pending]
+// Author review: Leong Wei Zhi (via PR #149).
 
 import { useEffect, useState } from 'react'
 

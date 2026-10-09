@@ -19,7 +19,7 @@
 // the fields, which were what it refused, and keeps the unspent code so
 // fixing the password costs no resend. Only a wrong code or a failure
 // that never judged the password keeps the code step.
-// Reviewed by: [pending]
+// Author review: Leong Wei Zhi (via PR #149).
 
 import React, { useState } from 'react'
 

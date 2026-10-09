@@ -11,7 +11,7 @@
 // on every ProblemDetail built without one), and an untyped 400 — the
 // DTO validation ProblemDetailAdvice answers with — is classified as a
 // refusal of the submitted values rather than of the code.
-// Reviewed by: [pending]
+// Author review: Leong Wei Zhi (via PR #149).
 
 import { ApiError } from '@/lib/api/http'
 

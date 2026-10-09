@@ -9,7 +9,7 @@
 // Presentational only: the caller owns the digits, runs the calls, and
 // wraps this in its own <form> (the button is a plain submit), because
 // what a failure means differs per step — see problemTypes.ts.
-// Reviewed by: [pending]
+// Author review: Leong Wei Zhi (via PR #149).
 
 import { CodeInput } from './CodeInput'
 import { CODE_LENGTH, describeExpiry, useOtpCountdown } from '../otp'

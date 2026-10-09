@@ -15,12 +15,17 @@
 // after an amended save brings the code boxes back, and an untyped 400
 // (the server's own body validation) returns both cards to their fields
 // with the unspent code kept.
-// Reviewed by: [pending]
+// Same review, second pass: the retained-code retries assert the call
+// COUNT, since their arguments repeat the refused attempt's and passed
+// whether or not the second Save ran; and an expired email change offers
+// a restart instead of the resend user-service can only refuse.
+// Author review: Leong Wei Zhi (via PR #149).
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
+import { EmailChangeModal } from '@/features/user/components/EmailChangeModal'
 import { profileApi } from '@/features/user/profileApi'
 import {
   OTP_ATTEMPTS_EXCEEDED,
@@ -233,11 +238,18 @@ describe('edit account info', () => {
     ).toBeInTheDocument()
 
     await user.click(editCard().getByRole('button', { name: 'Save' }))
-    await waitFor(() => expect(profileApi.requestOtp).toHaveBeenCalledTimes(1))
+
+    // the same code again, and no new one asked for. The call count is
+    // what proves the second Save ran at all: its arguments match the
+    // refused first one (PR #149 review)
+    await waitFor(() =>
+      expect(profileApi.updateAccount).toHaveBeenCalledTimes(2),
+    )
     expect(profileApi.updateAccount).toHaveBeenLastCalledWith(
       { username: 'taken_name' },
       OTP,
     )
+    expect(profileApi.requestOtp).toHaveBeenCalledTimes(1)
   })
 
   it('brings the code boxes back when a save after an amend fails', async () => {
@@ -281,11 +293,19 @@ describe('edit account info', () => {
     await typeCode(user, OTP, editCard())
     await user.click(editCard().getByRole('button', { name: 'Save' }))
 
+    // three saves, not two: the retyped code went out on its own call,
+    // whose arguments match the 502'd one (PR #149 review)
     await waitFor(() =>
-      expect(profileApi.updateAccount).toHaveBeenLastCalledWith(
-        { username: 'utown_runner' },
-        OTP,
-      ),
+      expect(profileApi.updateAccount).toHaveBeenCalledTimes(3),
+    )
+    expect(profileApi.updateAccount).toHaveBeenLastCalledWith(
+      { username: 'utown_runner' },
+      OTP,
+    )
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: 'Edit Account Info' }),
+      ).not.toBeInTheDocument(),
     )
     // one code throughout: nothing here was worth a resend
     expect(profileApi.requestOtp).toHaveBeenCalledTimes(1)
@@ -328,10 +348,11 @@ describe('edit account info', () => {
     await user.click(editCard().getByRole('button', { name: 'Save' }))
 
     await waitFor(() =>
-      expect(profileApi.updateAccount).toHaveBeenLastCalledWith(
-        { username: 'utown_runner' },
-        OTP,
-      ),
+      expect(profileApi.updateAccount).toHaveBeenCalledTimes(2),
+    )
+    expect(profileApi.updateAccount).toHaveBeenLastCalledWith(
+      { username: 'utown_runner' },
+      OTP,
     )
     expect(profileApi.requestOtp).toHaveBeenCalledTimes(1)
   })
@@ -442,6 +463,44 @@ describe('edit account info', () => {
     await waitFor(() => expect(snapshot()).toBeNull())
   })
 
+  // Rendered directly, with a dead snapshot: the page's own sweep clears
+  // those on mount, so the dialog meets one only when the change dies
+  // while the page is open — either as it sits open (CodeStep's tick
+  // re-renders it) or when "Enter your code" is clicked afterwards.
+  it('offers a restart instead of a doomed resend once the change expires', async () => {
+    const user = userEvent.setup()
+    const onDiscarded = vi.fn()
+    render(
+      <EmailChangeModal
+        pending={{
+          userId: 3,
+          email: NEW_EMAIL,
+          expiresAt: Date.now() - 1_000,
+          resendAt: Date.now() - 1_000,
+        }}
+        onClose={vi.fn()}
+        onVerified={vi.fn()}
+        onResent={vi.fn()}
+        onDiscarded={onDiscarded}
+      />,
+    )
+
+    // user-service deletes an expired pending_email_changes row and
+    // answers OTP_EXPIRED, so neither button could do anything but fail
+    expect(
+      screen.queryByRole('button', { name: 'Resend code' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Digit 1 of 6')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Start over' }))
+
+    expect(onDiscarded).toHaveBeenCalledWith(
+      expect.stringContaining('expired before it was confirmed'),
+    )
+    expect(profileApi.resendEmailChange).not.toHaveBeenCalled()
+    expect(profileApi.verifyEmailChange).not.toHaveBeenCalled()
+  })
+
   it('discards changes on cancel', async () => {
     const user = userEvent.setup()
     const usernameInput = await openEditCard(user)
@@ -541,6 +600,7 @@ describe('change password', () => {
     expect(
       await passwordCard().findByText('Password updated.'),
     ).toBeInTheDocument()
+    expect(profileApi.changePassword).toHaveBeenCalledTimes(2)
     expect(profileApi.changePassword).toHaveBeenLastCalledWith(
       'NewPassword1',
       'NewPassword1',

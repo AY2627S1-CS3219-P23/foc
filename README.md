@@ -61,6 +61,9 @@
   #109) by Claude Code (Opus 5).
   2026-09-30: AI Use Summary extended for the user-service account-update
   flows (issue #92) by Claude Code (Fable 5).
+  2026-10-09: AI Use Summary extended for the web profile screens
+  (issue #112, PR #149) and that PR's two Copilot-review rounds, by
+  Claude Code (Opus 5) — the summary had no entry for #112.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -362,7 +365,25 @@ sign-up policy re-checked, machine-readable problem+json `type` URIs
 on the OTP errors (sign-up's included), the V4/V5 migrations, purge
 sweeps, and unit and integration tests, with the scope, endpoint
 shapes, gating and response choices made by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`.
+neutral-options Q&A and recorded in `ai/usage-log.md`; and the `web/`
+profile screens (issue #112, PR #149) — the protected `/profile` page
+built on those endpoints: the details card, an OTP-gated Edit Account
+card, an OTP-gated password change, the second code step a new address
+confirms itself with, the delete-account confirmation, a shared
+code-step component and countdown module, a problem+json `type`
+classifier that replaced the sign-up dialog's matching on error
+sentences, and the page's tests, with the deviations from
+`docs/wireframes/profile.png` (no Current Password field, the new-email
+confirmation as a modal, the parked change snapshotted in
+localStorage) chosen by the author via neutral-options Q&A and
+recorded in `web/AGENTS.md` and `ai/usage-log.md`; plus that PR's two
+Copilot-review rounds — pending-email snapshots scoped to the account
+that parked them, the code step restored after a retryable save,
+Spring's `about:blank` read as "no type", body-validation refusals
+returning to the editable fields with the unspent code, an expired
+email change offering a restart instead of the resend user-service can
+only refuse, and the retained-code tests asserting the call that was
+meant to prove them.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

@@ -3,7 +3,7 @@
 // Scope: passwordRules + PasswordChecklist moved verbatim out of
 // register.tsx (PR #142) so the profile page's Change Password card can
 // reuse them.
-// Reviewed by: [pending]
+// Author review: Leong Wei Zhi (via PR #149).
 
 // Mirrors user-service's AccountRules password policy (PASSWORD_PATTERN,
 // PASSWORD_MIN/MAX). Display-only: the server remains the validator.

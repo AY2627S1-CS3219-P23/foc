@@ -21,7 +21,7 @@
 // stay there, so the next Save submitted an empty code with no boxes to
 // type it into. A body the server's validation refuses is an `amend` too
 // now (problemTypes.ts), so the fields it refused stay editable.
-// Reviewed by: [pending]
+// Author review: Leong Wei Zhi (via PR #149).
 
 import React, { useState } from 'react'
 

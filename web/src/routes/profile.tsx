@@ -3,7 +3,7 @@
 // Scope: My Profile page, per web/docs/wireframes/profile.png — profile
 // details, edit flows and delete account, all in the user domain's
 // ProfileSection.
-// Reviewed by: [pending]
+// Author review: Leong Wei Zhi (via PR #149).
 
 import { ProfileSection } from '@/features/user/components/ProfileSection'
 

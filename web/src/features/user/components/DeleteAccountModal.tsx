@@ -3,7 +3,7 @@
 // Scope: delete-account confirmation for the profile page, following
 // RemoveUserModal; the copy warns about the 30-day lock (F3.1.1),
 // matching user-service's soft delete + purge scheduler.
-// Reviewed by: [pending]
+// Author review: Leong Wei Zhi (via PR #149).
 
 import { Modal } from '@/shared/components/Modal'
 
@@ -31,9 +31,9 @@ export function DeleteAccountModal({
         </p>
       )}
       <p className="text-sm text-gray-600">
-        Your account will be locked for 30 days. You cannot create a new
-        account with the same email or username during this period. After 30
-        days, your account and all data will be permanently deleted.
+        Your account will be locked for 30 days. You cannot create a new account
+        with the same email or username during this period. After 30 days, your
+        account and all data will be permanently deleted.
       </p>
       <div className="mt-5 flex justify-end gap-2">
         <button

@@ -15,7 +15,14 @@
 // 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: a resend
 // carries the snapshot's fields it does not replace — the account that
 // owns it above all (ProfileSection reads no snapshot without one).
-// Reviewed by: [pending]
+// Same review, second pass: an expired change offers a restart, not a
+// resend. Unlike a gate code, a dead pending_email_changes row cannot be
+// renewed — resendEmailChange deletes it and answers OTP_EXPIRED
+// (AccountUpdateService) — so the shared code step's "send a new one"
+// was a button that could only fail. The dialog says what happened and
+// drops the snapshot instead, which is where that doomed call ended up
+// anyway, one round trip later.
+// Author review: Leong Wei Zhi (via PR #149).
 
 import React, { useState } from 'react'
 
@@ -29,8 +36,14 @@ import {
   retryAfter,
 } from '../problemTypes'
 import type { AdminUser, PendingEmailChange } from '../types'
-import { emptyCode } from '../otp'
+import { emptyCode, useOtpCountdown } from '../otp'
 import { CodeStep } from './CodeStep'
+
+// What the page is told when the parked change died before it was
+// confirmed. Said here rather than quoted from the server, because the
+// call that would have said it is the one being skipped.
+const EXPIRED =
+  'Your email change expired before it was confirmed. Start it again from Edit Profile.'
 
 interface EmailChangeModalProps {
   pending: PendingEmailChange
@@ -57,6 +70,14 @@ export function EmailChangeModal({
   const [notice, setNotice] = useState('')
 
   const startedAt = (seconds: number) => Date.now() + seconds * 1000
+
+  // The same countdown CodeStep runs, read for one decision: has the
+  // parked change died? It reads the clock on mount, so a dialog opened
+  // on a snapshot that expired while the page sat idle (the sweep that
+  // drops those runs on mount) starts here, and its tick flips this while
+  // the dialog is open.
+  const { expiresIn } = useOtpCountdown(pending.expiresAt, pending.resendAt)
+  const expired = expiresIn === 0
 
   const verify = async (event: React.SyntheticEvent) => {
     event.preventDefault()
@@ -133,20 +154,38 @@ export function EmailChangeModal({
           {notice}
         </p>
       )}
-      <form onSubmit={verify} className="mt-4">
-        <CodeStep
-          sentTo={pending.email}
-          expiresAt={pending.expiresAt}
-          resendAt={pending.resendAt}
-          value={code}
-          onChange={setCode}
-          busy={busy}
-          resending={resending}
-          submitLabel="Verify & Apply"
-          busyLabel="Verifying..."
-          onResend={() => void resend()}
-        />
-      </form>
+      {expired ? (
+        <div className="mt-4 space-y-4">
+          <p className="text-sm text-gray-600">
+            The code sent to {pending.email} has expired, and an expired change
+            cannot be resent — the request to {pending.email} is gone. Start the
+            change again from Edit Profile; the new address will get a fresh
+            code.
+          </p>
+          <button
+            type="button"
+            onClick={() => onDiscarded(EXPIRED)}
+            className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          >
+            Start over
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={verify} className="mt-4">
+          <CodeStep
+            sentTo={pending.email}
+            expiresAt={pending.expiresAt}
+            resendAt={pending.resendAt}
+            value={code}
+            onChange={setCode}
+            busy={busy}
+            resending={resending}
+            submitLabel="Verify & Apply"
+            busyLabel="Verifying..."
+            onResend={() => void resend()}
+          />
+        </form>
+      )}
     </Modal>
   )
 }

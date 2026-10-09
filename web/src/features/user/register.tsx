@@ -33,14 +33,18 @@
 // stranded the code already emailed behind the resend cooldown. The
 // snapshot holds absolute times so a reopened dialog counts from the
 // truth.
+// 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: the
+// PasswordChecklist import is written in the file's own style (single
+// quotes, no semicolon) and sorted with its neighbours; Prettier's check
+// rewrote it otherwise.
 // Reviewed by: Ryan Ang
 
 import React, { useState } from 'react'
 import { apiFetch, errorMessage } from '@/lib/api/http'
 import { router } from '../../routes/index'
 import { OtpVerificationModal } from './components/OtpVerificationModal'
+import { PasswordChecklist } from './PasswordChecklist'
 import type { SignupAccepted, SignupPending } from './types'
-import { PasswordChecklist } from "./PasswordChecklist";
 
 export function Register() {
   const [email, setEmail] = useState('')

@@ -10,7 +10,7 @@
 // UpdateAccountRequest, EmailChangePendingResponse,
 // VerifyEmailChangeRequest, ChangePasswordRequest); see
 // user-service/README.md for the routes and their problem+json types.
-// Reviewed by: [pending]
+// Author review: Leong Wei Zhi (via PR #149).
 
 import { apiFetch } from '@/lib/api/http'
 import type { AdminUser, EmailChangeAccepted, OtpTimings } from './types'
