@@ -14,6 +14,12 @@
 // and pay for a fresh gate code. A snapshot the server no longer honours
 // fails honestly — verify/resend answer with a type URI that says so,
 // and the snapshot is dropped then.
+// 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: the snapshot
+// names its owner and only the signed-in account's own is read, shown or
+// acted on. One browser-wide key outlives the session that wrote it
+// (logout and account deletion leave it behind), so an unowned snapshot
+// let the next account to sign in see — and confirm, against its own
+// account — an address somebody else had parked.
 // Reviewed by: [pending]
 
 import { useEffect, useState } from 'react'
@@ -40,7 +46,7 @@ export function ProfileSection() {
   const [deleteError, setDeleteError] = useState('')
   const [emailError, setEmailError] = useState('')
   const [emailNotice, setEmailNotice] = useState('')
-  const [pending, setPending] =
+  const [stored, setStored] =
     useLocalStorage<PendingEmailChange>(PENDING_EMAIL_KEY)
   const [codeOpen, setCodeOpen] = useState(false)
   const { logout } = useAuth()
@@ -61,9 +67,20 @@ export function ProfileSection() {
     }
   }, [])
 
-  // a snapshot whose code has died needs no call to know it is useless
+  // The snapshot this page may use: the signed-in account's own. One
+  // belonging to another account is left in storage — it is still its
+  // owner's change to finish — but never read from here, so neither the
+  // details card nor the confirm dialog can offer somebody else's
+  // address, or act on it as this account's (PR #149 review).
+  const pending = user && stored?.userId === user.id ? stored : null
+
+  // A snapshot nobody can use needs no call to know it: its code has
+  // died, or it names no owner (written before snapshots were scoped),
+  // so no account may claim it.
   useEffect(() => {
-    if (pending && pending.expiresAt <= Date.now()) setPending(null)
+    if (!stored) return
+    if (stored.expiresAt <= Date.now() || typeof stored.userId !== 'number')
+      setStored(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -72,6 +89,8 @@ export function ProfileSection() {
     setDeleteError('')
     try {
       await profileApi.deleteAccount()
+      // the account is gone, and so is any email change it had parked
+      if (pending) setStored(null)
       // Clears the stored session. logout() aims for the home page, but
       // ProtectedRoute's /login redirect wins from any protected page
       // (the token-clearing render outruns the navigation transition) —
@@ -137,7 +156,9 @@ export function ProfileSection() {
             // the 202 body carries the account as it stands, so a
             // username changed by the same PATCH is already in
             setUser(accepted.user)
-            setPending({
+            setStored({
+              // the 202's own account, not this page's copy of it
+              userId: accepted.user.id,
               email: accepted.email,
               expiresAt: Date.now() + accepted.expiresInSeconds * 1000,
               resendAt: Date.now() + accepted.resendInSeconds * 1000,
@@ -169,13 +190,13 @@ export function ProfileSection() {
           onClose={() => setCodeOpen(false)}
           onVerified={(updated) => {
             setUser(updated)
-            setPending(null)
+            setStored(null)
             setCodeOpen(false)
             setEmailNotice('Your email address has been updated.')
           }}
-          onResent={setPending}
+          onResent={setStored}
           onDiscarded={(message) => {
-            setPending(null)
+            setStored(null)
             setCodeOpen(false)
             setEmailError(message)
           }}

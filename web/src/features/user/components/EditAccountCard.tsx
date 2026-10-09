@@ -15,6 +15,12 @@
 // than by its wording. A name/address refused as taken rolls the gate
 // code's consumption back with it, so the card returns to the fields
 // still holding a live code and Save reuses it.
+// 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: a retryable
+// failure now always leaves the card ON the code step. Reached from the
+// fields (where an amended save starts), it used to clear the digits and
+// stay there, so the next Save submitted an empty code with no boxes to
+// type it into. A body the server's validation refuses is an `amend` too
+// now (problemTypes.ts), so the fields it refused stay editable.
 // Reviewed by: [pending]
 
 import React, { useState } from 'react'
@@ -138,12 +144,18 @@ export function EditAccountCard({
           break
         }
         case 'amend':
-          // the refusal rolled the gate consumption back, so the code
-          // stays good: back to the fields, Save reuses it
+          // nothing spent the code refusing these values, so it stays
+          // good: back to the fields, Save reuses it
           setVerifying(false)
           break
         default:
+          // the code is still live, so the step stands with empty boxes.
+          // setVerifying matters when the save was launched FROM the
+          // fields after an amend: clearing the digits there left the
+          // next Save sending an empty code with nowhere to retype it
+          // (PR #149 review)
           setCode(emptyCode())
+          setVerifying(true)
       }
       setError(message)
       setBusy(false)

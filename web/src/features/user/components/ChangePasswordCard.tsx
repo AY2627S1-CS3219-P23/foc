@@ -13,6 +13,12 @@
 // deviates from. The confirmation now travels to the server, where the
 // double-entry check belongs (F2.1.4); the local match check survives
 // only as a pre-flight that saves a round trip.
+// 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: a password the
+// server's own validation refuses (too short, no digit, entries that
+// don't match) is an `amend` now, not a code retry — the card returns to
+// the fields, which were what it refused, and keeps the unspent code so
+// fixing the password costs no resend. Only a wrong code or a failure
+// that never judged the password keeps the code step.
 // Reviewed by: [pending]
 
 import React, { useState } from 'react'
@@ -105,17 +111,27 @@ export function ChangePasswordCard({ email }: ChangePasswordCardProps) {
       setVerifying(false)
       setSaved(true)
     } catch (err: unknown) {
-      // 'amend' can't happen here (nothing unique is being claimed), so
-      // anything that isn't a live-code retry sends the card back to the
-      // fields for a new one
-      if (gateFailure(err) === 'retry') {
-        setCode(emptyCode())
-      } else {
-        const wait = retryAfter(err)
-        setGate(null)
-        setVerifying(false)
-        setCode(emptyCode())
-        if (wait !== null) setBlockedUntil(startedAt(wait))
+      switch (gateFailure(err)) {
+        case 'retry':
+          // the code in the inbox is still good: the step stands, boxes
+          // cleared for another attempt
+          setCode(emptyCode())
+          break
+        case 'amend':
+          // the password itself was refused, before the code was read —
+          // back to the fields holding the unspent code, which submit()
+          // reuses rather than spending a resend
+          setVerifying(false)
+          break
+        default: {
+          // no usable code any more: the card asks for a new one, after
+          // the wait a 429 quoted
+          const wait = retryAfter(err)
+          setGate(null)
+          setVerifying(false)
+          setCode(emptyCode())
+          if (wait !== null) setBlockedUntil(startedAt(wait))
+        }
       }
       setError(errorMessage(err, 'Could not update your password. Try again.'))
     } finally {
@@ -239,17 +255,28 @@ export function ChangePasswordCard({ email }: ChangePasswordCardProps) {
             }}
           />
         ) : (
-          <button
-            type="submit"
-            disabled={busy || blocked > 0}
-            className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
-            {busy
-              ? 'Sending OTP...'
-              : blocked > 0
-                ? `Try again in ${blocked}s`
-                : 'Verify & Continue'}
-          </button>
+          <>
+            {/* a code kept from a refused password is still live: say so,
+                as the Edit Account card does, so "Verify & Continue"
+                isn't read as spending a resend */}
+            {gate && (
+              <p className="text-xs text-gray-500">
+                The code already sent to {email} is still valid — continue to
+                use it again.
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={busy || blocked > 0}
+              className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {busy
+                ? 'Sending OTP...'
+                : blocked > 0
+                  ? `Try again in ${blocked}s`
+                  : 'Verify & Continue'}
+            </button>
+          </>
         )}
       </form>
     </section>

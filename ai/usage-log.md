@@ -26,6 +26,44 @@ Entry template:
 ```
 
 ---
+## 2026-10-09 — Leong Wei Zhi (PR #149 Copilot review: snapshot ownership + failure recovery)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debug (review fixes) + generate (regression tests)
+- **Scope:** `web`: `features/user/problemTypes.ts`, `types.ts`,
+  `components/ProfileSection.tsx`, `EditAccountCard.tsx`,
+  `ChangePasswordCard.tsx`, `EmailChangeModal.tsx`,
+  `OtpVerificationModal.tsx`; `test/profile.test.tsx`,
+  `test/auth.test.tsx`.
+- **Prompt(s):** Asked to address Copilot's four findings on PR #149.
+  (1) The pending-email snapshot used one browser-wide key with no
+  account on it and outlived both logout and account deletion, so the
+  next account to sign in was shown — and could confirm against its own
+  account — an address somebody else had parked: `PendingEmailChange`
+  carries `userId` now, the page reads only the signed-in account's own
+  (another account's is left alone, an ownerless or expired one is
+  dropped), the resend keeps the owner, and deleting the account clears
+  its snapshot. (2) After a name-taken refusal the Edit card sits at its
+  fields holding a live code; a retryable failure there cleared the
+  digits without reopening the code step, so the next Save submitted an
+  empty code with no boxes to type into — the retry branch now always
+  returns to the step. (3) `problemType()` read Spring's placeholder
+  `type: "about:blank"` as a real type, which made the sign-up dialog
+  answer for AuthService's untyped post-flush refusal and stay open over
+  a sign-up only the form could fix; `about:blank` is reported as untyped
+  now, in the one helper. (4) An untyped 400 is the request body's own
+  validation (`ProblemDetailAdvice.handleInvalidBody`), which runs before
+  the service reads the code, so it is classified `amend` rather than a
+  code retry: both cards return to their fields — the part that was
+  refused — keeping the unspent code, where before a rejected password or
+  address left the fields disabled behind a code step and cost the user
+  their edits.
+- **Author review:** Six regression tests added (account switch, an
+  ownerless snapshot, amend-then-transient-failure, an untyped 400 on
+  each card, and the `about:blank` sign-up refusal); each was checked to
+  fail against the pre-fix code and pass after. Vitest (86 tests),
+  eslint, tsc and prettier clean; reviewed via pull request.
+
+---
 ## 2026-10-07 — Leong Wei Zhi (#112 profile screens on #92's real endpoints)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** refactor (contract swap) + generate (the two new code steps)

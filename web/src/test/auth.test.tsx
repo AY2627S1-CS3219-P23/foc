@@ -17,6 +17,10 @@
 // resend is in flight.
 // 2026-09-30, Claude Code (Opus 5), PR #150 approval notes: the expiry
 // line keeps up with the clock and says plainly when the code has run out.
+// 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: the
+// back-to-the-form cases now include the untyped refusal as the server
+// really sends it — `type: "about:blank"`, which the dialog had been
+// reading as a type of its own.
 // Author review: Ryan to review via the PR.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -323,6 +327,16 @@ describe('sign-up page', () => {
       429,
       'Too many incorrect codes; sign up again to get a new code',
       OTP_ATTEMPTS_EXCEEDED,
+    ],
+    [
+      // AuthService's post-flush race is a plain ResponseStatusException,
+      // so Spring fills `type` with the placeholder `about:blank` — no
+      // type at all, and the sentence is the only signal. Only the form
+      // has the field that needs changing.
+      'an identifier taken after the checks',
+      400,
+      'Email or username was just taken; choose another',
+      'about:blank',
     ],
   ])(
     '%s sends the user back to the filled form',

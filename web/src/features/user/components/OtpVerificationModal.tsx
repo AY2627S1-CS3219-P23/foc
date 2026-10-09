@@ -25,6 +25,13 @@
 // wording of `detail` — the durable fix this file's own comment asked
 // for. The two countdowns moved to the shared otpCountdown module, which
 // the profile page's code steps use as well; behaviour unchanged.
+// 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: the untyped
+// refusal below reaches its sentence match again. AuthService's post-flush
+// race is a plain ResponseStatusException, whose body carries
+// `type: "about:blank"` — truthy, so the type list answered for it and the
+// dialog stayed open over a sign-up only the form could fix. problemType()
+// reports `about:blank` as untyped now (problemTypes.ts), which is the
+// whole fix; the check here is unchanged.
 // Author review: Leong Wei Zhi to review via the PR.
 
 import { useState } from 'react'
@@ -64,7 +71,8 @@ const ENDING_TYPES = [
 // where a concurrent sign-up took the email or username after the checks.
 // The remedy is to change a field, and only the form has fields. Giving it
 // a type is a one-line user-service follow-up; until then it is matched by
-// its sentence, as everything here used to be.
+// its sentence, as everything here used to be — which only works because
+// problemType() reads the `about:blank` such a body carries as "no type".
 const UNTYPED_ENDING_DETAIL = 'Email or username was just taken; choose another'
 
 function endsTheSignup(error: unknown): boolean {

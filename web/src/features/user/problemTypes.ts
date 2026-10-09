@@ -6,6 +6,11 @@
 // the durable way to tell these failures apart: the `detail` sentence is
 // human copy and may be reworded, which is exactly why the sign-up
 // dialog's sentence list (PR #150) was flagged for replacement.
+// 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: `about:blank`
+// is reported as untyped (RFC 9457's "no type", and the value Spring puts
+// on every ProblemDetail built without one), and an untyped 400 — the
+// DTO validation ProblemDetailAdvice answers with — is classified as a
+// refusal of the submitted values rather than of the code.
 // Reviewed by: [pending]
 
 import { ApiError } from '@/lib/api/http'
@@ -27,10 +32,21 @@ export const EMAIL_TAKEN = 'urn:foc:user:email-taken'
 /** The username is already taken. 400 */
 export const USERNAME_TAKEN = 'urn:foc:user:username-taken'
 
+// RFC 9457's "no type", and what Spring stamps on every ProblemDetail
+// built without one: a body can carry the field and still say nothing.
+// user-service's validation 400s (ProblemDetailAdvice.handleInvalidBody),
+// its untyped ResponseStatusExceptions and SecurityProblemResponses all
+// come through this way.
+const UNTYPED = 'about:blank'
+
 // The type URI an API failure carries, or null for anything else (a
-// network blip, a 500, an untyped refusal).
+// network blip, a 500, an untyped refusal — `about:blank` included:
+// checking the field for truthiness read it as a type and skipped the
+// callers' fallbacks, PR #149 review).
 export function problemType(error: unknown): string | null {
-  return error instanceof ApiError ? (error.problem?.type ?? null) : null
+  if (!(error instanceof ApiError)) return null
+  const type = error.problem?.type
+  return type && type !== UNTYPED ? type : null
 }
 
 // Seconds the server asked the caller to wait, or null. Only the two 429s
@@ -45,15 +61,19 @@ export function retryAfter(error: unknown): number | null {
  * (PATCH /users/me, POST /users/me/password):
  *
  * - `retry`  — the code step stands, the code in the inbox is still good:
- *              a wrong guess, or any untyped failure (500, network).
+ *              a wrong guess, or a failure that never judged the values (a
+ *              500, a mail 502, a network blip).
  * - `restart`— no usable code any more, so the card returns to its fields
  *              and asks for a new one: expired, spent (429), or never
  *              requested.
- * - `amend`  — the change itself was refused (name/address taken). The
- *              refusal rolls the gate consumption back with it, so the
- *              code is STILL LIVE — the card goes back to its fields
- *              holding the code, and the next Save reuses it rather than
- *              spending a resend (AccountUpdateService's rollback note).
+ * - `amend`  — the values submitted were refused and the code was NOT
+ *              spent refusing them, so it is STILL LIVE: the card goes
+ *              back to its fields holding the code, and the next Save
+ *              reuses it rather than spending a resend. Two failures land
+ *              here — a name or address already taken (the refusal rolls
+ *              the gate consumption back with it, AccountUpdateService's
+ *              rollback note), and a body the DTO's own validation
+ *              rejected, which never reached the gate at all.
  */
 export type GateFailure = 'retry' | 'restart' | 'amend'
 
@@ -66,6 +86,17 @@ export function gateFailure(error: unknown): GateFailure {
     case USERNAME_TAKEN:
     case EMAIL_TAKEN:
       return 'amend'
+    case null:
+      // An untyped 400 is the request body's own validation
+      // (ProblemDetailAdvice's handleInvalidBody / handleUnreadableBody),
+      // which runs before the service reads the code: a password the
+      // policy refuses, a confirmation that doesn't match, a malformed
+      // address. The fields are what need fixing, and the code is
+      // untouched. Everything else untyped — a 500, a mail 502, a 409
+      // race, a network blip — is a retry on the same code.
+      return error instanceof ApiError && error.status === 400
+        ? 'amend'
+        : 'retry'
     default:
       return 'retry'
   }

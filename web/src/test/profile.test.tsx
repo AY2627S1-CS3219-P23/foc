@@ -9,6 +9,12 @@
 // dialog, the localStorage snapshot that survives a reload, the
 // problem+json type URIs that decide whether a card retries, amends or
 // restarts, and the password call's { newPassword, confirmPassword, otp }.
+// 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: cases for the
+// three fixes — a pending snapshot is scoped to the account that parked it
+// (another account's is neither shown nor acted on), a retryable failure
+// after an amended save brings the code boxes back, and an untyped 400
+// (the server's own body validation) returns both cards to their fields
+// with the unspent code kept.
 // Reviewed by: [pending]
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -21,6 +27,7 @@ import {
   OTP_INVALID,
   USERNAME_TAKEN,
 } from '@/features/user/problemTypes'
+import type { PendingEmailChange } from '@/features/user/types'
 import type { AdminUser } from '@/features/user/types'
 import { ApiError } from '@/lib/api/http'
 import { routes } from '../routes'
@@ -113,6 +120,27 @@ async function typeCode(
 
 const snapshot = () =>
   JSON.parse(localStorage.getItem('pendingEmailChange') ?? 'null')
+
+// the localStorage snapshot of a parked email change, as the page writes
+// it: user-service has no GET for the row
+function storeSnapshot(override: Partial<PendingEmailChange> = {}) {
+  localStorage.setItem(
+    'pendingEmailChange',
+    JSON.stringify({
+      userId: me.id,
+      email: NEW_EMAIL,
+      expiresAt: Date.now() + 600_000,
+      resendAt: Date.now() + 60_000,
+      ...override,
+    }),
+  )
+}
+
+// What Spring answers with when a request body breaks the DTO's own rules
+// (ProblemDetailAdvice.handleInvalidBody): a 400 whose `type` is the
+// placeholder `about:blank`, i.e. no type at all. The code never reached
+// the gate, so it is still live and the FIELDS are what need fixing.
+const UNTYPED = 'about:blank'
 
 describe('profile page', () => {
   it('redirects to the login page without a session', async () => {
@@ -212,6 +240,102 @@ describe('edit account info', () => {
     )
   })
 
+  it('brings the code boxes back when a save after an amend fails', async () => {
+    const user = userEvent.setup()
+    vi.mocked(profileApi.updateAccount)
+      .mockRejectedValueOnce(
+        refusal(400, 'Username is already taken', USERNAME_TAKEN),
+      )
+      // the retry from the fields, where the amend left the card: a mail
+      // 502 or a 500 never judged the code, so it is still live
+      .mockRejectedValueOnce(refusal(502, 'Could not send the email', UNTYPED))
+    const usernameInput = await openEditCard(user)
+
+    await user.clear(usernameInput)
+    await user.type(usernameInput, 'taken_name')
+    await user.click(
+      editCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+    await typeCode(user, OTP, editCard())
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
+
+    // amended: back at the fields, holding the code
+    expect(await editCard().findByRole('alert')).toHaveTextContent(
+      'Username is already taken',
+    )
+    await user.clear(
+      editCard().getByRole('textbox', { name: 'Desired Username' }),
+    )
+    await user.type(
+      editCard().getByRole('textbox', { name: 'Desired Username' }),
+      'utown_runner',
+    )
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
+
+    // the digits were cleared by the failure, so the step has to come
+    // back with them — Save from the fields would send an empty code
+    expect(await editCard().findByRole('alert')).toHaveTextContent(
+      'Could not send the email',
+    )
+    expect(editCard().getByLabelText('Digit 1 of 6')).toHaveValue('')
+    await typeCode(user, OTP, editCard())
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(profileApi.updateAccount).toHaveBeenLastCalledWith(
+        { username: 'utown_runner' },
+        OTP,
+      ),
+    )
+    // one code throughout: nothing here was worth a resend
+    expect(profileApi.requestOtp).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns to the fields with the code when the server refuses the body', async () => {
+    const user = userEvent.setup()
+    vi.mocked(profileApi.updateAccount).mockRejectedValueOnce(
+      refusal(400, 'Username must be 3-30 characters.', UNTYPED),
+    )
+    const usernameInput = await openEditCard(user)
+
+    await user.clear(usernameInput)
+    await user.type(usernameInput, 'ab')
+    await user.click(
+      editCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+    await typeCode(user, OTP, editCard())
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
+
+    // the validation ran before the code was read, so the fields — the
+    // part that was refused — are editable again and the code still works
+    expect(await editCard().findByRole('alert')).toHaveTextContent(
+      'Username must be 3-30 characters.',
+    )
+    expect(
+      editCard().getByRole('textbox', { name: 'Desired Username' }),
+    ).toBeEnabled()
+    expect(
+      editCard().getByText(/still valid — Save to use it again/),
+    ).toBeInTheDocument()
+
+    await user.clear(
+      editCard().getByRole('textbox', { name: 'Desired Username' }),
+    )
+    await user.type(
+      editCard().getByRole('textbox', { name: 'Desired Username' }),
+      'utown_runner',
+    )
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(profileApi.updateAccount).toHaveBeenLastCalledWith(
+        { username: 'utown_runner' },
+        OTP,
+      ),
+    )
+    expect(profileApi.requestOtp).toHaveBeenCalledTimes(1)
+  })
+
   it('sends the card back and quotes the wait once the attempts are spent', async () => {
     const user = userEvent.setup()
     vi.mocked(profileApi.updateAccount).mockRejectedValue(
@@ -275,14 +399,7 @@ describe('edit account info', () => {
   it('still offers the code step after a reload mid-confirm', async () => {
     const user = userEvent.setup()
     // user-service has no GET for the parked row, so the page remembers it
-    localStorage.setItem(
-      'pendingEmailChange',
-      JSON.stringify({
-        email: NEW_EMAIL,
-        expiresAt: Date.now() + 600_000,
-        resendAt: Date.now() + 60_000,
-      }),
-    )
+    storeSnapshot()
     renderProfile()
 
     await user.click(
@@ -296,6 +413,33 @@ describe('edit account info', () => {
 
     expect(await screen.findByText(NEW_EMAIL)).toBeInTheDocument()
     expect(profileApi.updateAccount).not.toHaveBeenCalled()
+  })
+
+  it('ignores a pending change parked by another account', async () => {
+    // localStorage is browser-wide and a snapshot outlives the session
+    // that wrote it: this one is account 99's, and account 3 is signed in
+    storeSnapshot({ userId: 99 })
+    renderProfile()
+
+    await screen.findByText('nus_courier_99')
+    expect(
+      screen.queryByRole('button', { name: 'Enter your code' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(new RegExp(NEW_EMAIL))).not.toBeInTheDocument()
+    // left where it is: still its owner's change to finish
+    expect(snapshot().userId).toBe(99)
+  })
+
+  it('ignores a pending change that names no account', async () => {
+    // written before snapshots carried an owner: nobody can claim it
+    storeSnapshot({ userId: undefined })
+    renderProfile()
+
+    await screen.findByText('nus_courier_99')
+    expect(
+      screen.queryByRole('button', { name: 'Enter your code' }),
+    ).not.toBeInTheDocument()
+    await waitFor(() => expect(snapshot()).toBeNull())
   })
 
   it('discards changes on cancel', async () => {
@@ -362,6 +506,48 @@ describe('change password', () => {
       OTP,
     )
     expect(passwordCard().getByLabelText('New Password')).toHaveValue('')
+  })
+
+  it('returns to the fields with the code when the password is refused', async () => {
+    const user = userEvent.setup()
+    vi.mocked(profileApi.changePassword).mockRejectedValueOnce(
+      refusal(400, 'Password must be 10-50 characters.', UNTYPED),
+    )
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+    await fillPasswords(user, 'short1', 'short1')
+    await typeCode(user, OTP, passwordCard())
+    await user.click(
+      passwordCard().getByRole('button', { name: 'Update Password' }),
+    )
+
+    // the policy check ran before the code was read: the password is
+    // editable again, and the unspent code is kept
+    expect(await passwordCard().findByRole('alert')).toHaveTextContent(
+      'Password must be 10-50 characters.',
+    )
+    expect(passwordCard().getByLabelText('New Password')).toBeEnabled()
+    expect(
+      passwordCard().getByText(/still valid — continue to use it again/),
+    ).toBeInTheDocument()
+
+    await user.clear(passwordCard().getByLabelText('New Password'))
+    await user.clear(passwordCard().getByLabelText('Confirm New Password'))
+    await fillPasswords(user, 'NewPassword1', 'NewPassword1')
+    await user.click(
+      passwordCard().getByRole('button', { name: 'Update Password' }),
+    )
+
+    expect(
+      await passwordCard().findByText('Password updated.'),
+    ).toBeInTheDocument()
+    expect(profileApi.changePassword).toHaveBeenLastCalledWith(
+      'NewPassword1',
+      'NewPassword1',
+      OTP,
+    )
+    // fixing the password cost no resend
+    expect(profileApi.requestOtp).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the code step when the code is wrong', async () => {

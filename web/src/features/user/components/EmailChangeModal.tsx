@@ -12,6 +12,9 @@
 // code entry, so this step is a documented deviation (web/AGENTS.md).
 // Dismissing it keeps the pending change — PR #150's lesson: discarding
 // it stranded a code already emailed behind the resend cooldown.
+// 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: a resend
+// carries the snapshot's fields it does not replace — the account that
+// owns it above all (ProfileSection reads no snapshot without one).
 // Reviewed by: [pending]
 
 import React, { useState } from 'react'
@@ -84,6 +87,7 @@ export function EmailChangeModal({
     try {
       const accepted = await profileApi.resendEmailChange()
       onResent({
+        ...pending,
         email: accepted.email,
         expiresAt: startedAt(accepted.expiresInSeconds),
         resendAt: startedAt(accepted.resendInSeconds),

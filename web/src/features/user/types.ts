@@ -14,6 +14,9 @@
 // 2026-10-07, Claude Code (Opus 5), issue #112 (PR #149): OtpTimings,
 // EmailChangeAccepted and PendingEmailChange, for #92's account-update
 // endpoints (PR #157) now that they exist.
+// 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review:
+// PendingEmailChange names the account it belongs to, so the profile
+// page can tell its own snapshot from one another account left behind.
 // Reviewed by: Ryan Ang
 
 // POST /auth/login body (user-service's LoginResponse DTO) — the
@@ -106,7 +109,14 @@ export interface EmailChangeAccepted extends OtpTimings {
 // offers the code step instead of making the user redo the PATCH (and pay
 // for a fresh gate code). Absolute times rather than the durations the API
 // returns, for the reason SignupPending above gives.
+//
+// userId is the account the change belongs to. localStorage is
+// browser-wide and a snapshot outlives the session that wrote it (logout
+// and account deletion leave it there), so without an owner the page
+// would offer whatever address it found to whoever signed in next, and
+// act on it as theirs (PR #149 review).
 export interface PendingEmailChange {
+  userId: number
   email: string
   expiresAt: number // epoch ms
   resendAt: number // epoch ms
