@@ -25,6 +25,9 @@
   the team's saga design (docs/credit-service.md D6-D9) — no sign-up
   call from the User Service, and reservation, transfer and release
   all by events. Transcription only; no decisions made by the tool.
+  2026-10-09, PR #163 review (Leong Wei Zhi): Notification row lists the saga's
+  submitted/rejected events; Credit DB engine no longer open
+  (PostgreSQL, docs/credit-service.md D1).
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -107,7 +110,7 @@ TBD = to be decided.
 | Order Service → Supplier Service | sync REST | validate pickup location is a known supplier/landmark; fetch supplier locations for the 1 km acceptance-proximity check | Order F1.1.1, F8.1 |
 | Order Service → Broker (RabbitMQ) → Credit Service | **async events** | reserve the reward on `request.submitted`, transfer on `request.completed`, release on `request.cancelled` / `request.expired`; repeated events for the same request processed once (see [`credit-service.md`](credit-service.md)) | Credit F2.1, F2.1.1, F3.1, F5.1, NFR1.1, NFR2.2, NFR2.2.1; **M6** |
 | Credit Service → Broker (RabbitMQ) → Order Service | **async events** | reservation reply: `credit.reserved` moves the request from pending to created, `credit.reservation-rejected` moves it to rejected when the available balance is insufficient (see [`credit-service.md`](credit-service.md), D7–D8) | Credit F2.1.3; Order F1.1.4; **M6** |
-| Order Service → Broker (RabbitMQ) → Notification Service | **async events** | event on every request state transition (created/accepted/collected/completed/cancelled/expired); at-least-once, persisted across restarts; consumer deduplicates, retries, dead-letters exhausted retries; delivery failure never affects the producing operation; new event types need no publisher changes | Order F0.2; Notif F1.1, F1.3, F1.4, F2.1–F2.3, NFR1.1–1.2; **M6** |
+| Order Service → Broker (RabbitMQ) → Notification Service | **async events** | event on every request state transition (submitted/created/accepted/collected/completed/cancelled/expired/rejected); at-least-once, persisted across restarts; consumer deduplicates, retries, dead-letters exhausted retries; delivery failure never affects the producing operation; new event types need no publisher changes | Order F0.2; Notif F1.1, F1.3, F1.4, F2.1–F2.3, NFR1.1–1.2; **M6** |
 
 Timer-driven behaviors stay **inside** the owning service (no arrow):
 request expiry from the created or accepted state at the deadline, with
@@ -145,9 +148,9 @@ These shape sizing and implementation rather than adding components:
 
 ## Decisions still open (team, not AI)
 
-- **Database engines** for the Order and Credit services — one database
-  per service is decided; the User, Supplier and Notification DBs are
-  decided (PostgreSQL).
+- **Database engine** for the Order Service — one database per service
+  is decided; the User, Supplier, Notification and Credit DBs are
+  decided (PostgreSQL; Credit per [`credit-service.md`](credit-service.md) D1).
 - **Supplier caching mechanism** (Supplier NFR1.1.1) — in-process vs. a
   shared cache; drawn inside the Supplier Service until decided.
 

@@ -3,6 +3,8 @@
 %% Prompts: Convert the given credit-service.md file into a draft mermaid diagram. Skip heavy implementation details.
 %% Scope: Converted my finalized architecture design and component decisions into a formatted C4 Mermaid diagram. Assisted with resolving Mermaid layout overlaps and improving diagram caption readability.
 %% Author review: I provided the complete architectural design, components, and constraints. I validated the generated Mermaid syntax to ensure it strictly represents my own architectural decisions.
+%% 2026-10-09, Claude Code (Opus 5.5), PR #163 review (Leong Wei Zhi): Error Handler label
+%% narrowed to the read API. Author review: Ryan Ang, pending pull request review.
 
 %% AI generated (edited by Ryan Ang)
 
@@ -24,7 +26,7 @@ flowchart TD
  
         subgraph Entry ["Entry points"]
             CAC["<b>Credit Account Controller</b><br/>[Component: Spring MVC RestController]<br/>Exposes the caller's available/reserved balances (F4.1)<br/>and date/amount filtered history (F4.1.2, F4.1.3)."]:::component
-            CVH["<b>Error Handler</b><br/>[Component: Spring @RestControllerAdvice]<br/>Maps validation and domain errors<br/>to HTTP responses."]:::component
+            CVH["<b>Error Handler</b><br/>[Component: Spring @RestControllerAdvice]<br/>Maps invalid read-API query parameters<br/>to HTTP error responses."]:::component
             REL["<b>Request Event Listener</b><br/>[Component: Spring AMQP RabbitListener]<br/>submitted: reserve (F2.1). completed: transfer (F3.1).<br/>cancelled / expired: release (F2.1.1).<br/>Acknowledges after commit; retries, then dead-letters."]:::component
         end
  

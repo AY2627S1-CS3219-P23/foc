@@ -26,6 +26,41 @@ Entry template:
 ```
 
 ---
+## 2026-10-09 — Ryan Ang (PR #163 review fixes)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (review fixes: one test + docs)
+- **Scope:**
+  - `notification-service/.../DomainEventContractTest.java`: producer
+    and `requestId` checked through each event's domain marker
+    (`RequestEvent` / `CreditEvent`); `parties` required present, not
+    non-empty.
+  - `foc-contracts`: `request-submitted.example.json` now names the
+    requester in `parties`; README convention 1 reworded for saga
+    reply events.
+  - `docs/credit-service.md` / `.mmd`: pre-saga residue removed
+    (ownership note, error-mapping row and label, lot spend order,
+    closed-economy rule, legend), the two invariants stated, the
+    Notification row updated.
+  - `docs/architecture.md` / `.mmd`: Order states include `pending`
+    and `rejected`, Notification row lists the saga events, Credit DB
+    is PostgreSQL.
+  - `docs/notification-service.md`: catalog description, the
+    events-are-facts paragraph and the exchange list.
+- **Prompt(s):** Asked to read the review comments on PR #163 and fix
+  them.
+- **Author review:** Three choices were the author's, made via
+  options Q&A before any edit: `request.submitted` notifies the
+  requester (rather than documenting it as notification-free), item 4
+  states the reviewer's two proposed invariants (rather than being
+  dropped), and the Order states in the diagram include `pending` and
+  `rejected`. The convention rewording follows the team's saga
+  decision (`docs/credit-service.md` D7-D8) and was requested by the
+  convention's owner in the review. All other edits follow the
+  reviewer's own suggestions. `./mvnw install` in `foc-contracts` (9 tests)
+  and `./mvnw test` in `notification-service` (36 tests, 0 failures,
+  0 skipped, with Docker running for the RabbitMQ Testcontainers
+  tests) both pass.
+
 ## 2026-10-08 — Ryan Ang (foc-contracts: saga event contracts)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (records, fixtures, tests, docs)

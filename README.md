@@ -366,8 +366,11 @@ neutral-options Q&A and recorded in `ai/usage-log.md`; and the
 Credit Service saga event contracts in `foc-contracts` (PR #163) —
 four event records, the `credit-events` exchange name, their
 fixtures and the registry tests — together with that PR's review
-fixes to `docs/credit-service.md` and the high-level architecture
-doc and diagram, which were brought in line with it; the saga, the
+fixes to `docs/credit-service.md`, the high-level architecture doc
+and diagram, the notification design doc and the foc-contracts
+convention wording, which were brought in line with it, and the
+notification-service contract test generalized to the two event
+domains; the saga, the
 event names and fields, and the database schema are the team's
 decisions, recorded in `docs/credit-service.md` and
 `ai/usage-log.md`.

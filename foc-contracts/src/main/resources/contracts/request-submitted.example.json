@@ -4,7 +4,7 @@
   "occurredAt": "2026-09-19T07:59:58Z",
   "producer": "order-service",
   "correlationId": "corr-7f3a1c9e",
-  "parties": [],
+  "parties": ["usr-req-1001"],
   "requestId": "req-20260919-0042",
   "requesterId": "usr-req-1001",
   "pickupLocation": "Techno Edge",

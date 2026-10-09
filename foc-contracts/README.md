@@ -10,6 +10,10 @@
   lists updated for the four saga events (team design,
   docs/credit-service.md D7-D8); author review: Ryan Ang, pending
   pull request review.
+  2026-10-09, PR #163 review (Leong Wei Zhi): convention 1 reworded for the
+  Credit saga's reply events (team design, docs/credit-service.md
+  D7-D8), at the convention owner's request. Author review: Ryan Ang,
+  pending pull request review.
 -->
 
 # foc-contracts
@@ -64,7 +68,11 @@ Leong Wei Zhi — D16–D19 in
 
 1. **Semantics.** Events are **past-tense facts that already
    happened**, never commands. Calls whose caller needs a result stay
-   synchronous REST. One record per event type.
+   synchronous REST, unless the exchange is a saga step: there the
+   result travels as a reply event, itself a past-tense fact (e.g.
+   `request.submitted` answered by `credit.reserved` or
+   `credit.reservation-rejected`, `docs/credit-service.md` D7–D8). One
+   record per event type.
 
 2. **Naming & identity.** The record class is PascalCase past-tense
    (`RequestAccepted`). Its **canonical identity** is

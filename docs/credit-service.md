@@ -4,6 +4,11 @@
   Scope: typo and punctuation fixes, and the author's own rewording of
   D3 applied verbatim (PR #163 Copilot review). No design content was
   written or decided by the tool in this change.
+  2026-10-09, PR #163 review (Leong Wei Zhi): pre-saga residue removed (ownership
+  note, error-mapping row, lot spend order, closed-economy rule,
+  legend), the two invariants stated as Leong Wei Zhi proposed and the
+  author chose, and the Notification row updated for the author's
+  decision that request.submitted notifies the requester.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -51,21 +56,21 @@ High-level system architecture: [`architecture.md`](architecture.md)
   `created` or `rejected`, and balances change shortly after a request
   is completed, cancelled or expired, not in the same instant.
 
-Proposed event names: `request.submitted`,
-`request.rejected`, `credit.reserved` and `credit.reservation-rejected`
-are new and need records and registry entries in `foc-contracts`.
+The four saga events, `request.submitted`, `request.rejected`,
+`credit.reserved` and `credit.reservation-rejected`, are defined in
+`foc-contracts` (records, registry entries and fixtures).
 
 ## Components
 
-Ownership note: the Credit Service is a request/response
-service. Its state lives only in its own PostgreSQL database (database-per-service). The only timer-driven work is the scheduler and outbox publisher.
+Ownership note: the Credit Service serves a read-only REST API to the
+Web App; every balance change arrives as a request event. Its state lives only in its own PostgreSQL database (database-per-service). The only timer-driven work is the scheduler and outbox publisher.
 
 | Component | Responsibility |
 | --- | --- |
 | **Credit account REST API** (Spring Boot) | For the Web App, authenticated by the user's JWT: returns the caller's available and reserved balance (F4.1) and their transaction history with amount and date-range filters (F4.1.2, F4.1.3). |
-| **Request event listener** (Spring AMQP) | Consumes `request.submitted`, `request.completed`, `request.cancelled` and `request.expired` from the Credit Service's own queue and turns them into reserve (F2.1), transfer (F3.1) or release (F2.1.1) operations. Acknowledges manually after commit. Routes failures to the retry or dead-letter queue (D11). |
-| **Amount validation and error mapping** (Spring Boot, `@RestControllerAdvice`) | Rejects non-integer and non-positive amounts (F1.2, F1.2.1) and maps validation and domain failures (insufficient balance, unknown request, already released) to HTTP error responses. |
-| **Idempotent credit operations service** (Spring Boot, `@Transactional`) | Core logic: provisions accounts with 5 available / 0 reserved, once per user (F1.1.1, F1.1.2). It reserves only if available credit >= amount needed (F2.1, F2.1.2, F2.1.3) and releases or transfers each request's held credits at most once (F2.1.1, F3.1.1, F3.1.2, NFR2.2.1). It spends the oldest credit lots first and commits balance change, held-credits status, lots, history rows and the outgoing reply in one transaction (F5.1, NFR2.1) |
+| **Request event listener** (Spring AMQP) | Consumes `request.submitted`, `request.completed`, `request.cancelled` and `request.expired` from the Credit Service's own queue and turns them into reserve (F2.1), transfer (F3.1) or release (F2.1.1) operations. A reward below 1 is refused (F1.2, F1.2.1). Acknowledges manually after commit. Routes failures to the retry or dead-letter queue (D11). |
+| **Error mapping** (Spring Boot, `@RestControllerAdvice`) | Maps invalid query parameters on the read API (for example the history's amount and date-range filters) to HTTP error responses. Event-path failures never reach it: they are refused with a reply or dead-lettered (see "How each event is handled"). |
+| **Idempotent credit operations service** (Spring Boot, `@Transactional`) | Core logic: provisions accounts with 5 available / 0 reserved, once per user (F1.1.1, F1.1.2). It reserves only if available credit >= amount needed (F2.1, F2.1.2, F2.1.3) and releases or transfers each request's held credits at most once (F2.1.1, F3.1.1, F3.1.2, NFR2.2.1). It spends lots in soonest-expiry order, with the never-expiring sign-up lot last (D4), and commits balance change, held-credits status, lots, history rows and the outgoing reply in one transaction (F5.1, NFR2.1) |
 | **Credit history** (Spring Boot) | Appends one immutable row per transaction such as account provision, reservation, release, transfer, expiry, redistribution, with timestamps and request reference (F4.1.1). It will also serve the filtered history queries (F4.1.2, F4.1.3). |
 | **Outbox publisher** (Spring Boot, `@Scheduled`) | Reads unsent replies from the outbox table, publishes them to the `credit-events` exchange, and marks each one sent once the broker confirms it (D10). |
 | **Expiry and redistribution scheduler** (Spring Boot, `@Scheduled`) | Moves earned credits older than 3 months into the common pool (F6.1). At the start of each month, it shares the pool equally in integer amounts (F6.1.1) and gives the remainder to random users (F6.1.2). |
@@ -197,7 +202,11 @@ reservations instead.
    transfer with no courier is rejected by PostgreSQL even if the
    service code is wrong.
 4. **Two invariants** that every operation preserves, and that can be
-   checked at any time (both queries must return no rows)
+   checked at any time (each check must return no rows):
+   - a `HELD` reservation whose `amount` differs from the sum of its
+     slices;
+   - an account whose `reserved` differs from the sum of the amounts
+     of its `HELD` reservations.
 5. **The history is an independent second record.** Replaying a user's
    history rows with the table above reproduces their `available` and
    `reserved`, so the two can be reconciled against each other. Across
@@ -212,8 +221,9 @@ Same notation as [`architecture.md`](architecture.md):
 | --- | --- |
 | Rectangle | A software component (Spring Boot beans inside the service, or a neighbouring service) |
 | Cylinder | The PostgreSQL database owned by the service |
-| Thin arrow `-->` | Synchronous call (REST/JSON over HTTP, or a process call), caller --> callee |
-| Plain line `---` | Database access via Spring Data JPA |
+| Thin arrow `-->` | Synchronous call (REST/JSON over HTTP, an in-process call, or database access over JDBC), caller --> callee |
+| Thick arrow `==>` | Asynchronous message flow through the broker (AMQP) |
+| Dotted arrow `-.->` | Errors handed to the error handler |
 | `FR… / NFR…` on a line | The requirement the relationship implements |
 
 **Glossary:** JPA = Java Persistence API, REST = HTTP/JSON web APIs, AMQP = the messaging protocol RabbitMQ speaks, held = credits held for one request between reservation and transfer or release, saga = a sequence of local transactions in different services, linked by messages, where a failed step is undone by a compensating step, outbox = a table of messages waiting to be published, written in the same transaction as the data they describe.
@@ -291,7 +301,7 @@ original expiry. Each writes its history rows in the same transaction.
 
 `Sum over all users (available + reserved) + common pool = number of credits ever created`
 
-Credits are created only by the sign-up allocation (F1.1). The credit operation moves credits and destroys none: reserve (available → held), release (held → available), transfer (held → courier), expiry (lot → common pool), redistribution (pool → users).
+Credits are created only by the one-time account provision (F1.1, D6). The credit operation moves credits and destroys none: reserve (available → held), release (held → available), transfer (held → courier), expiry (lot → common pool), redistribution (pool → users).
 
 ## What this design needs from other services
  
@@ -304,7 +314,7 @@ Credits are created only by the sign-up allocation (F1.1). The credit operation 
 | Order Service | Cancel a request that stays `pending` past a waiting time, publishing `request.cancelled` | Without it, a lost or dead-lettered reply strands the request |
 | Order Service | Publish `request.cancelled` only when a request is finally cancelled, never when a courier withdraws and the request returns to created (Order F5.2) | A withdrawal must leave the credits held |
 | `foc-contracts` | Records and registry entries for the four new events, and a `credit-events` exchange name | Shared contracts |
-| Notification Service | Decide which of the new request events notify the requester; `request.rejected` should | It is the only way the requester learns of a refusal |
+| Notification Service | Nothing to build: `request.submitted` and `request.rejected` arrive through its existing `request.#` binding and notify the requester, who is in `parties` on both | The requester sees the submission, and `request.rejected` is the only way they learn of a refusal |
 | Web App | Show `pending` and `rejected` requests to the requester, and warn before submitting when the reward exceeds the displayed balance | The server's answer is no longer immediate |
 | User Service | Nothing | D6 removes the sign-up dependency |
  
