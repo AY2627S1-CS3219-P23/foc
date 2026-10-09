@@ -373,7 +373,13 @@ notification-service contract test generalized to the two event
 domains; the saga, the
 event names and fields, and the database schema are the team's
 decisions, recorded in `docs/credit-service.md` and
-`ai/usage-log.md`.
+`ai/usage-log.md`; and the credit-service scaffold (Spring Boot app,
+Dockerfile, credit-db in compose, the Flyway V1 schema transcribed
+from the design doc, JWT verification copied from supplier-service,
+and their tests), with the ports, image, dependency scope, schema
+scope and test database chosen by the author via options Q&A and
+recorded in `ai/usage-log.md`, plus `note` made `@Nullable` on the
+request event records (the author's decision, issue #165).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

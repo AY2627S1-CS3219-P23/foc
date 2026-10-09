@@ -1,0 +1,8 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-10-09.
+# Scope: copied unmodified (apart from this header) from user-service
+# while scaffolding credit-service (generated there by Spring Initializr).
+# Author review: Ryan Ang, pending pull request review.
+
+/mvnw text eol=lf
+*.cmd text eol=crlf

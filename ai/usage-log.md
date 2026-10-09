@@ -26,6 +26,51 @@ Entry template:
 ```
 
 ---
+## 2026-10-09 — Ryan Ang (credit-service scaffold)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (scaffold + tests + docs)
+- **Scope:** new `credit-service/` skeleton, plus its wiring:
+  - Maven wrapper, `.gitignore`, `.gitattributes` copied from
+    user-service; `pom.xml` (Boot 4.1.1, Java 21, web, JPA, Flyway,
+    Postgres, security, validation, actuator, AMQP, foc-contracts,
+    jjwt, Testcontainers); `Dockerfile` with notification-service's
+    foc-contracts build stage.
+  - `application.yaml` (credit-db datasource, Flyway with
+    `ddl-auto: none`, RabbitMQ connection, JWT secret, CORS origin).
+  - Flyway `V1__baseline.sql`: the eight tables from
+    `docs/credit-service.md`'s "Database" section, with its keys and
+    CHECK constraints and the common pool's single row.
+  - JWT verification copied from supplier-service (verifier, filter,
+    401/403 problem+json); `SecurityConfig` leaves only health open.
+  - Tests (Testcontainers Postgres, `test` profile): context and V1
+    schema checks, and the filter chain's 401/pass-through cases.
+  - `compose.yaml` (credit-service + credit-db + volume),
+    `.env.example` (Credit Service section, `VITE_CREDIT_SERVICE_URL`),
+    root `AGENTS.md` port table, the service's README and AGENTS.md.
+- **Prompt(s):** Asked whether a credit-service scaffold existed, then
+  to build one (app, credit-db in compose, Flyway V1, Dockerfile, JWT
+  filter) on a new branch.
+- **Author review:** The author chose, via options Q&A: host ports
+  8088/5436 and postgres:17; including the messaging dependencies now
+  (no listener or outbox code); the full schema in V1; Testcontainers
+  for tests. The schema itself is the team's design, transcribed; the
+  tool chose only SQL details the doc leaves open (varchar lengths,
+  NOT NULL where the doc marks nothing nullable, constraint/index
+  names, and indexes for the queries the doc lists). The RabbitMQ
+  health check is off in the test profile only, since tests run
+  without a broker. `./mvnw test`: 10 tests, 0 failures;
+  `docker compose config` and `docker compose build credit-service`
+  succeed. Pending pull request review.
+- **issue #165 item 1:** `note` marked `@Nullable` on all nine
+  request records (author's decision: a request may have no note, and a
+  missing display field must not dead-letter a reservation, transfer or
+  release). `request-submitted.example.json` now carries `"note": null`
+  so the contract tests bind the tolerant path; a new
+  `RequestEventRecordsTest` case keeps every `note` `@Nullable`. The
+  foc-contracts README/AGENTS and `docs/notification-service.md`
+  updated to match. Tests: foc-contracts 10, notification-service 36
+  (Docker running, none skipped), credit-service 10 — 0 failures.
+
 ## 2026-10-09 — Ryan Ang (PR #163 review fixes)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor (review fixes: one test + docs)

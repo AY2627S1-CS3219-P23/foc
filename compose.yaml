@@ -53,6 +53,11 @@
 # Copilot review: the mailpit image pinned to a tested minor version.
 # 2026-09-29, Claude Code (Opus 5.5): USER_SEED_DEMO passed to the user
 # service (demo-account seeder, off unless set).
+# 2026-10-09, Claude Code (Opus 5.5): credit-service + credit-db wiring
+# added, following the user-service pattern plus notification-service's
+# foc-contracts build and RabbitMQ connection (the saga, docs/credit-
+# service.md). Host ports 8088/5436 and postgres:17 chosen by Ryan Ang via
+# options Q&A.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -277,6 +282,59 @@ services:
       retries: 10
     restart: unless-stopped
 
+  credit-service:
+    # Context is the repo root so the build can include the shared
+    # foc-contracts library (D15).
+    build:
+      context: .
+      dockerfile: credit-service/Dockerfile
+    ports:
+      - "${CREDIT_SERVICE_PORT:-8088}:8080"
+    environment:
+      CREDIT_DB_HOST: credit-db
+      CREDIT_DB_PORT: "5432"
+      CREDIT_DB_NAME: ${CREDIT_DB_NAME:-credit}
+      CREDIT_DB_USER: ${CREDIT_DB_USER:-credit}
+      CREDIT_DB_PASSWORD: ${CREDIT_DB_PASSWORD:?set in .env}
+      # the saga's request and credit events (docs/credit-service.md)
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-foc}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set in .env}
+      # verifies login tokens; the secret user-service signs them with
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
+      # Browser origin allowed by CORS, shared with the other services.
+      WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
+    depends_on:
+      credit-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Credit DB: PostgreSQL owned exclusively by the credit service
+  # (database-per-service). Flyway in the service owns the schema.
+  credit-db:
+    image: postgres:17
+    # Published on the host so local tooling (psql, DB GUIs, the postgres
+    # MCP server) can reach the service-owned DB; the service itself talks
+    # to it over the compose network on 5432. Bound to loopback so the
+    # database is reachable from this machine only.
+    ports:
+      - "127.0.0.1:${CREDIT_DB_HOST_PORT:-5436}:5432"
+    environment:
+      POSTGRES_DB: ${CREDIT_DB_NAME:-credit}
+      POSTGRES_USER: ${CREDIT_DB_USER:-credit}
+      POSTGRES_PASSWORD: ${CREDIT_DB_PASSWORD:?set in .env}
+    volumes:
+      - credit-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CREDIT_DB_USER:-credit} -d ${CREDIT_DB_NAME:-credit}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   # Local mail catcher (issue #88): the default SMTP target for the user
   # service's OTP emails, so dev and demo need no real mail account.
   # Caught mail is browsable at http://localhost:8025; the store is
@@ -294,6 +352,7 @@ services:
 # Other services add their own entries in their own PRs.
 
 volumes:
+  credit-db-data:
   notification-db-data:
   rabbitmq-data:
   supplier-db-data:

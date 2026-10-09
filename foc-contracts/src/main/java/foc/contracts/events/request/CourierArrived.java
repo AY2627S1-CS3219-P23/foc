@@ -7,10 +7,14 @@
  * 2026-09-20: order→request rename and events.core/.request package
  * split applied (author decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-09, Claude Code (Opus 5.5): note marked @Nullable (author's
+ * decision, issue #165): a request may have no note, and a missing one
+ * must not make consumers reject the event.
  */
 package foc.contracts.events.request;
 
 import foc.contracts.events.core.EventTypeRegistry;
+import foc.contracts.events.core.Nullable;
 
 import java.time.Instant;
 import java.util.List;
@@ -31,5 +35,5 @@ public record CourierArrived(
 		String courierId,
 		String pickupLocation,
 		String dropoffLocation,
-		String note) implements RequestEvent {
+		@Nullable String note) implements RequestEvent {
 }

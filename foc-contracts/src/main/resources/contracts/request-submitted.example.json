@@ -9,6 +9,6 @@
   "requesterId": "usr-req-1001",
   "pickupLocation": "Techno Edge",
   "dropoffLocation": "COM3-01-19",
-  "note": "Chicken rice, less chilli",
+  "note": null,
   "reward": 2
 }

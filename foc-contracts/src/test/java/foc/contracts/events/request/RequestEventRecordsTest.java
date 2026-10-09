@@ -7,6 +7,8 @@
  * 2026-09-20: order→request rename and events.core/.request package
  * split applied (author decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-09, Claude Code (Opus 5.5): every record's note must be
+ * @Nullable (author's decision, issue #165).
  * 2026-10-08, Claude Code (Opus 5.5): domain-marker test widened to the credit domain
  * (team design, docs/credit-service.md D7-D8); author review: Ryan Ang,
  * pending pull request review.
@@ -16,6 +18,7 @@ package foc.contracts.events.request;
 import foc.contracts.events.core.DomainEvent;
 import foc.contracts.events.credit.CreditEvent;
 import foc.contracts.events.core.EventTypeRegistry;
+import foc.contracts.events.core.Nullable;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -65,6 +68,23 @@ class RequestEventRecordsTest {
 					entry.eventClass() + " is missing metadata components");
 			assertFalse(components.contains("eventType"),
 					entry.eventClass() + " must not store eventType (it is derived)");
+		}
+	}
+
+	/**
+	 * A request may have no note: a record that required one would make
+	 * consumers dead-letter the event, stopping a reservation, transfer or
+	 * release over a display field (issue #165).
+	 */
+	@Test
+	void noteIsNullableWherePresent() {
+		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
+			for (RecordComponent component : entry.eventClass().getRecordComponents()) {
+				if (component.getName().equals("note")) {
+					assertTrue(component.isAnnotationPresent(Nullable.class),
+							entry.eventClass() + ".note must be @Nullable");
+				}
+			}
 		}
 	}
 
