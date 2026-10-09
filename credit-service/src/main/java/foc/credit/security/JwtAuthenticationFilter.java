@@ -6,6 +6,9 @@
  * caller's user ID and a ROLE_<role> authority in the security context.
  * A missing or invalid token leaves the context unauthenticated, so
  * SecurityConfig and RestAuthEntryPoint render one consistent 401.
+ * 2026-10-10, Claude Code (Opus 5.5), PR #166 Copilot review: no longer a
+ * @Component: SecurityConfig builds it, so it runs only in the security
+ * chain, never as a second servlet-container filter.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.security;
@@ -20,10 +23,8 @@ import java.util.List;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-@Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String AUTHORIZATION_HEADER = "Authorization";

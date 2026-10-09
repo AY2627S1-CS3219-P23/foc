@@ -7,11 +7,16 @@
  * every route except health and /error needs a valid bearer token; there
  * is no role gate yet. CORS sits in the chain so browser preflights pass
  * before the authorization rules.
+ * 2026-10-10, Claude Code (Opus 5.5), PR #166 Copilot review: stateless
+ * sessions (no session is ever created for a bearer API), and the JWT
+ * filter built here rather than as a bean, so it runs only inside this
+ * chain; both as user-service's SecurityConfig does.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.config;
 
 import foc.credit.security.JwtAuthenticationFilter;
+import foc.credit.security.JwtVerifier;
 import foc.credit.security.RestAccessDeniedHandler;
 import foc.credit.security.RestAuthEntryPoint;
 import java.util.List;
@@ -21,6 +26,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -47,7 +53,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            JwtAuthenticationFilter jwtAuthenticationFilter,
+            JwtVerifier jwtVerifier,
             RestAuthEntryPoint restAuthEntryPoint,
             RestAccessDeniedHandler restAccessDeniedHandler) throws Exception {
         return http
@@ -55,6 +61,9 @@ public class SecurityConfig {
                 // uses the corsConfigurationSource bean; answers preflights
                 // before the authorization rules below
                 .cors(Customizer.withDefaults())
+                // every request carries its own bearer token: no session, so
+                // a rejected request doesn't leave one behind either
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // /error must stay open: an exception on any route makes
                         // the container forward here to render the response
@@ -66,7 +75,10 @@ public class SecurityConfig {
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(restAuthEntryPoint)
                         .accessDeniedHandler(restAccessDeniedHandler))
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                // built here, not a bean: a Filter bean is also registered with
+                // the servlet container and would run outside this chain
+                .addFilterBefore(new JwtAuthenticationFilter(jwtVerifier),
+                        UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
 }

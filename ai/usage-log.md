@@ -70,6 +70,14 @@ Entry template:
   foc-contracts README/AGENTS and `docs/notification-service.md`
   updated to match. Tests: foc-contracts 10, notification-service 36
   (Docker running, none skipped), credit-service 10 — 0 failures.
+- **2026-10-10, PR #166 Copilot review:** credit-service security, as
+  user-service already does it: `SessionCreationPolicy.STATELESS`; the
+  JWT filter built in `SecurityConfig` instead of being a `@Component`,
+  so it runs only in the security chain; and the 401 carries
+  `WWW-Authenticate: Bearer`. `SecurityConfigTest` now asserts the
+  header, that no request creates a session (checked to fail without
+  the stateless policy), and that the filter is not a bean. 11 tests,
+  0 failures.
 
 ## 2026-10-09 — Ryan Ang (PR #163 review fixes)
 - **Tool:** Claude Code (Opus 5.5)
