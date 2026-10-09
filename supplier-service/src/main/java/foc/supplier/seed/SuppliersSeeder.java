@@ -37,6 +37,12 @@
  * whole-file fix rather than special-casing those two rows — same
  * "the seed CSV is course-provided and can't be edited, so fix the
  * read side" precedent as SupplierService's image-URL normalization.
+ * 2026-10-05 (issue #160, Claude Code (Sonnet 5)): seeded category names
+ * are normalised with SupplierCategories.normalizeCategory and
+ * de-duplicated per supplier before their rows are saved.
+ * 2026-10-07 (PR #161 review, LeongWZ): a CSV row with an empty Type cell
+ * (category bound to null) no longer throws an NPE that aborts startup;
+ * that supplier is seeded with no categories.
  * Reviewed by: [pending]
  */
 package foc.supplier.seed;
@@ -55,6 +61,8 @@ import org.springframework.stereotype.Component;
 
 import java.io.InputStreamReader;
 import java.nio.charset.Charset;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Component
 public class SuppliersSeeder implements CommandLineRunner {
@@ -80,10 +88,21 @@ public class SuppliersSeeder implements CommandLineRunner {
                 for (Suppliers supplier : csvToBean) {
                     Suppliers savedSupplier = suppliersRepository.save(supplier);
 
-                    for (String category : savedSupplier.getCategory().split("/")) {
+                    Set<String> categories = new LinkedHashSet<>();
+                    // an empty Type cell binds to null; such a supplier just has no categories
+                    String rawCategories = savedSupplier.getCategory();
+                    if (rawCategories != null) {
+                        for (String raw : rawCategories.split("/")) {
+                            String category = SupplierCategories.normalizeCategory(raw);
+                            if (category != null) {
+                                categories.add(category);
+                            }
+                        }
+                    }
+                    for (String category : categories) {
                         SupplierCategories supplierCategory = new SupplierCategories();
                         supplierCategory.setSupplier(savedSupplier);
-                        supplierCategory.setCategory(category.trim());
+                        supplierCategory.setCategory(category);
                         supplierCategoriesRepository.save(supplierCategory);
                     }
                 }

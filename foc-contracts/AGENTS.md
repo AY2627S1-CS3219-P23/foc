@@ -6,6 +6,9 @@
   from the README. All decisions are team-made (D15–D22, recorded in
   docs/notification-service.md); the tool made none.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-10-08, Claude Code (Opus 5.5): module map updated for the four
+  saga events (team design, docs/credit-service.md D7-D8); author
+  review: Ryan Ang, pending pull request review.
 -->
 
 # foc-contracts/ — Agent Guide
@@ -23,8 +26,9 @@ design authority is
 
 | Package / path | Contents |
 | --- | --- |
-| `events/core/` | `DomainEvent` (base interface; `eventType()` derives the identity from the registry), `EventContracts` (shared names, e.g. `REQUEST_EVENTS_EXCHANGE`), `EventTypeRegistry` (single class↔identity source, D18), `Nullable` (marks optional wire fields) |
-| `events/request/` | `RequestEvent` (domain marker) + the seven records: `RequestCreated`, `RequestAccepted`, `RequestCollected`, `RequestCompleted`, `RequestCancelled`, `RequestExpired`, `CourierArrived` |
+| `events/core/` | `DomainEvent` (base interface; `eventType()` derives the identity from the registry), `EventContracts` (shared names: `REQUEST_EVENTS_EXCHANGE`, `CREDIT_EVENTS_EXCHANGE`), `EventTypeRegistry` (single class↔identity source, D18), `Nullable` (marks optional wire fields) |
+| `events/request/` | `RequestEvent` (domain marker) + the nine records: `RequestCreated`, `RequestAccepted`, `RequestCollected`, `RequestCompleted`, `RequestCancelled`, `RequestExpired`, `CourierArrived`, `RequestSubmitted`, `RequestRejected` |
+| `events/credit/` | `CreditEvent` (domain marker) + the two records: `CreditReserved`, `CreditReservationRejected` |
 | `src/main/resources/contracts/` | One canonical fixture per event, `<identity dots→hyphens>.example.json` (e.g. `request-courier-arrived.example.json`) — shipped on the jar's classpath |
 | `src/test/java/` | `EventTypeRegistryTest`, `RequestEventRecordsTest` — registry-driven: a new registry entry without a fixture (or vice versa) fails loudly |
 

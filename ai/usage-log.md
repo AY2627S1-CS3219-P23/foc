@@ -57,6 +57,76 @@ Entry template:
   `MAIL_FROM` exported empty and non-default `WEB_ALLOWED_ORIGIN`,
   `USER_RETENTION_DAYS` and `USER_SEED_DEMO`.
 
+## 2026-10-09 — Ryan Ang (PR #163 review fixes)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (review fixes: one test + docs)
+- **Scope:**
+  - `notification-service/.../DomainEventContractTest.java`: producer
+    and `requestId` checked through each event's domain marker
+    (`RequestEvent` / `CreditEvent`); `parties` required present, not
+    non-empty.
+  - `foc-contracts`: `request-submitted.example.json` now names the
+    requester in `parties`; README convention 1 reworded for saga
+    reply events.
+  - `docs/credit-service.md` / `.mmd`: pre-saga residue removed
+    (ownership note, error-mapping row and label, lot spend order,
+    closed-economy rule, legend), the two invariants stated, the
+    Notification row updated.
+  - `docs/architecture.md` / `.mmd`: Order states include `pending`
+    and `rejected`, Notification row lists the saga events, Credit DB
+    is PostgreSQL.
+  - `docs/notification-service.md`: catalog description, the
+    events-are-facts paragraph and the exchange list.
+- **Prompt(s):** Asked to read the review comments on PR #163 and fix
+  them.
+- **Author review:** Three choices were the author's, made via
+  options Q&A before any edit: `request.submitted` notifies the
+  requester (rather than documenting it as notification-free), item 4
+  states the reviewer's two proposed invariants (rather than being
+  dropped), and the Order states in the diagram include `pending` and
+  `rejected`. The convention rewording follows the team's saga
+  decision (`docs/credit-service.md` D7-D8) and was requested by the
+  convention's owner in the review. All other edits follow the
+  reviewer's own suggestions. `./mvnw install` in `foc-contracts` (9 tests)
+  and `./mvnw test` in `notification-service` (36 tests, 0 failures,
+  0 skipped, with Docker running for the RabbitMQ Testcontainers
+  tests) both pass.
+
+## 2026-10-08 — Ryan Ang (foc-contracts: saga event contracts)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (records, fixtures, tests, docs)
+- **Scope:** `foc-contracts/` only; no service code changed.
+  - New records `RequestSubmitted`, `RequestRejected`
+    (`events/request/`) and `CreditReserved`,
+    `CreditReservationRejected` with the `CreditEvent` marker
+    (`events/credit/`), one fixture each under `contracts/`.
+  - `EventContracts.CREDIT_EVENTS_EXCHANGE` and four
+    `EventTypeRegistry` entries.
+  - `EventTypeRegistryTest` and `RequestEventRecordsTest`: the entry
+    count, the identity-prefix check and the domain-marker check now
+    cover the credit domain.
+  - `README.md` and `AGENTS.md` of the module: record, exchange and
+    package lists.
+- **Prompt(s):** Asked to read the credit-service design doc and
+  diagram, check a list of proposed contract additions against the
+  current library, and then add them.
+- **Author review:** The saga, the four identity strings and the
+  exchange name are the team's design (`docs/credit-service.md` D7-D8);
+  the field lists and the empty `parties` on the credit events are team
+  decisions, confirmed by the author before the tool wrote anything.
+  The tool made no contract decisions. `./mvnw test` passes in
+  `foc-contracts`.
+- **2026-10-09, PR #163 Copilot review:** `docs/credit-service.md`:
+  typo and punctuation fixes, and D3 reworded to the author's own text
+  (duplicates are detected by the one held-credits record per request,
+  not by event ID). The schema is unchanged. The tool wrote no design
+  content.
+  `foc-contracts`: `reward` and both `amount` components changed
+  from `int` to `Integer` (team decision) so a missing value is
+  rejected. `docs/architecture.md` and `.mmd`: Credit Service rows and
+  edges transcribed from the team's saga design (D6-D9). Root
+  `README.md`: AI Use Summary clause for this PR.
+
 ## 2026-10-05 — Ryan Ang (user-service + web: remaining #154 and #138 follow-ups)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor + debug + tests + docs
@@ -2299,3 +2369,44 @@ Entry template:
 - **Author review:** Requirements, priorities, allocation, and tech stack
   were decided by the team beforehand (D1 document/presentation); the tool
   transcribed and formatted them. Output reviewed via pull requests.
+
+## 2026-10-05 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5)
+- **Mode:** debugging assistance, implementation (unit test)
+- **Prompt(s):** Asked to fix supplier category storage: sync
+  `Suppliers.category` on create/update (categories joined with `/`),
+  capitalise category names on save (`Food`/`food`/`fOOD` -> `Food`), and
+  refresh the category filter after a save. Issue #160, branch
+  `fix/supplier-category-sync`.
+- **Scope:** `supplier-service` `SupplierService` (save/create/update),
+  `SupplierCategories` (new `normalizeCategory` helper), `SuppliersSeeder`
+  (same normalisation), new `SupplierCategoriesTest`; `web`
+  `suppliers.tsx` (category effect re-runs on `refreshKey`).
+- **Author review:** Required the team-decided format (`/`-joined names,
+  first-letter capitalisation) beforehand; the schema of
+  `SupplierCategories` and whether `Suppliers.category` stays were left to
+  * the team and are not changed here. Backend tests pass (42, Java 21 via
+  Docker); web `tsc` passes. Pending author review of the diff.
+
+## 2026-10-07 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** refactoring, implementation
+- **Prompt(s):** Asked to apply PR #161 review feedback (LeongWZ): write
+  `null` rather than `""` to `Suppliers.category` when a supplier has no
+  categories, reject `/` in category names, and set the flat column before
+  `save()` to avoid a second UPDATE per create.
+- **Scope:** `supplier-service` `SupplierService` (categories normalised and
+  validated before save; flat column set in `applyRequest`), new
+  `InvalidCategoryException`, `SupplierController` (400 handler).
+- **Author review:** Rejecting `/` in category names is a validation-rule
+  choice made by the author. Pending author review of the diff.
+
+## 2026-10-07 — Alastair Tan
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** debugging assistance
+- **Prompt(s):** Asked to apply PR #161 review feedback (LeongWZ): guard
+  `SuppliersSeeder` against a null `Suppliers.category` (empty CSV `Type`
+  cell) so seeding doesn't throw an NPE and abort startup.
+- **Scope:** `supplier-service` `SuppliersSeeder` (null check around the
+  category split loop).
+- **Author review:** Pending author review of the diff.

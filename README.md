@@ -376,7 +376,18 @@ page showing once, and the nav bar border class — with the items taken
 from the team's review issues and recorded in `ai/usage-log.md`,
 and that PR's review fixes (test values pinned against the
 environment, the 415's `Accept` header kept, and the login attempt
-counter's read-then-refresh restored by the author's choice).
+counter's read-then-refresh restored by the author's choice); and the
+Credit Service saga event contracts in `foc-contracts` (PR #163) —
+four event records, the `credit-events` exchange name, their
+fixtures and the registry tests — together with that PR's review
+fixes to `docs/credit-service.md`, the high-level architecture doc
+and diagram, the notification design doc and the foc-contracts
+convention wording, which were brought in line with it, and the
+notification-service contract test generalized to the two event
+domains; the saga, the
+event names and fields, and the database schema are the team's
+decisions, recorded in `docs/credit-service.md` and
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
