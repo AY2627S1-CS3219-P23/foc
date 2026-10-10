@@ -9,6 +9,9 @@
  * 2026-10-09, Claude Code (Opus 5.5), PR #162 review (Leong Wei Zhi): the values the tests
  * assert on are pinned here too, so exported or empty environment
  * variables can't change them or stop the context starting.
+ * 2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei Zhi):
+ * user.retention.purge-cron and owner.setup.token pinned too (the token
+ * moved here from application-test.yaml).
  * Author review: Ryan to review via the PR.
  */
 package foc.user;
@@ -31,7 +34,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @ActiveProfiles("test")
 @TestPropertySource(properties = {
     "user.seed.demo=false",
+    "owner.setup.token=test-owner-setup-token",
     "user.retention.days=30",
+    "user.retention.purge-cron=0 0 3 * * *",
     "user.jwt.access-token-ttl=1h",
     "user.web-allowed-origin=http://localhost:5173",
     "user.mail.from=no-reply@foc.local",

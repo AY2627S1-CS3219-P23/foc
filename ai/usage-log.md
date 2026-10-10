@@ -26,6 +26,33 @@ Entry template:
 ```
 
 ---
+## 2026-10-10 — Ryan Ang (PR #162 re-review fixes, Leong Wei Zhi's re-review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (review fixes: code + tests + docs)
+- **Scope:** `user-service/` and `web/`.
+  - `PostgresTestContainer`: `user.retention.purge-cron` and
+    `owner.setup.token` added to the `@TestPropertySource` pins; the
+    token moved out of `application-test.yaml`.
+  - `DemoAccountsSeeder`: a run that loses an insert race seeds once
+    more; a second loss is logged as a warning that no longer says the
+    other instance finished. `DemoAccountsSeederTest`: one case for the
+    retry, one for losing twice.
+  - `OwnerSetupService`: the unconfigured-token 503 is logged
+    server-side, naming the setting; the response stays generic.
+  - `web` `login.tsx`: clearing the sign-up state keeps the URL's query
+    and hash; `auth.test.tsx` has a case for it.
+  - Root `README.md`: AI Use Summary clause updated.
+- **Prompt(s):** Asked to look at the comments on PR #162, then to fix
+  them, with the seeder re-running its seed after a conflict.
+- **Author review:** For the seeder the reviewer offered three options
+  (per-account transaction or `ON CONFLICT DO NOTHING`, re-running the
+  seed once, or only rewording the log line); the author chose the
+  re-run. The other fixes follow the reviewer's own suggestions.
+  `./mvnw clean test`: 306 tests, 0 failures; `OwnerSetupControllerTest`
+  and `AccountPurgeSchedulerTest` also pass with `USER_PURGE_CRON`
+  exported empty and a wrong `OWNER_SETUP_TOKEN`. Web: `npx vitest run`,
+  65 tests pass. Pending author review of the diff.
+
 ## 2026-10-09 — Ryan Ang (PR #162 review fixes, Leong Wei Zhi's review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor (review fixes: code + tests + docs)

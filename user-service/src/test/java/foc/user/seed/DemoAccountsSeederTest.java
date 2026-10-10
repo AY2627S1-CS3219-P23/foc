@@ -13,6 +13,9 @@ Scope: tests for DemoAccountsSeeder with USER_SEED_DEMO on: 1 owner, 3
        2026-10-07 (Claude Code, Opus 5.5), PR #162 Copilot review: the race
        stub carries the unique-violation SQLState; any other integrity
        failure is rethrown.
+       2026-10-10 (Claude Code, Opus 5.5), PR #162 re-review (Leong Wei
+       Zhi): a lost race seeds again; losing it twice is logged, not
+       thrown.
 Author review: Ryan to review via the PR.
 */
 
@@ -29,7 +32,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -167,8 +173,29 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("Losing an insert race to another instance is logged, not thrown")
-    void lostInsertRaceDoesNotThrow() {
+    @DisplayName("Losing an insert race to another instance seeds again")
+    void lostInsertRaceSeedsAgain() {
+        // the first insert hits the unique index; everything else goes to
+        // the real repository
+        UserRepository racing = mock(UserRepository.class);
+        when(racing.existsByEmail(anyString()))
+            .thenAnswer(inv -> userRepository.existsByEmail(inv.getArgument(0)));
+        when(racing.existsByUsernameIgnoreCase(anyString()))
+            .thenAnswer(inv -> userRepository.existsByUsernameIgnoreCase(inv.getArgument(0)));
+        when(racing.save(any(User.class)))
+            .thenThrow(new DataIntegrityViolationException("idx_users_email",
+                new SQLException("duplicate key", "23505")))
+            .thenAnswer(inv -> userRepository.save(inv.getArgument(0)));
+        userRepository.deleteAll();
+
+        new DemoAccountsSeeder(racing, passwordEncoder, transactionManager).run();
+
+        assertThat(userRepository.count()).isEqualTo(1 + DemoAccountsSeeder.ADMINS + DemoAccountsSeeder.USERS);
+    }
+
+    @Test
+    @DisplayName("Losing the insert race twice is logged, not thrown")
+    void lostInsertRaceTwiceDoesNotThrow() {
         // every account looks missing, then the insert hits the unique index
         UserRepository racing = mock(UserRepository.class);
         when(racing.save(any(User.class)))
@@ -179,6 +206,8 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
         assertThatCode(() -> new DemoAccountsSeeder(racing, passwordEncoder, transactionManager).run())
             .doesNotThrowAnyException();
 
+        // one retry, no more
+        verify(racing, times(2)).save(any(User.class));
         assertThat(userRepository.count()).isEqualTo(before);
     }
 

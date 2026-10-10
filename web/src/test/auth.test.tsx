@@ -19,6 +19,8 @@
 // line keeps up with the clock and says plainly when the code has run out.
 // 2026-10-05, Claude Code (Opus 5.5), issue #154: the "account created"
 // notice clears its navigation state, so a reload doesn't show it again.
+// 2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei Zhi):
+// clearing that state keeps the URL's query and hash.
 // Author review: Ryan to review via the PR.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -191,6 +193,24 @@ describe('login page', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'Account created. Log in to continue.',
     )
+  })
+
+  test('clearing the sign-up state keeps the query and hash', async () => {
+    const memoryRouter = createMemoryRouter(routes, {
+      initialEntries: [
+        {
+          pathname: '/login',
+          search: '?redirect=%2Forders',
+          hash: '#form',
+          state: { accountCreated: true },
+        },
+      ],
+    })
+    render(<RouterProvider router={memoryRouter} />)
+
+    await waitFor(() => expect(memoryRouter.state.location.state).toBeNull())
+    expect(memoryRouter.state.location.search).toBe('?redirect=%2Forders')
+    expect(memoryRouter.state.location.hash).toBe('#form')
   })
 
   test('shows no notice when opened directly', () => {

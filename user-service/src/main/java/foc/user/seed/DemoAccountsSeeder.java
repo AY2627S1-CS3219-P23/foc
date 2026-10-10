@@ -14,6 +14,10 @@ Scope: demo accounts for local testing and demos — 1 OWNER, 3 ADMINs and
        2026-10-07 (Claude Code, Opus 5.5), PR #162 Copilot review: only a
        unique violation counts as that race; any other integrity
        failure is rethrown.
+       2026-10-10 (Claude Code, Opus 5.5), PR #162 re-review (Leong Wei
+       Zhi): a run that loses the race seeds once more instead of
+       leaving the accounts to the other instance (Ryan's choice among
+       the reviewer's options).
 Author review: Ryan to review via the PR.
 */
 
@@ -99,20 +103,35 @@ public class DemoAccountsSeeder implements CommandLineRunner {
     // One transaction, so a failed run leaves nothing half-seeded
     @Override
     public void run(String... args) {
+        if (seedUnlessRaced()) {
+            return;
+        }
+        // another instance starting at the same time inserted an account
+        // between the check and the insert, and this run was rolled back
+        // whole. The other instance may have rolled back as well, so seed
+        // once more: its committed accounts are visible now and are skipped
+        log.info("Demo accounts: lost an insert race to another instance, seeding again");
+        if (!seedUnlessRaced()) {
+            // the service still starts
+            log.warn("Demo accounts not seeded: lost an insert race twice, some may be missing");
+        }
+    }
+
+    // false when the run hit a duplicate key and was rolled back. Caught
+    // outside the transaction, which is already rolled back by then
+    private boolean seedUnlessRaced() {
         try {
             transaction.executeWithoutResult(status -> seed());
+            return true;
         } catch (DataIntegrityViolationException e) {
             // anything but a duplicate key (a missing column, a broken
             // constraint) is a real problem and must stop startup
             if (!isUniqueViolation(e)) {
                 throw e;
             }
-            // another instance starting at the same time inserted an account
-            // between the check and the insert. Caught outside the
-            // transaction (it is already rolled back) so the service still
-            // starts; the other instance seeds the accounts
-            log.warn("Demo accounts not seeded: another instance is seeding them ({})",
+            log.debug("Demo accounts: duplicate key while seeding ({})",
                 e.getMostSpecificCause().getMessage());
+            return false;
         }
     }
 

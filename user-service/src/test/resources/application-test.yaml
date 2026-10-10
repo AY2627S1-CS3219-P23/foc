@@ -13,11 +13,10 @@
 # Now the "test" profile's overrides (PostgresTestContainer activates it):
 # the main yaml loads first, and the values that only repeated its
 # defaults are gone.
+# 2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei Zhi):
+# owner.setup.token moved to PostgresTestContainer's pins, because
+# OWNER_SETUP_TOKEN in the environment outranks this file.
 # Author review: Ryan to review via the PR.
-
-owner:
-  setup:
-    token: test-owner-setup-token
 
 user:
   jwt:

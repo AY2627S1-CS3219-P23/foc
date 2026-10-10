@@ -18,6 +18,8 @@
 // decision), passed in the navigation state by the sign-up page.
 // 2026-10-05, Claude Code (Opus 5.5), issue #154: that state is cleared
 // once read, so the notice doesn't come back when /login is reloaded.
+// 2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei Zhi):
+// clearing the state keeps the URL's query and hash.
 // Reviewed by: Ryan Ang
 
 import React, { useEffect, useState } from 'react'
@@ -45,9 +47,19 @@ export function Login() {
   // read: the notice shows on arrival only
   useEffect(() => {
     if (cameFromSignup) {
-      navigate(location.pathname, { replace: true, state: null })
+      // query and hash kept: only the state is dropped
+      navigate(location.pathname + location.search + location.hash, {
+        replace: true,
+        state: null,
+      })
     }
-  }, [cameFromSignup, navigate, location.pathname])
+  }, [
+    cameFromSignup,
+    navigate,
+    location.pathname,
+    location.search,
+    location.hash,
+  ])
 
   const toRegister = () => {
     router.navigate('/register')
