@@ -6,6 +6,11 @@
 // the durable way to tell these failures apart: the `detail` sentence is
 // human copy and may be reworded, which is exactly why the sign-up
 // dialog's sentence list (PR #150) was flagged for replacement.
+// 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): the resend
+// cooldown's 429 is its own answer, `wait`. A PATCH that parks an email
+// change inside a previous one's cooldown is refused that way, and
+// classing it with wrong codes cleared the boxes, dropped the wait the
+// server quoted, and left the user retyping a perfectly good code.
 // 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: `about:blank`
 // is reported as untyped (RFC 9457's "no type", and the value Spring puts
 // on every ProblemDetail built without one), and an untyped 400 — the
@@ -66,6 +71,10 @@ export function retryAfter(error: unknown): number | null {
  * - `restart`— no usable code any more, so the card returns to its fields
  *              and asks for a new one: expired, spent (429), or never
  *              requested.
+ * - `wait`   — refused for now, with the wait quoted in Retry-After: the
+ *              gate code is untouched (the 429 rolls its consumption back
+ *              with everything else), so the card holds code and fields
+ *              as they are and counts the wait down on its submit button.
  * - `amend`  — the values submitted were refused and the code was NOT
  *              spent refusing them, so it is STILL LIVE: the card goes
  *              back to its fields holding the code, and the next Save
@@ -75,7 +84,7 @@ export function retryAfter(error: unknown): number | null {
  *              rollback note), and a body the DTO's own validation
  *              rejected, which never reached the gate at all.
  */
-export type GateFailure = 'retry' | 'restart' | 'amend'
+export type GateFailure = 'retry' | 'restart' | 'amend' | 'wait'
 
 export function gateFailure(error: unknown): GateFailure {
   switch (problemType(error)) {
@@ -86,6 +95,8 @@ export function gateFailure(error: unknown): GateFailure {
     case USERNAME_TAKEN:
     case EMAIL_TAKEN:
       return 'amend'
+    case OTP_RESEND_COOLDOWN:
+      return 'wait'
     case null:
       // An untyped 400 is the request body's own validation
       // (ProblemDetailAdvice's handleInvalidBody / handleUnreadableBody),

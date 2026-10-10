@@ -10,6 +10,11 @@
 // UpdateAccountRequest, EmailChangePendingResponse,
 // VerifyEmailChangeRequest, ChangePasswordRequest); see
 // user-service/README.md for the routes and their problem+json types.
+// 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1):
+// getCurrentUser is gone — GET /users/me is fetched once per session by
+// AuthProvider (adminApi.getCurrentUser) and shared as useAuth().me, so
+// a second wrapper here only bought the profile page a duplicate request
+// and a private copy that drifted from everyone else's.
 // Author review: Leong Wei Zhi (via PR #149).
 
 import { apiFetch } from '@/lib/api/http'
@@ -39,10 +44,6 @@ function isEmailPending(
 }
 
 export const profileApi = {
-  getCurrentUser(): Promise<AdminUser> {
-    return apiFetch<AdminUser>('user', '/users/me')
-  },
-
   deleteAccount(): Promise<void> {
     return apiFetch<void>('user', '/users/me', { method: 'DELETE' })
   },

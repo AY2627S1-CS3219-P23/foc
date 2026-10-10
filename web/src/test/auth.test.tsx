@@ -21,6 +21,8 @@
 // back-to-the-form cases now include the untyped refusal as the server
 // really sends it — `type: "about:blank"`, which the dialog had been
 // reading as a type of its own.
+// 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): and an
+// untyped 429, which ends the sign-up on its status alone.
 // Author review: Ryan to review via the PR.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -327,6 +329,15 @@ describe('sign-up page', () => {
       429,
       'Too many incorrect codes; sign up again to get a new code',
       OTP_ATTEMPTS_EXCEEDED,
+    ],
+    [
+      // no type at all: only an exhausted attempt budget answers verify
+      // with a 429, and that row refuses every code, so the status is
+      // enough to end the dialog (PR #149 review, @Sinnez1)
+      'an untyped 429',
+      429,
+      'Too many incorrect codes; sign up again to get a new code',
+      undefined,
     ],
     [
       // AuthService's post-flush race is a plain ResponseStatusException,

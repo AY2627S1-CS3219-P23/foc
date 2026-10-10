@@ -3,6 +3,12 @@
 // Scope: delete-account confirmation for the profile page, following
 // RemoveUserModal; the copy warns about the 30-day lock (F3.1.1),
 // matching user-service's soft delete + purge scheduler.
+// 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): the
+// dialog cannot be dismissed while the DELETE is in flight. Cancel (and
+// the ✕ / backdrop, which share its handler) used to close the modal
+// over a request that still went through — logout() then signed the user
+// out with no warning, and a failure put its message on a dialog that
+// was no longer there.
 // Author review: Leong Wei Zhi (via PR #149).
 
 import { Modal } from '@/shared/components/Modal'
@@ -20,8 +26,12 @@ export function DeleteAccountModal({
   deleting,
   error,
 }: DeleteAccountModalProps) {
+  // nothing dismisses the dialog once the request is away: there is no
+  // call to cancel, and its answer has to land somewhere
+  const dismiss = deleting ? () => {} : onCancel
+
   return (
-    <Modal title="Are you sure?" onClose={onCancel}>
+    <Modal title="Are you sure?" onClose={dismiss}>
       {error && (
         <p
           role="alert"
@@ -38,8 +48,9 @@ export function DeleteAccountModal({
       <div className="mt-5 flex justify-end gap-2">
         <button
           type="button"
-          onClick={onCancel}
-          className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          onClick={dismiss}
+          disabled={deleting}
+          className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
         >
           Cancel
         </button>

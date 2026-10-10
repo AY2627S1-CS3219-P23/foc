@@ -9,6 +9,10 @@
 // Presentational only: the caller owns the digits, runs the calls, and
 // wraps this in its own <form> (the button is a plain submit), because
 // what a failure means differs per step — see problemTypes.ts.
+// 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1):
+// blockedFor, the wait a 429 quoted. Submitting again before it passes
+// can only be refused again, so the button counts it down instead —
+// the code in the boxes is still good and stays there.
 // Author review: Leong Wei Zhi (via PR #149).
 
 import { CodeInput } from './CodeInput'
@@ -27,6 +31,10 @@ interface CodeStepProps {
   resending: boolean
   submitLabel: string
   busyLabel: string
+  // seconds the server told the caller to wait before submitting again
+  // (a 429's Retry-After), counted down by the caller; 0 or omitted when
+  // nothing is holding the submit back
+  blockedFor?: number
   onResend: () => void
   onCancel?: () => void
 }
@@ -41,6 +49,7 @@ export function CodeStep({
   resending,
   submitLabel,
   busyLabel,
+  blockedFor = 0,
   onResend,
   onCancel,
 }: CodeStepProps) {
@@ -77,11 +86,16 @@ export function CodeStep({
           type="submit"
           // not while a resend is in flight: that call is replacing the
           // code, so submitting the old one would spend an attempt for
-          // nothing (PR #150 review)
-          disabled={busy || resending || !complete}
+          // nothing (PR #150 review). Nor inside a wait the server
+          // quoted, which would only be refused again.
+          disabled={busy || resending || !complete || blockedFor > 0}
           className="flex-1 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
         >
-          {busy ? busyLabel : submitLabel}
+          {busy
+            ? busyLabel
+            : blockedFor > 0
+              ? `Try again in ${blockedFor}s`
+              : submitLabel}
         </button>
         {onCancel && (
           <button

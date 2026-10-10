@@ -19,17 +19,25 @@
 // COUNT, since their arguments repeat the refused attempt's and passed
 // whether or not the second Save ran; and an expired email change offers
 // a restart instead of the resend user-service can only refuse.
+// 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): the page
+// reads the session's one GET /users/me (adminUserApi, through
+// AuthProvider) rather than fetching its own, so that is what the
+// harness fakes; plus cases for the dialog that cannot be dismissed
+// mid-delete, an edit reaching the rest of the app, the 429 wait on the
+// code step, and a kept code that has since expired.
 // Author review: Leong Wei Zhi (via PR #149).
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
+import { adminUserApi } from '@/features/user/adminApi'
 import { EmailChangeModal } from '@/features/user/components/EmailChangeModal'
 import { profileApi } from '@/features/user/profileApi'
 import {
   OTP_ATTEMPTS_EXCEEDED,
   OTP_INVALID,
+  OTP_RESEND_COOLDOWN,
   USERNAME_TAKEN,
 } from '@/features/user/problemTypes'
 import type { PendingEmailChange } from '@/features/user/types'
@@ -67,7 +75,9 @@ beforeEach(() => {
     role: 'USER',
     createdAt: '2026-09-03T08:00:00Z',
   }
-  vi.spyOn(profileApi, 'getCurrentUser').mockImplementation(async () => ({
+  // the page reads the session's GET /users/me, which AuthProvider
+  // fetches once through adminUserApi (PR #149 review, @Sinnez1)
+  vi.spyOn(adminUserApi, 'getCurrentUser').mockImplementation(async () => ({
     ...me,
   }))
   vi.spyOn(profileApi, 'requestOtp').mockResolvedValue({
@@ -165,7 +175,7 @@ describe('profile page', () => {
   })
 
   it('shows an error when the profile fails to load', async () => {
-    vi.mocked(profileApi.getCurrentUser).mockRejectedValue(new Error('boom'))
+    vi.mocked(adminUserApi.getCurrentUser).mockRejectedValue(new Error('boom'))
     renderProfile()
     expect(await screen.findByRole('alert')).toHaveTextContent('boom')
   })
@@ -195,7 +205,11 @@ describe('edit account info', () => {
       { username: 'utown_runner' },
       OTP,
     )
+    // the session's GET /users/me, fetched once by AuthProvider and
+    // written back by the save: the name on screen is that shared copy,
+    // which the nav bar and the /admin guard read too (PR #149 review)
     expect(screen.getByText('utown_runner')).toBeInTheDocument()
+    expect(adminUserApi.getCurrentUser).toHaveBeenCalledTimes(1)
   })
 
   it('rejects verification when nothing changed', async () => {
@@ -355,6 +369,69 @@ describe('edit account info', () => {
       OTP,
     )
     expect(profileApi.requestOtp).toHaveBeenCalledTimes(1)
+  })
+
+  it('counts down the quoted wait when the save is refused for now', async () => {
+    const user = userEvent.setup()
+    // a PATCH that parks an email change inside a previous change's
+    // cooldown: refused for now, and the code's consumption rolled back
+    // with it, so the digits in the boxes are still good
+    vi.mocked(profileApi.updateAccount).mockRejectedValueOnce(
+      refusal(429, 'A code was sent moments ago', OTP_RESEND_COOLDOWN, 30),
+    )
+    await openEditCard(user)
+
+    const emailInput = editCard().getByRole('textbox', { name: 'NUS Email' })
+    await user.clear(emailInput)
+    await user.type(emailInput, NEW_EMAIL)
+    await user.click(
+      editCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+    await typeCode(user, OTP, editCard())
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
+
+    const retry = await editCard().findByRole('button', {
+      name: /Try again in \d+s/,
+    })
+    expect(retry).toBeDisabled()
+    // still on the code step, still holding the code it typed
+    expect(editCard().getByLabelText('Digit 1 of 6')).toHaveValue('0')
+    expect(profileApi.requestOtp).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks for a new code when the one it kept has expired', async () => {
+    const user = userEvent.setup()
+    // a resend late in the window leaves almost nothing: this code dies
+    // as it arrives, so the card must not offer it after the refusal
+    vi.mocked(profileApi.requestOtp).mockResolvedValue({
+      expiresInSeconds: 0,
+      resendInSeconds: 0,
+    })
+    vi.mocked(profileApi.updateAccount).mockRejectedValueOnce(
+      refusal(400, 'Username is already taken', USERNAME_TAKEN),
+    )
+    const usernameInput = await openEditCard(user)
+
+    await user.clear(usernameInput)
+    await user.type(usernameInput, 'taken_name')
+    await user.click(
+      editCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+    await typeCode(user, OTP, editCard())
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
+
+    // amended back to the fields, but the kept code is dead: no promise
+    // that it still works, and the button asks for a new one
+    expect(await editCard().findByRole('alert')).toHaveTextContent(
+      'Username is already taken',
+    )
+    expect(
+      editCard().queryByText(/still valid — Save to use it again/),
+    ).not.toBeInTheDocument()
+    await user.click(
+      editCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+    await waitFor(() => expect(profileApi.requestOtp).toHaveBeenCalledTimes(2))
   })
 
   it('sends the card back and quotes the wait once the attempts are spent', async () => {
@@ -668,6 +745,34 @@ describe('delete account', () => {
     ).toBeInTheDocument()
     expect(profileApi.deleteAccount).toHaveBeenCalled()
     expect(JSON.parse(localStorage.getItem('user')!)).toBeNull()
+  })
+
+  it('cannot be dismissed while the delete is in flight', async () => {
+    const user = userEvent.setup()
+    let finish = () => {}
+    vi.mocked(profileApi.deleteAccount).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        }),
+    )
+    const dialog = await openDeleteModal(user)
+    await user.click(screen.getByRole('button', { name: 'Delete My Account' }))
+    await screen.findByRole('button', { name: 'Deleting...' })
+
+    // the DELETE is away and logout() follows it: closing here would
+    // sign the user out with no warning, and strand a failure's message
+    // on a dialog that is gone (PR #149 review, @Sinnez1)
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+    expect(cancel).toBeDisabled()
+    await user.click(cancel)
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    expect(dialog).toBeInTheDocument()
+
+    finish()
+    expect(
+      await screen.findByRole('heading', { name: 'Log In' }),
+    ).toBeInTheDocument()
   })
 
   it('keeps the modal open when deletion fails', async () => {

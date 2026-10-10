@@ -12,6 +12,11 @@
 // admin-only controls for non-admin callers instead of showing them
 // and letting the server's role gate (supplier-service #106) reject
 // the action after the fact.
+// 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): updateMe
+// writes a saved account back into this one answer, which the profile
+// page calls after an edit — it reads `me` instead of asking
+// GET /users/me a second time, so the request happens once per session
+// and no consumer is left on stale values.
 // 2026-09-29, Claude Code (Opus 5.5), issue #147: Prettier formatting;
 // also asks GET /users/me once per session and shares the answer as
 // `me` (the /admin guard and the nav bar's Admin Dashboard link use it,
@@ -25,7 +30,7 @@ import { useLocalStorage } from './useLocalStorage'
 import { errorMessage, setTokenSource } from '@/lib/api/http'
 import { adminUserApi } from './adminApi'
 import { decodeJwtRole } from './jwt'
-import type { LoginResponse } from './types'
+import type { AdminUser, LoginResponse } from './types'
 import type { CurrentUser } from './useAuth'
 
 // one shared object, so the context value stays stable while loading
@@ -97,7 +102,15 @@ export const AuthProvider = () => {
       navigate('/', { replace: true })
     }
 
-    return { token, role, me, login, logout }
+    // an account saved elsewhere in the app, written back into the one
+    // GET /users/me answer this session holds. Stamped with the current
+    // token so it is dropped by the same rule the fetch is: a new login
+    // asks afresh.
+    const updateMe = (user: AdminUser) => {
+      if (token) setMeCheck({ token, me: { status: 'ready', user } })
+    }
+
+    return { token, role, me, login, logout, updateMe }
   }, [token, role, me, navigate, setToken])
 
   return (

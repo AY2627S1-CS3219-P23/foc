@@ -14,6 +14,12 @@
 // and pay for a fresh gate code. A snapshot the server no longer honours
 // fails honestly — verify/resend answer with a type URI that says so,
 // and the snapshot is dropped then.
+// 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): the page
+// no longer asks GET /users/me for itself. AuthProvider already holds
+// that answer for the session as `me`, so this was a second request for
+// the same thing — and its private copy meant an edit here left the nav
+// bar and the /admin guard showing the pre-edit account until the next
+// login. Reads `me`, and hands every save back through updateMe.
 // 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: the snapshot
 // names its owner and only the signed-in account's own is read, shown or
 // acted on. One browser-wide key outlives the session that wrote it
@@ -26,7 +32,7 @@ import { useEffect, useState } from 'react'
 
 import { errorMessage } from '@/lib/api/http'
 import { profileApi } from '../profileApi'
-import type { AdminUser, PendingEmailChange } from '../types'
+import type { PendingEmailChange } from '../types'
 import { useAuth } from '../useAuth'
 import { useLocalStorage } from '../useLocalStorage'
 import { ChangePasswordCard } from './ChangePasswordCard'
@@ -38,8 +44,6 @@ import { ProfileDetailsCard } from './ProfileDetailsCard'
 const PENDING_EMAIL_KEY = 'pendingEmailChange'
 
 export function ProfileSection() {
-  const [user, setUser] = useState<AdminUser | null>(null)
-  const [loadError, setLoadError] = useState('')
   const [editing, setEditing] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -49,23 +53,9 @@ export function ProfileSection() {
   const [stored, setStored] =
     useLocalStorage<PendingEmailChange>(PENDING_EMAIL_KEY)
   const [codeOpen, setCodeOpen] = useState(false)
-  const { logout } = useAuth()
-
-  useEffect(() => {
-    let cancelled = false
-    profileApi.getCurrentUser().then(
-      (me) => {
-        if (!cancelled) setUser(me)
-      },
-      (err: unknown) => {
-        if (!cancelled)
-          setLoadError(errorMessage(err, 'Could not load your profile.'))
-      },
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  // the session's own GET /users/me answer, fetched once by AuthProvider
+  const { me, logout, updateMe } = useAuth()
+  const user = me?.status === 'ready' ? me.user : null
 
   // The snapshot this page may use: the signed-in account's own. One
   // belonging to another account is left in storage — it is still its
@@ -104,13 +94,13 @@ export function ProfileSection() {
     }
   }
 
-  if (loadError) {
+  if (me?.status === 'error') {
     return (
       <p
         role="alert"
         className="mx-auto max-w-md rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
       >
-        {loadError}
+        {me.message}
       </p>
     )
   }
@@ -149,13 +139,13 @@ export function ProfileSection() {
         <EditAccountCard
           user={user}
           onSaved={(updated) => {
-            setUser(updated)
+            updateMe(updated)
             setEditing(false)
           }}
           onEmailPending={(accepted) => {
             // the 202 body carries the account as it stands, so a
             // username changed by the same PATCH is already in
-            setUser(accepted.user)
+            updateMe(accepted.user)
             setStored({
               // the 202's own account, not this page's copy of it
               userId: accepted.user.id,
@@ -189,15 +179,19 @@ export function ProfileSection() {
           // can still be entered from the details card
           onClose={() => setCodeOpen(false)}
           onVerified={(updated) => {
-            setUser(updated)
+            updateMe(updated)
             setStored(null)
             setCodeOpen(false)
+            // the banners are a pair: a success clears whatever the last
+            // failure left up (PR #149 review, @Sinnez1)
+            setEmailError('')
             setEmailNotice('Your email address has been updated.')
           }}
           onResent={setStored}
           onDiscarded={(message) => {
             setStored(null)
             setCodeOpen(false)
+            setEmailNotice('')
             setEmailError(message)
           }}
         />

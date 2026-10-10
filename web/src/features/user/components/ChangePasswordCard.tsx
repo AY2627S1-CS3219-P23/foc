@@ -13,6 +13,11 @@
 // deviates from. The confirmation now travels to the server, where the
 // double-entry check belongs (F2.1.4); the local match check survives
 // only as a pre-flight that saves a round trip.
+// 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): the kept
+// code is only offered while it is alive (its expiry is checked before
+// the card says so, and before it reuses it), and a 429's wait counts
+// down on the submit button with the code left in place — the Edit
+// Account card's two fixes, which this card shares the gate code with.
 // 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: a password the
 // server's own validation refuses (too short, no digit, entries that
 // don't match) is an `amend` now, not a code retry — the card returns to
@@ -55,7 +60,13 @@ export function ChangePasswordCard({ email }: ChangePasswordCardProps) {
   const [notice, setNotice] = useState('')
   const [saved, setSaved] = useState(false)
   const [blockedUntil, setBlockedUntil] = useState(0)
-  const { cooldown: blocked } = useOtpCountdown(null, blockedUntil)
+  const { cooldown: blocked, expiresIn: gateLife } = useOtpCountdown(
+    gate?.expiresAt ?? null,
+    blockedUntil,
+  )
+  // a code kept across a refusal, while it is still alive; null expiry
+  // means "alive, remaining life unknown" (EditAccountCard says why)
+  const liveGate = gate && gateLife !== 0 ? gate : null
 
   const mismatch = next !== '' && confirm !== '' && next !== confirm
 
@@ -112,6 +123,13 @@ export function ChangePasswordCard({ email }: ChangePasswordCardProps) {
       setSaved(true)
     } catch (err: unknown) {
       switch (gateFailure(err)) {
+        case 'wait': {
+          // the code was not spent being refused: only the clock is in
+          // the way, so the step and its digits stand
+          const wait = retryAfter(err)
+          if (wait !== null) setBlockedUntil(startedAt(wait))
+          break
+        }
         case 'retry':
           // the code in the inbox is still good: the step stands, boxes
           // cleared for another attempt
@@ -150,7 +168,7 @@ export function ChangePasswordCard({ email }: ChangePasswordCardProps) {
     // a refusal that never reached the gate — a password the policy
     // rejects, say — leaves the code unconsumed, so going back to the
     // step must not spend a resend on a code already in the inbox
-    if (gate) {
+    if (liveGate) {
       setVerifying(true)
       setError('')
       return
@@ -247,6 +265,7 @@ export function ChangePasswordCard({ email }: ChangePasswordCardProps) {
             resending={resending}
             submitLabel="Update Password"
             busyLabel="Updating..."
+            blockedFor={blocked}
             onResend={() => void sendCode(true)}
             onCancel={() => {
               setVerifying(false)
@@ -259,7 +278,7 @@ export function ChangePasswordCard({ email }: ChangePasswordCardProps) {
             {/* a code kept from a refused password is still live: say so,
                 as the Edit Account card does, so "Verify & Continue"
                 isn't read as spending a resend */}
-            {gate && (
+            {liveGate && (
               <p className="text-xs text-gray-500">
                 The code already sent to {email} is still valid — continue to
                 use it again.

@@ -25,6 +25,11 @@
 // wording of `detail` — the durable fix this file's own comment asked
 // for. The two countdowns moved to the shared otpCountdown module, which
 // the profile page's code steps use as well; behaviour unchanged.
+// 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): an untyped
+// 429 ends the pending sign-up too. Only an exhausted row answers verify
+// that way, and reading it as a wrong guess left the dialog asking for
+// codes against a row that refuses every one — the status is the
+// fallback when no type says so.
 // 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: the untyped
 // refusal below reaches its sentence match again. AuthService's post-flush
 // race is a plain ResponseStatusException, whose body carries
@@ -79,7 +84,12 @@ function endsTheSignup(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false
   const type = problemType(error)
   if (type) return ENDING_TYPES.includes(type)
-  return error.problem?.detail === UNTYPED_ENDING_DETAIL
+  // Untyped: the race's sentence, or a 429. The only 429 this call can
+  // answer with is an exhausted attempt budget (a resend cooldown
+  // belongs to the resend), and that row refuses every code it is given,
+  // so the dialog has nothing left to offer — the status stands in for
+  // the type user-service normally attaches (PR #149 review, @Sinnez1).
+  return error.status === 429 || error.problem?.detail === UNTYPED_ENDING_DETAIL
 }
 
 interface OtpVerificationModalProps {

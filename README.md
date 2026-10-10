@@ -64,6 +64,8 @@
   2026-10-09: AI Use Summary extended for the web profile screens
   (issue #112, PR #149) and that PR's two Copilot-review rounds, by
   Claude Code (Opus 5) — the summary had no entry for #112.
+  2026-10-10: extended again for PR #149's team review (@Sinnez1), by
+  Claude Code (Opus 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -383,7 +385,14 @@ Spring's `about:blank` read as "no type", body-validation refusals
 returning to the editable fields with the unspent code, an expired
 email change offering a restart instead of the resend user-service can
 only refuse, and the retained-code tests asserting the call that was
-meant to prove them; and the Credit Service saga event contracts in
+meant to prove them; and that PR's team review (@Sinnez1) — the delete
+dialog sealed while its request is in flight, the page reading the
+session's one `GET /users/me` and writing saves back into it instead of
+keeping a private copy that went stale for the nav bar and the `/admin`
+guard, a resend-cooldown 429 counted down on the submit button rather
+than read as a wrong code, a kept code offered only while it is still
+alive, and an untyped 429 ending a pending sign-up on its status; and
+the Credit Service saga event contracts in
 `foc-contracts` (PR #163) —
 four event records, the `credit-events` exchange name, their
 fixtures and the registry tests — together with that PR's review

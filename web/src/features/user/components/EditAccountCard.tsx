@@ -15,6 +15,15 @@
 // than by its wording. A name/address refused as taken rolls the gate
 // code's consumption back with it, so the card returns to the fields
 // still holding a live code and Save reuses it.
+// 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): two
+// things about the code the card keeps across a refusal. A 429's wait is
+// counted down on the submit button and the code left in place (`wait`,
+// problemTypes.ts) instead of being read as a wrong guess — a PATCH that
+// parks an email change inside a previous change's cooldown is refused
+// that way, and clearing the boxes had the user retyping a good code
+// into a call that could only fail again. And a kept code is only
+// offered while it is still alive: once its own expiry passes, Save asks
+// for a new one rather than sending a code the server will refuse.
 // 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: a retryable
 // failure now always leaves the card ON the code step. Reached from the
 // fields (where an amended save starts), it used to clear the digits and
@@ -70,7 +79,17 @@ export function EditAccountCard({
   // set when the attempt limit was hit: no new code may be requested
   // until the resend cooldown passes, and the 429 quoted the wait
   const [blockedUntil, setBlockedUntil] = useState(0)
-  const { cooldown: blocked } = useOtpCountdown(null, blockedUntil)
+  // one countdown, two lines: the wait a 429 quoted, and the life left in
+  // the code the card is holding
+  const { cooldown: blocked, expiresIn: gateLife } = useOtpCountdown(
+    gate?.expiresAt ?? null,
+    blockedUntil,
+  )
+  // A kept code dies on its own clock. Once it has, Save must ask for a
+  // new one instead of sending one the server can only refuse. A null
+  // expiry means a cooldown refusal told us a code exists without saying
+  // how long it has left, so it counts as alive (PR #149 review).
+  const liveGate = gate && gateLife !== 0 ? gate : null
 
   const changes = {
     ...(username !== user.username && { username }),
@@ -135,6 +154,13 @@ export function EditAccountCard({
         'Could not save your changes. Try again.',
       )
       switch (gateFailure(err)) {
+        case 'wait': {
+          // the refusal rolled the code's consumption back with it, so
+          // the digits stand; only the clock is in the way
+          const wait = retryAfter(err)
+          if (wait !== null) setBlockedUntil(startedAt(wait))
+          break
+        }
         case 'restart': {
           const wait = retryAfter(err)
           setGate(null)
@@ -170,7 +196,7 @@ export function EditAccountCard({
       return
     }
     // a code kept from a refused save is still live — don't spend a resend
-    if (gate) return void save()
+    if (liveGate) return void save()
     void sendCode(false)
   }
 
@@ -235,12 +261,13 @@ export function EditAccountCard({
             resending={resending}
             submitLabel="Save"
             busyLabel="Saving..."
+            blockedFor={blocked}
             onResend={() => void sendCode(true)}
             onCancel={onCancel}
           />
         ) : (
           <div className="space-y-2">
-            {gate && (
+            {liveGate && (
               <p className="text-xs text-gray-500">
                 The code already sent to {user.email} is still valid — Save to
                 use it again.
@@ -255,7 +282,7 @@ export function EditAccountCard({
                 ? 'Sending OTP...'
                 : blocked > 0
                   ? `Try again in ${blocked}s`
-                  : gate
+                  : liveGate
                     ? 'Save'
                     : 'Verify & Continue'}
             </button>

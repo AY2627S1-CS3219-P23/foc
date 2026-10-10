@@ -59,6 +59,45 @@ Entry template:
   via pull request.
 
 ---
+## 2026-10-10 — Leong Wei Zhi (PR #149 review @Sinnez1: shared /users/me, delete dialog, gate-code failures)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debug (review fixes)
+- **Scope:** `web`: `features/user/AuthProvider.tsx`, `useAuth.tsx`,
+  `profileApi.ts`, `problemTypes.ts`,
+  `components/{ProfileSection,DeleteAccountModal,EditAccountCard,ChangePasswordCard,CodeStep,OtpVerificationModal}.tsx`;
+  `test/profile.test.tsx`, `test/auth.test.tsx`.
+- **Prompt(s):** Asked to address @Sinnez1's review of PR #149. The two
+  flagged items: (1) the delete dialog could be dismissed mid-request —
+  Cancel (and the ✕ / backdrop it shares a handler with) closed it while
+  the DELETE was away, so `logout()` signed the user out with no warning
+  and a failure's message landed on a dialog that was gone; both are
+  disabled while it is pending. (2) the profile page asked
+  `GET /users/me` for itself even though AuthProvider already holds that
+  answer for the session, and its private copy meant an edit here left
+  the nav bar and the `/admin` guard on pre-edit values; the page reads
+  `useAuth().me` and hands each save back through a new `updateMe`, and
+  the duplicate `profileApi.getCurrentUser` wrapper is gone. Also four of
+  his follow-ups: a resend-cooldown 429 on save is classified `wait`
+  (its own `GateFailure`) so the code stays in the boxes and `CodeStep`
+  counts the quoted wait down on the submit button, instead of being read
+  as a wrong guess; a code kept across a refusal is only offered while
+  its own expiry stands; an untyped 429 ends a pending sign-up on its
+  status alone; and the page's two email banners clear each other.
+- **Author review:** The two remaining follow-ups — one gate code tracked
+  separately by both cards, and the duplicated code-request logic — need
+  a shared owner (@Sinnez1's suggested `useGateCode()` hook, instantiated
+  once in ProfileSection); the author chose to track them as a follow-up
+  issue rather than widen an approved PR, since today's behaviour
+  degrades gracefully (a stale "still valid" hint costs one refused call,
+  then the card asks for a new code). Four regression tests added — the
+  dialog that cannot be dismissed mid-delete, the 429 countdown, a kept
+  code that has expired, and the untyped 429 — each checked to fail with
+  only its own fix reverted; the shared-`me` change is pinned by the
+  existing username-save case, which now also asserts one
+  `GET /users/me` per session. Vitest (91 tests), eslint, tsc and
+  prettier clean; reviewed via pull request.
+
+---
 ## 2026-10-09 — Leong Wei Zhi (PR #149 Copilot re-review: expired email change, test strength, disclosures)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** debug (review fixes) + docs (disclosures)
