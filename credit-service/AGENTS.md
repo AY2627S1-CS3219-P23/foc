@@ -25,11 +25,12 @@ IDs (D1–D12) when touching related code.
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
 | `entity/` | One JPA entity per V1 table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One empty `JpaRepository` per entity |
-| `service/` | `CreditOperations` and `ReplyOutbox` (interfaces), `ReserveResult` / `SettleResult`, and the `NotImplemented*` stub beans, which throw |
+| `service/` | `CreditOperations` and `ReplyOutbox` (interfaces), `ReserveResult` / `SettleResult`, the `NotImplemented*` stub beans, which throw, and `RequestEventHandler`, which owns the transaction for one request event |
+| `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, and `DomainEventMessageConverter`, a copy of notification-service's |
 
 No controllers, listener, outbox publisher or scheduler yet, and no
-business logic: the two interfaces are the seams the features are built
-against.
+credit logic: the two interfaces are the seams the features are built
+against, and the handler already calls them.
 
 ## Invariants — do not break
 
@@ -45,7 +46,13 @@ against.
   beans of one interface fail injection) and its case in
   `NotImplementedStubsTest`.
 - **No shared code except `foc-contracts`** (root `AGENTS.md`, D15). The
-  JWT classes are copies of supplier-service's, on purpose.
+  JWT classes are copies of supplier-service's, and the message converter
+  and topology initializer copies of notification-service's, on purpose.
+- **Broker types stay in `messaging/rabbitmq/`.** `service/` imports
+  none; the handler returns an outcome and the listener settles the
+  delivery.
+- **What each operation answers is specified** in the design doc ("What
+  each operation answers"); the handler depends on it.
 - **Amounts are integers** (Credit F1.2); balances never go negative
   (`CHECK` constraints back this up).
 

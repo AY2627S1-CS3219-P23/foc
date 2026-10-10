@@ -5,6 +5,9 @@
 # credit-db, Flyway owning the schema (V1 from docs/credit-service.md),
 # RabbitMQ connection settings (no listener yet), the shared JWT secret,
 # CORS origin, and the actuator health endpoint.
+# 2026-10-10: RabbitMQ acknowledgement, confirm and retry settings, and
+# a fractional number refused where an integer is expected, for the
+# request event handler and topology (the values are the author's).
 # Author review: Ryan Ang, pending pull request review.
 
 spring:
@@ -24,8 +27,36 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:foc}
     password: ${RABBITMQ_PASSWORD:}
+    listener:
+      simple:
+        # The listener acks or nacks itself, after the handler's
+        # transaction commits (docs/credit-service.md D11).
+        acknowledge-mode: manual
+    # Correlated confirms with returns: a publish is confirmed by the
+    # broker AND reported back if no queue took it, so a reply is marked
+    # sent only when it was confirmed and not returned (D10).
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+  jackson:
+    deserialization:
+      # A fractional number where an integer is expected is refused, not
+      # truncated: a reward of 1.7 fails conversion and dead-letters
+      # instead of reserving 1 (Credit F1.2.1).
+      accept-float-as-int: false
 
 credit:
+  rabbitmq:
+    retry:
+      # Delay before a failed event is tried again (D11). Baked into the
+      # retry queue's x-message-ttl when it is declared: changing it
+      # against a broker that already holds the queue fails
+      # PRECONDITION_FAILED until the queue is deleted.
+      ttl-ms: ${CREDIT_RETRY_TTL_MS:2000}
+      # Total attempts before an event dead-letters (D11); read by the
+      # listener.
+      max-attempts: ${CREDIT_RETRY_MAX_ATTEMPTS:5}
   # Origin the browser calls this service from (no API gateway)
   web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
   jwt:

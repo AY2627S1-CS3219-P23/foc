@@ -410,7 +410,12 @@ amount check and index in V1, the team's decision that the release
 path get-or-creates the requester's account written into
 `docs/credit-service.md`, a `SettleResult` returned by transfer and
 release by the author's choice among the reviewer's options, an index
-on unsent outbox rows, and tighter schema and contract tests).
+on unsent outbox rows, and tighter schema and contract tests), and its
+request event handler and broker topology (the handler, a message
+converter and topology initializer copied from notification-service,
+the queues and bindings, their configuration and tests), written to
+the author's plan, with the decisions recorded in
+`docs/credit-service.md` and `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

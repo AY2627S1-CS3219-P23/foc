@@ -26,6 +26,51 @@ Entry template:
 ```
 
 ---
+## 2026-10-10 — Ryan Ang (credit-service: request event handler and broker topology)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs), built against the
+  `CreditOperations` / `ReplyOutbox` stubs
+- **Scope:** `credit-service/`, `docs/credit-service.md`, `compose.yaml`,
+  `.env.example`.
+  - `service/RequestEventHandler` (+ `Outcome`): one transaction per
+    request event; reserve, transfer or release, and the reply enqueued
+    for a reservation. `RequestEventHandlerTest` with both interfaces
+    mocked.
+  - `messaging/rabbitmq/`: `DomainEventMessageConverter` and
+    `RabbitMqTopologyInitializer` copied from notification-service
+    (package, and the initializer's property name, changed);
+    `RabbitMqTopology` (work, retry and dead-letter queues, four
+    bindings from `EventTypeRegistry`, both exchanges); converter
+    wiring. `RabbitMqTopologyTest`, `DomainEventMessageConverterTest`.
+  - `application.yaml`: manual acknowledgement, correlated confirms
+    with returns and the mandatory flag, retry delay and attempts,
+    `accept-float-as-int: false`. Test profile: listener auto-startup
+    and topology provisioning off.
+  - `docs/credit-service.md`: D10, D11, the handler row, "What each
+    operation answers", three failure rows, F1.2.1 and NFR1.1.
+  - `compose.yaml`, `.env.example`: `CREDIT_RETRY_TTL_MS`,
+    `CREDIT_RETRY_MAX_ATTEMPTS`. Service README and AGENTS.md.
+- **Prompt(s):** Gave a four-part written plan (transaction ownership,
+  copying the messaging code, queues and bindings, what each operation
+  answers per record status) and asked for it to be checked for issues
+  before building. Then answered the issues raised and set the scope:
+  this branch is the handler, converter copy, topology, config and doc
+  edits; the real operations, listener and outbox publisher are later
+  slices.
+- **Author review:** Every decision here is the author's, from the
+  written plan and the answers to the check: the handler's shape, copy
+  rather than share, the queue names and four bindings, declaring both
+  exchanges, the retry values (2000 ms, 5 attempts), the results table,
+  the mandatory flag for replies, refusing a fractional reward, and the
+  history rules for refusals. The check raised four points the plan did
+  not cover (an unroutable reply confirmed and lost, where the reply is
+  serialised, the `PROVISION` row on a refusal, a test switch for the
+  publisher); the author decided each. The tool chose only the wording
+  of the reward-below-1 reason. The fractional-reward test was run
+  failing before the Jackson setting was added and passing after.
+  `./mvnw clean test`: 48 tests, 0 failures. Pending pull request
+  review.
+
 ## 2026-10-10 — Ryan Ang (credit-service scaffold: entities, repositories, interfaces)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (scaffold + tests + docs)

@@ -301,6 +301,9 @@ services:
       RABBITMQ_PORT: "5672"
       RABBITMQ_USER: ${RABBITMQ_USER:-foc}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set in .env}
+      # retry delay and attempts for a failed request event (D11)
+      CREDIT_RETRY_TTL_MS: ${CREDIT_RETRY_TTL_MS:-2000}
+      CREDIT_RETRY_MAX_ATTEMPTS: ${CREDIT_RETRY_MAX_ATTEMPTS:-5}
       # verifies login tokens; the secret user-service signs them with
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       # Browser origin allowed by CORS, shared with the other services.
