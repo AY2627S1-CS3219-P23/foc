@@ -6,6 +6,8 @@
 -- are the team's design; the tool chose only SQL details the doc leaves
 -- open (varchar lengths, NOT NULL on columns the doc doesn't mark
 -- nullable, constraint and index names) following user-service's V1.
+-- 2026-10-10 (PR #166 review): the slice amount CHECK and the slice
+-- request_ref index added.
 -- Author review: Ryan Ang, pending pull request review.
 
 -- A user's credit balances, one row per user. The primary key makes
@@ -23,7 +25,9 @@ create table credit_account (
 
 -- The reservation for one request. The primary key on request_ref is the
 -- duplicate check (D3); status records the outcome. A RELEASED row may
--- carry amount 0 (the tombstone for a cancel that arrives first).
+-- carry amount 0 (the tombstone for a cancel that arrives first; the
+-- release path get-or-creates the requester's account before writing it,
+-- D6).
 create table credit_reservation (
     request_ref varchar(255) not null,
     requester_id varchar(255) not null,
@@ -51,8 +55,12 @@ create table credit_reservation_slice (
     expires_at timestamp(6) with time zone,
     primary key (id),
     constraint credit_reservation_slice_reservation_fk
-        foreign key (request_ref) references credit_reservation (request_ref)
+        foreign key (request_ref) references credit_reservation (request_ref),
+    constraint credit_reservation_slice_amount_positive check (amount > 0)
 );
+
+-- a reservation's slices, read back on release
+create index idx_credit_reservation_slice_request_ref on credit_reservation_slice (request_ref);
 
 -- A user's available credits split by expiry date (F6.1). A null
 -- expires_at never expires (the sign-up credits). Deleted when spent to 0.

@@ -383,7 +383,10 @@ request event records (the author's decision, issue #165), and the
 scaffold's JPA entities (one per V1 table), empty repositories and the
 `CreditOperations` / `ReplyOutbox` interfaces with stubs that throw —
 the interface signatures and the `ReserveResult` values supplied by the
-author, with no business logic.
+author, with no business logic; and that PR's review fixes (a slice
+amount check and index in V1, and the team's decision that the release
+path get-or-creates the requester's account written into
+`docs/credit-service.md`).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

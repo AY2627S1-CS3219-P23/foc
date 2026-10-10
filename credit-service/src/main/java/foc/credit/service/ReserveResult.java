@@ -11,6 +11,7 @@ package foc.credit.service;
 public enum ReserveResult {
     RESERVED,
     REJECTED,
-    // the request already has a record; nothing changed
+    // the request already has a record, including the amount-0 RELEASED
+    // one from a cancel that arrived first; nothing changed
     DUPLICATE
 }

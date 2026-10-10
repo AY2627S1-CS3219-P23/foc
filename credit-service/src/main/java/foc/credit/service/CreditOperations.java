@@ -21,12 +21,20 @@ public interface CreditOperations {
     /** The user's account, created on first sight of the ID (D6). */
     CreditAccount getOrCreate(String userId);
 
-    /** Reserves a request's reward from the requester, or refuses (D8). */
+    /**
+     * Reserves a request's reward from the requester, or refuses (D8).
+     * Gets or creates the requester's account first (D6).
+     */
     ReserveResult reserve(String requestRef, String requesterId, int amount);
 
     /** Moves a request's held credits to the courier (D9). */
     void transfer(String requestRef, String courierId);
 
-    /** Returns a request's held credits to the requester (D9). */
+    /**
+     * Returns a request's held credits to the requester (D9). With no
+     * reservation for the request, gets or creates the requester's account
+     * (D6) and records the request as released with amount 0, so a late
+     * reserve is ignored.
+     */
     void release(String requestRef, String requesterId);
 }

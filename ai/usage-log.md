@@ -54,6 +54,20 @@ Entry template:
   Entity class names follow `docs/credit-service.md` where it names
   them; `CreditReservationSlice` and `CommonPool` are not named there
   and follow their tables. `./mvnw clean test`: 21 tests, 0 failures.
+- **2026-10-10, PR #166 Copilot review (schema):** asked to fix the
+  second review's three findings, with the team decision for the first
+  supplied as written text. `V1__baseline.sql`:
+  `CHECK (amount > 0)` on `credit_reservation_slice` and an index on its
+  `request_ref`, with two cases in `CreditServiceApplicationTests`.
+  Tombstone finding (also the requester-provisioning item of #165):
+  team decision to keep the foreign key and make get-or-create part of
+  the release path, stated as one rule under D6. The tool transcribed
+  it into `docs/credit-service.md` (D6, the event table's cancelled /
+  expired "no record" cell, the paragraph under it, the F1.1 row, the
+  slice row and ER diagram) and the `CreditOperations` javadoc. No
+  implementation: `release` is still the stub, so the cancel-then-submit
+  test waits for the real bean. `./mvnw clean test`: 23 tests, 0
+  failures.
   
 
 ## 2026-10-09 — Ryan Ang (credit-service scaffold)
