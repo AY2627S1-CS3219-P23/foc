@@ -17,6 +17,10 @@ Author review: Ryan validated test assertions to match intended behaviour.
        uniqueness, lock and save calls.
 2026-09-29 (Claude Code, Opus 5.5), PR #141 review: username checks use
        existsByUsernameIgnoreCase (usernames now ignore case, team decision).
+2026-10-02 (Claude Code, Opus 5.5), issue #154: the 503's reason is checked
+       to be the generic "Owner setup is unavailable".
+2026-10-10 (Claude Code, Opus 5.5), PR #162 re-review (Leong Wei Zhi): the
+       unconfigured-token log line is checked to be written once.
 */
 
 package foc.user.service;
@@ -37,6 +41,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -48,7 +54,7 @@ import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.repository.UserRepository;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class OwnerSetupServiceTest {
 
     private static final String VALID_SETUP_TOKEN = "correct-setup-token";
@@ -116,7 +122,29 @@ class OwnerSetupServiceTest {
             .satisfies(ex ->
                 assertThat(((ResponseStatusException) ex).getStatusCode())
                     .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE)
+            )
+            // the reason reaches the caller, so it must not name the setting
+            .satisfies(ex ->
+                assertThat(((ResponseStatusException) ex).getReason())
+                    .isEqualTo("Owner setup is unavailable")
             );
+    }
+
+    @Test
+    @DisplayName("Should log the unconfigured OWNER_SETUP_TOKEN once, not on every request")
+    void setupOwner_logsUnconfiguredTokenOnce(CapturedOutput output) {
+        ReflectionTestUtils.setField(ownerSetupService, "expectedSetupToken", "");
+
+        SetupOwnerRequest request = new SetupOwnerRequest(
+            "e1234567@u.nus.edu", "owner_user", "ValidPassword123!"
+        );
+
+        for (int call = 0; call < 3; call++) {
+            assertThatThrownBy(() -> ownerSetupService.setupOwner(request, VALID_SETUP_TOKEN))
+                .isInstanceOf(ResponseStatusException.class);
+        }
+
+        assertThat(output.getOut().split("OWNER_SETUP_TOKEN is not configured", -1)).hasSize(2);
     }
 
     // existing owners

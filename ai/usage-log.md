@@ -26,6 +26,74 @@ Entry template:
 ```
 
 ---
+## 2026-10-10 — Ryan Ang (PR #162 re-review fixes, Leong Wei Zhi's re-review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (review fixes: code + tests + docs)
+- **Scope:** `user-service/` and `web/`.
+  - `PostgresTestContainer`: `user.retention.purge-cron` and
+    `owner.setup.token` added to the `@TestPropertySource` pins; the
+    token moved out of `application-test.yaml`.
+  - `DemoAccountsSeeder`: a run that loses an insert race seeds once
+    more; a second loss is logged as a warning that no longer says the
+    other instance finished. `DemoAccountsSeederTest`: one case for the
+    retry, one for losing twice.
+  - `OwnerSetupService`: the unconfigured-token 503 is logged
+    server-side, naming the setting; the response stays generic.
+  - `web` `login.tsx`: clearing the sign-up state keeps the URL's query
+    and hash; `auth.test.tsx` has a case for it.
+  - Root `README.md`: AI Use Summary clause updated.
+- **Prompt(s):** Asked to look at the comments on PR #162, then to fix
+  them, with the seeder re-running its seed after a conflict.
+- **Author review:** For the seeder the reviewer offered three options
+  (per-account transaction or `ON CONFLICT DO NOTHING`, re-running the
+  seed once, or only rewording the log line); the author chose the
+  re-run. The other fixes follow the reviewer's own suggestions.
+  `./mvnw clean test`: 306 tests, 0 failures; `OwnerSetupControllerTest`
+  and `AccountPurgeSchedulerTest` also pass with `USER_PURGE_CRON`
+  exported empty and a wrong `OWNER_SETUP_TOKEN`. Web: `npx vitest run`,
+  65 tests pass. Pending author review of the diff.
+- **Second re-review (same day, head `d5e5734`):** asked to look at the
+  new findings and fix them. `OwnerSetupService`: the unconfigured-token
+  line is logged once per process, since the endpoint takes no
+  credentials (the reviewer's one-shot flag suggestion);
+  `OwnerSetupServiceTest` checks three calls write one line.
+  `ProblemDetailAdvice`: a 405 handler shaped like the 415 one, keeping
+  Spring's `Allow` header; `AuthControllerTest` has a case for it. The
+  406 is left alone: the reviewer found it returns an empty body and
+  called it a separate question. `./mvnw clean test`: 308 tests, 0
+  failures.
+
+## 2026-10-09 — Ryan Ang (PR #162 review fixes, Leong Wei Zhi's review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (review fixes: code + tests + docs)
+- **Scope:** `user-service/` only.
+  - `PostgresTestContainer`: the values the tests assert on
+    (`user.retention.days`, `user.jwt.access-token-ttl`,
+    `user.web-allowed-origin`, `user.mail.from`, `user.otp.ttl`,
+    `user.otp.max-attempts`, `spring.mail.host` / `port`) pinned with
+    `@TestPropertySource`, so exported or empty environment variables
+    can't change them or stop the context starting.
+  - `ProblemDetailAdvice`: the 415 returns Spring's headers with the
+    body, keeping `Accept`; `AuthControllerTest` asserts it.
+  - `LoginAttempts.record`: back to `find` then
+    `refresh(PESSIMISTIC_WRITE)`, so the read is fresh even when the
+    `User` is already in the persistence context; `AuthServiceTest`'s
+    stub follows.
+  - Root `README.md`: AI Use Summary clause updated.
+- **Prompt(s):** Asked to look at the review on PR #162, then to fix
+  all of it on the PR branch.
+- **Author review:** The login read was a performance-versus-
+  robustness trade-off; the author chose restoring `refresh` (one
+  extra query per attempt) over a guard test or no change, via
+  options Q&A. The other two fixes follow the reviewer's own
+  suggestions. `./mvnw clean test`: 305 tests, 0 failures. The four
+  environment-sensitive classes (`AuthControllerTest`,
+  `AccountPurgeSchedulerTest`, `AccountUpdateControllerTest`,
+  `DemoAccountsSeederTest`) also pass with `OTP_TTL`,
+  `OTP_MAX_ATTEMPTS`, `JWT_ACCESS_TOKEN_TTL`, `MAIL_PORT` and
+  `MAIL_FROM` exported empty and non-default `WEB_ALLOWED_ORIGIN`,
+  `USER_RETENTION_DAYS` and `USER_SEED_DEMO`.
+
 ## 2026-10-09 — Ryan Ang (PR #163 review fixes)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor (review fixes: one test + docs)
@@ -95,6 +163,43 @@ Entry template:
   rejected. `docs/architecture.md` and `.mmd`: Credit Service rows and
   edges transcribed from the team's saga design (D6-D9). Root
   `README.md`: AI Use Summary clause for this PR.
+
+## 2026-10-05 — Ryan Ang (user-service + web: remaining #154 and #138 follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + debug + tests + docs
+- **Scope:** `user-service/` and `web/`; the seven items still open on
+  issues #154 and #138, as listed in those issues (review follow-ups from
+  PR #152, PR #155 and PR #135).
+  - Test config: `src/test/resources/application.yaml` renamed to
+    `application-test.yaml` and `PostgresTestContainer` activates the
+    `test` profile, so tests load the main `application.yaml` (open-in-view
+    off, the main Flyway settings) and the test file keeps only the setup
+    token, the JWT secret and the 0s resend cooldown.
+  - `FlywayMigrationTest` runs with the Spring-configured Flyway pointed
+    at its own schema, so its baseline settings come from
+    `application.yaml` instead of a hand-typed copy.
+  - `PostgresTestContainer` pins `user.seed.demo=false` for every test
+    class; `DemoAccountsSeederTest` turns it on with `@TestPropertySource`;
+    the pin on `UserServiceApplicationTests` is gone.
+  - `ProblemDetailAdvice`: 415 problem+json for an unsupported
+    `Content-Type` (#138), with a test in `AuthControllerTest` and a line
+    in `user-service/README.md`.
+  - `LoginAttempts.record`: one locked `find` instead of `find` plus
+    `refresh`; `AuthServiceTest`'s stub follows.
+  - `DemoAccountsSeeder`: a run that loses an insert race to another
+    instance is rolled back and logged as a warning instead of stopping
+    startup; test in `DemoAccountsSeederTest`.
+  - `web/src/features/user/login.tsx`: the "account created" navigation
+    state is cleared once read, so a reload doesn't show the notice again;
+    test in `auth.test.tsx`.
+  - `web/src/shared/shell/NavBar.tsx`: the broken `border-gray-5=800`
+    class on the Log In / Logout buttons replaced with `border-gray-300`,
+    the credits badge's border.
+- **Prompt(s):** Asked which #154, #138 and #147 items were still open,
+  then to fix the seven open code items (the `jwt.ts` clean-up left out).
+- **Author review:** Full user-service suite (241 tests, also with
+  `USER_SEED_DEMO=true` exported) and the web suite (64 tests) run green;
+  to be reviewed via PR.
 
 ## 2026-10-05 — Leong Wei Zhi (PR #157 Copilot review: Retry-After on exhaustion + spent-row docs)
 - **Tool:** Claude Code (Fable 5)
@@ -176,6 +281,34 @@ Entry template:
 - **Author review:** Full suite green (298 tests, 11 new — including
   end-to-end regressions in both real-cooldown classes pinning that
   exhaustion no longer bypasses the cooldown). Reviewed via pull request.
+
+## 2026-10-02 — Ryan Ang (user-service: #154 review follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + tests + docs
+- **Scope:** `user-service/` only, four items from issue #154 (PR #152 and
+  PR #155 review follow-ups); no behaviour change beyond error bodies.
+  - `ProblemDetailAdvice`: the `ResponseStatusException` and
+    `MethodArgumentTypeMismatchException` handlers moved here from
+    `AuthController` and `AdminController`, so `OwnerSetupController` and
+    `ProfileController` answer those in problem+json too (e.g. a
+    non-numeric `GET /users/{id}`, a wrong setup token, `CallerId`'s 401).
+  - `DemoAccountsSeeder`: `Locale.ROOT` on the generated emails and
+    usernames; comment on the `ADMINS`/`USERS` limits.
+  - Tests: non-numeric id (400 problem+json) and a problem+json check on
+    the non-numeric-principal 401 in `ProfileControllerTest`; a
+    problem+json check on the wrong-token 403 in
+    `OwnerSetupControllerTest`; a soft-deleted demo account is not
+    re-seeded in `DemoAccountsSeederTest`.
+  - `user-service/README.md`: "Old local databases" note on
+    `baseline-on-migrate`; the wrong-type parameter 400 now mentions path
+    parameters.
+  - `OwnerSetupService`: the 503 for an unconfigured setup token now says
+    only "Owner setup is unavailable", since the shared handler shows the
+    reason to unauthenticated callers; `OwnerSetupServiceTest` checks it.
+  - `SignupIdentifierTakenException`: header comment now names
+    `ProblemDetailAdvice` as the handler that maps it.
+- **Prompt(s):** Review #138 and #154 to determine fixes.
+- **Author review:** Reviewed via PR.
 
 ## 2026-09-30 — Leong Wei Zhi (#92 account update flows)
 - **Tool:** Claude Code (Fable 5)

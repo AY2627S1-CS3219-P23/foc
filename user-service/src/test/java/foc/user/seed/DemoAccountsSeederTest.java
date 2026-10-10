@@ -5,17 +5,38 @@ Scope: tests for DemoAccountsSeeder with USER_SEED_DEMO on: 1 owner, 3
        admins and 100 users; each role logs in with its password; a rerun
        adds nothing; an account already present is skipped; every seeded
        email and username passes the sign-up rules.
+       2026-10-02 (Claude Code, Opus 5.5), issue #154: a soft-deleted demo
+       account is not re-seeded.
+       2026-10-05 (Claude Code, Opus 5.5), issue #154: the switch is set
+       with @TestPropertySource, to override PostgresTestContainer's pin;
+       a lost insert race is logged, not thrown.
+       2026-10-07 (Claude Code, Opus 5.5), PR #162 Copilot review: the race
+       stub carries the unique-violation SQLState; any other integrity
+       failure is rethrown.
+       2026-10-10 (Claude Code, Opus 5.5), PR #162 re-review (Leong Wei
+       Zhi): a lost race seeds again; losing it twice is logged, not
+       thrown.
 Author review: Ryan to review via the PR.
 */
 
 package foc.user.seed;
 
+import java.sql.SQLException;
+import java.time.Instant;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import org.junit.jupiter.api.AfterEach;
@@ -25,8 +46,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import foc.user.PostgresTestContainer;
 import foc.user.dto.AccountRules;
@@ -34,7 +59,10 @@ import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.repository.UserRepository;
 
-@SpringBootTest(properties = "user.seed.demo=true")
+// @TestPropertySource, not @SpringBootTest(properties): it has to outrank
+// the user.seed.demo=false that PostgresTestContainer sets the same way
+@SpringBootTest
+@TestPropertySource(properties = "user.seed.demo=true")
 @AutoConfigureMockMvc
 class DemoAccountsSeederTest extends PostgresTestContainer {
 
@@ -46,6 +74,12 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
 
     @Autowired
     private DemoAccountsSeeder seeder;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     // the seeder already ran at startup; start each test from a known state
     @BeforeEach
@@ -118,6 +152,76 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
         assertThat(userRepository.findByUsernameIgnoreCase("demo_admin_1").orElseThrow().getRole())
             .isEqualTo(Role.USER);
         assertThat(userRepository.count()).isEqualTo(1 + DemoAccountsSeeder.ADMINS + DemoAccountsSeeder.USERS);
+    }
+
+    @Test
+    @DisplayName("A soft-deleted demo account stays deleted after a rerun")
+    void softDeletedAccountStaysDeleted() {
+        // relies on existsByEmail / existsByUsernameIgnoreCase counting
+        // soft-deleted rows; narrowing them would re-insert the account and
+        // fail on the unique email
+        User user = userRepository.findByUsernameIgnoreCase("demo_user_010").orElseThrow();
+        user.softDelete(Instant.now());
+        userRepository.save(user);
+        long before = userRepository.count();
+
+        seeder.run();
+
+        assertThat(userRepository.findByUsernameIgnoreCase("demo_user_010").orElseThrow().getDeletedAt())
+            .isNotNull();
+        assertThat(userRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("Losing an insert race to another instance seeds again")
+    void lostInsertRaceSeedsAgain() {
+        // the first insert hits the unique index; everything else goes to
+        // the real repository
+        UserRepository racing = mock(UserRepository.class);
+        when(racing.existsByEmail(anyString()))
+            .thenAnswer(inv -> userRepository.existsByEmail(inv.getArgument(0)));
+        when(racing.existsByUsernameIgnoreCase(anyString()))
+            .thenAnswer(inv -> userRepository.existsByUsernameIgnoreCase(inv.getArgument(0)));
+        when(racing.save(any(User.class)))
+            .thenThrow(new DataIntegrityViolationException("idx_users_email",
+                new SQLException("duplicate key", "23505")))
+            .thenAnswer(inv -> userRepository.save(inv.getArgument(0)));
+        userRepository.deleteAll();
+
+        new DemoAccountsSeeder(racing, passwordEncoder, transactionManager).run();
+
+        assertThat(userRepository.count()).isEqualTo(1 + DemoAccountsSeeder.ADMINS + DemoAccountsSeeder.USERS);
+    }
+
+    @Test
+    @DisplayName("Losing the insert race twice is logged, not thrown")
+    void lostInsertRaceTwiceDoesNotThrow() {
+        // every account looks missing, then the insert hits the unique index
+        UserRepository racing = mock(UserRepository.class);
+        when(racing.save(any(User.class)))
+            .thenThrow(new DataIntegrityViolationException("idx_users_email",
+                new SQLException("duplicate key", "23505")));
+        long before = userRepository.count();
+
+        assertThatCode(() -> new DemoAccountsSeeder(racing, passwordEncoder, transactionManager).run())
+            .doesNotThrowAnyException();
+
+        // one retry, no more
+        verify(racing, times(2)).save(any(User.class));
+        assertThat(userRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("An integrity failure that is not a duplicate key still stops startup")
+    void otherIntegrityFailureIsRethrown() {
+        // 23502 is not_null_violation: not the race, so not swallowed
+        UserRepository broken = mock(UserRepository.class);
+        when(broken.save(any(User.class)))
+            .thenThrow(new DataIntegrityViolationException("users.email",
+                new SQLException("null value", "23502")));
+
+        assertThatThrownBy(() -> new DemoAccountsSeeder(broken, passwordEncoder, transactionManager).run())
+            .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

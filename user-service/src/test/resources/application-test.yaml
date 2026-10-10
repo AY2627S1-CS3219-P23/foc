@@ -1,0 +1,30 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Sonnet 4.6), 2026-09-22; setup token added 2026-09-23.
+# Scope: test-only config: a fixed owner setup token for the controller
+# tests.
+# Author review: Ryan ran mvn test and confirmed the suite is green.
+# 2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: fixed JWT secret
+# for the auth tests.
+# 2026-09-29, Claude Code (Opus 5), PR #150 review: otp.resend-cooldown
+# added (0s here — see the comment on it).
+# 2026-10-05, Claude Code (Opus 5.5), issue #154: renamed from
+# application.yaml, which replaced the main yaml on the test classpath, so
+# tests ran with open-in-view on and without the main Flyway settings.
+# Now the "test" profile's overrides (PostgresTestContainer activates it):
+# the main yaml loads first, and the values that only repeated its
+# defaults are gone.
+# 2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei Zhi):
+# owner.setup.token moved to PostgresTestContainer's pins, because
+# OWNER_SETUP_TOKEN in the environment outranks this file.
+# Author review: Ryan to review via the PR.
+
+user:
+  jwt:
+    # the main yaml's default is empty, which fails startup
+    secret: test-jwt-secret-that-is-at-least-32-bytes-long
+  otp:
+    # off here: the sign-up tests resend back to back, and no clock they
+    # can advance sits between the two calls. The cooldown itself is
+    # covered by AuthServiceTest (fixed clock) and SignupResendCooldownTest
+    # (which overrides this to the real default).
+    resend-cooldown: 0s

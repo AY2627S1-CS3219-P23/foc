@@ -33,6 +33,10 @@ Scope: unit tests for AuthService (issues #87/#89): sign-up normalisation
        the row instead of leaving it to block the address.
        PR #150 Copilot review: sign-up's pending-row read is stubbed on the
        locked finder, which is what it now uses.
+       2026-10-05, Claude Code (Opus 5.5), issue #154: the stub follows
+       LoginAttempts' single locked read.
+       2026-10-09, Claude Code (Opus 5.5), PR #162 review: back to a plain
+       find stub, as LoginAttempts reads and then refreshes with the lock.
        PR #157 Copilot review: the verify refusals now assert their
        problem+json type, pinning expiry to otp-expired — it had regressed
        to otp-invalid when #92 gave the exception a typed default.
@@ -148,7 +152,8 @@ class AuthServiceTest {
 
         user = new User("e1234567@u.nus.edu", "student_alex", PLAIN_ENCODER.encode(PASSWORD), Role.USER);
         ReflectionTestUtils.setField(user, "id", 42L);
-        // LoginAttempts re-reads the account with the row locked (refresh is a no-op here)
+        // LoginAttempts reads the account, then locks and re-reads it
+        // (refresh, a no-op on the mock)
         lenient().when(entityManager.find(User.class, 42L)).thenReturn(user);
     }
 

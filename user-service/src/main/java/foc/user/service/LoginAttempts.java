@@ -11,6 +11,10 @@ Scope: issue #147. The database write for a login attempt, split out of
        Merged with issue #146 (PR #148): the outcome carries the attempts
        left and the lock's remaining time for its messages, and the
        retention check runs before anything else (pastRetention).
+       2026-10-05 (issue #154): the row is read and locked in one query.
+       2026-10-09, PR #162 review (Leong Wei Zhi): back to find + refresh (author's
+       choice), so the read is fresh even if the User is already
+       loaded in the persistence context.
 Author review: Ryan to review via the PR.
 */
 
@@ -82,9 +86,10 @@ public class LoginAttempts {
             return Result.gone();
         }
         try {
-            // lock the row (SELECT ... FOR UPDATE) and re-read it: find() may
-            // return a copy the request loaded earlier (open-in-view), which
-            // would miss a parallel attempt's count
+            // lock the row (SELECT ... FOR UPDATE) and re-read it: find()
+            // returns the copy already in the persistence context if there
+            // is one (open-in-view, or a caller's transaction), which would
+            // miss a parallel attempt's count. One extra query per attempt
             entityManager.refresh(user, LockModeType.PESSIMISTIC_WRITE);
         } catch (EntityNotFoundException e) {
             return Result.gone();

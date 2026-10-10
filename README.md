@@ -61,6 +61,10 @@
   #109) by Claude Code (Opus 5).
   2026-09-30: AI Use Summary extended for the user-service account-update
   flows (issue #92) by Claude Code (Fable 5).
+  2026-10-07: AI Use Summary extended for the user-service and web review
+  follow-ups (issues #154 and #138, PR #162) by Claude Code (Opus 5.5).
+  2026-10-10: that clause extended for PR #162's re-review fixes by
+  Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -363,6 +367,24 @@ on the OTP errors (sign-up's included), the V4/V5 migrations, purge
 sweeps, and unit and integration tests, with the scope, endpoint
 shapes, gating and response choices made by the author via
 neutral-options Q&A and recorded in `ai/usage-log.md`; and the
+user-service and web review follow-ups (issues #154 and #138, PR #162)
+— problem+json on every user-service endpoint (the shared
+`ResponseStatusException`, wrong-type-parameter and 415 handlers), a
+generic owner-setup 503, the demo seeder's `Locale.ROOT` formatting and its handling of
+a lost insert race (a duplicate key only; any other integrity failure
+still stops startup), tests that load the main `application.yaml`
+through a `test` profile, the "account created" notice on the login
+page showing once, and the nav bar border class — with the items taken
+from the team's review issues and recorded in `ai/usage-log.md`,
+and that PR's review fixes (test values pinned against the
+environment, the 415's `Accept` header kept, and the login attempt
+counter's read-then-refresh restored by the author's choice) and
+re-review fixes (the purge cron and owner setup token pinned as well,
+a seeding run that loses the insert race seeding once more by the
+author's choice among the reviewer's options, the unconfigured setup
+token logged server-side, once per process, the login page keeping
+the URL's query and hash when it clears the notice state, and a 405
+problem+json handler); and the
 Credit Service saga event contracts in `foc-contracts` (PR #163) —
 four event records, the `credit-events` exchange name, their
 fixtures and the registry tests — together with that PR's review

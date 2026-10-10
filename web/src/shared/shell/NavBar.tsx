@@ -5,6 +5,9 @@
 // navigation is the bottom TabBar, not a menu here).
 // 2026-09-29, Claude Code (Opus 5.5), issue #147: Admin Dashboard link
 // after Profile, for ADMIN and OWNER only.
+// 2026-10-05, Claude Code (Opus 5.5), issue #154: the Log In / Logout
+// buttons' broken border class (border-gray-5=800) now matches the
+// credits badge beside them.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import { Link, NavLink } from 'react-router'
@@ -62,13 +65,13 @@ export function NavBar() {
         {!data?.token ? ( // Conditionally render login and logout based on user state
           <button
             onClick={toLogin}
-            className="text-inherit no-underline rounded-md border border-gray-5=800 bg-white px-3 py-1 text-sm font-medium whitespace-nowrap cursor-pointer"
+            className="text-inherit no-underline rounded-md border border-gray-300 bg-white px-3 py-1 text-sm font-medium whitespace-nowrap cursor-pointer"
           >
             Log In
           </button>
         ) : (
           <button
-            className="text-inherit no-underline rounded-md border border-gray-5=800 bg-white px-3 py-1 text-sm font-medium whitespace-nowrap cursor-pointer"
+            className="text-inherit no-underline rounded-md border border-gray-300 bg-white px-3 py-1 text-sm font-medium whitespace-nowrap cursor-pointer"
             onClick={data.logout}
           >
             Logout
