@@ -12,6 +12,10 @@
 // code entry, so this step is a documented deviation (web/AGENTS.md).
 // Dismissing it keeps the pending change — PR #150's lesson: discarding
 // it stranded a code already emailed behind the resend cooldown.
+// 2026-10-10, Claude Code (Opus 5), PR #149 re-review (@Sinnez1): the
+// cooldown refusal is read with problemTypes' resendWait and the
+// absolute times with otp.ts's deadline — the same two helpers the gate
+// code uses, which is what that comment in problemTypes.ts claims.
 // 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: a resend
 // carries the snapshot's fields it does not replace — the account that
 // owns it above all (ProfileSection reads no snapshot without one).
@@ -29,14 +33,9 @@ import React, { useState } from 'react'
 import { errorMessage } from '@/lib/api/http'
 import { Modal } from '@/shared/components/Modal'
 import { profileApi } from '../profileApi'
-import {
-  OTP_RESEND_COOLDOWN,
-  endsEmailChange,
-  problemType,
-  retryAfter,
-} from '../problemTypes'
+import { endsEmailChange, resendWait } from '../problemTypes'
 import type { AdminUser, PendingEmailChange } from '../types'
-import { emptyCode, useOtpCountdown } from '../otp'
+import { deadline, emptyCode, useOtpCountdown } from '../otp'
 import { CodeStep } from './CodeStep'
 
 // What the page is told when the parked change died before it was
@@ -68,8 +67,6 @@ export function EmailChangeModal({
   const [resending, setResending] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-
-  const startedAt = (seconds: number) => Date.now() + seconds * 1000
 
   // The same countdown CodeStep runs, read for one decision: has the
   // parked change died? It reads the clock on mount, so a dialog opened
@@ -110,8 +107,8 @@ export function EmailChangeModal({
       onResent({
         ...pending,
         email: accepted.email,
-        expiresAt: startedAt(accepted.expiresInSeconds),
-        resendAt: startedAt(accepted.resendInSeconds),
+        expiresAt: deadline(accepted.expiresInSeconds),
+        resendAt: deadline(accepted.resendInSeconds),
       })
       setCode(emptyCode())
       setNotice('A new code has been sent.')
@@ -123,9 +120,9 @@ export function EmailChangeModal({
       }
       // the cooldown had not elapsed after all (a stale tab, or clock
       // skew): the header says how much is left
-      const wait = retryAfter(err)
-      if (problemType(err) === OTP_RESEND_COOLDOWN && wait !== null) {
-        onResent({ ...pending, resendAt: startedAt(wait) })
+      const wait = resendWait(err)
+      if (wait !== null) {
+        onResent({ ...pending, resendAt: deadline(wait) })
       }
       setError(message)
     } finally {

@@ -243,8 +243,12 @@ export function ChangePasswordCard({ email, gate }: ChangePasswordCardProps) {
                 isn't read as spending a resend */}
             {gate.live && (
               <p className="text-xs text-gray-500">
-                The code already sent to {email} is still valid — continue to
-                use it again.
+                {/* as in the Edit Account card: a code whose remaining
+                    life was never quoted is not called valid */}
+                {gate.life === null
+                  ? `A code was already sent to ${email} — `
+                  : `The code already sent to ${email} is still valid — `}
+                continue to use it again.
               </p>
             )}
             <button

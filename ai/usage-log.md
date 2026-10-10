@@ -26,6 +26,45 @@ Entry template:
 ```
 
 ---
+## 2026-10-10 — Leong Wei Zhi (PR #149 re-review @Sinnez1: the empty-code regression and three nits)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debug (review fixes)
+- **Scope:** `web`: `features/user/otp.ts`,
+  `components/{EditAccountCard,ChangePasswordCard,EmailChangeModal}.tsx`,
+  `test/profile.test.tsx`.
+- **Prompt(s):** Asked to address @Sinnez1's re-review of the #167
+  refactor. The regression he found: sharing the code made `gate.live`
+  mean "the account holds a code", not "this card has one typed", so the
+  Edit Account card's Save could send `otp: ""` — after cancelling its
+  own code step, or when the Change Password card had requested the code
+  — and the untyped 400 that answers a blank otp routes to `amend`,
+  leaving the card resending the same empty code with no boxes to type
+  into. The hook answers `complete` now and the card opens its code step
+  unless the digits are filled, as the password card already did; its
+  hint and button follow (`Continue`, not `Save`, when there is nothing
+  to send). Three nits: a refused resend kept blanking an expiry already
+  known, so it is preserved; the expiry countdown's last tick now lands
+  on the expiry instead of up to 15s past it, which had `live` outliving
+  the code; and `resendWait` is actually used by EmailChangeModal, as
+  problemTypes.ts claimed — with `deadline` replacing its local copy of
+  the same helper. He also asked for a merge with main (conflicts since
+  #162), logged separately above.
+- **Author review:** One half of his expiry nit is deliberately not
+  fixed: a code learnt of only through a cooldown 429 has no quoted
+  life, so `live` cannot time it out without either assuming
+  user-service's TTL in the web (duplicating server config, which would
+  lie silently if the server's `otp.ttl` changed) or the 429 carrying
+  the remaining life — a user-service contract change, and so the
+  team's call, not an agent's. What the author took instead is the
+  user-visible half: with no quoted life the cards say a code was sent
+  without calling it valid, and the path self-heals (the server answers
+  `otp-expired`, which restarts the card). Raised in the PR reply for
+  @Sinnez1 to decide. Two regression tests cover the empty-code bug in
+  both shapes (requested from the other card, and cancelled here), and
+  both were checked to fail against the pre-fix submit path. Vitest
+  (97 tests), eslint, tsc and prettier clean; reviewed via pull request.
+
+---
 ## 2026-10-10 — Leong Wei Zhi (merging main into feat/profile-screens, second time)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** refactor (merge conflict resolution)

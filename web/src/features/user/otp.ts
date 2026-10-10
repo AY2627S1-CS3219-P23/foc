@@ -10,6 +10,11 @@
 // left rather than restarting at 60s, and the timer keeps running while
 // EITHER line is still moving (keyed on the cooldown alone, the expiry
 // sentence froze the moment the cooldown ran out).
+// 2026-10-10, Claude Code (Opus 5), PR #149 re-review (@Sinnez1): the
+// hook answers `complete` (a code exists is not a code is typed — see
+// EditAccountCard), a refused resend keeps an expiry already known
+// instead of blanking it, and the expiry countdown's last tick lands on
+// the expiry rather than up to 15s past it.
 // 2026-10-10, Claude Code (Opus 5), issue #167 (from the PR #149 review,
 // @Sinnez1): useGateCode, the one owner of the account's gate code.
 // user-service keeps a single account_update_otps row per account, but
@@ -76,7 +81,10 @@ export function useOtpCountdown(
     if (cooldown <= 0 && !expiresIn) return
     const timer = setTimeout(
       () => setNow(Date.now()),
-      cooldown > 0 ? 1000 : 15000,
+      // the expiry's own tick is 15s, but never past the expiry itself:
+      // overshooting it left callers treating a dead code as live for up
+      // to 15s (PR #149 re-review, @Sinnez1)
+      cooldown > 0 ? 1000 : Math.min(15000, (expiresIn ?? 15) * 1000),
     )
     return () => clearTimeout(timer)
   }, [cooldown, expiresIn])
@@ -125,6 +133,11 @@ export interface GateCode {
   // has not run out
   live: boolean
   digits: string[]
+  // every box filled, so there is a code to submit. The code outlives
+  // the card that asked for it now, so "a code exists" and "a code is
+  // typed" are different questions — a card that conflates them submits
+  // a blank otp (PR #149 re-review, @Sinnez1).
+  complete: boolean
   setDigits: (next: string[]) => void
   // POST /users/me/otp. One call for both the first request and the
   // resend: user-service treats a repeat as the resend, which is why
@@ -166,12 +179,18 @@ export function useGateCode(): GateCode {
     } catch (error: unknown) {
       const wait = resendWait(error)
       if (wait !== null) {
-        // not a dead end: a live code is already in the inbox, and the
-        // 429 says how long before another may be asked for. Its
-        // remaining life is unquoted, so no expiry line is shown. A
-        // refused resend never replaced the code, so anything already
-        // typed still matches it and stays.
-        setGate({ expiresAt: null, resendAt: deadline(wait) })
+        // Not a dead end: a live code is already in the inbox, and the
+        // 429 says how long before another may be asked for. A refused
+        // resend never replaced the code, so anything already typed
+        // still matches it and stays — and an expiry we already knew is
+        // kept, since this refusal says nothing about it; only a first
+        // request that lands on an existing code leaves it unquoted,
+        // and then no expiry line is shown (PR #149 re-review,
+        // @Sinnez1).
+        setGate((previous) => ({
+          expiresAt: previous?.expiresAt ?? null,
+          resendAt: deadline(wait),
+        }))
         return { kind: 'exists', wait }
       }
       return { kind: 'failed', error }
@@ -216,6 +235,7 @@ export function useGateCode(): GateCode {
     blocked,
     live: gate !== null && life !== 0,
     digits,
+    complete: digits.every((digit) => digit !== ''),
     setDigits,
     request,
     failed,

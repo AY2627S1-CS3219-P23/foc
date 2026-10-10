@@ -28,6 +28,10 @@
 // 2026-10-10, Claude Code (Opus 5), issue #167: cases for the account's
 // one gate code across both cards — a code one requests the other can
 // use, and a code one spends leaves the other asking for its own.
+// 2026-10-10, Claude Code (Opus 5), PR #149 re-review (@Sinnez1): the
+// password → edit direction, which #167's two cases missed, in both
+// shapes that left Save sending an empty code: a code requested from the
+// other card, and one requested here and then cancelled.
 // Author review: Leong Wei Zhi (via PR #149).
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -758,6 +762,85 @@ describe('the account gate code', () => {
       OTP,
     )
     // no second code: the one in the inbox was the one it needed
+    expect(profileApi.requestOtp).toHaveBeenCalledTimes(1)
+  })
+
+  async function requestFromPasswordCard(
+    user: ReturnType<typeof userEvent.setup>,
+  ) {
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+    await user.type(
+      passwordCard().getByLabelText('New Password'),
+      'NewPassword1',
+    )
+    await user.type(
+      passwordCard().getByLabelText('Confirm New Password'),
+      'NewPassword1',
+    )
+    await user.click(
+      passwordCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+    await waitFor(() => expect(profileApi.requestOtp).toHaveBeenCalledTimes(1))
+  }
+
+  // The code outlives the card that asked for it, so "the account has a
+  // code" is not "this card has one typed" — conflating them sent a
+  // blank otp, which is an untyped 400 the card could not get out of
+  // (PR #149 re-review, @Sinnez1).
+  it('opens its code step instead of saving a code it does not have', async () => {
+    const user = userEvent.setup()
+    await requestFromPasswordCard(user)
+
+    // over to the other card, having typed the code nowhere
+    await user.click(screen.getByRole('button', { name: 'Edit Profile' }))
+    const usernameInput = editCard().getByRole('textbox', {
+      name: 'Desired Username',
+    })
+    await user.clear(usernameInput)
+    await user.type(usernameInput, 'utown_runner')
+    await user.click(editCard().getByRole('button', { name: 'Continue' }))
+
+    expect(editCard().getByLabelText('Digit 1 of 6')).toBeInTheDocument()
+    expect(profileApi.updateAccount).not.toHaveBeenCalled()
+    await typeCode(user, OTP, editCard())
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(profileApi.updateAccount).toHaveBeenCalledWith(
+        { username: 'utown_runner' },
+        OTP,
+      ),
+    )
+    expect(profileApi.requestOtp).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the code when its step is cancelled and reopened', async () => {
+    const user = userEvent.setup()
+    await requestFromEditCard(user)
+    // Cancel on the code step closes the card; the code stays the
+    // account's, so reopening must not spend a resend — nor save with
+    // empty boxes
+    await user.click(editCard().getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: 'Edit Profile' }))
+
+    const usernameInput = editCard().getByRole('textbox', {
+      name: 'Desired Username',
+    })
+    await user.clear(usernameInput)
+    await user.type(usernameInput, 'utown_runner')
+    await user.click(editCard().getByRole('button', { name: 'Continue' }))
+
+    expect(profileApi.updateAccount).not.toHaveBeenCalled()
+    await typeCode(user, OTP, editCard())
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(profileApi.updateAccount).toHaveBeenCalledWith(
+        { username: 'utown_runner' },
+        OTP,
+      ),
+    )
     expect(profileApi.requestOtp).toHaveBeenCalledTimes(1)
   })
 

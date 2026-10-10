@@ -15,6 +15,15 @@
 // than by its wording. A name/address refused as taken rolls the gate
 // code's consumption back with it, so the card returns to the fields
 // still holding a live code and Save reuses it.
+// 2026-10-10, Claude Code (Opus 5), PR #149 re-review (@Sinnez1): Save
+// no longer submits an empty code. `gate.live` meant "a code is typed
+// here" while the card owned it; shared, it means only that the account
+// holds one — so a code requested here and then cancelled, or requested
+// from the Change Password card, left Save sending `otp: ""`. That is an
+// untyped 400 ("Verification code is required."), which routes to
+// `amend` and leaves the card on its fields, resending the same empty
+// code with no boxes to type into. The card now opens its code step
+// unless the digits are complete, as the password card already did.
 // 2026-10-10, Claude Code (Opus 5), issue #167: the gate code is no
 // longer this card's. useGateCode (otp.ts) owns the account's one row
 // and the digits typed for it, ProfileSection runs it once, and this
@@ -162,8 +171,16 @@ export function EditAccountCard({
       setError('Nothing to change.')
       return
     }
-    // a code kept from a refused save is still live — don't spend a resend
-    if (gate.live) return void save()
+    if (gate.live) {
+      // The code is the account's, not this card's: it may be live with
+      // nothing typed here. Only the digits kept from a refused save go
+      // straight back — otherwise the step opens, which spends no
+      // resend on a code already in the inbox.
+      if (gate.complete) return void save()
+      setVerifying(true)
+      setError('')
+      return
+    }
     void sendCode(false)
   }
 
@@ -236,8 +253,16 @@ export function EditAccountCard({
           <div className="space-y-2">
             {gate.live && (
               <p className="text-xs text-gray-500">
-                The code already sent to {user.email} is still valid — Save to
-                use it again.
+                {/* A code learnt of through a cooldown refusal has no
+                    quoted life, so the card says a code exists without
+                    claiming it is still good (PR #149 re-review,
+                    @Sinnez1) */}
+                {gate.life === null
+                  ? `A code was already sent to ${user.email} — `
+                  : `The code already sent to ${user.email} is still valid — `}
+                {gate.complete
+                  ? 'Save to use it again.'
+                  : 'continue and enter it below.'}
               </p>
             )}
             <button
@@ -250,7 +275,9 @@ export function EditAccountCard({
                 : gate.blocked > 0
                   ? `Try again in ${gate.blocked}s`
                   : gate.live
-                    ? 'Save'
+                    ? gate.complete
+                      ? 'Save'
+                      : 'Continue'
                     : 'Verify & Continue'}
             </button>
             <button
