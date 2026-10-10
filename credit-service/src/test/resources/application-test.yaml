@@ -1,0 +1,18 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-10-09.
+# Scope: the "test" profile's overrides (PostgresTestContainer activates
+# it); the main application.yaml loads first. The datasource comes from
+# the Testcontainers @ServiceConnection.
+# Author review: Ryan Ang, pending pull request review.
+
+credit:
+  jwt:
+    # the main yaml's default is empty, which fails startup
+    secret: test-jwt-secret-that-is-at-least-32-bytes-long
+
+management:
+  health:
+    rabbit:
+      # no broker in the tests (nothing consumes or publishes yet); the
+      # deployed service keeps this check, so health reports a lost broker
+      enabled: false

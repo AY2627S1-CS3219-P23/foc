@@ -139,7 +139,7 @@ alone is only a gate inside the server.
 | `user-db` | `${USER_DB_HOST_PORT:-5435}` (loopback only) | available |
 | `supplier-db` | `${SUPPLIER_DB_HOST_PORT:-5434}` (loopback only) | available |
 | `order-db` | — | not created yet |
-| `credit-db` | — | not created yet |
+| `credit-db` | `${CREDIT_DB_HOST_PORT:-5436}` (loopback only) | available |
 | `web` | — | no database (frontend itself published on `${WEB_PORT:-5173}`) |
 | `mailpit` | — | mail catcher, not a DB: SMTP `${MAILPIT_SMTP_PORT:-1025}`, web inbox `${MAILPIT_UI_PORT:-8025}` (both loopback only) |
 

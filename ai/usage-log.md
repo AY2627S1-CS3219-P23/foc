@@ -26,6 +26,117 @@ Entry template:
 ```
 
 ---
+## 2026-10-10 — Ryan Ang (credit-service scaffold: entities, repositories, interfaces)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (scaffold + tests + docs)
+- **Scope:** `credit-service/` only, no business logic.
+  - `entity/`: one JPA entity per Flyway V1 table (`CreditAccount`,
+    `Reserved`, `CreditReservationSlice`, `CreditLot`,
+    `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`,
+    `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType`
+    enums, transcribed from `V1__baseline.sql`. IDs of other rows are
+    plain columns, not JPA associations.
+  - `repository/`: an empty `JpaRepository` per entity.
+  - `service/`: `CreditOperations` and `ReplyOutbox` with the supplied
+    signatures, `ReserveResult`, and `NotImplemented*` stub beans whose
+    methods throw `UnsupportedOperationException("not implemented")`.
+  - Tests: `EntityMappingTest` (each entity saved and read back against
+    V1) and `NotImplementedStubsTest`.
+  - `credit-service/README.md` and `AGENTS.md`; root `README.md` AI Use
+    Summary clause.
+- **Prompt(s):** Pasted the planned scaffold contents (skeleton, Flyway
+  V1, entities, empty repositories, the JWT filter, and the two
+  interfaces with their method signatures) and asked whether the
+  scaffold PR had them, then to add the four missing pieces.
+- **Author review:** The interface signatures are the author's, as
+  pasted. `ReserveResult` was undefined; the author chose the
+  three-value enum (`RESERVED`, `REJECTED`, `DUPLICATE`) from options.
+  Entity class names follow `docs/credit-service.md` where it names
+  them; `CreditReservationSlice` and `CommonPool` are not named there
+  and follow their tables. `./mvnw clean test`: 21 tests, 0 failures.
+- **2026-10-10, PR #166 Copilot review (schema):** asked to fix the
+  second review's three findings, with the team decision for the first
+  supplied as written text. `V1__baseline.sql`:
+  `CHECK (amount > 0)` on `credit_reservation_slice` and an index on its
+  `request_ref`, with two cases in `CreditServiceApplicationTests`.
+  Tombstone finding (also the requester-provisioning item of #165):
+  team decision to keep the foreign key and make get-or-create part of
+  the release path, stated as one rule under D6. The tool transcribed
+  it into `docs/credit-service.md` (D6, the event table's cancelled /
+  expired "no record" cell, the paragraph under it, the F1.1 row, the
+  slice row and ER diagram) and the `CreditOperations` javadoc. No
+  implementation: `release` is still the stub, so the cancel-then-submit
+  test waits for the real bean. `./mvnw clean test`: 23 tests, 0
+  failures.
+- **2026-10-10, PR #166 review (Leong Wei Zhi):** asked to look at the
+  five findings and fix them. `CreditOperations.transfer` / `release`
+  return a new `SettleResult` (`SETTLED`, `DUPLICATE`, `INVALID_STATE`)
+  instead of `void`: the reviewer offered that enum or a documented
+  exception, and the author chose the enum. `V1__baseline.sql`: the
+  reviewer's partial index on unsent `outbox_event` rows, with a test.
+  `docs/credit-service.md`: that index, and the two existing
+  reservation CHECKs marked on the ER diagram.
+  `CreditServiceApplicationTests`: the two negative cases made
+  `@Transactional`. `foc-contracts` `RequestEventRecordsTest`: every
+  request record must declare `note`, not only annotate it where
+  present. Also removed three merge-conflict marker lines left in this
+  file by the merge of `main`; both sides' entries are kept. Tests:
+  foc-contracts 10, credit-service 24, 0 failures.
+  
+
+## 2026-10-09 — Ryan Ang (credit-service scaffold)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (scaffold + tests + docs)
+- **Scope:** new `credit-service/` skeleton, plus its wiring:
+  - Maven wrapper, `.gitignore`, `.gitattributes` copied from
+    user-service; `pom.xml` (Boot 4.1.1, Java 21, web, JPA, Flyway,
+    Postgres, security, validation, actuator, AMQP, foc-contracts,
+    jjwt, Testcontainers); `Dockerfile` with notification-service's
+    foc-contracts build stage.
+  - `application.yaml` (credit-db datasource, Flyway with
+    `ddl-auto: none`, RabbitMQ connection, JWT secret, CORS origin).
+  - Flyway `V1__baseline.sql`: the eight tables from
+    `docs/credit-service.md`'s "Database" section, with its keys and
+    CHECK constraints and the common pool's single row.
+  - JWT verification copied from supplier-service (verifier, filter,
+    401/403 problem+json); `SecurityConfig` leaves only health open.
+  - Tests (Testcontainers Postgres, `test` profile): context and V1
+    schema checks, and the filter chain's 401/pass-through cases.
+  - `compose.yaml` (credit-service + credit-db + volume),
+    `.env.example` (Credit Service section, `VITE_CREDIT_SERVICE_URL`),
+    root `AGENTS.md` port table, the service's README and AGENTS.md.
+- **Prompt(s):** Asked whether a credit-service scaffold existed, then
+  to build one (app, credit-db in compose, Flyway V1, Dockerfile, JWT
+  filter) on a new branch.
+- **Author review:** The author chose, via options Q&A: host ports
+  8088/5436 and postgres:17; including the messaging dependencies now
+  (no listener or outbox code); the full schema in V1; Testcontainers
+  for tests. The schema itself is the team's design, transcribed; the
+  tool chose only SQL details the doc leaves open (varchar lengths,
+  NOT NULL where the doc marks nothing nullable, constraint/index
+  names, and indexes for the queries the doc lists). The RabbitMQ
+  health check is off in the test profile only, since tests run
+  without a broker. `./mvnw test`: 10 tests, 0 failures;
+  `docker compose config` and `docker compose build credit-service`
+  succeed. Pending pull request review.
+- **issue #165 item 1:** `note` marked `@Nullable` on all nine
+  request records (author's decision: a request may have no note, and a
+  missing display field must not dead-letter a reservation, transfer or
+  release). `request-submitted.example.json` now carries `"note": null`
+  so the contract tests bind the tolerant path; a new
+  `RequestEventRecordsTest` case keeps every `note` `@Nullable`. The
+  foc-contracts README/AGENTS and `docs/notification-service.md`
+  updated to match. Tests: foc-contracts 10, notification-service 36
+  (Docker running, none skipped), credit-service 10 — 0 failures.
+- **2026-10-10, PR #166 Copilot review:** credit-service security, as
+  user-service already does it: `SessionCreationPolicy.STATELESS`; the
+  JWT filter built in `SecurityConfig` instead of being a `@Component`,
+  so it runs only in the security chain; and the 401 carries
+  `WWW-Authenticate: Bearer`. `SecurityConfigTest` now asserts the
+  header, that no request creates a session (checked to fail without
+  the stateless policy), and that the filter is not a bean. 11 tests,
+  0 failures.
+
 ## 2026-10-10 — Ryan Ang (PR #162 re-review fixes, Leong Wei Zhi's re-review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor (review fixes: code + tests + docs)

@@ -14,6 +14,9 @@
   Credit saga's reply events (team design, docs/credit-service.md
   D7-D8), at the convention owner's request. Author review: Ryan Ang,
   pending pull request review.
+  2026-10-09, Claude Code (Opus 5.5): the list of @Nullable components
+  now includes every request record's note (author's decision, issue
+  #165).
 -->
 
 # foc-contracts
@@ -99,8 +102,9 @@ Leong Wei Zhi — D16–D19 in
    record and registry entry — the old type keeps flowing during the
    migration and is retired in a later release. Every record
    component is **required on the wire** unless marked with the
-   contracts' `@Nullable` annotation (currently only
-   `RequestCancelled.courierId`); consumers reject events with
+   contracts' `@Nullable` annotation (currently
+   `RequestCancelled.courierId` and every request record's `note`);
+   consumers reject events with
    missing required fields as conversion failures. An unknown event
    *type* is likewise a conversion failure — which is also how a
    breaking change presents to a not-yet-upgraded consumer (all of

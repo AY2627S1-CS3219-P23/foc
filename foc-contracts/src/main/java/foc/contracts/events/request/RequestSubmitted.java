@@ -8,10 +8,14 @@
  * 2026-10-09, PR #163 Copilot review: reward changed from int to Integer
  * (team decision) so a missing value is null and consumers reject it.
  * Author review: Ryan Ang, pending pull request review.
+ * 2026-10-09, Claude Code (Opus 5.5): note marked @Nullable (author's
+ * decision, issue #165): a request may have no note, and a missing one
+ * must not make consumers reject the event.
  */
 package foc.contracts.events.request;
 
 import foc.contracts.events.core.EventTypeRegistry;
+import foc.contracts.events.core.Nullable;
 
 import java.time.Instant;
 import java.util.List;
@@ -32,6 +36,6 @@ public record RequestSubmitted(
 		String requesterId,
 		String pickupLocation,
 		String dropoffLocation,
-		String note,
+		@Nullable String note,
 		Integer reward) implements RequestEvent {
 }

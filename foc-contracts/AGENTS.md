@@ -9,6 +9,8 @@
   2026-10-08, Claude Code (Opus 5.5): module map updated for the four
   saga events (team design, docs/credit-service.md D7-D8); author
   review: Ryan Ang, pending pull request review.
+  2026-10-09, Claude Code (Opus 5.5): nullable-components note updated
+  for note (author's decision, issue #165).
 -->
 
 # foc-contracts/ — Agent Guide
@@ -51,9 +53,10 @@ design authority is
 - **Every event has exactly one fixture**, named from its identity.
 - **Service-private names stay out**: queue names, table names, and
   internal config belong to their service, not here.
-- Currently the only `@Nullable` component is
+- Currently the `@Nullable` components are
   `RequestCancelled.courierId` (a pre-acceptance cancel has no
-  courier).
+  courier) and every request record's `note` (a request may have
+  none, issue #165); `RequestEventRecordsTest` holds the latter.
 
 ## Adding a new event
 
