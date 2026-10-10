@@ -1,0 +1,41 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-10-09.
+# Scope: service configuration scaffolded following the user-service and
+# notification-service patterns: datasource bound to the service-owned
+# credit-db, Flyway owning the schema (V1 from docs/credit-service.md),
+# RabbitMQ connection settings (no listener yet), the shared JWT secret,
+# CORS origin, and the actuator health endpoint.
+# Author review: Ryan Ang, pending pull request review.
+
+spring:
+  application:
+    name: credit-service
+  datasource:
+    url: jdbc:postgresql://${CREDIT_DB_HOST:localhost}:${CREDIT_DB_PORT:5432}/${CREDIT_DB_NAME:credit}
+    username: ${CREDIT_DB_USER:credit}
+    password: ${CREDIT_DB_PASSWORD:}
+  jpa:
+    hibernate:
+      # Flyway (db/migration) owns the schema; Hibernate never changes it
+      ddl-auto: none
+    open-in-view: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:foc}
+    password: ${RABBITMQ_PASSWORD:}
+
+credit:
+  # Origin the browser calls this service from (no API gateway)
+  web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
+  jwt:
+    # Shared platform secret (HS256). Empty default so the yaml stays
+    # parseable; JwtVerifier turns a missing/short value into a clear
+    # startup failure.
+    secret: ${JWT_SECRET:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

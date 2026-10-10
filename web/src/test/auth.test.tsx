@@ -17,10 +17,14 @@
 // resend is in flight.
 // 2026-09-30, Claude Code (Opus 5), PR #150 approval notes: the expiry
 // line keeps up with the clock and says plainly when the code has run out.
+// 2026-10-05, Claude Code (Opus 5.5), issue #154: the "account created"
+// notice clears its navigation state, so a reload doesn't show it again.
 // 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: the
 // back-to-the-form cases now include the untyped refusal as the server
 // really sends it — `type: "about:blank"`, which the dialog had been
 // reading as a type of its own.
+// 2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei Zhi):
+// clearing that state keeps the URL's query and hash.
 // 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): and an
 // untyped 429, which ends the sign-up on its status alone.
 // Author review: Ryan to review via the PR.
@@ -188,6 +192,38 @@ describe('login page', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'Account created. Log in to continue.',
     )
+  })
+
+  test('clears the sign-up state once read, so a reload shows no notice', async () => {
+    const memoryRouter = createMemoryRouter(routes, {
+      initialEntries: [{ pathname: '/login', state: { accountCreated: true } }],
+    })
+    render(<RouterProvider router={memoryRouter} />)
+
+    await waitFor(() => expect(memoryRouter.state.location.state).toBeNull())
+    expect(memoryRouter.state.location.pathname).toBe('/login')
+    // still shown on this visit
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Account created. Log in to continue.',
+    )
+  })
+
+  test('clearing the sign-up state keeps the query and hash', async () => {
+    const memoryRouter = createMemoryRouter(routes, {
+      initialEntries: [
+        {
+          pathname: '/login',
+          search: '?redirect=%2Forders',
+          hash: '#form',
+          state: { accountCreated: true },
+        },
+      ],
+    })
+    render(<RouterProvider router={memoryRouter} />)
+
+    await waitFor(() => expect(memoryRouter.state.location.state).toBeNull())
+    expect(memoryRouter.state.location.search).toBe('?redirect=%2Forders')
+    expect(memoryRouter.state.location.hash).toBe('#form')
   })
 
   test('shows no notice when opened directly', () => {

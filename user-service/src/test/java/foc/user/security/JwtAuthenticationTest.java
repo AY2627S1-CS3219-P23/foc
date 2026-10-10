@@ -57,7 +57,7 @@ import tools.jackson.databind.json.JsonMapper;
 @AutoConfigureMockMvc
 class JwtAuthenticationTest extends PostgresTestContainer {
 
-    // matches src/test/resources/application.yaml
+    // matches src/test/resources/application-test.yaml
     private static final String JWT_SECRET = "test-jwt-secret-that-is-at-least-32-bytes-long";
     private static final String PASSWORD = "ValidPassword123";
 

@@ -14,6 +14,8 @@
   updated for the Credit saga events (team design,
   docs/credit-service.md D7-D8). Author review: Ryan Ang, pending pull
   request review.
+  2026-10-09, Claude Code (Opus 5.5): note recorded as nullable on the
+  request events (author's decision, issue #165).
 -->
 
 # FoC Notification Service — Architecture Design
@@ -129,7 +131,7 @@ courier-arrival update, F4.1.1–F4.1.2): `request.created`,
 the Credit saga's `request.submitted` and `request.rejected`
 ([`credit-service.md`](credit-service.md) D7–D8). All request events
 carry `requestId`, `requesterId`, `pickupLocation`, `dropoffLocation`,
-`note`; the post-acceptance events add `courierId` (nullable on
+and `note` (nullable: a request may have none); the post-acceptance events add `courierId` (nullable on
 `request.cancelled` — a pre-acceptance cancel has no courier),
 `request.submitted` adds `reward` and `request.rejected` adds
 `reason`. The credit domain's `credit.reserved` and

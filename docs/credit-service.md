@@ -28,7 +28,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D3 | Duplicate detection | **One held-credits record per request**, with a unique request reference. Its status records what has already been decided and done, so a redelivered event changes nothing and never produces a second, different reply. | NFR2.2, NFR2.2.1 |
 | D4 | Expiry model | Earned credits live in lots that expire 3 months after they are earned into a common pool. Lots are spent in soonest expiry order first. Redistributed credits expiry are started the date they are received | F6.1–F6.1.2 |
 | D5 | Credit history | **Append-only**: each row has type, amount, timestamp and request reference. Filters will use JPA. | F4.1.1, F4.1.2, F4.1.3 |
-| D6 | Account provisioning | **Get or create method inside Credit Service**. Call is made idempotent by a unique user ID. Account with 5 available credits is created the first time a trusted ID is seen | F1.1, F1.1.1, F1.1.2 |
+| D6 | Account provisioning | **Get or create method inside Credit Service**. Call is made idempotent by a unique user ID. Account with 5 available credits is created the first time a trusted ID is seen. Every path that writes a row referencing a user get-or-creates that user's account first: a balance or history read (the JWT's user), reserve (the requester), release, including the amount-0 `RELEASED` record (the requester), and transfer (the courier; the requester's already exists, since the `HELD` record references it). | F1.1, F1.1.1, F1.1.2 |
 | D7 | Cross-service consistency | **Saga between the Order and Credit Services, by choreography.** Each service reacts to the other's events, and the request's status in the Order Service is the saga's state. No synchronous call exists between the two services. | F2, F3, NFR2 |
 | D8 | Reservation | Saga step 1. The Credit Service consumes `request.submitted`, reserves or refuses, and replies with `credit.reserved` or `credit.reservation-rejected`. | F2.1, F2.1.2, F2.1.3 |
 | D9 | Transfer and release | Saga endings. `request.completed` transfers the held credits. `request.cancelled` and `request.expired` release them, with release being the compensation for a reservation. | F2.1.1, F3.1, NFR1.1 |
@@ -108,8 +108,8 @@ erDiagram
     credit_reservation {
         varchar request_ref PK "the order's ID"
         varchar requester_id FK
-        varchar courier_id FK "null until transfer"
-        integer amount
+        varchar courier_id FK "null until transfer, required when TRANSFERRED"
+        integer amount "CHECK > 0 while HELD"
         varchar status "HELD, REJECTED, TRANSFERRED, RELEASED"
         timestamptz created_at
         timestamptz settled_at "null while HELD"
@@ -117,7 +117,7 @@ erDiagram
     credit_reservation_slice {
         bigint id PK
         varchar request_ref FK
-        integer amount
+        integer amount "CHECK > 0"
         timestamptz earned_at
         timestamptz expires_at "null = never"
     }
@@ -159,12 +159,12 @@ erDiagram
 | --- | --- | --- |
 | `credit_account` (`CreditAccount`) | **A user's credit balances.** One row per user. | The primary key on `user_id` makes get-or-create happen once per user (D6). `available` and `reserved` are columns so that the balance read is one row and the non-negative rule is a `CHECK` (F2.1.2). |
 | `credit_reservation` (`Reserved`) | **The reservation for one order.** One row per request. | The primary key on `request_ref` is the duplicate check (D3, NFR2.2.1). `status` records the outcome; `REJECTED` records a refusal so a redelivery gets the same answer. `courier_id` is filled in at transfer. |
-| `credit_reservation_slice` | Which lots a reservation's credits came from. | Lets a release return credits with their original expiry (D4). |
+| `credit_reservation_slice` | Which lots a reservation's credits came from. | Lets a release return credits with their original expiry (D4). `amount` is always positive. Indexed by `request_ref`, which is how a release reads them back. |
 | `credit_lot` (`CreditLot`) | A user's available credits, split by expiry date. | Needed for 3-month expiry (F6.1). A null `expires_at` marks the sign-up credits, which never expire. A row is deleted when spent to zero. |
 | `credit_history` (`CreditHistoryEntry`) | **The record of every credit operation.** Append-only. | One row per affected account per operation (F4.1.1). `amount` is always positive and `type` says which way it moved. Indexed by user and time for the history view (F4.1.2, F4.1.3). |
 | `common_pool` | Expired credits awaiting redistribution. | A single row, enforced by `CHECK (id = 1)` (F6.1). |
 | `redistribution_run` (`RedistributionRun`) | Months already redistributed. | The primary key on `period` lets only one run per month commit (F6.1.1). |
-| `outbox_event` (`OutboxEvent`) | Replies waiting to be published. | Written in the same transaction as the balance change (D10). |
+| `outbox_event` (`OutboxEvent`) | Replies waiting to be published. | Written in the same transaction as the balance change (D10). The unsent rows are indexed by `created_at`, which is the publisher's poll. |
  
 History `type` values and what each does to the account's balances:
  
@@ -232,7 +232,7 @@ Same notation as [`architecture.md`](architecture.md):
 
 | Requirement | Satisfied by |
 | --- | --- |
-| Credit F1.1 - allocate 5 credits at sign-up | Get-or-create: the account is created with its starting credits the first time the user is seen, which is their first page load after logging in. A user never observes a starting balance other than 5. |
+| Credit F1.1 - allocate 5 credits at sign-up | Get-or-create: the account is created with its starting credits the first time the user is seen (D6): their first page load after logging in, or the first event that names them, whichever comes first. A user never observes a starting balance other than 5. |
 | Credit F1.1.1 - reserved balance 0 at sign-up | Account is created with `reserved = 0` |
 | Credit F1.1.2 - available balance 5 at sign-up | Account is created with `available = 5`, as one non-expiring lot |
 | Credit F1.2 - credits spent only in integer amounts | Amounts are integers >= 1 and stored as integers |
@@ -272,12 +272,16 @@ acknowledges the event only after the commit.
 | --- | --- | --- | --- | --- | --- |
 | `request.submitted` | Enough balance: reserve, write `HELD`, reply `credit.reserved`. Otherwise write `REJECTED`, reply `credit.reservation-rejected`. | Nothing (duplicate) | Nothing (duplicate) | Nothing (duplicate) | Nothing: the request was already cancelled |
 | `request.completed` | Dead-letter | Transfer to the courier; set `TRANSFERRED` | Dead-letter | Nothing (duplicate) | Dead-letter |
-| `request.cancelled`, `request.expired` | Write `RELEASED` with amount 0, so a late `request.submitted` is ignored | Release to the requester; set `RELEASED` | Nothing | Dead-letter | Nothing (duplicate) |
+| `request.cancelled`, `request.expired` | Get-or-create the requester's account, then write `RELEASED` with amount 0, so a late `request.submitted` is ignored | Release to the requester; set `RELEASED` | Nothing | Dead-letter | Nothing (duplicate) |
  
-Reserve consumes lots soonest-expiry first and stores the slices on the
-record. Transfer gets or creates the courier's account and adds the
-amount as a new lot. Release returns each slice as a lot with its
-original expiry. Each writes its history rows in the same transaction.
+Reserve gets or creates the requester's account, consumes lots
+soonest-expiry first and stores the slices on the record. Transfer gets
+or creates the courier's account and adds the amount as a new lot.
+Release returns each slice as a lot with its original expiry; with no
+record it gets or creates the requester's account before writing the
+amount-0 `RELEASED` record (D6). Each writes its history rows in the
+same transaction, including the sign-up lot and `PROVISION` row of an
+account it creates.
 
 ## Failure and retry behaviour
  

@@ -26,6 +26,33 @@ Entry template:
 ```
 
 ---
+## 2026-10-10 — Leong Wei Zhi (merging main into feat/profile-screens, second time)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** refactor (merge conflict resolution)
+- **Scope:** `README.md`, `ai/usage-log.md`, `web/src/test/auth.test.tsx`
+  — the same three ledgers as the previous merge, conflicting only
+  because each side appended at the same place. No code conflicted.
+  (1) `auth.test.tsx`: both sides added header disclosure lines; all four
+  kept, in date order. (2) `README.md` AI Use Summary: both continued the
+  same sentence, so the shared "neutral-options Q&A and recorded in
+  `ai/usage-log.md`" prefix is kept once and the clauses chained — this
+  branch's profile screens (#112/#149/#167) first, since they follow the
+  #92 account-update clause they build on, then main's #154/#138
+  follow-ups (PR #162), then the Credit Service contracts clause (PR
+  #163) both sides already shared; the changelog comment keeps all of
+  both sides' lines. (3) `ai/usage-log.md`: every entry from both parents
+  kept with each side's internal order untouched, this branch's block
+  first at each joint; two `---` separators are the only lines authored
+  here.
+- **Prompt(s):** Asked to address @Sinnez1's PR #149 re-review, which
+  also asked for a merge with main (conflicts since #162 went in).
+- **Author review:** Checked mechanically, not by eye: a script re-parsed
+  the merged log and compared each `## ` entry against both parents —
+  59 entries from this branch and 58 from main, 0 missing and 0 altered,
+  65 in the union. `web` suite 95 tests, eslint and tsc clean after the
+  merge. Reviewed via pull request.
+
+---
 ## 2026-10-10 — Leong Wei Zhi (merging main into feat/profile-screens)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** refactor (merge conflict resolution)
@@ -211,6 +238,185 @@ Entry template:
   eslint, tsc and prettier clean; reviewed via pull request.
 
 ---
+## 2026-10-10 — Ryan Ang (credit-service scaffold: entities, repositories, interfaces)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (scaffold + tests + docs)
+- **Scope:** `credit-service/` only, no business logic.
+  - `entity/`: one JPA entity per Flyway V1 table (`CreditAccount`,
+    `Reserved`, `CreditReservationSlice`, `CreditLot`,
+    `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`,
+    `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType`
+    enums, transcribed from `V1__baseline.sql`. IDs of other rows are
+    plain columns, not JPA associations.
+  - `repository/`: an empty `JpaRepository` per entity.
+  - `service/`: `CreditOperations` and `ReplyOutbox` with the supplied
+    signatures, `ReserveResult`, and `NotImplemented*` stub beans whose
+    methods throw `UnsupportedOperationException("not implemented")`.
+  - Tests: `EntityMappingTest` (each entity saved and read back against
+    V1) and `NotImplementedStubsTest`.
+  - `credit-service/README.md` and `AGENTS.md`; root `README.md` AI Use
+    Summary clause.
+- **Prompt(s):** Pasted the planned scaffold contents (skeleton, Flyway
+  V1, entities, empty repositories, the JWT filter, and the two
+  interfaces with their method signatures) and asked whether the
+  scaffold PR had them, then to add the four missing pieces.
+- **Author review:** The interface signatures are the author's, as
+  pasted. `ReserveResult` was undefined; the author chose the
+  three-value enum (`RESERVED`, `REJECTED`, `DUPLICATE`) from options.
+  Entity class names follow `docs/credit-service.md` where it names
+  them; `CreditReservationSlice` and `CommonPool` are not named there
+  and follow their tables. `./mvnw clean test`: 21 tests, 0 failures.
+- **2026-10-10, PR #166 Copilot review (schema):** asked to fix the
+  second review's three findings, with the team decision for the first
+  supplied as written text. `V1__baseline.sql`:
+  `CHECK (amount > 0)` on `credit_reservation_slice` and an index on its
+  `request_ref`, with two cases in `CreditServiceApplicationTests`.
+  Tombstone finding (also the requester-provisioning item of #165):
+  team decision to keep the foreign key and make get-or-create part of
+  the release path, stated as one rule under D6. The tool transcribed
+  it into `docs/credit-service.md` (D6, the event table's cancelled /
+  expired "no record" cell, the paragraph under it, the F1.1 row, the
+  slice row and ER diagram) and the `CreditOperations` javadoc. No
+  implementation: `release` is still the stub, so the cancel-then-submit
+  test waits for the real bean. `./mvnw clean test`: 23 tests, 0
+  failures.
+- **2026-10-10, PR #166 review (Leong Wei Zhi):** asked to look at the
+  five findings and fix them. `CreditOperations.transfer` / `release`
+  return a new `SettleResult` (`SETTLED`, `DUPLICATE`, `INVALID_STATE`)
+  instead of `void`: the reviewer offered that enum or a documented
+  exception, and the author chose the enum. `V1__baseline.sql`: the
+  reviewer's partial index on unsent `outbox_event` rows, with a test.
+  `docs/credit-service.md`: that index, and the two existing
+  reservation CHECKs marked on the ER diagram.
+  `CreditServiceApplicationTests`: the two negative cases made
+  `@Transactional`. `foc-contracts` `RequestEventRecordsTest`: every
+  request record must declare `note`, not only annotate it where
+  present. Also removed three merge-conflict marker lines left in this
+  file by the merge of `main`; both sides' entries are kept. Tests:
+  foc-contracts 10, credit-service 24, 0 failures.
+  
+
+## 2026-10-09 — Ryan Ang (credit-service scaffold)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (scaffold + tests + docs)
+- **Scope:** new `credit-service/` skeleton, plus its wiring:
+  - Maven wrapper, `.gitignore`, `.gitattributes` copied from
+    user-service; `pom.xml` (Boot 4.1.1, Java 21, web, JPA, Flyway,
+    Postgres, security, validation, actuator, AMQP, foc-contracts,
+    jjwt, Testcontainers); `Dockerfile` with notification-service's
+    foc-contracts build stage.
+  - `application.yaml` (credit-db datasource, Flyway with
+    `ddl-auto: none`, RabbitMQ connection, JWT secret, CORS origin).
+  - Flyway `V1__baseline.sql`: the eight tables from
+    `docs/credit-service.md`'s "Database" section, with its keys and
+    CHECK constraints and the common pool's single row.
+  - JWT verification copied from supplier-service (verifier, filter,
+    401/403 problem+json); `SecurityConfig` leaves only health open.
+  - Tests (Testcontainers Postgres, `test` profile): context and V1
+    schema checks, and the filter chain's 401/pass-through cases.
+  - `compose.yaml` (credit-service + credit-db + volume),
+    `.env.example` (Credit Service section, `VITE_CREDIT_SERVICE_URL`),
+    root `AGENTS.md` port table, the service's README and AGENTS.md.
+- **Prompt(s):** Asked whether a credit-service scaffold existed, then
+  to build one (app, credit-db in compose, Flyway V1, Dockerfile, JWT
+  filter) on a new branch.
+- **Author review:** The author chose, via options Q&A: host ports
+  8088/5436 and postgres:17; including the messaging dependencies now
+  (no listener or outbox code); the full schema in V1; Testcontainers
+  for tests. The schema itself is the team's design, transcribed; the
+  tool chose only SQL details the doc leaves open (varchar lengths,
+  NOT NULL where the doc marks nothing nullable, constraint/index
+  names, and indexes for the queries the doc lists). The RabbitMQ
+  health check is off in the test profile only, since tests run
+  without a broker. `./mvnw test`: 10 tests, 0 failures;
+  `docker compose config` and `docker compose build credit-service`
+  succeed. Pending pull request review.
+- **issue #165 item 1:** `note` marked `@Nullable` on all nine
+  request records (author's decision: a request may have no note, and a
+  missing display field must not dead-letter a reservation, transfer or
+  release). `request-submitted.example.json` now carries `"note": null`
+  so the contract tests bind the tolerant path; a new
+  `RequestEventRecordsTest` case keeps every `note` `@Nullable`. The
+  foc-contracts README/AGENTS and `docs/notification-service.md`
+  updated to match. Tests: foc-contracts 10, notification-service 36
+  (Docker running, none skipped), credit-service 10 — 0 failures.
+- **2026-10-10, PR #166 Copilot review:** credit-service security, as
+  user-service already does it: `SessionCreationPolicy.STATELESS`; the
+  JWT filter built in `SecurityConfig` instead of being a `@Component`,
+  so it runs only in the security chain; and the 401 carries
+  `WWW-Authenticate: Bearer`. `SecurityConfigTest` now asserts the
+  header, that no request creates a session (checked to fail without
+  the stateless policy), and that the filter is not a bean. 11 tests,
+  0 failures.
+
+## 2026-10-10 — Ryan Ang (PR #162 re-review fixes, Leong Wei Zhi's re-review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (review fixes: code + tests + docs)
+- **Scope:** `user-service/` and `web/`.
+  - `PostgresTestContainer`: `user.retention.purge-cron` and
+    `owner.setup.token` added to the `@TestPropertySource` pins; the
+    token moved out of `application-test.yaml`.
+  - `DemoAccountsSeeder`: a run that loses an insert race seeds once
+    more; a second loss is logged as a warning that no longer says the
+    other instance finished. `DemoAccountsSeederTest`: one case for the
+    retry, one for losing twice.
+  - `OwnerSetupService`: the unconfigured-token 503 is logged
+    server-side, naming the setting; the response stays generic.
+  - `web` `login.tsx`: clearing the sign-up state keeps the URL's query
+    and hash; `auth.test.tsx` has a case for it.
+  - Root `README.md`: AI Use Summary clause updated.
+- **Prompt(s):** Asked to look at the comments on PR #162, then to fix
+  them, with the seeder re-running its seed after a conflict.
+- **Author review:** For the seeder the reviewer offered three options
+  (per-account transaction or `ON CONFLICT DO NOTHING`, re-running the
+  seed once, or only rewording the log line); the author chose the
+  re-run. The other fixes follow the reviewer's own suggestions.
+  `./mvnw clean test`: 306 tests, 0 failures; `OwnerSetupControllerTest`
+  and `AccountPurgeSchedulerTest` also pass with `USER_PURGE_CRON`
+  exported empty and a wrong `OWNER_SETUP_TOKEN`. Web: `npx vitest run`,
+  65 tests pass. Pending author review of the diff.
+- **Second re-review (same day, head `d5e5734`):** asked to look at the
+  new findings and fix them. `OwnerSetupService`: the unconfigured-token
+  line is logged once per process, since the endpoint takes no
+  credentials (the reviewer's one-shot flag suggestion);
+  `OwnerSetupServiceTest` checks three calls write one line.
+  `ProblemDetailAdvice`: a 405 handler shaped like the 415 one, keeping
+  Spring's `Allow` header; `AuthControllerTest` has a case for it. The
+  406 is left alone: the reviewer found it returns an empty body and
+  called it a separate question. `./mvnw clean test`: 308 tests, 0
+  failures.
+
+## 2026-10-09 — Ryan Ang (PR #162 review fixes, Leong Wei Zhi's review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (review fixes: code + tests + docs)
+- **Scope:** `user-service/` only.
+  - `PostgresTestContainer`: the values the tests assert on
+    (`user.retention.days`, `user.jwt.access-token-ttl`,
+    `user.web-allowed-origin`, `user.mail.from`, `user.otp.ttl`,
+    `user.otp.max-attempts`, `spring.mail.host` / `port`) pinned with
+    `@TestPropertySource`, so exported or empty environment variables
+    can't change them or stop the context starting.
+  - `ProblemDetailAdvice`: the 415 returns Spring's headers with the
+    body, keeping `Accept`; `AuthControllerTest` asserts it.
+  - `LoginAttempts.record`: back to `find` then
+    `refresh(PESSIMISTIC_WRITE)`, so the read is fresh even when the
+    `User` is already in the persistence context; `AuthServiceTest`'s
+    stub follows.
+  - Root `README.md`: AI Use Summary clause updated.
+- **Prompt(s):** Asked to look at the review on PR #162, then to fix
+  all of it on the PR branch.
+- **Author review:** The login read was a performance-versus-
+  robustness trade-off; the author chose restoring `refresh` (one
+  extra query per attempt) over a guard test or no change, via
+  options Q&A. The other two fixes follow the reviewer's own
+  suggestions. `./mvnw clean test`: 305 tests, 0 failures. The four
+  environment-sensitive classes (`AuthControllerTest`,
+  `AccountPurgeSchedulerTest`, `AccountUpdateControllerTest`,
+  `DemoAccountsSeederTest`) also pass with `OTP_TTL`,
+  `OTP_MAX_ATTEMPTS`, `JWT_ACCESS_TOKEN_TTL`, `MAIL_PORT` and
+  `MAIL_FROM` exported empty and non-default `WEB_ALLOWED_ORIGIN`,
+  `USER_RETENTION_DAYS` and `USER_SEED_DEMO`.
+
 ## 2026-10-09 — Ryan Ang (PR #163 review fixes)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor (review fixes: one test + docs)
@@ -318,6 +524,43 @@ Entry template:
   Mailpit; reviewed via pull request.
 
 ---
+## 2026-10-05 — Ryan Ang (user-service + web: remaining #154 and #138 follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + debug + tests + docs
+- **Scope:** `user-service/` and `web/`; the seven items still open on
+  issues #154 and #138, as listed in those issues (review follow-ups from
+  PR #152, PR #155 and PR #135).
+  - Test config: `src/test/resources/application.yaml` renamed to
+    `application-test.yaml` and `PostgresTestContainer` activates the
+    `test` profile, so tests load the main `application.yaml` (open-in-view
+    off, the main Flyway settings) and the test file keeps only the setup
+    token, the JWT secret and the 0s resend cooldown.
+  - `FlywayMigrationTest` runs with the Spring-configured Flyway pointed
+    at its own schema, so its baseline settings come from
+    `application.yaml` instead of a hand-typed copy.
+  - `PostgresTestContainer` pins `user.seed.demo=false` for every test
+    class; `DemoAccountsSeederTest` turns it on with `@TestPropertySource`;
+    the pin on `UserServiceApplicationTests` is gone.
+  - `ProblemDetailAdvice`: 415 problem+json for an unsupported
+    `Content-Type` (#138), with a test in `AuthControllerTest` and a line
+    in `user-service/README.md`.
+  - `LoginAttempts.record`: one locked `find` instead of `find` plus
+    `refresh`; `AuthServiceTest`'s stub follows.
+  - `DemoAccountsSeeder`: a run that loses an insert race to another
+    instance is rolled back and logged as a warning instead of stopping
+    startup; test in `DemoAccountsSeederTest`.
+  - `web/src/features/user/login.tsx`: the "account created" navigation
+    state is cleared once read, so a reload doesn't show the notice again;
+    test in `auth.test.tsx`.
+  - `web/src/shared/shell/NavBar.tsx`: the broken `border-gray-5=800`
+    class on the Log In / Logout buttons replaced with `border-gray-300`,
+    the credits badge's border.
+- **Prompt(s):** Asked which #154, #138 and #147 items were still open,
+  then to fix the seven open code items (the `jwt.ts` clean-up left out).
+- **Author review:** Full user-service suite (241 tests, also with
+  `USER_SEED_DEMO=true` exported) and the web suite (64 tests) run green;
+  to be reviewed via PR.
+
 ## 2026-10-05 — Leong Wei Zhi (PR #157 Copilot review: Retry-After on exhaustion + spent-row docs)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor (review fixes: contract + docs)
@@ -398,6 +641,34 @@ Entry template:
 - **Author review:** Full suite green (298 tests, 11 new — including
   end-to-end regressions in both real-cooldown classes pinning that
   exhaustion no longer bypasses the cooldown). Reviewed via pull request.
+
+## 2026-10-02 — Ryan Ang (user-service: #154 review follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + tests + docs
+- **Scope:** `user-service/` only, four items from issue #154 (PR #152 and
+  PR #155 review follow-ups); no behaviour change beyond error bodies.
+  - `ProblemDetailAdvice`: the `ResponseStatusException` and
+    `MethodArgumentTypeMismatchException` handlers moved here from
+    `AuthController` and `AdminController`, so `OwnerSetupController` and
+    `ProfileController` answer those in problem+json too (e.g. a
+    non-numeric `GET /users/{id}`, a wrong setup token, `CallerId`'s 401).
+  - `DemoAccountsSeeder`: `Locale.ROOT` on the generated emails and
+    usernames; comment on the `ADMINS`/`USERS` limits.
+  - Tests: non-numeric id (400 problem+json) and a problem+json check on
+    the non-numeric-principal 401 in `ProfileControllerTest`; a
+    problem+json check on the wrong-token 403 in
+    `OwnerSetupControllerTest`; a soft-deleted demo account is not
+    re-seeded in `DemoAccountsSeederTest`.
+  - `user-service/README.md`: "Old local databases" note on
+    `baseline-on-migrate`; the wrong-type parameter 400 now mentions path
+    parameters.
+  - `OwnerSetupService`: the 503 for an unconfigured setup token now says
+    only "Owner setup is unavailable", since the shared handler shows the
+    reason to unauthenticated callers; `OwnerSetupServiceTest` checks it.
+  - `SignupIdentifierTakenException`: header comment now names
+    `ProblemDetailAdvice` as the handler that maps it.
+- **Prompt(s):** Review #138 and #154 to determine fixes.
+- **Author review:** Reviewed via PR.
 
 ## 2026-09-30 — Leong Wei Zhi (#92 account update flows)
 - **Tool:** Claude Code (Fable 5)

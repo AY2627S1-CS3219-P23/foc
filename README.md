@@ -61,12 +61,15 @@
   #109) by Claude Code (Opus 5).
   2026-09-30: AI Use Summary extended for the user-service account-update
   flows (issue #92) by Claude Code (Fable 5).
+  2026-10-07: AI Use Summary extended for the user-service and web review
+  follow-ups (issues #154 and #138, PR #162) by Claude Code (Opus 5.5).
   2026-10-09: AI Use Summary extended for the web profile screens
   (issue #112, PR #149) and that PR's two Copilot-review rounds, by
   Claude Code (Opus 5) — the summary had no entry for #112.
-  2026-10-10: extended again for PR #149's team review (@Sinnez1) and
-  for issue #167, the gate-code refactor that came out of it, by Claude
-  Code (Opus 5).
+  2026-10-10: that #162 clause extended for its re-review fixes by
+  Claude Code (Opus 5.5); and the #149 clause for that PR's team review
+  (@Sinnez1) and issue #167, the gate-code refactor that came out of it,
+  by Claude Code (Opus 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -398,8 +401,25 @@ code moved out of the two cards into one `useGateCode` hook the page
 owns, so a code either card requests, spends or replaces is the same
 code for the other, and their drifted-apart request paths became one,
 with the shape (hook, placement, what stays per card) decided by the
-reviewer; and the Credit Service saga event contracts in
-`foc-contracts` (PR #163) —
+reviewer; and the user-service and web review follow-ups (issues #154 and #138, PR #162)
+— problem+json on every user-service endpoint (the shared
+`ResponseStatusException`, wrong-type-parameter and 415 handlers), a
+generic owner-setup 503, the demo seeder's `Locale.ROOT` formatting and its handling of
+a lost insert race (a duplicate key only; any other integrity failure
+still stops startup), tests that load the main `application.yaml`
+through a `test` profile, the "account created" notice on the login
+page showing once, and the nav bar border class — with the items taken
+from the team's review issues and recorded in `ai/usage-log.md`,
+and that PR's review fixes (test values pinned against the
+environment, the 415's `Accept` header kept, and the login attempt
+counter's read-then-refresh restored by the author's choice) and
+re-review fixes (the purge cron and owner setup token pinned as well,
+a seeding run that loses the insert race seeding once more by the
+author's choice among the reviewer's options, the unconfigured setup
+token logged server-side, once per process, the login page keeping
+the URL's query and hash when it clears the notice state, and a 405
+problem+json handler); and the
+Credit Service saga event contracts in `foc-contracts` (PR #163) —
 four event records, the `credit-events` exchange name, their
 fixtures and the registry tests — together with that PR's review
 fixes to `docs/credit-service.md`, the high-level architecture doc
@@ -409,7 +429,22 @@ notification-service contract test generalized to the two event
 domains; the saga, the
 event names and fields, and the database schema are the team's
 decisions, recorded in `docs/credit-service.md` and
-`ai/usage-log.md`.
+`ai/usage-log.md`; and the credit-service scaffold (Spring Boot app,
+Dockerfile, credit-db in compose, the Flyway V1 schema transcribed
+from the design doc, JWT verification copied from supplier-service,
+and their tests), with the ports, image, dependency scope, schema
+scope and test database chosen by the author via options Q&A and
+recorded in `ai/usage-log.md`, plus `note` made `@Nullable` on the
+request event records (the author's decision, issue #165), and the
+scaffold's JPA entities (one per V1 table), empty repositories and the
+`CreditOperations` / `ReplyOutbox` interfaces with stubs that throw —
+the interface signatures and the `ReserveResult` values supplied by the
+author, with no business logic; and that PR's review fixes (a slice
+amount check and index in V1, the team's decision that the release
+path get-or-creates the requester's account written into
+`docs/credit-service.md`, a `SettleResult` returned by transfer and
+release by the author's choice among the reviewer's options, an index
+on unsent outbox rows, and tighter schema and contract tests).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

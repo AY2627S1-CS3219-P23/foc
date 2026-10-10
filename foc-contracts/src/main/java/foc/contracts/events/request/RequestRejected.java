@@ -6,10 +6,14 @@
  * string and the fields are the team's decisions; the tool transcribed
  * them into the existing record pattern.
  * Author review: Ryan Ang, pending pull request review.
+ * 2026-10-09, Claude Code (Opus 5.5): note marked @Nullable (author's
+ * decision, issue #165): a request may have no note, and a missing one
+ * must not make consumers reject the event.
  */
 package foc.contracts.events.request;
 
 import foc.contracts.events.core.EventTypeRegistry;
+import foc.contracts.events.core.Nullable;
 
 import java.time.Instant;
 import java.util.List;
@@ -30,6 +34,6 @@ public record RequestRejected(
 		String requesterId,
 		String pickupLocation,
 		String dropoffLocation,
-		String note,
+		@Nullable String note,
 		String reason) implements RequestEvent {
 }

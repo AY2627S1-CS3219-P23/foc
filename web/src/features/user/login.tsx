@@ -16,10 +16,14 @@
 // from lib/api/http; Prettier formatting.
 // 2026-09-29 (issue #147): "Account created" notice after sign-up (team
 // decision), passed in the navigation state by the sign-up page.
+// 2026-10-05, Claude Code (Opus 5.5), issue #154: that state is cleared
+// once read, so the notice doesn't come back when /login is reloaded.
+// 2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei Zhi):
+// clearing the state keeps the URL's query and hash.
 // Reviewed by: Ryan Ang
 
-import React, { useState } from 'react'
-import { useLocation } from 'react-router'
+import React, { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 import { apiFetch, errorMessage } from '@/lib/api/http'
 import { router } from '../../routes/index'
 import { useAuth } from './useAuth'
@@ -30,10 +34,32 @@ export function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const data = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
   // set by the sign-up page after it creates the account
-  const accountCreated =
-    (useLocation().state as { accountCreated?: boolean } | null)
-      ?.accountCreated === true
+  const cameFromSignup =
+    (location.state as { accountCreated?: boolean } | null)?.accountCreated ===
+    true
+  // kept here because the navigation state is cleared below
+  const [accountCreated] = useState(cameFromSignup)
+
+  // the browser keeps navigation state across a reload, so drop it once
+  // read: the notice shows on arrival only
+  useEffect(() => {
+    if (cameFromSignup) {
+      // query and hash kept: only the state is dropped
+      navigate(location.pathname + location.search + location.hash, {
+        replace: true,
+        state: null,
+      })
+    }
+  }, [
+    cameFromSignup,
+    navigate,
+    location.pathname,
+    location.search,
+    location.hash,
+  ])
 
   const toRegister = () => {
     router.navigate('/register')

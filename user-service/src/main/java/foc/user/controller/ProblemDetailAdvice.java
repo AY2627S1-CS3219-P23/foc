@@ -9,6 +9,7 @@ Scope: problem+json handlers shared by ProfileController and AdminController
        handlers moved here from AuthController, so every controller
        (including OwnerSetupController, which had none) reports broken
        rules one sentence per field (team decision; #138 contract).
+       2026-10-05 (issue #138): 415 for an unsupported Content-Type.
 Author review: Ryan to review via the PR.
 2026-09-30 (Claude Code, Fable 5), issue #92: the three OTP handlers moved
 here from AuthController — the account-update routes fail the same ways
@@ -18,6 +19,10 @@ decision via options Q&A: machine-readable types in scope, so the SPA can
 stop string-matching detail sentences), and a ResponseStatusException
 passthrough renders typed bodies (uniqueness refusals) for controllers
 without a local one.
+2026-10-09 (Claude Code, Opus 5.5), PR #162 review (Leong Wei Zhi): the 415 keeps
+Spring's Accept header, which names the types the endpoint takes.
+2026-10-10 (Claude Code, Opus 5.5), PR #162 re-review (Leong Wei Zhi): 405
+for an unsupported method, with Spring's Allow header.
 2026-10-05 (Claude Code, Fable 5), PR #157 Copilot review: the
 attempts-exceeded 429 now carries Retry-After — the exhausted row
 survives as spent, so there is a real wait (the resend cooldown) to
@@ -36,9 +41,12 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 
 import foc.user.exception.OtpAttemptsExceededException;
@@ -82,6 +90,21 @@ class ProblemDetailAdvice {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request body is missing or malformed");
     }
 
+    // a body that isn't JSON (or has no Content-Type): Spring's own
+    // problem body for it, which names the type that was sent, and its
+    // Accept header, which names the types the endpoint takes
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    ResponseEntity<ProblemDetail> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException e) {
+        return ResponseEntity.status(e.getStatusCode()).headers(e.getHeaders()).body(e.getBody());
+    }
+
+    // a method the path doesn't take (e.g. GET /auth/login): Spring's own
+    // problem body, and its Allow header, which names the methods it does
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    ResponseEntity<ProblemDetail> handleMethodNotAllowed(HttpRequestMethodNotSupportedException e) {
+        return ResponseEntity.status(e.getStatusCode()).headers(e.getHeaders()).body(e.getBody());
+    }
+
     // the OTP failures, moved from AuthController (issue #92): sign-up and
     // the account-update routes fail the same ways, with the same bodies.
     // The exception names the type (wrong code / expired / no code yet /
@@ -117,12 +140,20 @@ class ProblemDetailAdvice {
             .body(problem);
     }
 
-    // uniqueness refusals and other typed ResponseStatusExceptions reach
-    // controllers that have no local passthrough (AuthController keeps its
-    // own — local wins there, same output); returning the exception's own
-    // body keeps the type it was built with
+    // refusals the services raise with a status and reason (blocked admin
+    // actions, invalid list parameters, a bad setup token, CallerId's 401,
+    // the typed uniqueness refusals); returning the exception's own body
+    // keeps the type it was built with
     @ExceptionHandler(ResponseStatusException.class)
     ProblemDetail handleResponseStatus(ResponseStatusException e) {
         return e.getBody();
+    }
+
+    // a query or path parameter of the wrong type: an unknown role or
+    // non-boolean includeDeleted, a non-numeric id. Body problems are
+    // handleUnreadableBody's
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ProblemDetail handleBadParameter(MethodArgumentTypeMismatchException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid request parameter");
     }
 }
