@@ -7,7 +7,8 @@
 -- open (varchar lengths, NOT NULL on columns the doc doesn't mark
 -- nullable, constraint and index names) following user-service's V1.
 -- 2026-10-10 (PR #166 review): the slice amount CHECK and the slice
--- request_ref index added.
+-- request_ref index added; then the unsent-outbox index (Leong Wei
+-- Zhi's suggestion).
 -- Author review: Ryan Ang, pending pull request review.
 
 -- A user's credit balances, one row per user. The primary key makes
@@ -131,3 +132,7 @@ create table outbox_event (
     sent_at timestamp(6) with time zone,
     primary key (event_id)
 );
+
+-- the publisher's poll: unsent replies, oldest first (D10). Partial, so the
+-- index stays small no matter how many sent rows accumulate.
+create index idx_outbox_event_unsent on outbox_event (created_at) where sent_at is null;

@@ -25,7 +25,7 @@ IDs (D1–D12) when touching related code.
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
 | `entity/` | One JPA entity per V1 table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One empty `JpaRepository` per entity |
-| `service/` | `CreditOperations` and `ReplyOutbox` (interfaces), `ReserveResult`, and the `NotImplemented*` stub beans, which throw |
+| `service/` | `CreditOperations` and `ReplyOutbox` (interfaces), `ReserveResult` / `SettleResult`, and the `NotImplemented*` stub beans, which throw |
 
 No controllers, listener, outbox publisher or scheduler yet, and no
 business logic: the two interfaces are the seams the features are built

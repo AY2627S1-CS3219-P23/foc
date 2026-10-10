@@ -26,7 +26,6 @@ Entry template:
 ```
 
 ---
-<<<<<<< HEAD
 ## 2026-10-10 — Ryan Ang (credit-service scaffold: entities, repositories, interfaces)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (scaffold + tests + docs)
@@ -69,6 +68,20 @@ Entry template:
   implementation: `release` is still the stub, so the cancel-then-submit
   test waits for the real bean. `./mvnw clean test`: 23 tests, 0
   failures.
+- **2026-10-10, PR #166 review (Leong Wei Zhi):** asked to look at the
+  five findings and fix them. `CreditOperations.transfer` / `release`
+  return a new `SettleResult` (`SETTLED`, `DUPLICATE`, `INVALID_STATE`)
+  instead of `void`: the reviewer offered that enum or a documented
+  exception, and the author chose the enum. `V1__baseline.sql`: the
+  reviewer's partial index on unsent `outbox_event` rows, with a test.
+  `docs/credit-service.md`: that index, and the two existing
+  reservation CHECKs marked on the ER diagram.
+  `CreditServiceApplicationTests`: the two negative cases made
+  `@Transactional`. `foc-contracts` `RequestEventRecordsTest`: every
+  request record must declare `note`, not only annotate it where
+  present. Also removed three merge-conflict marker lines left in this
+  file by the merge of `main`; both sides' entries are kept. Tests:
+  foc-contracts 10, credit-service 24, 0 failures.
   
 
 ## 2026-10-09 — Ryan Ang (credit-service scaffold)
@@ -123,7 +136,7 @@ Entry template:
   header, that no request creates a session (checked to fail without
   the stateless policy), and that the filter is not a bean. 11 tests,
   0 failures.
-=======
+
 ## 2026-10-10 — Ryan Ang (PR #162 re-review fixes, Leong Wei Zhi's re-review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor (review fixes: code + tests + docs)
@@ -191,7 +204,6 @@ Entry template:
   `OTP_MAX_ATTEMPTS`, `JWT_ACCESS_TOKEN_TTL`, `MAIL_PORT` and
   `MAIL_FROM` exported empty and non-default `WEB_ALLOWED_ORIGIN`,
   `USER_RETENTION_DAYS` and `USER_SEED_DEMO`.
->>>>>>> aee263c2d168e95732d3c1b35611317f16213569
 
 ## 2026-10-09 — Ryan Ang (PR #163 review fixes)
 - **Tool:** Claude Code (Opus 5.5)

@@ -8,7 +8,8 @@
  * split applied (author decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
  * 2026-10-09, Claude Code (Opus 5.5): every record's note must be
- * @Nullable (author's decision, issue #165).
+ * @Nullable (author's decision, issue #165). 2026-10-10, PR #166 review
+ * (Leong Wei Zhi): every request record must also declare the note.
  * 2026-10-08, Claude Code (Opus 5.5): domain-marker test widened to the credit domain
  * (team design, docs/credit-service.md D7-D8); author review: Ryan Ang,
  * pending pull request review.
@@ -74,11 +75,16 @@ class RequestEventRecordsTest {
 	/**
 	 * A request may have no note: a record that required one would make
 	 * consumers dead-letter the event, stopping a reservation, transfer or
-	 * release over a display field (issue #165).
+	 * release over a display field (issue #165). Every request record must
+	 * still declare the note, or a renamed one would pass unchecked.
 	 */
 	@Test
-	void noteIsNullableWherePresent() {
+	void everyRequestRecordHasANullableNote() {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
+			if (RequestEvent.class.isAssignableFrom(entry.eventClass())) {
+				assertTrue(componentNames(entry.eventClass()).contains("note"),
+						entry.eventClass() + " must declare a note component");
+			}
 			for (RecordComponent component : entry.eventClass().getRecordComponents()) {
 				if (component.getName().equals("note")) {
 					assertTrue(component.isAnnotationPresent(Nullable.class),

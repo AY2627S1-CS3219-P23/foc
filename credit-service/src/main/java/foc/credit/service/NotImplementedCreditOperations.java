@@ -26,12 +26,12 @@ public class NotImplementedCreditOperations implements CreditOperations {
     }
 
     @Override
-    public void transfer(String requestRef, String courierId) {
+    public SettleResult transfer(String requestRef, String courierId) {
         throw new UnsupportedOperationException("not implemented");
     }
 
     @Override
-    public void release(String requestRef, String requesterId) {
+    public SettleResult release(String requestRef, String requesterId) {
         throw new UnsupportedOperationException("not implemented");
     }
 }

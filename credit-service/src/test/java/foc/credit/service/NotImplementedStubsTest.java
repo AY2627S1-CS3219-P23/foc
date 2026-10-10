@@ -2,7 +2,8 @@
  * AI-assisted (CS3219 AI Usage Policy disclosure):
  * Tool: Claude Code (Opus 5.5), 2026-10-10.
  * Scope: the two scaffold interfaces resolve to a bean, and every stub
- * method says it is not implemented rather than doing nothing.
+ * method says it is not implemented rather than doing nothing (transfer
+ * and release included, now that they return a SettleResult).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;

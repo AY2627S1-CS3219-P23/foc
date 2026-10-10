@@ -4,6 +4,9 @@
  * Scope: the credit operations interface, with the signatures the author
  * supplied; the comments point at docs/credit-service.md. No
  * implementation yet (see NotImplementedCreditOperations).
+ * PR #166 review (Leong Wei Zhi): transfer and release return a
+ * SettleResult instead of void (the author's choice of the reviewer's
+ * options).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -27,14 +30,17 @@ public interface CreditOperations {
      */
     ReserveResult reserve(String requestRef, String requesterId, int amount);
 
-    /** Moves a request's held credits to the courier (D9). */
-    void transfer(String requestRef, String courierId);
+    /**
+     * Moves a request's held credits to the courier (D9). The result says
+     * whether it did, had already, or could not for the request's status.
+     */
+    SettleResult transfer(String requestRef, String courierId);
 
     /**
      * Returns a request's held credits to the requester (D9). With no
      * reservation for the request, gets or creates the requester's account
      * (D6) and records the request as released with amount 0, so a late
-     * reserve is ignored.
+     * reserve is ignored. The result is as for {@link #transfer}.
      */
-    void release(String requestRef, String requesterId);
+    SettleResult release(String requestRef, String requesterId);
 }

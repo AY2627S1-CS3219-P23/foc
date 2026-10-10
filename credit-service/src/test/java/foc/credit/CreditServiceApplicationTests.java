@@ -4,7 +4,9 @@
  * Scope: scaffolded following the user-service pattern: the context loads
  * against a real Postgres, and Flyway's V1 has created the schema from
  * docs/credit-service.md, including the common pool's single row.
- * 2026-10-10 (PR #166 review): the slice amount CHECK and index cases.
+ * 2026-10-10 (PR #166 review): the slice amount CHECK and index cases;
+ * then the outbox index case and @Transactional on the negative cases
+ * (Leong Wei Zhi's review).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit;
@@ -39,7 +41,10 @@ class CreditServiceApplicationTests extends PostgresTestContainer {
 				"credit_lot", "credit_history", "common_pool", "redistribution_run", "outbox_event");
 	}
 
+	// the negative cases roll back, so a constraint that stops holding
+	// leaves no row behind for the other classes sharing the container
 	@Test
+	@Transactional
 	void commonPoolStartsAsOneEmptyRow() {
 		assertThat(jdbc.queryForList("select balance from common_pool", Integer.class)).containsExactly(0);
 		// a second row breaks the single-row rule
@@ -48,6 +53,7 @@ class CreditServiceApplicationTests extends PostgresTestContainer {
 	}
 
 	@Test
+	@Transactional
 	void negativeBalanceIsRejected() {
 		assertThatThrownBy(() -> jdbc.update(
 				"insert into credit_account (user_id, available, reserved, created_at) values ('u-neg', -1, 0, now())"))
@@ -71,6 +77,13 @@ class CreditServiceApplicationTests extends PostgresTestContainer {
 		assertThat(jdbc.queryForList(
 				"select indexname from pg_indexes where tablename = 'credit_reservation_slice'", String.class))
 				.contains("idx_credit_reservation_slice_request_ref");
+	}
+
+	@Test
+	void unsentOutboxRowsAreIndexed() {
+		assertThat(jdbc.queryForList(
+				"select indexdef from pg_indexes where indexname = 'idx_outbox_event_unsent'", String.class))
+				.singleElement().asString().contains("(created_at)", "sent_at IS NULL");
 	}
 
 }

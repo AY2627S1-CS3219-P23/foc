@@ -108,8 +108,8 @@ erDiagram
     credit_reservation {
         varchar request_ref PK "the order's ID"
         varchar requester_id FK
-        varchar courier_id FK "null until transfer"
-        integer amount
+        varchar courier_id FK "null until transfer, required when TRANSFERRED"
+        integer amount "CHECK > 0 while HELD"
         varchar status "HELD, REJECTED, TRANSFERRED, RELEASED"
         timestamptz created_at
         timestamptz settled_at "null while HELD"
@@ -164,7 +164,7 @@ erDiagram
 | `credit_history` (`CreditHistoryEntry`) | **The record of every credit operation.** Append-only. | One row per affected account per operation (F4.1.1). `amount` is always positive and `type` says which way it moved. Indexed by user and time for the history view (F4.1.2, F4.1.3). |
 | `common_pool` | Expired credits awaiting redistribution. | A single row, enforced by `CHECK (id = 1)` (F6.1). |
 | `redistribution_run` (`RedistributionRun`) | Months already redistributed. | The primary key on `period` lets only one run per month commit (F6.1.1). |
-| `outbox_event` (`OutboxEvent`) | Replies waiting to be published. | Written in the same transaction as the balance change (D10). |
+| `outbox_event` (`OutboxEvent`) | Replies waiting to be published. | Written in the same transaction as the balance change (D10). The unsent rows are indexed by `created_at`, which is the publisher's poll. |
  
 History `type` values and what each does to the account's balances:
  
