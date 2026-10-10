@@ -5,6 +5,8 @@
  * instruction), following notification-service's
  * RequestEventsRabbitMqIntegrationTest: Testcontainers RabbitMQ, startup
  * provisioning on, raw fixture JSON published under its routing key.
+ * PR #168 review (Leong Wei Zhi): the unbound keys are published before
+ * the bound ones, and the fixture is read as its literal bytes.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
@@ -14,7 +16,6 @@ import static org.awaitility.Awaitility.await;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -87,15 +88,20 @@ class RabbitMqTopologyIntegrationTest extends PostgresTestContainer {
 	void onlyTheFourConsumedKeysAreBound() throws IOException {
 		byte[] body = fixture("request-submitted");
 
-		// routing is by key alone, so one body serves for every key
-		for (String key : new String[] { "request.submitted", "request.completed", "request.cancelled",
-				"request.expired", "request.created", "request.accepted", "request.rejected" }) {
-			publish(EventContracts.REQUEST_EVENTS_EXCHANGE, key, body);
-		}
+		// Routing is by key alone, so one body serves for every key. The
+		// three unbound keys go first, on one channel: the broker routes a
+		// channel's publishes in order, so once the four bound ones are in
+		// the queue, a wrongly bound key has already added to the count.
+		rabbitTemplate.invoke(sameChannel -> {
+			for (String key : new String[] { "request.created", "request.accepted", "request.rejected",
+					"request.submitted", "request.completed", "request.cancelled", "request.expired" }) {
+				sameChannel.send(EventContracts.REQUEST_EVENTS_EXCHANGE, key, json(body));
+			}
+			return null;
+		});
 
-		awaitReady(RabbitMqTopology.REQUEST_EVENTS_QUEUE, 4);
-		// the three unbound keys were published before this check, on the
-		// same channel order: had they been routed, the count would be 7
+		await().atMost(TIMEOUT).untilAsserted(
+				() -> assertThat(readyCount(RabbitMqTopology.REQUEST_EVENTS_QUEUE)).isGreaterThanOrEqualTo(4));
 		assertThat(readyCount(RabbitMqTopology.REQUEST_EVENTS_QUEUE)).isEqualTo(4);
 	}
 
@@ -138,9 +144,13 @@ class RabbitMqTopologyIntegrationTest extends PostgresTestContainer {
 
 	/** Raw JSON with no type headers: the wire contract as the Order Service publishes it. */
 	private void publish(String exchange, String routingKey, byte[] body) {
+		rabbitTemplate.send(exchange, routingKey, json(body));
+	}
+
+	private static Message json(byte[] body) {
 		MessageProperties properties = new MessageProperties();
 		properties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
-		rabbitTemplate.send(exchange, routingKey, new Message(body, properties));
+		return new Message(body, properties);
 	}
 
 	private void awaitReady(String queue, long expected) {
@@ -162,7 +172,7 @@ class RabbitMqTopologyIntegrationTest extends PostgresTestContainer {
 		try (InputStream in = RabbitMqTopologyIntegrationTest.class
 				.getResourceAsStream("/contracts/" + name + ".example.json")) {
 			assertThat(in).as("fixture " + name).isNotNull();
-			return new String(in.readAllBytes(), StandardCharsets.UTF_8).getBytes(StandardCharsets.UTF_8);
+			return in.readAllBytes();
 		}
 	}
 }

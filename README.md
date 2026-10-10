@@ -65,6 +65,8 @@
   follow-ups (issues #154 and #138, PR #162) by Claude Code (Opus 5.5).
   2026-10-10: that clause extended for PR #162's re-review fixes by
   Claude Code (Opus 5.5).
+  2026-10-10: AI Use Summary extended for the PR #168 review fixes by
+  Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -415,7 +417,12 @@ request event handler and broker topology (the handler, a message
 converter and topology initializer copied from notification-service,
 the queues and bindings, their configuration and tests), written to
 the author's plan, with the decisions recorded in
-`docs/credit-service.md` and `ai/usage-log.md`.
+`docs/credit-service.md` and `ai/usage-log.md`; and that PR's review
+fixes (#168: the reserve result split by refusal cause and an
+unhandled event logged, both the team's decisions among the reviewer's
+options, tests tying the bound events to the handler and exercising
+its transaction, and the disclosure headers the review found
+missing).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

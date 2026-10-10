@@ -14,6 +14,10 @@
   table and its rules, the failure rows, F1.2.1 and NFR1.1). The
   decisions are the author's; the tool transcribed them. Same day: the
   "Read API contract" section, from the author's written contract.
+  2026-10-10, PR #168 review (Leong Wei Zhi): the reserve results split
+  by refusal cause, the duplicate-reply wording, the unhandled-event
+  rule and the below-5 s bound on the retry delay restored. The
+  decisions are the team's; the tool transcribed them.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -259,7 +263,7 @@ Same notation as [`architecture.md`](architecture.md):
 | Credit F6.1 - expire earned credits after 3 months into a pool | Scheduler moves the remaining amount of each expired lot into the common pool |
 | Credit F6.1.1 - redistribute equally, in integers, monthly | Scheduler gives each credit account `floor(pool / accounts)` at the start of each month |
 | Credit F6.1.2 - redistribute the remainder randomly | Remainder (always fewer credits than accounts) goes 1 credit each to randomly chosen accounts |
-| Credit NFR1.1 - balances updated within 5 s of delivery | The event is consumed as soon as the Order Service publishes it. The retry delay is 2 s, so one retry still meets the target. |
+| Credit NFR1.1 - balances updated within 5 s of delivery | The event is consumed as soon as the Order Service publishes it. The retry delay is configured below 5 s (2 s by default) so that one retry still meets the target. |
 | Credit NFR2.1 - revert to pre-transaction balance on transfer failure | Single transaction rolls back |
 | Credit NFR2.1.1 - both balances match their pre-transaction values | Same rollback as NFR2.1 above |
 | Credit NFR2.2 - prevent duplicate payments | Unique request reference on the held-credits record, locked and checked in the same transaction |
@@ -392,7 +396,7 @@ differ only for logs and tests.
 
 | Operation | Record found | Result |
 | --- | --- | --- |
-| reserve | none | `RESERVED` or `REJECTED` |
+| reserve | none | `RESERVED`, `REJECTED_INSUFFICIENT_CREDITS` or `REJECTED_INVALID_AMOUNT` |
 | reserve | any record | `DUPLICATE` |
 | transfer | `HELD` | `SETTLED` |
 | transfer | `TRANSFERRED`, same courier | `DUPLICATE` |
@@ -403,14 +407,21 @@ differ only for logs and tests.
 | release | `RELEASED` or `REJECTED` | `DUPLICATE` |
 | release | `TRANSFERRED` | `INVALID_STATE` |
 
-- **Replies.** Only `RESERVED` and `REJECTED` write a reply. A
-  `DUPLICATE` writes none: the record and its reply were committed
-  together, so the first reply is already in the outbox.
+- **Replies.** Only `RESERVED` and the two `REJECTED_*` results write a
+  reply. A `DUPLICATE` writes none: a record exists, and its reply, if
+  one was owed, was committed with it. The amount-0 `RELEASED` record
+  from a cancel that arrived first never owed one.
 - **Reply fields.** A new random `eventId`, `occurredAt` at the time of
   writing, `producer` `credit-service`, the request event's
   `correlationId`, empty `parties`, and the reward as `amount`.
 - **A reward below 1** is recorded as `REJECTED`, like an insufficient
-  balance; the reply's `reason` says which.
+  balance. The reserve result says which
+  (`REJECTED_INVALID_AMOUNT` or `REJECTED_INSUFFICIENT_CREDITS`), and
+  the reply's `reason` follows the result.
+- **A request event with no handler** is acknowledged and logged with
+  its type and `eventId`, not dead-lettered: only the four bound events
+  reach the queue, so it was published there by hand. A test fails the
+  build if an event is bound without a handler.
 - **A refusal** still gets or creates the requester's account, which the
   record references, and writes no history row of its own. Creating an
   account always writes its sign-up lot and `PROVISION` row.

@@ -5,6 +5,9 @@
  * CreditOperations and ReplyOutbox (the author's instruction): which
  * operation each event calls, which results enqueue a reply and with
  * what fields, and the outcome handed back to the listener.
+ * PR #168 review (Leong Wei Zhi): the reply's time is checked against
+ * the clock around the call instead of a fixed date, and the two
+ * refusals are told apart by the result, not by the reward.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -66,7 +69,9 @@ class RequestEventHandlerTest {
     void reservedSubmissionEnqueuesCreditReserved() {
         when(operations.reserve("r-1", "u-req", 3)).thenReturn(ReserveResult.RESERVED);
 
+        Instant before = Instant.now();
         assertThat(handler.handle(submitted(3))).isEqualTo(Outcome.HANDLED);
+        Instant after = Instant.now();
 
         assertThat(enqueuedReply()).isInstanceOfSatisfying(CreditReserved.class, reply -> {
             assertThat(reply.requestId()).isEqualTo("r-1");
@@ -77,13 +82,13 @@ class RequestEventHandlerTest {
             assertThat(reply.parties()).isEmpty();
             // its own identity and time, not the request event's
             assertThat(reply.eventId()).isNotBlank().isNotEqualTo("evt-1");
-            assertThat(reply.occurredAt()).isAfter(SENT_AT);
+            assertThat(reply.occurredAt()).isBetween(before, after);
         });
     }
 
     @Test
     void refusedSubmissionEnqueuesTheRejectionWithItsReason() {
-        when(operations.reserve("r-1", "u-req", 9)).thenReturn(ReserveResult.REJECTED);
+        when(operations.reserve("r-1", "u-req", 9)).thenReturn(ReserveResult.REJECTED_INSUFFICIENT_CREDITS);
 
         assertThat(handler.handle(submitted(9))).isEqualTo(Outcome.HANDLED);
 
@@ -99,12 +104,23 @@ class RequestEventHandlerTest {
 
     @Test
     void rewardBelowOneIsRefusedWithItsOwnReason() {
-        when(operations.reserve("r-1", "u-req", 0)).thenReturn(ReserveResult.REJECTED);
+        when(operations.reserve("r-1", "u-req", 0)).thenReturn(ReserveResult.REJECTED_INVALID_AMOUNT);
 
         handler.handle(submitted(0));
 
         assertThat(enqueuedReply()).isInstanceOfSatisfying(CreditReservationRejected.class,
             reply -> assertThat(reply.reason()).isEqualTo(RequestEventHandler.REWARD_BELOW_ONE));
+    }
+
+    // the reason is the result's: the handler does not look at the reward
+    @Test
+    void theReasonFollowsTheResultNotTheReward() {
+        when(operations.reserve("r-1", "u-req", 0)).thenReturn(ReserveResult.REJECTED_INSUFFICIENT_CREDITS);
+
+        handler.handle(submitted(0));
+
+        assertThat(enqueuedReply()).isInstanceOfSatisfying(CreditReservationRejected.class,
+            reply -> assertThat(reply.reason()).isEqualTo(RequestEventHandler.INSUFFICIENT_CREDITS));
     }
 
     @Test

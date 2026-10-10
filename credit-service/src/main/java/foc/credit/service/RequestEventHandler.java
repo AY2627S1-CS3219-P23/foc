@@ -7,6 +7,11 @@
  * code to that plan and chose the wording of the reward-below-1 reason.
  * Built against the CreditOperations and ReplyOutbox interfaces, which
  * are still stubs.
+ * PR #168 review (Leong Wei Zhi), team decisions among the reviewer's
+ * options: the rejection reason comes from the ReserveResult instead of
+ * being worked out from the reward, the reply is chosen by a switch
+ * expression so every result must be handled, and a request event with
+ * no handler is still acknowledged but logged.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -15,9 +20,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import foc.contracts.events.core.DomainEvent;
 import foc.contracts.events.credit.CreditReservationRejected;
 import foc.contracts.events.credit.CreditReserved;
 import foc.contracts.events.request.RequestCancelled;
@@ -44,6 +52,8 @@ public class RequestEventHandler {
         INVALID_STATE
     }
 
+    private static final Logger log = LoggerFactory.getLogger(RequestEventHandler.class);
+
     static final String PRODUCER = "credit-service";
     static final String INSUFFICIENT_CREDITS = "insufficient available credits";
     static final String REWARD_BELOW_ONE = "reward must be at least 1 credit";
@@ -65,24 +75,39 @@ public class RequestEventHandler {
             case RequestCompleted e -> settle(operations.transfer(e.requestId(), e.courierId()));
             case RequestCancelled e -> settle(operations.release(e.requestId(), e.requesterId()));
             case RequestExpired e -> settle(operations.release(e.requestId(), e.requesterId()));
-            // a request event the Credit Service has no part in
-            default -> Outcome.HANDLED;
+            // A request event the Credit Service has no part in. Only the
+            // four events above are bound to the queue, so this is one
+            // published to it by hand: acknowledged, since there is nothing
+            // to inspect, but logged so it can be traced.
+            default -> {
+                log.warn("No handler for request event {} (eventId {}); acknowledged without action",
+                    event.getClass().getSimpleName(), event.eventId());
+                yield Outcome.HANDLED;
+            }
         };
     }
 
     private Outcome onSubmitted(RequestSubmitted e) {
-        switch (operations.reserve(e.requestId(), e.requesterId(), e.reward())) {
-            case RESERVED -> outbox.enqueue(new CreditReserved(
+        // no default: a new ReserveResult does not compile until it is given a reply
+        DomainEvent reply = switch (operations.reserve(e.requestId(), e.requesterId(), e.reward())) {
+            case RESERVED -> new CreditReserved(
                 newEventId(), Instant.now(), PRODUCER, e.correlationId(), List.of(),
-                e.requestId(), e.requesterId(), e.reward()));
-            case REJECTED -> outbox.enqueue(new CreditReservationRejected(
-                newEventId(), Instant.now(), PRODUCER, e.correlationId(), List.of(),
-                e.requestId(), e.requesterId(), e.reward(),
-                e.reward() < 1 ? REWARD_BELOW_ONE : INSUFFICIENT_CREDITS));
-            // the first delivery's reply is already in the outbox
-            case DUPLICATE -> { }
+                e.requestId(), e.requesterId(), e.reward());
+            case REJECTED_INSUFFICIENT_CREDITS -> rejected(e, INSUFFICIENT_CREDITS);
+            case REJECTED_INVALID_AMOUNT -> rejected(e, REWARD_BELOW_ONE);
+            // a record exists: its reply, if one was owed, committed with it
+            case DUPLICATE -> null;
+        };
+        if (reply != null) {
+            outbox.enqueue(reply);
         }
         return Outcome.HANDLED;
+    }
+
+    private static CreditReservationRejected rejected(RequestSubmitted e, String reason) {
+        return new CreditReservationRejected(
+            newEventId(), Instant.now(), PRODUCER, e.correlationId(), List.of(),
+            e.requestId(), e.requesterId(), e.reward(), reason);
     }
 
     // SETTLED and DUPLICATE are both acknowledged; they differ for logs and tests

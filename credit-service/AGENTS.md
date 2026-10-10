@@ -6,6 +6,9 @@
   the team's.
   2026-10-10, Claude Code (Opus 5.5): package map and invariants extended
   for the entities, repositories and the two stubbed interfaces.
+  2026-10-10, Claude Code (Opus 5.5), PR #168: the package map and
+  invariants updated for the request event handler, the broker
+  topology and the message converter.
   Author review: Ryan Ang, pending pull request review.
 -->
 

@@ -26,6 +26,50 @@ Entry template:
 ```
 
 ---
+## 2026-10-10 — Ryan Ang (PR #168 review fixes)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** review assistance, refactoring, tests, docs
+- **Scope:** `credit-service/`, `docs/credit-service.md`, `compose.yaml`,
+  `.env.example`.
+  - `ReserveResult`: `REJECTED` split into
+    `REJECTED_INSUFFICIENT_CREDITS` and `REJECTED_INVALID_AMOUNT`;
+    `CreditOperations.reserve`'s comment states the reward-below-1 rule.
+  - `RequestEventHandler`: the reply chosen by a switch expression over
+    the result, the reason taken from the result, a warning log (event
+    type and `eventId`) on a request event with no handler, and the
+    duplicate comment corrected.
+  - Tests: `RequestEventHandlerTest` (a relative time bound, the two
+    refusals); new `ConsumedEventsHandledTest` (every bound event
+    reaches an operation) and `RequestEventHandlerTransactionTest` (the
+    handler through Spring's proxy); `RabbitMqTopologyIntegrationTest`
+    (unbound keys published first on one channel, fixture read as
+    bytes); `DomainEventMessageConverterTest` (a named fixture guard).
+  - `application.yaml`, `.env.example`: the attempts setting described
+    as not read yet; the below-5 s bound on the retry delay.
+  - `docs/credit-service.md`: the reserve results, the duplicate-reply
+    wording, the unhandled-event rule, the NFR1.1 row.
+  - Disclosure headers on `compose.yaml`, `credit-service/AGENTS.md`
+    and `credit-service/README.md` brought up to this PR's scope.
+- **Prompt(s):** Summary: asked for the review comments on PR #168 to be
+  checked against the code. The tool confirmed all eleven and put two
+  back as decisions (how the rejection reason is carried, what an
+  unhandled event does). The decisions were then given in writing, with
+  where the tying test goes and what the log names, and the tool was
+  asked to apply them with the remaining fixes.
+- **Author review:** The two decisions are the team's, from the
+  reviewer's options: the result carries the rejection reason (and the
+  rule is also stated on `reserve`), and an unhandled event stays
+  acknowledged, with a warning log and a build-time test instead of
+  dead-lettering. The database keeps its single `REJECTED` status. The
+  tool made no design choice; it chose the two enum names' comments,
+  the log wording and the test mechanics. The Copilot finding (the
+  transaction never exercised) was not among the reviewer's blocking
+  items; its test was added on the tool's suggestion. `./mvnw clean
+  test`: 59 tests, 0 failures, with Docker, the broker test run. The
+  three guarding tests were each seen failing with the code broken on
+  purpose (no `@Transactional`, a missing handler arm, a fifth
+  binding) and passing once restored. Pending pull request review.
+
 ## 2026-10-10 — Ryan Ang (credit-service: request event handler and broker topology)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (code + tests + docs), built against the

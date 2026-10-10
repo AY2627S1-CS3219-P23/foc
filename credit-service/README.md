@@ -5,6 +5,9 @@
   build, test and run it. The design is docs/credit-service.md (team).
   2026-10-10, Claude Code (Opus 5.5): status and contents updated for
   the entities, repositories and the two stubbed interfaces.
+  2026-10-10, Claude Code (Opus 5.5), PR #168: status, contents and
+  configuration updated for the request event handler, the broker
+  topology and the message converter.
   Author review: Ryan Ang, pending pull request review.
 -->
 

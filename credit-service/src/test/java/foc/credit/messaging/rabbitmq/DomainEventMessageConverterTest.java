@@ -6,6 +6,7 @@
  * reward (the author's decision; application.yaml's
  * accept-float-as-int), refuses an incomplete or unknown event, and
  * injects eventType outbound.
+ * PR #168 review (Leong Wei Zhi): a missing fixture fails by name.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
@@ -44,6 +45,7 @@ class DomainEventMessageConverterTest extends PostgresTestContainer {
 	/** The shared request.submitted fixture, changed by the caller. */
 	private Message submitted(Consumer<ObjectNode> change) throws IOException {
 		try (InputStream fixture = getClass().getResourceAsStream("/contracts/request-submitted.example.json")) {
+			assertThat(fixture).as("fixture request-submitted").isNotNull();
 			ObjectNode body = (ObjectNode) jsonMapper.readTree(fixture);
 			change.accept(body);
 			return new Message(jsonMapper.writeValueAsBytes(body), new MessageProperties());

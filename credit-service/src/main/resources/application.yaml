@@ -54,8 +54,9 @@ credit:
       # against a broker that already holds the queue fails
       # PRECONDITION_FAILED until the queue is deleted.
       ttl-ms: ${CREDIT_RETRY_TTL_MS:2000}
-      # Total attempts before an event dead-letters (D11); read by the
-      # listener.
+      # Total attempts before an event dead-letters (D11). Nothing reads
+      # this yet: the listener that counts attempts is a later change and
+      # must bind this property name. Until then no cap is applied.
       max-attempts: ${CREDIT_RETRY_MAX_ATTEMPTS:5}
   # Origin the browser calls this service from (no API gateway)
   web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
