@@ -31,7 +31,7 @@ Entry template:
 - **Mode:** generate (code + tests + docs), built against the
   `CreditOperations` / `ReplyOutbox` stubs
 - **Scope:** `credit-service/`, `docs/credit-service.md`, `compose.yaml`,
-  `.env.example`.
+  `.env.example`, and the D3 wiki page.
   - `service/RequestEventHandler` (+ `Outcome`): one transaction per
     request event; reserve, transfer or release, and the reply enqueued
     for a reservation. `RequestEventHandlerTest` with both interfaces
@@ -41,22 +41,35 @@ Entry template:
     (package, and the initializer's property name, changed);
     `RabbitMqTopology` (work, retry and dead-letter queues, four
     bindings from `EventTypeRegistry`, both exchanges); converter
-    wiring. `RabbitMqTopologyTest`, `DomainEventMessageConverterTest`.
+    wiring. `RabbitMqTopologyTest`, `DomainEventMessageConverterTest`,
+    and `RabbitMqTopologyIntegrationTest` against a Testcontainers
+    RabbitMQ (new test dependency), following notification-service's
+    integration test: the four keys reach the work queue and no other,
+    the retry queue returns an event, a rejected one lands in the DLQ.
+  - `CreditServiceApplication`: `@EnableScheduling`.
   - `application.yaml`: manual acknowledgement, correlated confirms
     with returns and the mandatory flag, retry delay and attempts,
     `accept-float-as-int: false`. Test profile: listener auto-startup
     and topology provisioning off.
   - `docs/credit-service.md`: D10, D11, the handler row, "What each
-    operation answers", three failure rows, F1.2.1 and NFR1.1.
+    operation answers", three failure rows, F1.2.1 and NFR1.1; and a
+    "Read API contract" section (`GET /credits/me`,
+    `GET /credits/me/history`, the fields, filters, paging, fixed
+    order, errors and implementation notes).
   - `compose.yaml`, `.env.example`: `CREDIT_RETRY_TTL_MS`,
     `CREDIT_RETRY_MAX_ATTEMPTS`. Service README and AGENTS.md.
+  - The team wiki's D3 design page (outside this repo): its Credit
+    content brought in line with `docs/credit-service.md`.
 - **Prompt(s):** Gave a four-part written plan (transaction ownership,
   copying the messaging code, queues and bindings, what each operation
   answers per record status) and asked for it to be checked for issues
   before building. Then answered the issues raised and set the scope:
   this branch is the handler, converter copy, topology, config and doc
   edits; the real operations, listener and outbox publisher are later
-  slices.
+  slices. Asked next for `@EnableScheduling`, a real-broker topology
+  test and the read API's REST contract in the design doc, checked
+  against the D3 wiki; then to bring the wiki's Credit content in line
+  with the design doc.
 - **Author review:** Every decision here is the author's, from the
   written plan and the answers to the check: the handler's shape, copy
   rather than share, the queue names and four bindings, declaring both
@@ -68,8 +81,18 @@ Entry template:
   publisher); the author decided each. The tool chose only the wording
   of the reward-below-1 reason. The fractional-reward test was run
   failing before the Jackson setting was added and passing after.
-  `./mvnw clean test`: 48 tests, 0 failures. Pending pull request
-  review.
+  `@EnableScheduling` and the real-broker test were added on the
+  author's follow-up instruction. `./mvnw clean test`: 53 tests, 0
+  failures, the broker test run, not skipped. The read API contract is
+  the author's, supplied in writing
+  after the tool checked the D3 wiki page and found it gave no paths,
+  fields or parameters; the tool transcribed it, raised two gaps (the
+  format of `from` and `to`, a negative `page`), and the author decided
+  both. The wiki edits follow the author's list of the sections that
+  contradicted the design doc: decided items are cited to
+  `docs/credit-service.md`, #163, #166 and #168, and Order-side
+  consequences are flagged for the Order owner rather than decided. The
+  author approved the push to the wiki. Pending pull request review.
 
 ## 2026-10-10 — Ryan Ang (credit-service scaffold: entities, repositories, interfaces)
 - **Tool:** Claude Code (Opus 5.5)

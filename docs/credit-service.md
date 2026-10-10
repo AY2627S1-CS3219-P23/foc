@@ -12,7 +12,8 @@
   2026-10-10: the author's decisions for the request event handler and
   topology written in (D10, D11, the handler row, the operation results
   table and its rules, the failure rows, F1.2.1 and NFR1.1). The
-  decisions are the author's; the tool transcribed them.
+  decisions are the author's; the tool transcribed them. Same day: the
+  "Read API contract" section, from the author's written contract.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -71,7 +72,7 @@ Web App; every balance change arrives as a request event. Its state lives only i
 
 | Component | Responsibility |
 | --- | --- |
-| **Credit account REST API** (Spring Boot) | For the Web App, authenticated by the user's JWT: returns the caller's available and reserved balance (F4.1) and their transaction history with amount and date-range filters (F4.1.2, F4.1.3). |
+| **Credit account REST API** (Spring Boot) | For the Web App, authenticated by the user's JWT: returns the caller's available and reserved balance (F4.1) and their transaction history with amount and date-range filters (F4.1.2, F4.1.3). The routes and shapes are in "Read API contract". |
 | **Request event listener** (Spring AMQP) | Consumes `request.submitted`, `request.completed`, `request.cancelled` and `request.expired` from the Credit Service's own queue, hands each to the request event handler, and settles the delivery on its answer: acknowledge after the commit, dead-letter an event that conflicts with the request's record, and send any failure to the retry queue (D11). |
 | **Request event handler** (Spring Boot, `@Transactional`) | Owns the transaction for one event. Turns it into a reserve (F2.1), transfer (F3.1) or release (F2.1.1) operation and, for a reservation, writes the reply to the outbox in the same transaction (D10). Imports no broker types. |
 | **Error mapping** (Spring Boot, `@RestControllerAdvice`) | Maps invalid query parameters on the read API (for example the history's amount and date-range filters) to HTTP error responses. Event-path failures never reach it: they are refused with a reply or dead-lettered (see "How each event is handled"). |
@@ -265,6 +266,100 @@ Same notation as [`architecture.md`](architecture.md):
 | Credit NFR2.2.1 - identical transfer requests for one confirmation processed once | The first event moves the status to `TRANSFERRED`. A repeat finds that status and changes nothing. |
 | Order F1.1.4 - reject creation when reward > available | Same mechanism as Credit F2.1.3 |
 | User F8.1 - credit balance on the own profile | Web App reads the balance from the Credit account REST API (F4.1) |
+
+## Read API contract
+
+Both routes return the caller's own data, identified by the JWT; there
+is no route for another user's. Either one creates the caller's account
+on first use (D6), so a balance always exists and neither answers 404.
+
+### `GET /credits/me`
+
+The caller's balance.
+
+```json
+{ "available": 5, "reserved": 0, "total": 5 }
+```
+
+`total` is `available + reserved`, computed when read.
+
+### `GET /credits/me/history`
+
+A page of the caller's history rows, newest first.
+
+```json
+{
+  "content": [
+    { "id": 42, "type": "RESERVE", "amount": 3, "requestRef": "r-1", "occurredAt": "2026-10-10T08:00:00Z" }
+  ],
+  "page": 0, "size": 20, "totalElements": 1, "totalPages": 1
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | The row's ID; a stable key for the web app |
+| `type` | One of the history types in "Database" |
+| `amount` | Always positive. Whether the row is a gain or a loss follows from `type` |
+| `requestRef` | The request the row is for; null if it is not for a request |
+| `occurredAt` | When it happened |
+
+The page has supplier-service's `PageResponse` shape. The order is
+fixed: `occurredAt` descending, then `id` descending. There is no sort
+parameter.
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `page` | 0 | Page number, from 0 |
+| `size` | 20 | Rows per page, 1 to 100 |
+| `minAmount` | none | Lowest amount, inclusive |
+| `maxAmount` | none | Highest amount, inclusive |
+| `from` | none | Start of the date range, inclusive |
+| `to` | none | End of the date range, exclusive |
+
+Every filter is optional and they combine. An exact amount is
+`minAmount` equal to `maxAmount`.
+
+`from` and `to` are full ISO-8601 instants with an offset, the format of
+`occurredAt`. A date alone is refused: the server would have to pick a
+time zone, and only the browser knows the user's.
+
+| Value | Result |
+| --- | --- |
+| `2026-10-10T08:00:00Z` | Valid |
+| `2026-10-10T16:00:00+08:00` | Valid, the same instant |
+| `2026-10-10` | 400 |
+| `2026-10-10T08:00:00` (no offset) | 400 |
+
+For the web page:
+
+- Turn the picked dates into instants in the user's local zone. `from`
+  is the start of the first day; `to` is the start of the day after the
+  last day, because `to` is exclusive.
+- Send UTC (`Z`), which is what `toISOString()` produces. A `+08:00`
+  offset must be encoded as `%2B08:00` in the query string, or the `+`
+  arrives as a space and the request is a 400.
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| 400 problem+json | An amount that is not an integer or is below 1; `minAmount` above `maxAmount`; `from` or `to` not a full instant with an offset; `from` not before `to`; `page` below 0; `size` outside 1 to 100 |
+| 401 problem+json | A missing or invalid token |
+
+No history is an empty page, not an error, and so is a `page` past the
+last one: 200 with empty `content`.
+
+### Implementation notes
+
+- `page` and `size` are plain integer request parameters with their
+  bounds validated, and the page request is built by hand. Spring's
+  `Pageable`, which supplier-service takes, would turn a negative page
+  into 0 and cap an oversized size silently, so the 400s above would
+  never happen; it would also admit a `sort` parameter.
+- `from` and `to` bind as `OffsetDateTime` in the ISO date-time format
+  and are converted to `Instant`, so both the `Z` and the offset forms
+  parse.
 
 ## How each event is handled
  
