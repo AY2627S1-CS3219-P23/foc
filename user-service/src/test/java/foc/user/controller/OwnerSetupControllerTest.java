@@ -29,6 +29,8 @@ Author review: Ryan validated correctness and naming.
 2026-09-29 (Claude Code, Opus 5.5), issue #147: an invalid body now gets
        problem+json with the broken rule's message (ProblemDetailAdvice,
        team decision).
+2026-10-02 (Claude Code, Opus 5.5), issue #154: the wrong-token 403 is
+       checked for a problem+json body.
 */
 
 
@@ -55,6 +57,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -312,7 +315,10 @@ class OwnerSetupControllerTest extends PostgresTestContainer {
                 .header("X-Setup-Token", "wrong-token")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isForbidden())
+            // ProblemDetailAdvice's ResponseStatusException handler (#154)
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.detail").value("Invalid or missing setup token"));
     }
 
     @Test

@@ -29,6 +29,8 @@ Scope: POST /auth/signup (issue #87) and POST /auth/login (issues #89/#90),
        the email has a live pending sign-up that isn't the caller's own
        request (which used to be silently merged, a hijack), and 429 with
        Retry-After when a resend is inside the cooldown.
+       2026-10-02, Claude Code (Opus 5.5), issue #154: the
+       ResponseStatusException handler moved to ProblemDetailAdvice.
 Author review: Leong Wei Zhi to review via the PR.
 2026-09-30 (Claude Code, Fable 5), issue #92: the three OTP handlers moved
 to ProblemDetailAdvice, shared with the account-update routes (same statuses,
@@ -49,7 +51,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 import foc.user.dto.LoginRequest;
 import foc.user.dto.LoginResponse;
@@ -115,10 +116,5 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
             .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
             .body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage()));
-    }
-
-    @ExceptionHandler(ResponseStatusException.class)
-    public ProblemDetail handleResponseStatus(ResponseStatusException e) {
-        return e.getBody();
     }
 }

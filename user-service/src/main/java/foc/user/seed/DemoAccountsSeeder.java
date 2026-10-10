@@ -7,21 +7,36 @@ Scope: demo accounts for local testing and demos — 1 OWNER, 3 ADMINs and
        gets known-password accounts by accident), and one password per
        role. Follows supplier-service's SuppliersSeeder (CommandLineRunner
        in a seed package).
+       2026-10-02 (Claude Code, Opus 5.5), issue #154: Locale.ROOT for the
+       generated emails and usernames; comment on the ADMINS/USERS limits.
+       2026-10-05 (issue #154): a seeding run that loses an insert race
+       is logged as a warning instead of stopping the service.
+       2026-10-07 (Claude Code, Opus 5.5), PR #162 Copilot review: only a
+       unique violation counts as that race; any other integrity
+       failure is rethrown.
+       2026-10-10 (Claude Code, Opus 5.5), PR #162 re-review (Leong Wei
+       Zhi): a run that loses the race seeds once more instead of
+       leaving the accounts to the other instance (Ryan's choice among
+       the reviewer's options).
 Author review: Ryan to review via the PR.
 */
 
 package foc.user.seed;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import foc.user.entity.Role;
 import foc.user.entity.User;
@@ -38,8 +53,13 @@ public class DemoAccountsSeeder implements CommandLineRunner {
     public static final String ADMIN_PASSWORD = "AdminPass123";
     public static final String USER_PASSWORD = "StudentPass123";
 
+    // at most 99 admins and 99999 users: past that the email formats in
+    // accounts() gain an eighth digit and fail AccountRules.EMAIL_PATTERN
+    // (accountsFollowTheSignupRules catches it)
     public static final int ADMINS = 3;
     public static final int USERS = 100;
+
+    private static final String UNIQUE_VIOLATION = "23505";
 
     // one seeded account
     record DemoAccount(String email, String username, Role role) {
@@ -47,10 +67,15 @@ public class DemoAccountsSeeder implements CommandLineRunner {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TransactionTemplate transaction;
 
-    public DemoAccountsSeeder(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public DemoAccountsSeeder(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            PlatformTransactionManager transactionManager) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.transaction = new TransactionTemplate(transactionManager);
     }
 
     // e9xxxxxx emails (NUS format), clear of the hand-made dev accounts;
@@ -60,11 +85,13 @@ public class DemoAccountsSeeder implements CommandLineRunner {
         accounts.add(new DemoAccount("e9000001@u.nus.edu", "demo_owner", Role.OWNER));
         for (int i = 1; i <= ADMINS; i++) {
             accounts.add(new DemoAccount(
-                String.format("e90001%02d@u.nus.edu", i), "demo_admin_" + i, Role.ADMIN));
+                String.format(Locale.ROOT, "e90001%02d@u.nus.edu", i), "demo_admin_" + i, Role.ADMIN));
         }
+        // Locale.ROOT: a default locale with its own digits must not change them
         for (int i = 1; i <= USERS; i++) {
             accounts.add(new DemoAccount(
-                String.format("e91%05d@u.nus.edu", i), String.format("demo_user_%03d", i), Role.USER));
+                String.format(Locale.ROOT, "e91%05d@u.nus.edu", i),
+                String.format(Locale.ROOT, "demo_user_%03d", i), Role.USER));
         }
         return accounts;
     }
@@ -72,10 +99,54 @@ public class DemoAccountsSeeder implements CommandLineRunner {
     // Inserts every demo account that isn't there yet, so a restart (or a
     // database that already holds some of them) doesn't duplicate or fail.
     // Each role's password is hashed once and the hash reused: bcrypt per
-    // account would add seconds to startup for no benefit in demo data
+    // account would add seconds to startup for no benefit in demo data.
+    // One transaction, so a failed run leaves nothing half-seeded
     @Override
-    @Transactional
     public void run(String... args) {
+        if (seedUnlessRaced()) {
+            return;
+        }
+        // another instance starting at the same time inserted an account
+        // between the check and the insert, and this run was rolled back
+        // whole. The other instance may have rolled back as well, so seed
+        // once more: its committed accounts are visible now and are skipped
+        log.info("Demo accounts: lost an insert race to another instance, seeding again");
+        if (!seedUnlessRaced()) {
+            // the service still starts
+            log.warn("Demo accounts not seeded: lost an insert race twice, some may be missing");
+        }
+    }
+
+    // false when the run hit a duplicate key and was rolled back. Caught
+    // outside the transaction, which is already rolled back by then
+    private boolean seedUnlessRaced() {
+        try {
+            transaction.executeWithoutResult(status -> seed());
+            return true;
+        } catch (DataIntegrityViolationException e) {
+            // anything but a duplicate key (a missing column, a broken
+            // constraint) is a real problem and must stop startup
+            if (!isUniqueViolation(e)) {
+                throw e;
+            }
+            log.debug("Demo accounts: duplicate key while seeding ({})",
+                e.getMostSpecificCause().getMessage());
+            return false;
+        }
+    }
+
+    // SQLState 23505 is unique_violation: the users table's email and
+    // username indexes
+    private static boolean isUniqueViolation(DataIntegrityViolationException e) {
+        for (Throwable cause = e; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sql && UNIQUE_VIOLATION.equals(sql.getSQLState())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void seed() {
         String ownerHash = passwordEncoder.encode(OWNER_PASSWORD);
         String adminHash = passwordEncoder.encode(ADMIN_PASSWORD);
         String userHash = passwordEncoder.encode(USER_PASSWORD);

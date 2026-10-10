@@ -16,6 +16,8 @@ Author review: Ryan reviewed and ensured tests run successfully.
 2026-09-29 (Claude Code, Opus 5.5), issue #91: requests without credentials
        now get 401 problem+json from the JWT entry point (was a provisional
        403).
+2026-10-02 (Claude Code, Opus 5.5), issue #154: problem+json checks for
+       the non-numeric principal 401 and a non-numeric id (400).
 */
 
 package foc.user.controller;
@@ -96,7 +98,9 @@ class ProfileControllerTest extends PostgresTestContainer {
     @DisplayName("GET /users/me should return 401 when the principal is not a user id")
     void getOwnProfile_nonNumericPrincipal() throws Exception {
         mockMvc.perform(get("/users/me").with(user("not-a-number")))
-            .andExpect(status().isUnauthorized());
+            .andExpect(status().isUnauthorized())
+            // CallerId's 401, rendered by ProblemDetailAdvice (#138/#154)
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
     }
 
     @Test
@@ -185,5 +189,14 @@ class ProfileControllerTest extends PostgresTestContainer {
         mockMvc.perform(get("/users/{id}", deleted.getId()).with(user("999")))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.detail").value("User not found"));
+    }
+
+    @Test
+    @DisplayName("GET /users/{id} should return 400 problem+json for a non-numeric id")
+    void getPublicProfile_nonNumericId() throws Exception {
+        mockMvc.perform(get("/users/{id}", "abc").with(user("999")))
+            .andExpect(status().isBadRequest())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.detail").value("Invalid request parameter"));
     }
 }
