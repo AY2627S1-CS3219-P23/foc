@@ -26,6 +26,36 @@ Entry template:
 ```
 
 ---
+## 2026-10-10 — Ryan Ang (credit-service scaffold: entities, repositories, interfaces)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (scaffold + tests + docs)
+- **Scope:** `credit-service/` only, no business logic.
+  - `entity/`: one JPA entity per Flyway V1 table (`CreditAccount`,
+    `Reserved`, `CreditReservationSlice`, `CreditLot`,
+    `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`,
+    `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType`
+    enums, transcribed from `V1__baseline.sql`. IDs of other rows are
+    plain columns, not JPA associations.
+  - `repository/`: an empty `JpaRepository` per entity.
+  - `service/`: `CreditOperations` and `ReplyOutbox` with the supplied
+    signatures, `ReserveResult`, and `NotImplemented*` stub beans whose
+    methods throw `UnsupportedOperationException("not implemented")`.
+  - Tests: `EntityMappingTest` (each entity saved and read back against
+    V1) and `NotImplementedStubsTest`.
+  - `credit-service/README.md` and `AGENTS.md`; root `README.md` AI Use
+    Summary clause.
+- **Prompt(s):** Pasted the planned scaffold contents (skeleton, Flyway
+  V1, entities, empty repositories, the JWT filter, and the two
+  interfaces with their method signatures) and asked whether the
+  scaffold PR had them, then to add the four missing pieces.
+- **Author review:** The interface signatures are the author's, as
+  pasted. `ReserveResult` was undefined; the author chose the
+  three-value enum (`RESERVED`, `REJECTED`, `DUPLICATE`) from options.
+  Entity class names follow `docs/credit-service.md` where it names
+  them; `CreditReservationSlice` and `CommonPool` are not named there
+  and follow their tables. `./mvnw clean test`: 21 tests, 0 failures.
+  
+
 ## 2026-10-09 — Ryan Ang (credit-service scaffold)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (scaffold + tests + docs)

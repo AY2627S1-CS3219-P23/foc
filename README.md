@@ -379,7 +379,11 @@ from the design doc, JWT verification copied from supplier-service,
 and their tests), with the ports, image, dependency scope, schema
 scope and test database chosen by the author via options Q&A and
 recorded in `ai/usage-log.md`, plus `note` made `@Nullable` on the
-request event records (the author's decision, issue #165).
+request event records (the author's decision, issue #165), and the
+scaffold's JPA entities (one per V1 table), empty repositories and the
+`CreditOperations` / `ReplyOutbox` interfaces with stubs that throw —
+the interface signatures and the `ReserveResult` values supplied by the
+author, with no business logic.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
