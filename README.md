@@ -383,7 +383,18 @@ Spring's `about:blank` read as "no type", body-validation refusals
 returning to the editable fields with the unspent code, an expired
 email change offering a restart instead of the resend user-service can
 only refuse, and the retained-code tests asserting the call that was
-meant to prove them.
+meant to prove them; and the Credit Service saga event contracts in
+`foc-contracts` (PR #163) —
+four event records, the `credit-events` exchange name, their
+fixtures and the registry tests — together with that PR's review
+fixes to `docs/credit-service.md`, the high-level architecture doc
+and diagram, the notification design doc and the foc-contracts
+convention wording, which were brought in line with it, and the
+notification-service contract test generalized to the two event
+domains; the saga, the
+event names and fields, and the database schema are the team's
+decisions, recorded in `docs/credit-service.md` and
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

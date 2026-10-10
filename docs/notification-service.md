@@ -9,6 +9,11 @@
   history. The tool documented decisions, derived the traceability
   mapping, and formatted the result; it made no design decisions.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-10-09, Claude Code (Opus 5.5), PR #163 review (Leong Wei Zhi): the catalog
+  description, the events-are-facts paragraph and the exchange list
+  updated for the Credit saga events (team design,
+  docs/credit-service.md D7-D8). Author review: Ryan Ang, pending pull
+  request review.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -82,10 +87,10 @@ the team's finalized design for this service. Superseded decisions
 
 ## Event contracts (D17/D18)
 
-The Order Service publishes **explicit, business-specific typed
-events** — one flat record per fact, no envelope wrapper. The contracts
-are code in `foc-contracts/`: the `DomainEvent`/`RequestEvent`
-interfaces, the seven records, the `EventTypeRegistry`, and one
+The Order and Credit Services publish **explicit, business-specific
+typed events** — one flat record per fact, no envelope wrapper. The contracts
+are code in `foc-contracts/`: the `DomainEvent` interface, the
+`RequestEvent`/`CreditEvent` domain markers, the eleven records, the `EventTypeRegistry`, and one
 canonical fixture per event under
 [`foc-contracts/src/main/resources/contracts/`](../foc-contracts/src/main/resources/contracts/),
 which both producer and consumer contract-test against (D15). The full
@@ -117,13 +122,20 @@ required fields (components not marked `@Nullable`); a **breaking
 contract change ships as a new event type** (e.g.
 `request.accepted.v2`).
 
-The seven cataloged events (Order F0.2 state transitions plus the
+The cataloged request events (Order F0.2 state transitions plus the
 courier-arrival update, F4.1.1–F4.1.2): `request.created`,
 `request.accepted`, `request.collected`, `request.completed`,
-`request.cancelled`, `request.expired`, `request.courier-arrived`. All
+`request.cancelled`, `request.expired`, `request.courier-arrived`, and
+the Credit saga's `request.submitted` and `request.rejected`
+([`credit-service.md`](credit-service.md) D7–D8). All request events
 carry `requestId`, `requesterId`, `pickupLocation`, `dropoffLocation`,
 `note`; the post-acceptance events add `courierId` (nullable on
-`request.cancelled` — a pre-acceptance cancel has no courier). Adding
+`request.cancelled` — a pre-acceptance cancel has no courier),
+`request.submitted` adds `reward` and `request.rejected` adds
+`reason`. The credit domain's `credit.reserved` and
+`credit.reservation-rejected` carry `requestId`, `requesterId` and
+`amount` (plus `reason` on the rejection) and go to the separate
+`credit-events` exchange, which this service does not bind. Adding
 an event type is a contracts release (record + registry entry +
 fixture) plus a consumer jar bump — the `request.#` binding never
 changes (D16).
@@ -275,10 +287,14 @@ is centralized logging (nice-to-have N4).
   foc-contracts README. A new producing domain adds its own event
   records, registry entries and exchange.
 - **Events are facts, not commands.** Calls whose caller needs the
-  result — e.g. Order → Credit reserve/transfer — stay synchronous
-  REST; the broker carries only "this happened" notifications.
+  result stay synchronous REST, unless the exchange is a saga step:
+  Order → Credit reservation is a choreographed saga in which
+  `request.submitted` is answered by `credit.reserved` or
+  `credit.reservation-rejected`, and transfer and release follow the
+  request events ([`credit-service.md`](credit-service.md) D7–D9).
+  Either way the broker carries only "this happened" facts.
 - **Exchange topology is settled (D16):** one topic exchange per
-  producing domain (`request-events` today), routing keys = the
+  producing domain (`request-events` and `credit-events` today), routing keys = the
   registry's canonical identities, pattern bindings per consumer. This
   also maps cleanly onto Kafka topics, should D11's swap scenario ever
   happen.

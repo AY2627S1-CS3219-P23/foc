@@ -8,6 +8,9 @@
  * 2026-09-20: order→request rename and events.core/.request package
  * split applied (author decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-08, Claude Code (Opus 5.5): credit-events exchange name added
+ * (team design, docs/credit-service.md D7-D8); author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.contracts.events.core;
 
@@ -35,6 +38,14 @@ public final class EventContracts {
 	 * domains get their own exchanges.
 	 */
 	public static final String REQUEST_EVENTS_EXCHANGE = "request-events";
+
+	/**
+	 * Durable <strong>topic</strong> exchange for the credit domain
+	 * (D16: one per producing domain): the Credit Service publishes its
+	 * reservation replies here and the Order Service consumes them
+	 * (docs/credit-service.md D7-D8).
+	 */
+	public static final String CREDIT_EVENTS_EXCHANGE = "credit-events";
 
 	private EventContracts() {
 	}

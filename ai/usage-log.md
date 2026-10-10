@@ -26,6 +26,39 @@ Entry template:
 ```
 
 ---
+## 2026-10-10 — Leong Wei Zhi (merging main into feat/profile-screens)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** refactor (merge conflict resolution)
+- **Scope:** Two documentation ledgers, both conflicting only because each
+  side appended at the same place; no code conflicted. `README.md` AI Use
+  Summary: both sides continued the same sentence from "made by the author
+  via", so the shared "neutral-options Q&A and recorded in
+  `ai/usage-log.md`" prefix is kept once and the two clauses chained — the
+  `web/` profile screens (#112, PR #149) first, since they read directly
+  off the #92 account-update endpoints clause above them, then main's
+  Credit Service saga contracts (PR #163), whose closing text is
+  unchanged. `ai/usage-log.md`: all five new entries kept and ordered
+  newest-first, which interleaves the two sides rather than stacking them
+  — this branch's 2026-10-07 #112 entry sorts below main's 2026-10-08
+  foc-contracts entry. Nothing was dropped or reworded on either side; the
+  only line authored here is one `---` separator at the new joint.
+- **Prompt(s):** Asked to fix the merge conflict on PR #149.
+- **Author review:** Verified mechanically rather than by eye: every
+  `## ` entry from both parents is present in the merge (55 = the union of
+  the branch's 53 and main's 51), each entry's body is byte-identical to
+  its parent, no entry appears that is in neither parent, and the five
+  date inversions remaining in the file are all pre-existing in both
+  parents (none introduced). `foc-contracts` 9 tests and `web` 87 pass
+  after the merge. `notification-service` has a pre-existing flaky
+  failure unrelated to this merge, which touched no code: with Docker
+  running, `RetentionPurgeSchedulerTest` (and sometimes
+  `IdempotentEventProcessorTest`) fail to start the Rabbit listener
+  registry, and `origin/main` alone fails the same way — 33 run/2 errors
+  and 36 run/1 error on two runs of the same commit. With Docker stopped
+  the suite is 36/36 with the 3 Testcontainers tests skipped. Reviewed
+  via pull request.
+
+---
 ## 2026-10-09 — Leong Wei Zhi (PR #149 Copilot re-review: expired email change, test strength, disclosures)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** debug (review fixes) + docs (disclosures)
@@ -99,6 +132,77 @@ Entry template:
   each card, and the `about:blank` sign-up refusal); each was checked to
   fail against the pre-fix code and pass after. Vitest (86 tests),
   eslint, tsc and prettier clean; reviewed via pull request.
+
+---
+## 2026-10-09 — Ryan Ang (PR #163 review fixes)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor (review fixes: one test + docs)
+- **Scope:**
+  - `notification-service/.../DomainEventContractTest.java`: producer
+    and `requestId` checked through each event's domain marker
+    (`RequestEvent` / `CreditEvent`); `parties` required present, not
+    non-empty.
+  - `foc-contracts`: `request-submitted.example.json` now names the
+    requester in `parties`; README convention 1 reworded for saga
+    reply events.
+  - `docs/credit-service.md` / `.mmd`: pre-saga residue removed
+    (ownership note, error-mapping row and label, lot spend order,
+    closed-economy rule, legend), the two invariants stated, the
+    Notification row updated.
+  - `docs/architecture.md` / `.mmd`: Order states include `pending`
+    and `rejected`, Notification row lists the saga events, Credit DB
+    is PostgreSQL.
+  - `docs/notification-service.md`: catalog description, the
+    events-are-facts paragraph and the exchange list.
+- **Prompt(s):** Asked to read the review comments on PR #163 and fix
+  them.
+- **Author review:** Three choices were the author's, made via
+  options Q&A before any edit: `request.submitted` notifies the
+  requester (rather than documenting it as notification-free), item 4
+  states the reviewer's two proposed invariants (rather than being
+  dropped), and the Order states in the diagram include `pending` and
+  `rejected`. The convention rewording follows the team's saga
+  decision (`docs/credit-service.md` D7-D8) and was requested by the
+  convention's owner in the review. All other edits follow the
+  reviewer's own suggestions. `./mvnw install` in `foc-contracts` (9 tests)
+  and `./mvnw test` in `notification-service` (36 tests, 0 failures,
+  0 skipped, with Docker running for the RabbitMQ Testcontainers
+  tests) both pass.
+
+## 2026-10-08 — Ryan Ang (foc-contracts: saga event contracts)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (records, fixtures, tests, docs)
+- **Scope:** `foc-contracts/` only; no service code changed.
+  - New records `RequestSubmitted`, `RequestRejected`
+    (`events/request/`) and `CreditReserved`,
+    `CreditReservationRejected` with the `CreditEvent` marker
+    (`events/credit/`), one fixture each under `contracts/`.
+  - `EventContracts.CREDIT_EVENTS_EXCHANGE` and four
+    `EventTypeRegistry` entries.
+  - `EventTypeRegistryTest` and `RequestEventRecordsTest`: the entry
+    count, the identity-prefix check and the domain-marker check now
+    cover the credit domain.
+  - `README.md` and `AGENTS.md` of the module: record, exchange and
+    package lists.
+- **Prompt(s):** Asked to read the credit-service design doc and
+  diagram, check a list of proposed contract additions against the
+  current library, and then add them.
+- **Author review:** The saga, the four identity strings and the
+  exchange name are the team's design (`docs/credit-service.md` D7-D8);
+  the field lists and the empty `parties` on the credit events are team
+  decisions, confirmed by the author before the tool wrote anything.
+  The tool made no contract decisions. `./mvnw test` passes in
+  `foc-contracts`.
+- **2026-10-09, PR #163 Copilot review:** `docs/credit-service.md`:
+  typo and punctuation fixes, and D3 reworded to the author's own text
+  (duplicates are detected by the one held-credits record per request,
+  not by event ID). The schema is unchanged. The tool wrote no design
+  content.
+  `foc-contracts`: `reward` and both `amount` components changed
+  from `int` to `Integer` (team decision) so a missing value is
+  rejected. `docs/architecture.md` and `.mmd`: Credit Service rows and
+  edges transcribed from the team's saga design (D6-D9). Root
+  `README.md`: AI Use Summary clause for this PR.
 
 ---
 ## 2026-10-07 — Leong Wei Zhi (#112 profile screens on #92's real endpoints)
