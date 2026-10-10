@@ -382,8 +382,9 @@ counter's read-then-refresh restored by the author's choice) and
 re-review fixes (the purge cron and owner setup token pinned as well,
 a seeding run that loses the insert race seeding once more by the
 author's choice among the reviewer's options, the unconfigured setup
-token logged server-side, and the login page keeping the URL's query
-and hash when it clears the notice state); and the
+token logged server-side, once per process, the login page keeping
+the URL's query and hash when it clears the notice state, and a 405
+problem+json handler); and the
 Credit Service saga event contracts in `foc-contracts` (PR #163) —
 four event records, the `credit-events` exchange name, their
 fixtures and the registry tests — together with that PR's review

@@ -52,6 +52,16 @@ Entry template:
   and `AccountPurgeSchedulerTest` also pass with `USER_PURGE_CRON`
   exported empty and a wrong `OWNER_SETUP_TOKEN`. Web: `npx vitest run`,
   65 tests pass. Pending author review of the diff.
+- **Second re-review (same day, head `d5e5734`):** asked to look at the
+  new findings and fix them. `OwnerSetupService`: the unconfigured-token
+  line is logged once per process, since the endpoint takes no
+  credentials (the reviewer's one-shot flag suggestion);
+  `OwnerSetupServiceTest` checks three calls write one line.
+  `ProblemDetailAdvice`: a 405 handler shaped like the 415 one, keeping
+  Spring's `Allow` header; `AuthControllerTest` has a case for it. The
+  406 is left alone: the reviewer found it returns an empty body and
+  called it a separate question. `./mvnw clean test`: 308 tests, 0
+  failures.
 
 ## 2026-10-09 — Ryan Ang (PR #162 review fixes, Leong Wei Zhi's review)
 - **Tool:** Claude Code (Opus 5.5)

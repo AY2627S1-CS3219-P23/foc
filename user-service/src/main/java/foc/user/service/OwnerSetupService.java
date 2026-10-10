@@ -23,7 +23,8 @@ Scope: Generated owner bootstrap logic (advisory lock, owner guard,
        unconfigured setup token gives a generic reason (Ryan's request),
        since ProblemDetailAdvice now shows it to the caller.
        2026-10-10 (Claude Code, Opus 5.5), PR #162 re-review (Leong Wei
-       Zhi): that case is logged server-side, naming the setting.
+       Zhi): that case is logged server-side, naming the setting; then
+       logged once per process rather than on every request.
 Author review: Ryan validated that the endpoint logic matches the feature design.
 */
 
@@ -31,6 +32,7 @@ package foc.user.service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +57,7 @@ public class OwnerSetupService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final String expectedSetupToken;
+    private final AtomicBoolean missingTokenLogged = new AtomicBoolean();
 
     public OwnerSetupService(
             UserRepository userRepository,
@@ -91,8 +94,12 @@ public class OwnerSetupService {
     // it doesn't say which setting is missing
     private void ensureValidSetupToken(String providedToken) {
         if (expectedSetupToken == null || expectedSetupToken.isBlank()) {
-            // the setting is named here, for the operator, and not in the response
-            log.error("Owner setup unavailable: OWNER_SETUP_TOKEN is not configured");
+            // the setting is named here, for the operator, and not in the response.
+            // logged once: the endpoint takes no credentials, so a caller
+            // must not be able to write an ERROR line per request
+            if (missingTokenLogged.compareAndSet(false, true)) {
+                log.error("Owner setup unavailable: OWNER_SETUP_TOKEN is not configured");
+            }
             throw new ResponseStatusException(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 "Owner setup is unavailable"

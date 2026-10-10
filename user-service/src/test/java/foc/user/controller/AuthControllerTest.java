@@ -33,6 +33,8 @@ Scope: integration tests for POST /auth/signup and POST /auth/login
        Content-Type is 415 problem+json.
        2026-10-09, Claude Code (Opus 5.5), PR #162 review (Leong Wei Zhi): the 415 also
        carries the Accept header.
+       2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei
+       Zhi): an unsupported method is 405 problem+json with Allow.
 Author review: Leong Wei Zhi to review via the PR.
 2026-09-30, Claude Code (Fable 5), issue #92: the OTP failures now carry
 problem+json type URIs (handlers shared via ProblemDetailAdvice), so the
@@ -77,6 +79,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -437,6 +440,17 @@ class AuthControllerTest extends PostgresTestContainer {
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath("$.status").value(415))
             .andExpect(jsonPath("$.detail").value("Content-Type 'text/plain' is not supported."));
+    }
+
+    @Test
+    @DisplayName("A method the path doesn't take is 405 problem+json")
+    void unsupportedMethod() throws Exception {
+        mockMvc.perform(get("/auth/login"))
+            .andExpect(status().isMethodNotAllowed())
+            .andExpect(header().string("Allow", containsString("POST")))
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.status").value(405))
+            .andExpect(jsonPath("$.detail").value("Method 'GET' is not supported."));
     }
 
     // ---- login ----

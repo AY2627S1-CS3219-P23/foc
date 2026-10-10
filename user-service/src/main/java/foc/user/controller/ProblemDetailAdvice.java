@@ -21,6 +21,8 @@ passthrough renders typed bodies (uniqueness refusals) for controllers
 without a local one.
 2026-10-09 (Claude Code, Opus 5.5), PR #162 review (Leong Wei Zhi): the 415 keeps
 Spring's Accept header, which names the types the endpoint takes.
+2026-10-10 (Claude Code, Opus 5.5), PR #162 re-review (Leong Wei Zhi): 405
+for an unsupported method, with Spring's Allow header.
 2026-10-05 (Claude Code, Fable 5), PR #157 Copilot review: the
 attempts-exceeded 429 now carries Retry-After — the exhausted row
 survives as spent, so there is a real wait (the resend cooldown) to
@@ -40,6 +42,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -92,6 +95,13 @@ class ProblemDetailAdvice {
     // Accept header, which names the types the endpoint takes
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     ResponseEntity<ProblemDetail> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException e) {
+        return ResponseEntity.status(e.getStatusCode()).headers(e.getHeaders()).body(e.getBody());
+    }
+
+    // a method the path doesn't take (e.g. GET /auth/login): Spring's own
+    // problem body, and its Allow header, which names the methods it does
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    ResponseEntity<ProblemDetail> handleMethodNotAllowed(HttpRequestMethodNotSupportedException e) {
         return ResponseEntity.status(e.getStatusCode()).headers(e.getHeaders()).body(e.getBody());
     }
 
