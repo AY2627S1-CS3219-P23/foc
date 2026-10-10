@@ -6,6 +6,9 @@
 // the durable way to tell these failures apart: the `detail` sentence is
 // human copy and may be reworded, which is exactly why the sign-up
 // dialog's sentence list (PR #150) was flagged for replacement.
+// 2026-10-10, Claude Code (Opus 5), issue #167: resendWait, the one
+// reader of the cooldown 429's quoted wait (the gate code and the
+// email-change resend both detect that refusal the same way).
 // 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): the resend
 // cooldown's 429 is its own answer, `wait`. A PATCH that parks an email
 // change inside a previous one's cooldown is refused that way, and
@@ -59,6 +62,15 @@ export function problemType(error: unknown): string | null {
 // cross-origin hop.
 export function retryAfter(error: unknown): number | null {
   return error instanceof ApiError ? error.retryAfter : null
+}
+
+// The wait a resend-cooldown refusal quoted, or null for any other
+// failure: a live code is already in the inbox and this says how long
+// before another may be requested. Both the gate code (useGateCode) and
+// the email-change resend read it — the same 429, two different rows
+// (issue #167).
+export function resendWait(error: unknown): number | null {
+  return problemType(error) === OTP_RESEND_COOLDOWN ? retryAfter(error) : null
 }
 
 /**

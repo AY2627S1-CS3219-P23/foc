@@ -25,6 +25,9 @@
 // harness fakes; plus cases for the dialog that cannot be dismissed
 // mid-delete, an edit reaching the rest of the app, the 429 wait on the
 // code step, and a kept code that has since expired.
+// 2026-10-10, Claude Code (Opus 5), issue #167: cases for the account's
+// one gate code across both cards — a code one requests the other can
+// use, and a code one spends leaves the other asking for its own.
 // Author review: Leong Wei Zhi (via PR #149).
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -704,6 +707,90 @@ describe('change password', () => {
       'Invalid verification code',
     )
     expect(passwordCard().getByLabelText('Digit 1 of 6')).toBeInTheDocument()
+  })
+})
+
+// user-service keeps ONE account_update_otps row per account, and both
+// cards draw on it (issue #167). The page owns it, so what one card does
+// to the code the other sees.
+describe('the account gate code', () => {
+  async function requestFromEditCard(user: ReturnType<typeof userEvent.setup>) {
+    const usernameInput = await openEditCard(user)
+    await user.clear(usernameInput)
+    await user.type(usernameInput, 'utown_runner')
+    await user.click(
+      editCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+    await waitFor(() => expect(profileApi.requestOtp).toHaveBeenCalledTimes(1))
+  }
+
+  it('lets the other card use a code this one requested', async () => {
+    const user = userEvent.setup()
+    await requestFromEditCard(user)
+    // the code belongs to the account, not to the card that asked
+    await user.click(editCard().getByRole('button', { name: 'Cancel' }))
+
+    expect(
+      passwordCard().getByText(/still valid — continue to use it again/),
+    ).toBeInTheDocument()
+    await user.type(
+      passwordCard().getByLabelText('New Password'),
+      'NewPassword1',
+    )
+    await user.type(
+      passwordCard().getByLabelText('Confirm New Password'),
+      'NewPassword1',
+    )
+    await user.click(
+      passwordCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+    await typeCode(user, OTP, passwordCard())
+    await user.click(
+      passwordCard().getByRole('button', { name: 'Update Password' }),
+    )
+
+    expect(
+      await passwordCard().findByText('Password updated.'),
+    ).toBeInTheDocument()
+    expect(profileApi.changePassword).toHaveBeenCalledWith(
+      'NewPassword1',
+      'NewPassword1',
+      OTP,
+    )
+    // no second code: the one in the inbox was the one it needed
+    expect(profileApi.requestOtp).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks for a new code once the other card has spent it', async () => {
+    const user = userEvent.setup()
+    await requestFromEditCard(user)
+    await typeCode(user, OTP, editCard())
+    await user.click(editCard().getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: 'Edit Account Info' }),
+      ).not.toBeInTheDocument(),
+    )
+
+    // single-use: that row is gone server-side, so this card must not
+    // promise it, and must ask for its own
+    expect(passwordCard().queryByText(/still valid/)).not.toBeInTheDocument()
+    expect(
+      passwordCard().queryByLabelText('Digit 1 of 6'),
+    ).not.toBeInTheDocument()
+    await user.type(
+      passwordCard().getByLabelText('New Password'),
+      'NewPassword1',
+    )
+    await user.type(
+      passwordCard().getByLabelText('Confirm New Password'),
+      'NewPassword1',
+    )
+    await user.click(
+      passwordCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+
+    await waitFor(() => expect(profileApi.requestOtp).toHaveBeenCalledTimes(2))
   })
 })
 

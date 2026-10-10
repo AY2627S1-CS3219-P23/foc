@@ -15,6 +15,14 @@
 // than by its wording. A name/address refused as taken rolls the gate
 // code's consumption back with it, so the card returns to the fields
 // still holding a live code and Save reuses it.
+// 2026-10-10, Claude Code (Opus 5), issue #167: the gate code is no
+// longer this card's. useGateCode (otp.ts) owns the account's one row
+// and the digits typed for it, ProfileSection runs it once, and this
+// card receives it — so a code the Change Password card spends or
+// replaces is spent or replaced here too, and the request both cards
+// used to implement separately is one implementation. What stays local
+// is this card's own: its fields, whether the code step is showing, and
+// its error and notice lines.
 // 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): two
 // things about the code the card keeps across a refusal. A 429's wait is
 // counted down on the submit button and the code left in place (`wait`,
@@ -36,26 +44,14 @@ import React, { useState } from 'react'
 
 import { errorMessage } from '@/lib/api/http'
 import { profileApi } from '../profileApi'
-import { emptyCode, useOtpCountdown } from '../otp'
-import {
-  OTP_RESEND_COOLDOWN,
-  gateFailure,
-  problemType,
-  retryAfter,
-} from '../problemTypes'
+import type { GateCode } from '../otp'
 import type { AdminUser, EmailChangeAccepted } from '../types'
 import { CodeStep } from './CodeStep'
 
-// A gate code the account is holding: when it dies, and when another may
-// be requested. expiresAt is null when a cooldown refusal told us a code
-// exists without saying how long it has left.
-interface Gate {
-  expiresAt: number | null
-  resendAt: number
-}
-
 interface EditAccountCardProps {
   user: AdminUser
+  // the page's one gate code, shared with the Change Password card
+  gate: GateCode
   onSaved: (updated: AdminUser) => void
   onEmailPending: (pending: EmailChangeAccepted) => void
   onCancel: () => void
@@ -63,45 +59,28 @@ interface EditAccountCardProps {
 
 export function EditAccountCard({
   user,
+  gate,
   onSaved,
   onEmailPending,
   onCancel,
 }: EditAccountCardProps) {
   const [username, setUsername] = useState(user.username)
   const [email, setEmail] = useState(user.email)
-  const [code, setCode] = useState<string[]>(emptyCode)
-  const [gate, setGate] = useState<Gate | null>(null)
   const [verifying, setVerifying] = useState(false)
   const [busy, setBusy] = useState(false)
   const [resending, setResending] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  // set when the attempt limit was hit: no new code may be requested
-  // until the resend cooldown passes, and the 429 quoted the wait
-  const [blockedUntil, setBlockedUntil] = useState(0)
-  // one countdown, two lines: the wait a 429 quoted, and the life left in
-  // the code the card is holding
-  const { cooldown: blocked, expiresIn: gateLife } = useOtpCountdown(
-    gate?.expiresAt ?? null,
-    blockedUntil,
-  )
-  // A kept code dies on its own clock. Once it has, Save must ask for a
-  // new one instead of sending one the server can only refuse. A null
-  // expiry means a cooldown refusal told us a code exists without saying
-  // how long it has left, so it counts as alive (PR #149 review).
-  const liveGate = gate && gateLife !== 0 ? gate : null
 
   const changes = {
     ...(username !== user.username && { username }),
     ...(email !== user.email && { email }),
   }
 
-  const startedAt = (seconds: number) => Date.now() + seconds * 1000
-
-  // Sends (or resends) the gate code. A 429 inside the cooldown is not a
-  // dead end: it means a live code is already in the inbox — the other
-  // card on this page may have asked for it — so the step opens anyway
-  // with the wait it quoted.
+  // Asks for the gate code (or its resend). A 429 inside the cooldown is
+  // not a dead end: a live code is already in the inbox — the other card
+  // may have asked for it — so the step opens anyway, with the wait the
+  // server quoted.
   const sendCode = async (resend: boolean) => {
     if (resend) {
       setResending(true)
@@ -110,30 +89,22 @@ export function EditAccountCard({
     }
     setError('')
     setNotice('')
-    try {
-      const timings = await profileApi.requestOtp()
-      setGate({
-        expiresAt: startedAt(timings.expiresInSeconds),
-        resendAt: startedAt(timings.resendInSeconds),
-      })
-      setCode(emptyCode())
+    const result = await gate.request()
+    if (result.kind === 'sent') {
       setVerifying(true)
       if (resend) setNotice('A new code has been sent.')
-    } catch (err: unknown) {
-      const wait = retryAfter(err)
-      if (problemType(err) === OTP_RESEND_COOLDOWN && wait !== null) {
-        setGate({ expiresAt: null, resendAt: startedAt(wait) })
-        setVerifying(true)
-        setNotice(`A code was sent to ${user.email} recently — enter it below.`)
-        return
-      }
-      setError(errorMessage(err, 'Could not send the code. Try again.'))
-    } finally {
-      if (resend) {
-        setResending(false)
-      } else {
-        setBusy(false)
-      }
+    } else if (result.kind === 'exists') {
+      setVerifying(true)
+      setNotice(`A code was sent to ${user.email} recently — enter it below.`)
+    } else {
+      setError(
+        errorMessage(result.error, 'Could not send the code. Try again.'),
+      )
+    }
+    if (resend) {
+      setResending(false)
+    } else {
+      setBusy(false)
     }
   }
 
@@ -142,7 +113,13 @@ export function EditAccountCard({
     setError('')
     setNotice('')
     try {
-      const result = await profileApi.updateAccount(changes, code.join(''))
+      const result = await profileApi.updateAccount(
+        changes,
+        gate.digits.join(''),
+      )
+      // single-use: the row is gone server-side, for this card and the
+      // other one (a 202's parked email change spent it too)
+      gate.spent()
       if (result.kind === 'emailPending') {
         onEmailPending(result.pending)
       } else {
@@ -153,34 +130,24 @@ export function EditAccountCard({
         err,
         'Could not save your changes. Try again.',
       )
-      switch (gateFailure(err)) {
-        case 'wait': {
-          // the refusal rolled the code's consumption back with it, so
-          // the digits stand; only the clock is in the way
-          const wait = retryAfter(err)
-          if (wait !== null) setBlockedUntil(startedAt(wait))
+      // the shared code has already been moved by the failure; this card
+      // moves its own step
+      switch (gate.failed(err)) {
+        case 'wait':
+          // the step stands with its digits: only the clock is in the way
           break
-        }
-        case 'restart': {
-          const wait = retryAfter(err)
-          setGate(null)
-          setVerifying(false)
-          setCode(emptyCode())
-          if (wait !== null) setBlockedUntil(startedAt(wait))
-          break
-        }
+        case 'restart':
         case 'amend':
-          // nothing spent the code refusing these values, so it stays
-          // good: back to the fields, Save reuses it
+          // either a new code is needed, or the fields were what was
+          // refused — both send the user back to them
           setVerifying(false)
           break
         default:
           // the code is still live, so the step stands with empty boxes.
-          // setVerifying matters when the save was launched FROM the
-          // fields after an amend: clearing the digits there left the
+          // This matters most when the save was launched FROM the fields
+          // after an amend: the cleared digits would otherwise leave the
           // next Save sending an empty code with nowhere to retype it
           // (PR #149 review)
-          setCode(emptyCode())
           setVerifying(true)
       }
       setError(message)
@@ -196,7 +163,7 @@ export function EditAccountCard({
       return
     }
     // a code kept from a refused save is still live — don't spend a resend
-    if (liveGate) return void save()
+    if (gate.live) return void save()
     void sendCode(false)
   }
 
@@ -253,21 +220,21 @@ export function EditAccountCard({
         {verifying ? (
           <CodeStep
             sentTo={user.email}
-            expiresAt={gate?.expiresAt ?? null}
-            resendAt={gate?.resendAt ?? 0}
-            value={code}
-            onChange={setCode}
+            expiresAt={gate.expiresAt}
+            resendAt={gate.resendAt}
+            value={gate.digits}
+            onChange={gate.setDigits}
             busy={busy}
             resending={resending}
             submitLabel="Save"
             busyLabel="Saving..."
-            blockedFor={blocked}
+            blockedFor={gate.blocked}
             onResend={() => void sendCode(true)}
             onCancel={onCancel}
           />
         ) : (
           <div className="space-y-2">
-            {liveGate && (
+            {gate.live && (
               <p className="text-xs text-gray-500">
                 The code already sent to {user.email} is still valid — Save to
                 use it again.
@@ -275,14 +242,14 @@ export function EditAccountCard({
             )}
             <button
               type="submit"
-              disabled={busy || blocked > 0}
+              disabled={busy || gate.blocked > 0}
               className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
             >
               {busy
                 ? 'Sending OTP...'
-                : blocked > 0
-                  ? `Try again in ${blocked}s`
-                  : liveGate
+                : gate.blocked > 0
+                  ? `Try again in ${gate.blocked}s`
+                  : gate.live
                     ? 'Save'
                     : 'Verify & Continue'}
             </button>

@@ -13,6 +13,12 @@
 // deviates from. The confirmation now travels to the server, where the
 // double-entry check belongs (F2.1.4); the local match check survives
 // only as a pre-flight that saves a round trip.
+// 2026-10-10, Claude Code (Opus 5), issue #167: the gate code comes from
+// useGateCode (otp.ts) through ProfileSection, so this card and the Edit
+// Account card hold the ONE row user-service keeps per account — a code
+// either spends or replaces now counts for both — and the request they
+// each implemented is one implementation. Local state is this card's
+// own: the two password fields, the code step, its messages.
 // 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): the kept
 // code is only offered while it is alive (its expiry is checked before
 // the card says so, and before it reuses it), and a 429's wait counts
@@ -31,49 +37,31 @@ import React, { useState } from 'react'
 import { errorMessage } from '@/lib/api/http'
 import { PasswordChecklist } from '../PasswordChecklist'
 import { profileApi } from '../profileApi'
-import { emptyCode, useOtpCountdown } from '../otp'
-import {
-  OTP_RESEND_COOLDOWN,
-  gateFailure,
-  problemType,
-  retryAfter,
-} from '../problemTypes'
+import type { GateCode } from '../otp'
 import { CodeStep } from './CodeStep'
 
 interface ChangePasswordCardProps {
   // the account's current address, where the gate code goes
   email: string
+  // the page's one gate code, shared with the Edit Account card
+  gate: GateCode
 }
 
-export function ChangePasswordCard({ email }: ChangePasswordCardProps) {
+export function ChangePasswordCard({ email, gate }: ChangePasswordCardProps) {
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
-  const [code, setCode] = useState<string[]>(emptyCode)
-  const [gate, setGate] = useState<{
-    expiresAt: number | null
-    resendAt: number
-  } | null>(null)
   const [verifying, setVerifying] = useState(false)
   const [busy, setBusy] = useState(false)
   const [resending, setResending] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [saved, setSaved] = useState(false)
-  const [blockedUntil, setBlockedUntil] = useState(0)
-  const { cooldown: blocked, expiresIn: gateLife } = useOtpCountdown(
-    gate?.expiresAt ?? null,
-    blockedUntil,
-  )
-  // a code kept across a refusal, while it is still alive; null expiry
-  // means "alive, remaining life unknown" (EditAccountCard says why)
-  const liveGate = gate && gateLife !== 0 ? gate : null
 
   const mismatch = next !== '' && confirm !== '' && next !== confirm
 
-  const startedAt = (seconds: number) => Date.now() + seconds * 1000
-
-  // Same gate code as the Edit Account card: one row per account, so a
-  // 429 inside the cooldown means a live code is already in the inbox.
+  // Asks for the gate code (or its resend). One row per account, so a
+  // 429 inside the cooldown means a live code is already in the inbox —
+  // the Edit Account card may be the one that asked for it.
   const sendCode = async (resend: boolean) => {
     if (resend) {
       setResending(true)
@@ -82,30 +70,22 @@ export function ChangePasswordCard({ email }: ChangePasswordCardProps) {
     }
     setError('')
     setNotice('')
-    try {
-      const timings = await profileApi.requestOtp()
-      setGate({
-        expiresAt: startedAt(timings.expiresInSeconds),
-        resendAt: startedAt(timings.resendInSeconds),
-      })
-      setCode(emptyCode())
+    const result = await gate.request()
+    if (result.kind === 'sent') {
       setVerifying(true)
       if (resend) setNotice('A new code has been sent.')
-    } catch (err: unknown) {
-      const wait = retryAfter(err)
-      if (problemType(err) === OTP_RESEND_COOLDOWN && wait !== null) {
-        setGate({ expiresAt: null, resendAt: startedAt(wait) })
-        setVerifying(true)
-        setNotice(`A code was sent to ${email} recently — enter it below.`)
-        return
-      }
-      setError(errorMessage(err, 'Could not send the code. Try again.'))
-    } finally {
-      if (resend) {
-        setResending(false)
-      } else {
-        setBusy(false)
-      }
+    } else if (result.kind === 'exists') {
+      setVerifying(true)
+      setNotice(`A code was sent to ${email} recently — enter it below.`)
+    } else {
+      setError(
+        errorMessage(result.error, 'Could not send the code. Try again.'),
+      )
+    }
+    if (resend) {
+      setResending(false)
+    } else {
+      setBusy(false)
     }
   }
 
@@ -114,42 +94,25 @@ export function ChangePasswordCard({ email }: ChangePasswordCardProps) {
     setError('')
     setNotice('')
     try {
-      await profileApi.changePassword(next, confirm, code.join(''))
+      await profileApi.changePassword(next, confirm, gate.digits.join(''))
+      gate.spent()
       setNext('')
       setConfirm('')
-      setCode(emptyCode())
-      setGate(null)
       setVerifying(false)
       setSaved(true)
     } catch (err: unknown) {
-      switch (gateFailure(err)) {
-        case 'wait': {
-          // the code was not spent being refused: only the clock is in
-          // the way, so the step and its digits stand
-          const wait = retryAfter(err)
-          if (wait !== null) setBlockedUntil(startedAt(wait))
-          break
-        }
+      // the shared code has already been moved by the failure; this card
+      // moves its own step
+      switch (gate.failed(err)) {
+        case 'wait':
         case 'retry':
-          // the code in the inbox is still good: the step stands, boxes
-          // cleared for another attempt
-          setCode(emptyCode())
+          // the code is still the live one: the step stands, with its
+          // digits (a wait) or cleared for another attempt (a retry)
           break
-        case 'amend':
-          // the password itself was refused, before the code was read —
-          // back to the fields holding the unspent code, which submit()
-          // reuses rather than spending a resend
+        default:
+          // a new code is needed, or the password was what was refused:
+          // either way the fields are where the user goes
           setVerifying(false)
-          break
-        default: {
-          // no usable code any more: the card asks for a new one, after
-          // the wait a 429 quoted
-          const wait = retryAfter(err)
-          setGate(null)
-          setVerifying(false)
-          setCode(emptyCode())
-          if (wait !== null) setBlockedUntil(startedAt(wait))
-        }
       }
       setError(errorMessage(err, 'Could not update your password. Try again.'))
     } finally {
@@ -168,7 +131,7 @@ export function ChangePasswordCard({ email }: ChangePasswordCardProps) {
     // a refusal that never reached the gate — a password the policy
     // rejects, say — leaves the code unconsumed, so going back to the
     // step must not spend a resend on a code already in the inbox
-    if (liveGate) {
+    if (gate.live) {
       setVerifying(true)
       setError('')
       return
@@ -257,15 +220,15 @@ export function ChangePasswordCard({ email }: ChangePasswordCardProps) {
         {verifying ? (
           <CodeStep
             sentTo={email}
-            expiresAt={gate?.expiresAt ?? null}
-            resendAt={gate?.resendAt ?? 0}
-            value={code}
-            onChange={setCode}
+            expiresAt={gate.expiresAt}
+            resendAt={gate.resendAt}
+            value={gate.digits}
+            onChange={gate.setDigits}
             busy={busy}
             resending={resending}
             submitLabel="Update Password"
             busyLabel="Updating..."
-            blockedFor={blocked}
+            blockedFor={gate.blocked}
             onResend={() => void sendCode(true)}
             onCancel={() => {
               setVerifying(false)
@@ -278,7 +241,7 @@ export function ChangePasswordCard({ email }: ChangePasswordCardProps) {
             {/* a code kept from a refused password is still live: say so,
                 as the Edit Account card does, so "Verify & Continue"
                 isn't read as spending a resend */}
-            {liveGate && (
+            {gate.live && (
               <p className="text-xs text-gray-500">
                 The code already sent to {email} is still valid — continue to
                 use it again.
@@ -286,13 +249,13 @@ export function ChangePasswordCard({ email }: ChangePasswordCardProps) {
             )}
             <button
               type="submit"
-              disabled={busy || blocked > 0}
+              disabled={busy || gate.blocked > 0}
               className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
             >
               {busy
                 ? 'Sending OTP...'
-                : blocked > 0
-                  ? `Try again in ${blocked}s`
+                : gate.blocked > 0
+                  ? `Try again in ${gate.blocked}s`
                   : 'Verify & Continue'}
             </button>
           </>

@@ -59,6 +59,44 @@ Entry template:
   via pull request.
 
 ---
+## 2026-10-10 — Leong Wei Zhi (issue #167: one gate code for both profile cards)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** refactor
+- **Scope:** `web`: `features/user/otp.ts` (new `useGateCode` hook and a
+  shared `deadline` helper), `problemTypes.ts` (`resendWait`),
+  `components/{ProfileSection,EditAccountCard,ChangePasswordCard}.tsx`,
+  `test/profile.test.tsx`.
+- **Prompt(s):** Asked to do issue #167 — @Sinnez1's two remaining PR
+  #149 follow-ups — inside the same PR. user-service keeps ONE
+  `account_update_otps` row per account, but each profile card held its
+  own copy of it, so a code one card spent or replaced left the other
+  promising a code that was gone and spending attempts on one that had
+  been replaced; the two cards' `POST /users/me/otp` paths had also
+  drifted apart. `useGateCode()` now owns the row, the digits typed for
+  it, the request (one call for the first send and the resend, since
+  user-service treats a repeat as the resend), the cooldown-429 "a code
+  already exists" answer, and the `GateFailure` routing; ProfileSection
+  runs it once and hands it to both cards, which keep only what is
+  theirs — their fields, whether the code step is showing, and their
+  messages. Confirming an email change spends it too, because
+  user-service deletes the gate row along with the old address. The
+  shape (hook in `otp.ts`, instantiated once above the cards,
+  EmailChangeModal keeping its own `pending_email_changes` row) is the
+  reviewer's, recorded in #167 before the work started.
+- **Author review:** The refactor landed with the 91 existing tests
+  unchanged and passing, which is the regression evidence for "behaviour
+  preserved"; two cases were added for the shared code — one card using
+  a code the other requested without a second `POST /users/me/otp`, and
+  one card asking for its own once the other spent it. Both were
+  mutation-checked rather than just run: the first fails if each card is
+  given its own hook (the pre-#167 split), the second if `spent()` stops
+  clearing the shared row. The email-change resend still has its own
+  request path — a different row, endpoint, response and failure rules —
+  and shares only the cooldown detection (`resendWait`) and the
+  countdown. Vitest (93 tests), eslint, tsc and prettier clean; reviewed
+  via pull request.
+
+---
 ## 2026-10-10 — Leong Wei Zhi (PR #149 review @Sinnez1: shared /users/me, delete dialog, gate-code failures)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** debug (review fixes)

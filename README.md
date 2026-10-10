@@ -64,8 +64,9 @@
   2026-10-09: AI Use Summary extended for the web profile screens
   (issue #112, PR #149) and that PR's two Copilot-review rounds, by
   Claude Code (Opus 5) — the summary had no entry for #112.
-  2026-10-10: extended again for PR #149's team review (@Sinnez1), by
-  Claude Code (Opus 5).
+  2026-10-10: extended again for PR #149's team review (@Sinnez1) and
+  for issue #167, the gate-code refactor that came out of it, by Claude
+  Code (Opus 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -391,8 +392,13 @@ session's one `GET /users/me` and writing saves back into it instead of
 keeping a private copy that went stale for the nav bar and the `/admin`
 guard, a resend-cooldown 429 counted down on the submit button rather
 than read as a wrong code, a kept code offered only while it is still
-alive, and an untyped 429 ending a pending sign-up on its status; and
-the Credit Service saga event contracts in
+alive, and an untyped 429 ending a pending sign-up on its status;
+followed by issue #167 from the same review — the account's single gate
+code moved out of the two cards into one `useGateCode` hook the page
+owns, so a code either card requests, spends or replaces is the same
+code for the other, and their drifted-apart request paths became one,
+with the shape (hook, placement, what stays per card) decided by the
+reviewer; and the Credit Service saga event contracts in
 `foc-contracts` (PR #163) —
 four event records, the `credit-events` exchange name, their
 fixtures and the registry tests — together with that PR's review

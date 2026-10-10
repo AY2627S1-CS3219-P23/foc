@@ -14,6 +14,12 @@
 // and pay for a fresh gate code. A snapshot the server no longer honours
 // fails honestly — verify/resend answer with a type URI that says so,
 // and the snapshot is dropped then.
+// 2026-10-10, Claude Code (Opus 5), issue #167: the page owns the
+// account's gate code (useGateCode) and hands it to both cards, since
+// user-service keeps one row per account — a code either card requests,
+// spends or replaces is the same code for the other. Confirming an email
+// change spends it too: user-service deletes the gate row with the old
+// address.
 // 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): the page
 // no longer asks GET /users/me for itself. AuthProvider already holds
 // that answer for the session as `me`, so this was a second request for
@@ -31,6 +37,7 @@
 import { useEffect, useState } from 'react'
 
 import { errorMessage } from '@/lib/api/http'
+import { useGateCode } from '../otp'
 import { profileApi } from '../profileApi'
 import type { PendingEmailChange } from '../types'
 import { useAuth } from '../useAuth'
@@ -56,6 +63,9 @@ export function ProfileSection() {
   // the session's own GET /users/me answer, fetched once by AuthProvider
   const { me, logout, updateMe } = useAuth()
   const user = me?.status === 'ready' ? me.user : null
+  // the account's single gate code, held here so both cards see the same
+  // one (issue #167)
+  const gate = useGateCode()
 
   // The snapshot this page may use: the signed-in account's own. One
   // belonging to another account is left in storage — it is still its
@@ -138,6 +148,7 @@ export function ProfileSection() {
       {editing && (
         <EditAccountCard
           user={user}
+          gate={gate}
           onSaved={(updated) => {
             updateMe(updated)
             setEditing(false)
@@ -161,7 +172,7 @@ export function ProfileSection() {
           onCancel={() => setEditing(false)}
         />
       )}
-      <ChangePasswordCard email={user.email} />
+      <ChangePasswordCard email={user.email} gate={gate} />
       <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900">Danger Zone</h2>
         <button
@@ -180,6 +191,9 @@ export function ProfileSection() {
           onClose={() => setCodeOpen(false)}
           onVerified={(updated) => {
             updateMe(updated)
+            // user-service drops the gate code with the address it was
+            // sent to, so the cards must stop offering it
+            gate.spent()
             setStored(null)
             setCodeOpen(false)
             // the banners are a pair: a success clears whatever the last
