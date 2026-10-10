@@ -16,7 +16,9 @@ public interface ReplyOutbox {
     /**
      * Stores the reply for publishing. Called inside the caller's
      * transaction, so the reply commits with the balance change or not
-     * at all.
+     * at all. An implementation requires that transaction (propagation
+     * MANDATORY), so a call outside one fails instead of committing a
+     * reply on its own.
      */
     void enqueue(DomainEvent reply);
 }

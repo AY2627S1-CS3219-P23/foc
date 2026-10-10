@@ -26,6 +26,118 @@ Entry template:
 ```
 
 ---
+## 2026-10-10 — Ryan Ang (PR #168 review fixes)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** review assistance, refactoring, tests, docs
+- **Scope:** `credit-service/`, `docs/credit-service.md`, `compose.yaml`,
+  `.env.example`.
+  - `ReserveResult`: `REJECTED` split into
+    `REJECTED_INSUFFICIENT_CREDITS` and `REJECTED_INVALID_AMOUNT`;
+    `CreditOperations.reserve`'s comment states the reward-below-1 rule.
+  - `RequestEventHandler`: the reply chosen by a switch expression over
+    the result, the reason taken from the result, a warning log (event
+    type and `eventId`) on a request event with no handler, and the
+    duplicate comment corrected.
+  - Tests: `RequestEventHandlerTest` (a relative time bound, the two
+    refusals); new `ConsumedEventsHandledTest` (every bound event
+    reaches an operation) and `RequestEventHandlerTransactionTest` (the
+    handler through Spring's proxy); `RabbitMqTopologyIntegrationTest`
+    (unbound keys published first on one channel, fixture read as
+    bytes); `DomainEventMessageConverterTest` (a named fixture guard).
+  - `application.yaml`, `.env.example`: the attempts setting described
+    as not read yet; the below-5 s bound on the retry delay.
+  - `docs/credit-service.md`: the reserve results, the duplicate-reply
+    wording, the unhandled-event rule, the NFR1.1 row.
+  - Disclosure headers on `compose.yaml`, `credit-service/AGENTS.md`
+    and `credit-service/README.md` brought up to this PR's scope.
+- **Prompt(s):** Summary: asked for the review comments on PR #168 to be
+  checked against the code. The tool confirmed all eleven and put two
+  back as decisions (how the rejection reason is carried, what an
+  unhandled event does). The decisions were then given in writing, with
+  where the tying test goes and what the log names, and the tool was
+  asked to apply them with the remaining fixes.
+- **Author review:** The two decisions are the team's, from the
+  reviewer's options: the result carries the rejection reason (and the
+  rule is also stated on `reserve`), and an unhandled event stays
+  acknowledged, with a warning log and a build-time test instead of
+  dead-lettering. The database keeps its single `REJECTED` status. The
+  tool made no design choice; it chose the two enum names' comments,
+  the log wording and the test mechanics. The Copilot finding (the
+  transaction never exercised) was not among the reviewer's blocking
+  items; its test was added on the tool's suggestion. `./mvnw clean
+  test`: 59 tests, 0 failures, with Docker, the broker test run. The
+  three guarding tests were each seen failing with the code broken on
+  purpose (no `@Transactional`, a missing handler arm, a fifth
+  binding) and passing once restored. Pending pull request review.
+
+## 2026-10-10 — Ryan Ang (credit-service: request event handler and broker topology)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs), built against the
+  `CreditOperations` / `ReplyOutbox` stubs
+- **Scope:** `credit-service/`, `docs/credit-service.md`, `compose.yaml`,
+  `.env.example`, and the D3 wiki page.
+  - `service/RequestEventHandler` (+ `Outcome`): one transaction per
+    request event; reserve, transfer or release, and the reply enqueued
+    for a reservation. `RequestEventHandlerTest` with both interfaces
+    mocked.
+  - `messaging/rabbitmq/`: `DomainEventMessageConverter` and
+    `RabbitMqTopologyInitializer` copied from notification-service
+    (package, and the initializer's property name, changed);
+    `RabbitMqTopology` (work, retry and dead-letter queues, four
+    bindings from `EventTypeRegistry`, both exchanges); converter
+    wiring. `RabbitMqTopologyTest`, `DomainEventMessageConverterTest`,
+    and `RabbitMqTopologyIntegrationTest` against a Testcontainers
+    RabbitMQ (new test dependency), following notification-service's
+    integration test: the four keys reach the work queue and no other,
+    the retry queue returns an event, a rejected one lands in the DLQ.
+  - `CreditServiceApplication`: `@EnableScheduling`.
+  - `application.yaml`: manual acknowledgement, correlated confirms
+    with returns and the mandatory flag, retry delay and attempts,
+    `accept-float-as-int: false`. Test profile: listener auto-startup
+    and topology provisioning off.
+  - `docs/credit-service.md`: D10, D11, the handler row, "What each
+    operation answers", three failure rows, F1.2.1 and NFR1.1; and a
+    "Read API contract" section (`GET /credits/me`,
+    `GET /credits/me/history`, the fields, filters, paging, fixed
+    order, errors and implementation notes).
+  - `compose.yaml`, `.env.example`: `CREDIT_RETRY_TTL_MS`,
+    `CREDIT_RETRY_MAX_ATTEMPTS`. Service README and AGENTS.md.
+  - The team wiki's D3 design page (outside this repo): its Credit
+    content brought in line with `docs/credit-service.md`.
+- **Prompt(s):** Gave a four-part written plan (transaction ownership,
+  copying the messaging code, queues and bindings, what each operation
+  answers per record status) and asked for it to be checked for issues
+  before building. Then answered the issues raised and set the scope:
+  this branch is the handler, converter copy, topology, config and doc
+  edits; the real operations, listener and outbox publisher are later
+  slices. Asked next for `@EnableScheduling`, a real-broker topology
+  test and the read API's REST contract in the design doc, checked
+  against the D3 wiki; then to bring the wiki's Credit content in line
+  with the design doc.
+- **Author review:** Every decision here is the author's, from the
+  written plan and the answers to the check: the handler's shape, copy
+  rather than share, the queue names and four bindings, declaring both
+  exchanges, the retry values (2000 ms, 5 attempts), the results table,
+  the mandatory flag for replies, refusing a fractional reward, and the
+  history rules for refusals. The check raised four points the plan did
+  not cover (an unroutable reply confirmed and lost, where the reply is
+  serialised, the `PROVISION` row on a refusal, a test switch for the
+  publisher); the author decided each. The tool chose only the wording
+  of the reward-below-1 reason. The fractional-reward test was run
+  failing before the Jackson setting was added and passing after.
+  `@EnableScheduling` and the real-broker test were added on the
+  author's follow-up instruction. `./mvnw clean test`: 53 tests, 0
+  failures, the broker test run, not skipped. The read API contract is
+  the author's, supplied in writing
+  after the tool checked the D3 wiki page and found it gave no paths,
+  fields or parameters; the tool transcribed it, raised two gaps (the
+  format of `from` and `to`, a negative `page`), and the author decided
+  both. The wiki edits follow the author's list of the sections that
+  contradicted the design doc: decided items are cited to
+  `docs/credit-service.md`, #163, #166 and #168, and Order-side
+  consequences are flagged for the Order owner rather than decided. The
+  author approved the push to the wiki. Pending pull request review.
+
 ## 2026-10-10 — Ryan Ang (credit-service scaffold: entities, repositories, interfaces)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (scaffold + tests + docs)
