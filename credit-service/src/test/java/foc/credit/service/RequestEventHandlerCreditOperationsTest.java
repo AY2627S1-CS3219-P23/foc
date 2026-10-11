@@ -6,6 +6,9 @@
  * joins the handler's transaction, so it commits with its reply or not
  * at all (docs/credit-service.md D10). The handler's own tests mock the
  * operations; added on the tool's review of this change.
+ * PR #175 review (Leong Wei Zhi), team decision: a completion that
+ * arrives before its reservation throws and is paid when retried; the
+ * operation's log line is written only once the transaction commits.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -22,9 +25,12 @@ import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import foc.contracts.events.core.DomainEvent;
@@ -43,6 +49,7 @@ import foc.credit.service.RequestEventHandler.Outcome;
 // Not @Transactional: the handler's own transaction commits or rolls
 // back, which is what is under test. Every test uses its own IDs.
 @SpringBootTest
+@ExtendWith(OutputCaptureExtension.class)
 class RequestEventHandlerCreditOperationsTest extends PostgresTestContainer {
 
     private static final Instant SENT_AT = Instant.parse("2026-10-11T08:00:00Z");
@@ -64,8 +71,11 @@ class RequestEventHandlerCreditOperationsTest extends PostgresTestContainer {
     private ReservedRepository reservations;
 
     @Test
-    void aReservationCommitsWithItsReply() {
+    void aReservationCommitsWithItsReply(CapturedOutput output) {
         assertThat(handler.handle(submitted(3))).isEqualTo(Outcome.HANDLED);
+
+        assertThat(output).contains("provision user=" + requester)
+            .contains("reserve request=" + request + " requester=" + requester + " amount=3 outcome=RESERVED");
 
         assertBalance(requester, 2, 3);
         assertThat(statusOf(request)).isEqualTo(ReservationStatus.HELD);
@@ -78,7 +88,7 @@ class RequestEventHandlerCreditOperationsTest extends PostgresTestContainer {
     }
 
     @Test
-    void aReservationWhoseReplyCannotBeStoredLeavesNothingBehind() {
+    void aReservationWhoseReplyCannotBeStoredLeavesNothingBehind(CapturedOutput output) {
         IllegalStateException outboxFailure = new IllegalStateException("outbox unavailable");
         doThrow(outboxFailure).when(outbox).enqueue(any());
 
@@ -87,6 +97,9 @@ class RequestEventHandlerCreditOperationsTest extends PostgresTestContainer {
         // the reservation, and the account it created, rolled back with the reply
         assertThat(reservations.findById(request)).isEmpty();
         assertThat(accounts.findById(requester)).isEmpty();
+        // and so did their log lines: they are written after the commit
+        assertThat(output).doesNotContain("reserve request=" + request)
+            .doesNotContain("provision user=" + requester);
     }
 
     @Test
@@ -127,10 +140,20 @@ class RequestEventHandlerCreditOperationsTest extends PostgresTestContainer {
     }
 
     @Test
-    void aCompletionWithNothingHeldIsInvalid() {
-        assertThat(handler.handle(completed(courier))).isEqualTo(Outcome.INVALID_STATE);
+    void aCompletionThatArrivesBeforeItsReservationThrowsAndIsPaidWhenRetried() {
+        assertThatThrownBy(() -> handler.handle(completed(courier)))
+            .isInstanceOf(ReservationNotFoundException.class);
 
+        // nothing was written, so the late submission reserves as usual
+        assertThat(reservations.findById(request)).isEmpty();
         assertThat(accounts.findById(courier)).isEmpty();
+
+        handler.handle(submitted(3));
+
+        assertThat(handler.handle(completed(courier))).as("retried").isEqualTo(Outcome.HANDLED);
+        assertBalance(requester, 2, 0);
+        assertBalance(courier, 8, 0);
+        assertThat(statusOf(request)).isEqualTo(ReservationStatus.TRANSFERRED);
     }
 
     private RequestSubmitted submitted(int reward) {

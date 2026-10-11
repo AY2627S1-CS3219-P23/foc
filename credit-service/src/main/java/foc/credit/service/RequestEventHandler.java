@@ -12,6 +12,9 @@
  * being worked out from the reward, the reply is chosen by a switch
  * expression so every result must be handled, and a request event with
  * no handler is still acknowledged but logged.
+ * 2026-10-11, PR #175 review (Leong Wei Zhi), team decision: a
+ * completion with no record throws, so it is retried; the settle
+ * result is chosen by a switch with no default.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -48,7 +51,8 @@ public class RequestEventHandler {
     public enum Outcome {
         // applied, or nothing to do: acknowledge
         HANDLED,
-        // conflicts with the request's record: dead-letter, no retry (D11)
+        // conflicts with the request's record, or is missing a field:
+        // dead-letter, no retry (D11)
         INVALID_STATE
     }
 
@@ -72,9 +76,9 @@ public class RequestEventHandler {
     public Outcome handle(RequestEvent event) {
         return switch (event) {
             case RequestSubmitted e -> onSubmitted(e);
-            case RequestCompleted e -> settle(operations.transfer(e.requestId(), e.courierId()));
-            case RequestCancelled e -> settle(operations.release(e.requestId(), e.requesterId()));
-            case RequestExpired e -> settle(operations.release(e.requestId(), e.requesterId()));
+            case RequestCompleted e -> settle(e.requestId(), operations.transfer(e.requestId(), e.courierId()));
+            case RequestCancelled e -> settle(e.requestId(), operations.release(e.requestId(), e.requesterId()));
+            case RequestExpired e -> settle(e.requestId(), operations.release(e.requestId(), e.requesterId()));
             // A request event the Credit Service has no part in. Only the
             // four events above are bound to the queue, so this is one
             // published to it by hand: acknowledged, since there is nothing
@@ -110,9 +114,16 @@ public class RequestEventHandler {
             e.requestId(), e.requesterId(), e.reward(), reason);
     }
 
-    // SETTLED and DUPLICATE are both acknowledged; they differ for logs and tests
-    private static Outcome settle(SettleResult result) {
-        return result == SettleResult.INVALID_STATE ? Outcome.INVALID_STATE : Outcome.HANDLED;
+    // no default: a new SettleResult does not compile until it is given an outcome
+    private static Outcome settle(String requestRef, SettleResult result) {
+        return switch (result) {
+            // both acknowledged; they differ for logs and tests
+            case SETTLED, DUPLICATE -> Outcome.HANDLED;
+            case INVALID_STATE -> Outcome.INVALID_STATE;
+            // the completion overtook its reservation: retried like any
+            // failure, and dead-lettered once the attempts run out (D11)
+            case NO_RESERVATION -> throw new ReservationNotFoundException(requestRef);
+        };
     }
 
     private static String newEventId() {

@@ -75,7 +75,8 @@
   2026-10-11: AI Use Summary extended for the credit operations (issue
   #169) by Claude Code (Opus 5.5); the conflict markers the PR #168
   merge left in this header were removed, keeping both sides. Same day:
-  that clause extended for the team-review fixes.
+  that clause extended for the team-review fixes, and again for the
+  PR #175 review fixes.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -470,7 +471,11 @@ that work's team-review fixes (released credits returned to the lots
 they came from, with the V1 schema amended so a slice references its
 lot, the sign-up amount and earned-credit lifetime made configuration,
 a log line per operation, and further tests), all the team's decisions,
-recorded in `docs/credit-service.md` and `ai/usage-log.md`.
+recorded in `docs/credit-service.md` and `ai/usage-log.md`; and that
+PR's review fixes (#175: a completion that finds no reservation is
+retried instead of dead-lettered at once, a removed race test restored,
+and the expiry and rejected-record rules moved from open items into the
+design doc), the team's decisions on the reviewers' findings.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

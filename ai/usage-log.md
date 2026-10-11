@@ -26,6 +26,73 @@ Entry template:
 ```
 
 ---
+## 2026-10-11 — Ryan Ang (PR #175 review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** review assistance, refactoring, tests, docs
+- **Scope:** `credit-service/`, `docs/credit-service.md`, GitHub issues
+  #171, #173 and #174.
+  - `SettleResult.NO_RESERVATION`, returned by a transfer that finds no
+    record; `INVALID_STATE` stays for a record in the wrong status. A
+    release with no record is unchanged.
+  - `RequestEventHandler.settle` is a switch with no default;
+    `NO_RESERVATION` throws the new `ReservationNotFoundException`, so
+    the event rolls back and takes the retry path.
+  - Tests: the no-record transfer split from the released-or-rejected
+    one in `CreditOperationsServiceTest`, and the transfer-against-release
+    race removed earlier the same day restored; a mocked and a
+    real-database handler test that a completion with no record throws,
+    the second also paying the courier once the reservation exists.
+  - `transfer` answers `INVALID_STATE` for a null or blank courier,
+    checked before the record is looked up; `release` answers it for a
+    null or blank requester when the request has no record.
+  - The four log lines (reserve, transfer, release, provision) are
+    written from an after-commit hook; the class comment, the service
+    README and the PR body say "one line per operation that changes
+    credits".
+  - `application-test.yaml` pins the sign-up amount and the lifetime;
+    the new `CreditOperationsConfigurationTest` covers non-default
+    values and the below-1 refusals; the handler's real-database test
+    checks that a committed reservation logs and a rolled-back one does
+    not.
+  - `V1__baseline.sql`: the `credit_reservation` comment only (what
+    `amount` and `settled_at` hold on a `REJECTED` row). No statement
+    changed, though the file's Flyway checksum does.
+  - `docs/credit-service.md`: the event table, "What each operation
+    answers" and a failure-table row for the early completion; the
+    expiry window and the expiry instant moved from "Open items" into
+    D4 and the lots section, with the daily expiry run (D12) and the
+    Asia/Singapore display; the `REJECTED` row's `amount` and
+    `settled_at` in the schema section; the lot table and expiry
+    paragraph reworded for the configurable lifetime.
+  - Issues: #171 gains the acceptance criterion for a completion with
+    no record; #173 says the expiry run is daily; #174 says the expiry
+    is displayed in Asia/Singapore.
+- **Prompt(s):** Asked the tool to go through the PR's review comments;
+  it checked each against the branch and listed six that needed a
+  decision. These decisions were given to implement: keep the
+  amended V1; restore the race test; retry a completion that finds no
+  record, with the result name, the exception name, the tests and the
+  doc and issue wording specified; and no code change for expired lots
+  awaiting the run, the expiry instant, or `REJECTED` rows, each to be
+  written into the doc as decided. A second set of team answers
+  followed for three more comments: guard a missing courier before the
+  lookup and a missing requester on release, returning `INVALID_STATE`,
+  with a missing requester on reserve left to #171; keep `getOrCreate`
+  unlogged and soften the logging claim; and log after commit, with a
+  sketch of the hook.
+- **Author review:** The tool verified the
+  reviewers' findings, implemented the decisions and transcribed them.
+  The after-commit hook is the team's sketch, used as given. The tool
+  chose the code-comment and exception-message wording, which doc
+  paragraphs carry each decision, and the shape of the configuration
+  and log tests. The release guard applies only when the request has no
+  record, so a release naming no requester still returns the credits
+  of a `HELD` record to the requester on it: the tool's reading of the
+  decision, since confirmed by the team as the one meant. The three readings the
+  entry below leaves "for the author to confirm" are now decided as
+  implemented. `./mvnw test` on JDK 21: 127 tests, 0 failures, with
+  Docker. Pending pull request review.
+
 ## 2026-10-11 — Ryan Ang (credit operations: team review fixes, issue #169)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** review assistance, refactoring, tests, docs

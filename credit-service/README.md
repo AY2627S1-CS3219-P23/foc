@@ -36,8 +36,9 @@ What is here:
 - **Credit operations** (`service/CreditOperationsService`): get-or-create
   (the sign-up credits, once per user), reserve, transfer and release,
   each in one transaction under row locks, with the outcomes of the
-  design doc's "What each operation answers". Each logs one line with
-  the request, the users, the amount and the outcome. The sign-up amount
+  design doc's "What each operation answers". Each one that changes credits logs one line with
+  the request, the users, the amount and the outcome, written after the
+  transaction commits. The sign-up amount
   (`CREDIT_SIGN_UP_CREDITS`, default 5) and the months before earned
   credits expire (`CREDIT_EARNED_CREDIT_LIFETIME_MONTHS`, default 3) are
   configuration.

@@ -16,6 +16,9 @@
 -- tests. The lot table moved above the slice table, which now
 -- references it. A credit-db created from the earlier V1 must be
 -- recreated (see the service README).
+-- Same day, PR #175 review (team decision): the credit_reservation
+-- comment says what amount and settled_at hold on a REJECTED row. No
+-- statement changed.
 -- Author review: Ryan Ang, pending pull request review.
 
 -- A user's credit balances, one row per user. The primary key makes
@@ -35,7 +38,10 @@ create table credit_account (
 -- duplicate check (D3); status records the outcome. A RELEASED row may
 -- carry amount 0 (the tombstone for a cancel that arrives first; the
 -- release path get-or-creates the requester's account before writing it,
--- D6).
+-- D6). A REJECTED row keeps the reward as it was requested, zero or
+-- negative included: amount is only checked while HELD. settled_at is
+-- the moment the record became final, so a REJECTED row has it set from
+-- the start.
 create table credit_reservation (
     request_ref varchar(255) not null,
     requester_id varchar(255) not null,

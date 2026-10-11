@@ -8,6 +8,10 @@
  * Same day, team review: a release returns credits to their lots, a
  * transfer to the requester themselves, the record insert called twice,
  * and the races repeated.
+ * PR #175 review (Leong Wei Zhi), team decisions: a transfer with no
+ * record answers NO_RESERVATION, and the transfer-against-release race
+ * is restored; a transfer naming no courier and a release naming no
+ * requester.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -285,14 +289,38 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
     }
 
     @Test
-    void transferWithNothingHeldIsInvalid() {
+    void transferWithNoRecordFindsNoReservation() {
+        assertThat(operations.transfer(request, courier)).isEqualTo(SettleResult.NO_RESERVATION);
+
+        // nothing is written, unlike a release with no record
+        assertThat(reservations.findById(request)).isEmpty();
+        assertThat(accounts.findById(courier)).isEmpty();
+    }
+
+    @Test
+    void transferNamingNoCourierIsInvalidWhateverTheRecord() {
+        String held = request + "-held";
+        operations.reserve(held, requester, 3);
+
+        // with no record it is not NO_RESERVATION: a retry could never succeed
+        assertThat(operations.transfer(request, null)).as("no record, null").isEqualTo(SettleResult.INVALID_STATE);
+        assertThat(operations.transfer(request, " ")).as("no record, blank").isEqualTo(SettleResult.INVALID_STATE);
+        assertThat(operations.transfer(held, null)).as("HELD, null").isEqualTo(SettleResult.INVALID_STATE);
+        assertThat(operations.transfer(held, "")).as("HELD, blank").isEqualTo(SettleResult.INVALID_STATE);
+
+        assertThat(reservations.findById(request)).isEmpty();
+        assertThat(statusOf(held)).isEqualTo(ReservationStatus.HELD);
+        assertBalance(requester, 2, 3);
+    }
+
+    @Test
+    void transferOfAReleasedOrRejectedRecordIsInvalid() {
         String rejected = request + "-rejected";
         String released = request + "-released";
         operations.reserve(rejected, requester, 6);
         operations.reserve(released, requester, 3);
         operations.release(released, requester);
 
-        assertThat(operations.transfer(request, courier)).as("no record").isEqualTo(SettleResult.INVALID_STATE);
         assertThat(operations.transfer(rejected, courier)).as("REJECTED").isEqualTo(SettleResult.INVALID_STATE);
         assertThat(operations.transfer(released, courier)).as("RELEASED").isEqualTo(SettleResult.INVALID_STATE);
 
@@ -369,6 +397,18 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
 
         assertBalance(requester, 5, 0);
         assertThat(accounts.findById(someoneElse)).isEmpty();
+    }
+
+    @Test
+    void releaseNamingNoRequesterIsInvalidOnlyWithNoRecord() {
+        assertThat(operations.release(request, null)).as("no record, null").isEqualTo(SettleResult.INVALID_STATE);
+        assertThat(operations.release(request, " ")).as("no record, blank").isEqualTo(SettleResult.INVALID_STATE);
+        assertThat(reservations.findById(request)).isEmpty();
+
+        // with a record, the requester is the one on it
+        operations.reserve(request, requester, 3);
+        assertThat(operations.release(request, null)).as("HELD, null").isEqualTo(SettleResult.SETTLED);
+        assertBalance(requester, 5, 0);
     }
 
     @Test
@@ -471,6 +511,30 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
         assertThat(results).containsExactlyInAnyOrder(SettleResult.SETTLED, SettleResult.DUPLICATE);
         assertBalance(requester, 2, 0);
         assertBalance(courier, 8, 0);
+    }
+
+    // a completion racing a cancellation or expiry of the same request:
+    // both lock the record first, so one settles it and the other finds it settled
+    @RepeatedTest(RACE_REPETITIONS)
+    void aTransferRacingAReleaseOfOneRequestSettlesItOnce() throws Exception {
+        operations.reserve(request, requester, 3);
+
+        List<Object> results = race(
+            () -> operations.transfer(request, courier),
+            () -> operations.release(request, requester));
+
+        assertThat(results).containsExactlyInAnyOrder(SettleResult.SETTLED, SettleResult.INVALID_STATE);
+        if (statusOf(request) == ReservationStatus.TRANSFERRED) {
+            assertThat(results).containsExactly(SettleResult.SETTLED, SettleResult.INVALID_STATE);
+            assertBalance(requester, 2, 0);
+            assertBalance(courier, 8, 0);
+        } else {
+            assertThat(statusOf(request)).isEqualTo(ReservationStatus.RELEASED);
+            assertThat(results).containsExactly(SettleResult.INVALID_STATE, SettleResult.SETTLED);
+            // the losing transfer never got as far as the courier's account
+            assertBalance(requester, 5, 0);
+            assertThat(accounts.findById(courier)).isEmpty();
+        }
     }
 
     @RepeatedTest(RACE_REPETITIONS)

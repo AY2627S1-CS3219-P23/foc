@@ -12,6 +12,12 @@
  * operation, a release returning credits to the lots they came from,
  * and the request's record inserted through the repository. The
  * four decisions are the team's.
+ * PR #175 review (Leong Wei Zhi): a transfer with no record answers
+ * NO_RESERVATION instead of INVALID_STATE (team decision). Further
+ * team decisions on that review: a transfer naming no courier, or a
+ * release naming no requester for a request with no record, answers
+ * INVALID_STATE; and the log lines are written after the commit (the
+ * hook is the team's sketch).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -27,6 +33,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import foc.credit.entity.CreditAccount;
 import foc.credit.entity.CreditHistoryEntry;
@@ -49,9 +57,10 @@ import foc.credit.repository.ReservedRepository;
  * user ID. A user's lots are only read or changed under that user's
  * account lock.
  *
- * <p>Each operation logs one line with the request, the users it touched
- * and its outcome. The line is written when the operation is applied,
- * before the caller's transaction commits.
+ * <p>Each operation that changes credits logs one line with the request,
+ * the users it touched and its outcome, and creating an account logs
+ * one. The line is written after the transaction commits, so an attempt
+ * that rolls back leaves none.
  */
 @Service
 @Transactional
@@ -98,17 +107,23 @@ public class CreditOperationsService implements CreditOperations {
     @Override
     public ReserveResult reserve(String requestRef, String requesterId, int amount) {
         ReserveResult result = applyReserve(requestRef, requesterId, amount);
-        log.info("reserve request={} requester={} amount={} outcome={}", requestRef, requesterId, amount, result);
+        afterCommit(() -> log.info("reserve request={} requester={} amount={} outcome={}",
+            requestRef, requesterId, amount, result));
         return result;
     }
 
     @Override
     public SettleResult transfer(String requestRef, String courierId) {
+        // Before the lookup: with no record either, a completion naming no
+        // courier would answer NO_RESERVATION and be retried to no purpose.
+        if (isMissing(courierId)) {
+            logTransfer(requestRef, null, courierId, null, SettleResult.INVALID_STATE);
+            return SettleResult.INVALID_STATE;
+        }
         Optional<Reserved> found = reservations.findForUpdate(requestRef);
         SettleResult result = found.map(reservation -> applyTransfer(reservation, courierId))
-            .orElse(SettleResult.INVALID_STATE);
-        log.info("transfer request={} requester={} courier={} amount={} outcome={}", requestRef,
-            found.map(Reserved::getRequesterId).orElse(null), courierId,
+            .orElse(SettleResult.NO_RESERVATION);
+        logTransfer(requestRef, found.map(Reserved::getRequesterId).orElse(null), courierId,
             found.map(Reserved::getAmount).orElse(null), result);
         return result;
     }
@@ -119,9 +134,10 @@ public class CreditOperationsService implements CreditOperations {
         SettleResult result = found.map(this::applyRelease)
             .orElseGet(() -> recordReleasedBeforeReserved(requestRef, requesterId));
         // the requester on the record, when there is one, not the one the event names
-        log.info("release request={} requester={} amount={} outcome={}", requestRef,
-            found.map(Reserved::getRequesterId).orElse(requesterId),
-            found.map(Reserved::getAmount).orElse(0), result);
+        String loggedRequester = found.map(Reserved::getRequesterId).orElse(requesterId);
+        int loggedAmount = found.map(Reserved::getAmount).orElse(0);
+        afterCommit(() -> log.info("release request={} requester={} amount={} outcome={}",
+            requestRef, loggedRequester, loggedAmount, result));
         return result;
     }
 
@@ -219,6 +235,10 @@ public class CreditOperationsService implements CreditOperations {
 
     // the cancel arrived first: an amount-0 record, so a late reserve is a duplicate
     private SettleResult recordReleasedBeforeReserved(String requestRef, String requesterId) {
+        // the record needs an account to reference, and the event names none
+        if (isMissing(requesterId)) {
+            return SettleResult.INVALID_STATE;
+        }
         Instant now = Instant.now();
         lockAccount(requesterId, now);
         Reserved released = new Reserved(requestRef, requesterId, 0, ReservationStatus.RELEASED, now);
@@ -232,7 +252,7 @@ public class CreditOperationsService implements CreditOperations {
         if (accounts.insertIfAbsent(userId, signUpCredits, now) == 1) {
             lots.save(new CreditLot(userId, signUpCredits, now, null));
             record(userId, CreditHistoryType.PROVISION, signUpCredits, null, now);
-            log.info("provision user={} amount={} outcome=CREATED", userId, signUpCredits);
+            afterCommit(() -> log.info("provision user={} amount={} outcome=CREATED", userId, signUpCredits));
         }
     }
 
@@ -274,5 +294,30 @@ public class CreditOperationsService implements CreditOperations {
 
     private Instant expiryOfCreditsEarnedAt(Instant earnedAt) {
         return earnedAt.atOffset(ZoneOffset.UTC).plusMonths(earnedCreditLifetimeMonths).toInstant();
+    }
+
+    private static boolean isMissing(String userId) {
+        return userId == null || userId.isBlank();
+    }
+
+    private static void logTransfer(String requestRef, String requesterId, String courierId, Integer amount,
+            SettleResult result) {
+        afterCommit(() -> log.info("transfer request={} requester={} courier={} amount={} outcome={}",
+            requestRef, requesterId, courierId, amount, result));
+    }
+
+    // AI-generated (edited by Ryan Ang): the team's sketch from the PR #175 review
+    // runs the log line once the surrounding transaction has committed, or at once with none
+    private static void afterCommit(Runnable logLine) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    logLine.run();
+                }
+            });
+        } else {
+            logLine.run();
+        }
     }
 }
