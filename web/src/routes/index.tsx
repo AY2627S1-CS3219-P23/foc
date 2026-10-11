@@ -11,6 +11,11 @@
 // 2026-10-07, Claude Code (Opus 5), issue #112: /admin's AdminRoute
 // wrapper restored — this branch had flattened it while adding /profile,
 // which silently dropped the role gate main added in issue #147.
+// 2026-10-11, Claude Code (Fable 5), issue #94: /forgot-password
+// (public — both of its steps run logged out) and /account-recovery
+// (inside ProtectedRoute: the choice belongs to the deleted account's
+// own session). A /reset-password link route existed for a day; it
+// went when the owner revisited the reset credential to an OTP code.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import { createBrowserRouter, type RouteObject } from 'react-router'
@@ -21,7 +26,9 @@ import { Admin } from './admin'
 import { Home } from './home'
 import { Profile } from './profile'
 import { Suppliers } from './suppliers'
+import { AccountRecovery } from '../features/user/account-recovery'
 import { AdminRoute } from '../features/user/AdminRoute'
+import { ForgotPassword } from '../features/user/forgot-password'
 import { ProtectedRoute } from '../features/user/ProtectedRoute'
 import { Login } from '../features/user/login'
 import { Register } from '../features/user/register'
@@ -39,11 +46,13 @@ export const routes: RouteObject[] = [
           { index: true, element: <Home /> },
           { path: 'login', element: <Login /> },
           { path: 'register', element: <Register /> },
+          { path: 'forgot-password', element: <ForgotPassword /> },
           {
             Component: ProtectedRoute,
             children: [
               { path: 'suppliers', element: <Suppliers /> },
               { path: 'profile', element: <Profile /> },
+              { path: 'account-recovery', element: <AccountRecovery /> },
               {
                 Component: AdminRoute,
                 children: [{ path: 'admin', element: <Admin /> }],

@@ -12,26 +12,37 @@ shared UserResponse.from mapping.
 Leong Wei Zhi via options Q&A).
 2026-09-27 (Claude Code, Opus 5.5), PR #135 review: lookups use the shared
 UserRepository.getActiveUser.
+2026-10-11 (Claude Code, Fable 5), issue #94: recoverOwnAccount — the
+explicit restore that replaced login's silent recovery (owner decision
+via options Q&A). The one lookup here that deliberately reaches a
+soft-deleted account.
 */
 
 package foc.user.service;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import foc.user.dto.PublicProfileResponse;
 import foc.user.dto.UserResponse;
 import foc.user.entity.User;
+import foc.user.exception.UserNotFoundException;
 import foc.user.repository.UserRepository;
 
 @Service
 public class ProfileService {
 
     private final UserRepository userRepository;
+    private final int retentionDays;
 
-    public ProfileService(UserRepository userRepository) {
+    public ProfileService(UserRepository userRepository,
+            @Value("${user.retention.days}") int retentionDays) {
         this.userRepository = userRepository;
+        this.retentionDays = retentionDays;
     }
 
     // own profile: username, email, role (credits are fetched from credit-service by the web app)
@@ -53,5 +64,32 @@ public class ProfileService {
         User user = userRepository.getActiveUser(userId);
         user.softDelete(Instant.now());
         userRepository.save(user);
+    }
+
+    // the explicit restore (issue #94): a soft-deleted caller logged in
+    // (login leaves deletedAt standing now) and chose "Restore My
+    // Account". Locked like the account-update flows' user reads, so a
+    // concurrent failed-login counter write can't race this into a
+    // @Version 409; @Transactional because the lock lives and dies with
+    // the transaction
+    @Transactional
+    public UserResponse recoverOwnAccount(Long userId) {
+        // the deliberate deleted-bypassing lookup — getActiveUser would
+        // 404 exactly the caller this route exists for
+        User user = userRepository.findWithLockById(userId)
+            .orElseThrow(UserNotFoundException::new);
+        // past the window the account answers as gone everywhere (login,
+        // reset); the purge is about to take it
+        if (user.getDeletedAt() != null
+            && user.getDeletedAt().isBefore(Instant.now().minus(retentionDays, ChronoUnit.DAYS))) {
+            throw new UserNotFoundException();
+        }
+        // idempotent for an active caller (double-click, replayed tab):
+        // nothing conflicting to report, so answer with the account
+        if (user.getDeletedAt() != null) {
+            user.setDeletedAt(null);
+            userRepository.save(user);
+        }
+        return UserResponse.from(user);
     }
 }

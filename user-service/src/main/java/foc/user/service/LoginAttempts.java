@@ -16,6 +16,11 @@ Scope: issue #147. The database write for a login attempt, split out of
        choice), so the read is fresh even if the User is already
        loaded in the persistence context.
 Author review: Ryan to review via the PR.
+2026-10-11 (Claude Code, Fable 5), issue #94: login no longer silently
+recovers a soft-deleted account (owner decision via options Q&A,
+reversing the #93-era team decision): it succeeds and AuthService
+reports the scheduled purge date (purgeAt) so the SPA can offer the
+explicit choice — restore via POST /users/me/recover, or keep deleted.
 */
 
 package foc.user.service;
@@ -108,12 +113,12 @@ public class LoginAttempts {
         }
 
         // only write when something changes: an unconditional save bumps the
-        // row's @Version and could make a concurrent admin action fail
-        if (user.getFailedLoginAttempts() != 0 || user.getLockedUntil() != null || !user.isActive()) {
+        // row's @Version and could make a concurrent admin action fail.
+        // deletedAt deliberately survives a login (issue #94): recovery
+        // is an explicit choice now, made at POST /users/me/recover
+        if (user.getFailedLoginAttempts() != 0 || user.getLockedUntil() != null) {
             user.setFailedLoginAttempts(0);
             user.setLockedUntil(null);
-            // logging in within the window recovers a soft-deleted account
-            user.setDeletedAt(null);
             userRepository.save(user);
         }
         return Result.success(user);
@@ -124,6 +129,17 @@ public class LoginAttempts {
     boolean pastRetention(User user, Instant now) {
         return !user.isActive()
             && user.getDeletedAt().isBefore(now.minus(retentionDays, ChronoUnit.DAYS));
+    }
+
+    // when the purge will take a soft-deleted account (day 31's sweep
+    // condition, deletedAt older than the retention window), or null for
+    // an active one. Lives here with the retention knob it shares with
+    // pastRetention; AuthService quotes it in the LoginResponse so the
+    // SPA can offer the restore-or-keep-deleted choice (issue #94)
+    public Instant purgeAt(User user) {
+        return user.isActive()
+            ? null
+            : user.getDeletedAt().plus(retentionDays, ChronoUnit.DAYS);
     }
 
     // returns the running failure count this attempt made;

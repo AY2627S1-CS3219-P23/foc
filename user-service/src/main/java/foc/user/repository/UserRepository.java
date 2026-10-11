@@ -34,6 +34,10 @@ added for the account-update flows (NewAccountDetails' except-self variants).
 2026-10-05 (Claude Code, Fable 5), PR #157 Copilot review: locked
 active-user lookup added; the account-update flows take it first so a
 gate code cannot be mailed to a just-replaced address.
+2026-10-11 (Claude Code, Fable 5), issue #94: findWithLockById, the
+deleted-bypassing locked lookup for the two flows that must reach a
+soft-deleted account — password-reset confirm (reset leaves the account
+deleted, owner decision) and POST /users/me/recover (restores it).
 */
 
 package foc.user.repository;
@@ -77,8 +81,9 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
     Optional<User> findByEmail(String email);
 
-    // also includes soft-deleted users: login recovers them within the
-    // retention window (AuthService)
+    // also includes soft-deleted users: within the retention window a
+    // deleted account still logs in (recovery is the explicit
+    // POST /users/me/recover since #94) and still resets its password
     @Query("select u from User u where lower(u.username) = lower(:username)")
     Optional<User> findByUsernameIgnoreCase(@Param("username") String username);
 
@@ -105,6 +110,17 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
         return findWithLockByIdAndDeletedAtIsNull(id).orElseThrow(UserNotFoundException::new);
     }
 
+    // DELIBERATELY includes soft-deleted users, unlike every other id
+    // lookup here: password-reset confirm writes a deleted account's
+    // password without recovering it, and /users/me/recover is what
+    // recovers it (issue #94). FOR UPDATE for the same reason as
+    // getActiveUserWithLock: the write must not race a concurrent
+    // failed-login counter into an @Version conflict. Anything else
+    // wanting a user by id should use getActiveUser(WithLock)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.id = :id")
+    Optional<User> findWithLockById(@Param("id") Long id);
+
     // serialises owner setup calls so two concurrent requests can't both pass
     // the email/username uniqueness checks
     @Query(value = "SELECT pg_advisory_xact_lock(1000)", nativeQuery = true)
@@ -112,8 +128,9 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
     // bulk-deletes accounts whose 30-day recovery window has passed,
     // releasing their email/username. The caller (AccountPurgeScheduler)
-    // provides the transaction and must remove dependent account_tokens
-    // rows first — their user_id FK blocks this delete. (The otps table
+    // provides the transaction and must remove dependent
+    // password_reset_otps rows first — their user_id FK blocks this
+    // delete. (The otps table
     // this also used to name went with issue #88.)
     @Modifying(clearAutomatically = true)
     @Query("DELETE FROM User u WHERE u.deletedAt < :cutoff")

@@ -3088,3 +3088,103 @@ Entry template:
   JSON valid, CORS headers present. Behavior-preserving fixes; no new
   design decisions.
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** code generation with options Q&A (issue #94)
+- **Prompt(s):** Asked to plan and implement issue #94 (account recovery
+  + password reset via token table). Five flow decisions made by the
+  author via options Q&A before coding: reset credential is an opaque
+  token in an emailed link (not an OTP code); recovery is login +
+  explicit restore (login stops silently recovering — reverses the
+  #93-era behavior; POST /users/me/recover restores); a reset on a
+  soft-deleted account inside the window works but leaves it deleted;
+  the request endpoint answers 202 whatever the email maps to (with the
+  silent-202 cooldown corollary, since a 429 would reveal account
+  existence); scope covers backend and the web screens together.
+- **Scope:** user-service — `V7__account_tokens_reset.sql` (created_at,
+  unique token_hash, unique user_id+kind), `AccountToken` (createdAt,
+  replace(), RECOVERY dropped from the enum), `AccountTokenRepository` +
+  `UserRepository.findWithLockById` (one lock order: user then token),
+  new `PasswordResetService`/`PasswordResetController`/DTOs/
+  `ResetTokenInvalidException` (+ ProblemTypes URI and advice handler),
+  `OtpEmailSender.sendPasswordResetLink` (+ SMTP impl), SHA-256 token
+  hashing (lookup-by-hash needs a deterministic hash; 256-bit entropy
+  needs no slow one — documented as the inverse of the OTP BCrypt
+  rationale), `LoginAttempts` no longer clears deletedAt (+ purgeAt),
+  `LoginResponse.deletionScheduledFor`, `ProfileService/Controller`
+  recover route + SecurityConfig line, purge scheduler sweep,
+  application.yaml/.env.example `PASSWORD_RESET_TTL`. web — login's
+  forgot-password link and reset notice, `forgot-password.tsx`,
+  `reset-password.tsx` (URL token strip), `account-recovery.tsx`
+  (wireframe's restore/keep-deleted), AuthProvider/useAuth `restored()`
+  + deleted-session guard in ProtectedRoute, `apiFetch` tolerates the
+  bodyless 202. Tests: new PasswordResetService/Controller tests, web
+  password-reset and account-recovery suites; existing login/profile/
+  purge/Flyway/entity tests updated (user-service 350 green, web 112
+  green). Docs: README #94 section + corrections to the two sections
+  that said login recovers.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** code generation with options Q&A (issue #94, revision)
+- **Prompt(s):** Asked whether the reset flow could use an OTP instead;
+  the author chose "reset via OTP code" via options Q&A, revisiting the
+  same day's link-token decision. Follow-on shapes applied and
+  documented: confirm carries email + code (a salted BCrypt code hash
+  cannot be looked up); the codes ride the user.otp.* knobs whole (the
+  PASSWORD_RESET_TTL knob went); and every confirm failure is the one
+  reset-code-invalid 400 — stricter than sign-up's verify on purpose,
+  since a 429 or an expired-specific answer on this public route would
+  reveal which addresses hold accounts.
+- **Scope:** user-service — V8 (attempts column, V7's unique hash index
+  dropped), AccountToken (codeHash naming, attempts, replace() resets
+  the budget), AccountTokenRepository (by-hash finders removed),
+  PasswordResetService rewritten for the code flow (dummy-hash cost for
+  missing rows, spent-until-replaced attempts), DTO gains email + code,
+  ResetTokenInvalidException → ResetCodeInvalidException with
+  urn:foc:user:reset-code-invalid, sendPasswordResetCode replaces the
+  link mail, yaml/.env/test pins drop the reset TTL knob. web — the
+  /reset-password route went; forgot-password.tsx is the wireframe's
+  two steps on one page (email → code + new password, resend/change
+  affordances). Tests reworked on both sides (user-service 353 green,
+  web 112 green); README #94 section and Flyway paragraph rewritten.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactoring with options Q&A (issue #94, PR #179 review)
+- **Prompt(s):** Asked to rename account_tokens to something
+  reset-specific and remove the kind column, now that recovery carries
+  no emailed credential. Names chosen by the author via options Q&A:
+  table password_reset_otps / entity PasswordResetOtp (the
+  account_update_otps parallel), and the token_hash column follows as
+  code_hash (revisiting the earlier keep-tokenHash call now that the
+  table itself says OTP).
+- **Scope:** `V9__password_reset_otps.sql` (rename table and column,
+  drop kind — V7's composite index and V1's CHECK go with it —
+  per-user unique index, FK renamed to the siblings' convention; a new
+  migration, not an edit, since V7/V8 are applied on dev DBs).
+  AccountToken/AccountTokenRepository → PasswordResetOtp/
+  PasswordResetOtpRepository (Kind enum gone, finders lose the kind
+  parameter); PasswordResetService and AccountPurgeScheduler follow;
+  stale comments updated (UserRepository's "login recovers" note
+  included). Tests track the rename (user-service suite green);
+  README/application.yaml/.env.example wording updated.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactoring (issue #94, PR #179 review)
+- **Prompt(s):** Asked to collapse the branch's three stacked
+  migrations into one, since they all belong to one PR.
+- **Scope:** V7/V8/V9 squashed into a single `V7__password_reset_otps.sql`
+  (rename + code_hash + drop kind + created_at + attempts + per-user
+  unique index + FK rename, with the design iterations noted in its
+  header); FlywayMigrationTest counts back to 6/7 and its proof block
+  rewritten; the V8/V9 references in headers, comments and the README's
+  Flyway paragraph updated. Dev databases that ran the branch's stacked
+  migrations must be reset (README's "Old local databases" steps) —
+  noted in the migration header and the PR.
+- **Author review:** Pending author review of the diff via the PR.

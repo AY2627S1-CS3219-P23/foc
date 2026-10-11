@@ -24,6 +24,13 @@
 // 2026-10-11, Claude Code (Fable 5), issue #151: logout() now also calls
 // POST /auth/logout (best-effort, team decision) so the server denylists
 // the token; the local session is cleared either way.
+// 2026-10-11, Claude Code (Fable 5), issue #94: a login whose response
+// carries deletionScheduledFor (a soft-deleted account — login no longer
+// recovers it) lands on /account-recovery instead of home, and the
+// GET /users/me fetch is skipped while the flag stands (the active-only
+// lookup would 404 and poison `me`). restored() is the recovery screen's
+// exit: it strips the flag from the stored session and seeds `me` with
+// the account POST /users/me/recover returned.
 // Reviewed by: Ryan Ang
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
@@ -61,6 +68,10 @@ export const AuthProvider = () => {
   const [meCheck, setMeCheck] = useState<MeCheck | null>(null)
   useEffect(() => {
     if (!token) return
+    // a still-deleted session (issue #94): GET /users/me filters deleted
+    // accounts and would 404. The recovery screen reads the token, not
+    // `me`; restored() seeds `me` once the account is back
+    if (token.deletionScheduledFor) return
     let cancelled = false
     adminUserApi.getCurrentUser().then(
       (user) => {
@@ -96,7 +107,9 @@ export const AuthProvider = () => {
     // call this function to set login values
     const login = async (session: LoginResponse) => {
       setToken(session)
-      navigate('/')
+      // a deleted account logs in without being recovered (issue #94):
+      // offer the restore-or-keep-deleted choice before anything else
+      navigate(session.deletionScheduledFor ? '/account-recovery' : '/')
     }
 
     // call this function to sign out logged in user
@@ -121,7 +134,20 @@ export const AuthProvider = () => {
       if (token) setMeCheck({ token, me: { status: 'ready', user } })
     }
 
-    return { token, role, me, login, logout, updateMe }
+    // the recovery screen's exit (issue #94): the account is active
+    // again, so the session sheds its deletion flag — kept, the guard
+    // would bounce every page back to /account-recovery — and `me` is
+    // seeded from the restore's response, stamped with the NEW session
+    // object so the identity check above keeps it
+    const restored = (user: AdminUser) => {
+      if (!token) return
+      const recovered: LoginResponse = { ...token }
+      delete recovered.deletionScheduledFor
+      setToken(recovered)
+      setMeCheck({ token: recovered, me: { status: 'ready', user } })
+    }
+
+    return { token, role, me, login, logout, updateMe, restored }
   }, [token, role, me, navigate, setToken])
 
   return (

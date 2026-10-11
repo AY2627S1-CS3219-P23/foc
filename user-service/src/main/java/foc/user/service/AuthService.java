@@ -114,6 +114,13 @@ via options Q&A over freezing the row until expiry).
 Also: verify's exhausting guess now carries the cooldown left until a
 re-sign-up may replace the spent row, for the 429's Retry-After
 (PR #157 Copilot review).
+2026-10-11 (Claude Code, Fable 5), issue #94: login no longer recovers a
+soft-deleted account (owner decision via options Q&A, reversing the
+#93-era behaviour this header's first paragraph describes): a deleted
+account's login succeeds unchanged, and the response now carries
+deletionScheduledFor (LoginAttempts.purgeAt) so the SPA offers the
+explicit restore-or-keep-deleted choice; POST /users/me/recover is what
+restores.
 */
 
 package foc.user.service;
@@ -451,7 +458,11 @@ public class AuthService {
         boolean matched = passwordEncoder.matches(request.password(), user.getPasswordHash());
         LoginAttempts.Result result = loginAttempts.record(user.getId(), matched, now);
         return switch (result.outcome()) {
-            case SUCCESS -> LoginResponse.bearer(jwtIssuer.issue(result.user()), jwtIssuer.ttl().toSeconds());
+            // a soft-deleted account logs in without being recovered
+            // (issue #94): deletionScheduledFor tells the SPA to offer
+            // the restore-or-keep-deleted choice (POST /users/me/recover)
+            case SUCCESS -> LoginResponse.bearer(jwtIssuer.issue(result.user()),
+                jwtIssuer.ttl().toSeconds(), loginAttempts.purgeAt(result.user()));
             // the attempt that trips the lock reports the lockout too, so
             // the user learns immediately rather than on the next try
             case LOCKED -> throw new AccountLockedException(result.retryAfter());

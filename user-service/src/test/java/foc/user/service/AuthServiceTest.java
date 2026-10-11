@@ -48,6 +48,10 @@ and cooldown-bypass regressions added.
 Same day, PR #157 Copilot re-review: a spent row revives only for its own
 request (original expiry kept); other details stay 409 — takeover test
 split accordingly.
+2026-10-11 (Claude Code, Fable 5), issue #94: the recovery case became
+login_deletedAccountLogsInWithoutRecovery — login keeps deletedAt and
+reports deletionScheduledFor instead of restoring (owner decision via
+options Q&A); an active-login case pins the field's absence.
 */
 
 package foc.user.service;
@@ -787,13 +791,28 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Logging in within the retention window recovers a soft-deleted account")
-    void login_recoversDeletedAccount() {
+    @DisplayName("Logging in within the retention window succeeds but no longer recovers (#94)")
+    void login_deletedAccountLogsInWithoutRecovery() {
         userFoundByUsername();
         user.softDelete(NOW.minus(Duration.ofDays(10)));
 
-        assertThat(login(PASSWORD).accessToken()).isNotBlank();
-        assertThat(user.isActive()).isTrue();
+        LoginResponse response = login(PASSWORD);
+
+        assertThat(response.accessToken()).isNotBlank();
+        // recovery is an explicit choice now (POST /users/me/recover);
+        // the response tells the SPA when the purge would take the
+        // account, so it can offer that choice
+        assertThat(user.isActive()).isFalse();
+        assertThat(response.deletionScheduledFor())
+            .isEqualTo(NOW.minus(Duration.ofDays(10)).plus(Duration.ofDays(30)));
+    }
+
+    @Test
+    @DisplayName("An active account's login carries no deletion schedule")
+    void login_activeAccountHasNoDeletionSchedule() {
+        userFoundByUsername();
+
+        assertThat(login(PASSWORD).deletionScheduledFor()).isNull();
     }
 
     @Test

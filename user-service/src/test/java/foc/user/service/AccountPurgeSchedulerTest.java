@@ -21,6 +21,10 @@ Reviewed by: Leong Wei Zhi (via pull request).
        day-31 account, since the TTL and the retention window are
        configured separately — and a case pins the expiry sweeps'
        inclusive boundary.
+2026-10-11 (Claude Code, Fable 5), issue #94: the reset-code seeding
+       follows PasswordResetOtp (V7 remakes the account_tokens scaffold
+       for the reset flow), and a case covers the expired-reset-code
+       hygiene sweep the same run now performs.
 */
 
 package foc.user.service;
@@ -37,14 +41,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import foc.user.PostgresTestContainer;
-import foc.user.entity.AccountToken;
 import foc.user.entity.AccountUpdateOtp;
+import foc.user.entity.PasswordResetOtp;
 import foc.user.entity.PendingEmailChange;
 import foc.user.entity.PendingSignup;
 import foc.user.entity.Role;
 import foc.user.entity.User;
-import foc.user.repository.AccountTokenRepository;
 import foc.user.repository.AccountUpdateOtpRepository;
+import foc.user.repository.PasswordResetOtpRepository;
 import foc.user.repository.PendingEmailChangeRepository;
 import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
@@ -67,7 +71,7 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
     private UserRepository userRepository;
 
     @Autowired
-    private AccountTokenRepository accountTokenRepository;
+    private PasswordResetOtpRepository resetOtpRepository;
 
     @Autowired
     private PendingSignupRepository pendingSignupRepository;
@@ -80,7 +84,7 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
 
     @BeforeEach
     void cleanDatabase() {
-        accountTokenRepository.deleteAll();
+        resetOtpRepository.deleteAll();
         pendingSignupRepository.deleteAll();
         accountUpdateOtpRepository.deleteAll();
         pendingEmailChangeRepository.deleteAll();
@@ -96,8 +100,8 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
         User expired = saveUser("e3333333@u.nus.edu", "expired_deleted",
             Instant.now().minus(31, ChronoUnit.DAYS));
         for (User user : new User[] {active, inWindow, expired}) {
-            accountTokenRepository.save(new AccountToken(user, "token_hash",
-                AccountToken.Kind.RECOVERY, Instant.now().plus(1, ChronoUnit.DAYS)));
+            resetOtpRepository.save(new PasswordResetOtp(user, "code_hash_" + user.getUsername(),
+                Instant.now(), Instant.now().plus(1, ChronoUnit.DAYS)));
         }
         userRepository.flush();
 
@@ -105,7 +109,7 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
 
         assertThat(userRepository.findAll()).extracting(User::getId)
             .containsExactlyInAnyOrder(active.getId(), inWindow.getId());
-        assertThat(accountTokenRepository.findAll()).extracting(token -> token.getUser().getId())
+        assertThat(resetOtpRepository.findAll()).extracting(otp -> otp.getUser().getId())
             .containsExactlyInAnyOrder(active.getId(), inWindow.getId());
     }
 
@@ -232,6 +236,23 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
         assertThat(pendingEmailChangeRepository.deleteByExpiresAtNotAfter(boundary)).isEqualTo(1);
         assertThat(accountUpdateOtpRepository.findAll()).isEmpty();
         assertThat(pendingEmailChangeRepository.findAll()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Should sweep expired reset codes and keep live ones")
+    void sweepsExpiredResetTokens() {
+        User alex = saveUser("e1111111@u.nus.edu", "active_user", null);
+        resetOtpRepository.save(new PasswordResetOtp(alex, "expired_code_hash",
+            Instant.now().minusSeconds(2460), Instant.now().minusSeconds(60)));
+        User bob = saveUser("e3333333@u.nus.edu", "other_user", null);
+        PasswordResetOtp live = resetOtpRepository.save(new PasswordResetOtp(bob, "live_code_hash",
+            Instant.now(), Instant.now().plusSeconds(600)));
+        userRepository.flush();
+
+        scheduler.purgeExpiredDeletedAccounts();
+
+        assertThat(resetOtpRepository.findAll()).extracting(PasswordResetOtp::getId)
+            .containsExactly(live.getId());
     }
 
     private User saveUser(String email, String username, Instant deletedAt) {
