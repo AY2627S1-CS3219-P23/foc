@@ -91,11 +91,17 @@ services:
     build:
       context: web
       args:
-        VITE_USER_SERVICE_URL: ${VITE_USER_SERVICE_URL:-}
-        VITE_SUPPLIER_SERVICE_URL: ${VITE_SUPPLIER_SERVICE_URL:-}
-        VITE_ORDER_SERVICE_URL: ${VITE_ORDER_SERVICE_URL:-}
-        VITE_CREDIT_SERVICE_URL: ${VITE_CREDIT_SERVICE_URL:-}
-        VITE_NOTIFICATION_SERVICE_URL: ${VITE_NOTIFICATION_SERVICE_URL:-}
+        # Defaults track the gateway (PR #176 review, @Sinnez1): an
+        # unset variable no longer produces a dead bundle. A STALE
+        # value still wins over these — after pulling the cutover,
+        # update (or delete) the five VITE_* lines in your .env to the
+        # gateway prefixes in .env.example, or every API call fails as
+        # a CORS-blocked connection error.
+        VITE_USER_SERVICE_URL: ${VITE_USER_SERVICE_URL:-http://localhost:${GATEWAY_PORT:-8090}/api/user}
+        VITE_SUPPLIER_SERVICE_URL: ${VITE_SUPPLIER_SERVICE_URL:-http://localhost:${GATEWAY_PORT:-8090}/api/supplier}
+        VITE_ORDER_SERVICE_URL: ${VITE_ORDER_SERVICE_URL:-http://localhost:${GATEWAY_PORT:-8090}/api/order}
+        VITE_CREDIT_SERVICE_URL: ${VITE_CREDIT_SERVICE_URL:-http://localhost:${GATEWAY_PORT:-8090}/api/credit}
+        VITE_NOTIFICATION_SERVICE_URL: ${VITE_NOTIFICATION_SERVICE_URL:-http://localhost:${GATEWAY_PORT:-8090}/api/notification}
     ports:
       - "${WEB_PORT:-5173}:80"
     restart: unless-stopped

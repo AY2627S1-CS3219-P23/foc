@@ -10,6 +10,11 @@
   order-stub row updated for the review fixes (public-auth skip, CORS-
   readable stub, no Redis startup gating) — behavior-preserving fixes,
   no new decisions.
+  2026-10-11, PR #176 review (@Sinnez1): the skip rebuilt as location
+  blocks (the raw-path match was bypassable with dot segments),
+  /actuator/health mirrored, gateway-origin errors made CORS-readable
+  problem+json, the opm package pinned, and the encoded-slash limit
+  recorded. Fixes to recorded behavior; no new decisions.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -42,7 +47,7 @@ no design decisions; comparisons presented were factual only).
 | G2 | Denylist store | Redis only: `denylist:<jti>` keys with `EX` = seconds until the token's own `exp`; Redis expiry replaces any purge job. The never-used `token_denylist` table is dropped (user-service `V6`) |
 | G3 | Routing scope | Full cutover: the SPA's five service URLs all point at the gateway (`/api/user`, `/api/supplier`, `/api/credit`, `/api/notification`; `/api/order` reserved); backend containers have **no published host ports** |
 | G4 | Enforcement depth | Gateway only. No backend service reads the denylist; user-service gains Redis solely to **write** it at logout |
-| G5 | Anonymous requests | Pass through untouched (incl. OPTIONS preflights and non-Bearer schemes); each service's Spring Security still decides what needs auth. A Bearer token present is verified + denylist-checked — except on user-service's public `/auth/**` routes (logout excluded), which the gateway skips like `JwtAuthenticationFilter` does, so a stale token stored by the SPA can never block login/sign-up (PR #176 review) |
+| G5 | Anonymous requests | Pass through untouched (incl. OPTIONS preflights and non-Bearer schemes); each service's Spring Security still decides what needs auth. A Bearer token present is verified + denylist-checked — except on user-service's public `/auth/**` routes (logout excluded) and `/actuator/health`, which get their own auth-free location blocks mirroring `JwtAuthenticationFilter`'s skip, so a stale token stored by the SPA can never block login/sign-up. Location blocks, not a path match in Lua: nginx routes on the normalized URI, so a dot-segment path cannot be skipped one way and routed another (PR #176 reviews) |
 | G6 | Redis outage | Fail open: a connect/lookup error forwards the request if signature + exp are valid (availability over revocation, bounded by the ≤1 h token lifetime) |
 | G7 | Redis durability | AOF (`--appendonly yes`) + named volume: revoked-but-unexpired tokens stay revoked across container restarts |
 | G8 | Logout writer | user-service `POST /auth/logout` (authenticated): reads the verified token's `jti`/`exp` and writes the Redis key via Spring Data Redis |
@@ -77,9 +82,13 @@ sequenceDiagram
 ```
 
 Exception mirrored from `JwtAuthenticationFilter`: `/api/user/auth/**`
-except logout is forwarded without reading the Authorization header at
-all — the SPA attaches any stored token to every call, and an expired
-one must not 401 the login that would replace it.
+except logout, plus `/api/user/actuator/health`, are forwarded without
+reading the Authorization header at all — the SPA attaches any stored
+token to every call, and an expired one must not 401 the login that
+would replace it. The exception is expressed as nginx location blocks
+(matched on the normalized URI), so `/api/user/auth/../users/me` and
+its percent-encoded variants match the protected location, never the
+public one.
 
 Logout: `POST /api/user/auth/logout` → user-service
 `SET denylist:<jti> "1" EX <seconds-until-exp>` → 204 (G8/G9). From that
@@ -89,12 +98,17 @@ moment every gateway route rejects that token.
 
 | Prefix | Upstream | Notes |
 | --- | --- | --- |
-| `/api/user/**` | `user-service:8080` | prefix stripped |
+| `/api/user/**` | `user-service:8080` | prefix stripped; `/auth/**` (except logout) and `/actuator/health` route through auth-free locations (G5) |
 | `/api/supplier/**` | `supplier-service:8080` | prefix stripped |
 | `/api/credit/**` | `credit-service:8080` | prefix stripped |
 | `/api/notification/**` | `notification-service:8080` | prefix stripped; WebSocket upgrade + SockJS streaming enabled for `/ws/**` |
 | `/api/order/**` | — | reserved: same auth check as real routes, then a CORS-readable 503 problem+json (incl. answering the preflight itself) until order-service exists |
 | anything else | — | 404 problem+json |
+
+Every gateway-origin response — the Lua 401s, the order stub, the 404,
+and the 502/504 a briefly-restarting backend produces — is problem+json
+with `Access-Control-Allow-Origin`, so the SPA reads a status instead
+of a blocked response (PR #176 review).
 
 Upstream names resolve per request through compose's DNS
 (`resolver 127.0.0.11`), so the gateway starts and keeps routing while
@@ -113,6 +127,11 @@ individual backends restart or are rebuilt.
 - **Role gates stay in the services.** The gateway checks validity and
   revocation, not authorization — `role` enforcement is unchanged
   (fail-closed rules in each `SecurityConfig`).
+- **Percent-encoded slashes are decoded in transit**: the
+  prefix-stripping `rewrite` forwards the normalized path, so
+  `a%2Fb` in a path segment reaches the backend as `a/b`. No current
+  route puts user text in a path segment; flagged as a known limit
+  (PR #176 review) for whoever first designs one that does.
 - `docs/notification-service.md` D10 ("no Redis") predates this: Redis
   now exists as platform infrastructure for the denylist. D10's
   scale-out question (Redis pub/sub vs broker relay) remains open and
@@ -122,7 +141,7 @@ individual backends restart or are rebuilt.
 
 | | |
 | --- | --- |
-| Image | `openresty/openresty:1.31.1.1-alpine-fat` + `opm get cdbattags/lua-resty-jwt` |
+| Image | `openresty/openresty:1.31.1.1-alpine-fat` + `opm get cdbattags/lua-resty-jwt=0.3.2` (both pinned) |
 | Host port | `${GATEWAY_PORT:-8090}` → 8080 |
 | Config | `gateway/nginx.conf` (routing) + `gateway/lua/auth.lua` (auth) |
 | Env | `JWT_SECRET` (shared platform secret), `WEB_ALLOWED_ORIGIN` |

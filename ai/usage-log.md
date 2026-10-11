@@ -3064,3 +3064,27 @@ Entry template:
   the in-network name noted where relevant. The gateway health path was
   verified against the running stack (200).
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debugging assistance, refactoring (PR #176 review, @Sinnez1)
+- **Prompt(s):** Asked to address the team review's eight findings (two
+  blocking).
+- **Scope:** `gateway/nginx.conf` — the public-auth skip rebuilt as
+  location blocks (the raw request_uri match was bypassable with
+  dot-segment/percent-encoded paths; locations match the normalized
+  URI, closing the revoked-token bypass the reviewer reproduced);
+  `/actuator/health` mirrored; the three proxy headers repeated per
+  location (location-level proxy_set_header cancels inheritance);
+  gateway-origin 404/502/504 now problem+json with the CORS origin
+  header; the order stub builds its body with cjson. `gateway/lua/auth.lua`
+  — path-skip removed (locations own it). `gateway/Dockerfile` — opm
+  package pinned to 0.3.2. `compose.yaml` — the five VITE_* defaults
+  track the gateway so an unset value no longer builds a dead bundle;
+  stale values documented as needing a .env update (also added to the
+  PR description). `docs/gateway.md` — G5, routing table, error-shape
+  note and the encoded-slash known limit. All reviewer reproductions
+  re-run against the rebuilt stack: bypass paths 401, skips intact,
+  JSON valid, CORS headers present. Behavior-preserving fixes; no new
+  design decisions.
+- **Author review:** Pending author review of the diff via the PR.

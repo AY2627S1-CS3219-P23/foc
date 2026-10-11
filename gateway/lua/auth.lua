@@ -18,6 +18,11 @@
 -- every call, so without the skip a stale token in the browser would
 -- block login/sign-up at the gateway, the exact recovery case the
 -- filter's skip exists for (issue #91 decision).
+-- PR #176 review (@Sinnez1): that skip no longer lives here — matching
+-- the raw request_uri was bypassable with dot-segment paths (nginx
+-- routes on the normalized URI). The public routes are now their own
+-- location blocks in nginx.conf without this access check, so this
+-- file runs exactly when the route demands a check.
 -- Reviewed by: Leong Wei Zhi (via pull request).
 
 local cjson = require "cjson.safe"
@@ -51,19 +56,6 @@ end
 
 -- preflights never carry credentials; the services answer them (CORS)
 if ngx.req.get_method() == "OPTIONS" then
-    return
-end
-
--- user-service's public auth routes never read the Authorization
--- header (JwtAuthenticationFilter skips them so a stale browser token
--- can't block login or sign-up) — the gateway honors the same
--- exception, or an expired token stored by the SPA would 401 the very
--- login that replaces it. Logout is the carve-out from the carve-out:
--- it needs its token verified, like the filter's LOGOUT matcher.
--- request_uri, not uri: the locations' prefix-stripping rewrite runs
--- before this access phase, so uri is already /auth/... here
-local path = ngx.var.request_uri:match("^[^?]*")
-if path:find("^/api/user/auth/") and path ~= "/api/user/auth/logout" then
     return
 end
 
