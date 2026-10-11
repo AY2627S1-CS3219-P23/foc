@@ -21,6 +21,13 @@ recovers a soft-deleted account (owner decision via options Q&A,
 reversing the #93-era team decision): it succeeds and AuthService
 reports the scheduled purge date (purgeAt) so the SPA can offer the
 explicit choice — restore via POST /users/me/recover, or keep deleted.
+2026-10-11 (Claude Code, Fable 5), PR #179 Copilot review: record()
+now receives the hash the bcrypt check actually ran against and
+answers STALE_CREDENTIAL when the locked re-read shows a different
+one — a concurrent password reset committing between the check and
+this lock could otherwise turn an old-password match into a fresh
+JWT. AuthService redoes the whole check; bcrypt stays outside the
+lock either way (#147's rule).
 */
 
 package foc.user.service;
@@ -42,7 +49,7 @@ import jakarta.persistence.LockModeType;
 @Component
 public class LoginAttempts {
 
-    public enum Outcome { SUCCESS, FAILED, LOCKED, GONE }
+    public enum Outcome { SUCCESS, FAILED, LOCKED, GONE, STALE_CREDENTIAL }
 
     // user: the account after a SUCCESS; retryAfter: the lock's time left
     // (LOCKED); attemptsLeft: failures left before the lock (FAILED)
@@ -61,6 +68,10 @@ public class LoginAttempts {
 
         static Result gone() {
             return new Result(Outcome.GONE, null, null, 0);
+        }
+
+        static Result stale() {
+            return new Result(Outcome.STALE_CREDENTIAL, null, null, 0);
         }
     }
 
@@ -84,7 +95,7 @@ public class LoginAttempts {
     // transaction proxy only wraps public methods, and without the
     // transaction the row lock ends with the read
     @Transactional
-    public Result record(Long userId, boolean passwordMatched, Instant now) {
+    public Result record(Long userId, boolean passwordMatched, String checkedHash, Instant now) {
         User user = entityManager.find(User.class, userId);
         if (user == null) {
             // purged between the lookup and now
@@ -98,6 +109,17 @@ public class LoginAttempts {
             entityManager.refresh(user, LockModeType.PESSIMISTIC_WRITE);
         } catch (EntityNotFoundException e) {
             return Result.gone();
+        }
+
+        // the hash the caller's bcrypt check ran against is no longer the
+        // account's (a password reset committed in between): the verdict
+        // is stale in BOTH directions — an old-password match must not
+        // become a token, and a mismatch must not count against the new
+        // password — so nothing is recorded and the caller redoes the
+        // check against the fresh hash (PR #179 Copilot review). The
+        // recheck happens outside this lock, like every bcrypt here (#147)
+        if (!user.getPasswordHash().equals(checkedHash)) {
+            return Result.stale();
         }
 
         // locked by a parallel attempt since the lookup: not counted

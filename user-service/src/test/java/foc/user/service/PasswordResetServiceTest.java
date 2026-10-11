@@ -106,8 +106,9 @@ class PasswordResetServiceTest {
     }
 
     private void accountFound() {
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
-        when(userRepository.findWithLockById(USER_ID)).thenReturn(Optional.of(user));
+        // the locked-by-email finder is the flows' one user read
+        // (PR #179 Copilot review: lock-first, so the state is fresh)
+        when(userRepository.findWithLockByEmail(EMAIL)).thenReturn(Optional.of(user));
     }
 
     private String emailedCode() {
@@ -141,7 +142,7 @@ class PasswordResetServiceTest {
     @Test
     @DisplayName("An unknown email is absorbed silently: no row, no mail")
     void requestReset_unknownEmailSilent() {
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+        when(userRepository.findWithLockByEmail(EMAIL)).thenReturn(Optional.empty());
 
         service.requestReset(EMAIL);
 
@@ -167,7 +168,7 @@ class PasswordResetServiceTest {
     @DisplayName("An account past the retention window is absorbed silently, like unknown")
     void requestReset_pastWindowSilent() {
         user.softDelete(NOW.minus(31, ChronoUnit.DAYS));
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(userRepository.findWithLockByEmail(EMAIL)).thenReturn(Optional.of(user));
 
         service.requestReset(EMAIL);
 
@@ -232,8 +233,7 @@ class PasswordResetServiceTest {
     private PasswordResetOtp storedCode(String code, Instant createdAt, Instant expiresAt) {
         PasswordResetOtp token = new PasswordResetOtp(user, PLAIN_ENCODER.encode(code),
             createdAt, expiresAt);
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
-        when(userRepository.findWithLockById(USER_ID)).thenReturn(Optional.of(user));
+        when(userRepository.findWithLockByEmail(EMAIL)).thenReturn(Optional.of(user));
         when(resetOtps.findWithLockByUserId(USER_ID))
             .thenReturn(Optional.of(token));
         return token;
@@ -276,7 +276,10 @@ class PasswordResetServiceTest {
     @Test
     @DisplayName("An unknown email answers exactly like a wrong code")
     void confirmReset_unknownEmail() {
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+        // also the purged-mid-flight shape (PR #179 review): the locked
+        // read finding nothing answers exactly like unknown, dummy
+        // BCrypt cost included
+        when(userRepository.findWithLockByEmail(EMAIL)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.confirmReset(confirm("042042")))
             .isInstanceOf(ResetCodeInvalidException.class)
@@ -287,8 +290,7 @@ class PasswordResetServiceTest {
     @Test
     @DisplayName("An account with no code requested answers the same way")
     void confirmReset_noCodeRequested() {
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
-        when(userRepository.findWithLockById(USER_ID)).thenReturn(Optional.of(user));
+        when(userRepository.findWithLockByEmail(EMAIL)).thenReturn(Optional.of(user));
         when(resetOtps.findWithLockByUserId(USER_ID))
             .thenReturn(Optional.empty());
 
@@ -369,7 +371,7 @@ class PasswordResetServiceTest {
     @DisplayName("An account past the window answers like unknown, before any row is touched")
     void confirmReset_pastWindowAnswersInvalid() {
         user.softDelete(NOW.minus(31, ChronoUnit.DAYS));
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(userRepository.findWithLockByEmail(EMAIL)).thenReturn(Optional.of(user));
 
         assertThatThrownBy(() -> service.confirmReset(confirm("042042")))
             .isInstanceOf(ResetCodeInvalidException.class);

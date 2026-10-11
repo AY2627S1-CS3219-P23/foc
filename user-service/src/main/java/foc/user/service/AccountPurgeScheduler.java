@@ -24,6 +24,11 @@ account_tokens cleanup already did, with the expiry sweep left as hygiene.
 2026-10-11 (Claude Code, Fable 5), issue #94: the hygiene sweep covers
 expired reset-code rows too, now that the password-reset flow writes
 them (password_reset_otps — V7 remakes the account_tokens scaffold).
+Same day, PR #179 Copilot review: the purge now locks the users it
+will delete BEFORE touching any child table, so it takes locks in the
+flows' user-then-child order — unlocked, its child bulk deletes could
+hold an OTP row while a reset request held that user and waited for
+the same row, a deadlock.
 */
 
 package foc.user.service;
@@ -88,6 +93,13 @@ class AccountPurgeScheduler {
     void purgeExpiredDeletedAccounts() {
         Instant now = Instant.now();
         Instant cutoff = now.minus(retentionDays, ChronoUnit.DAYS);
+        // lock the condemned user rows FIRST (PR #179 Copilot review):
+        // the flows lock user-then-child, and the child deletes below
+        // acquire child-row locks — taken unlocked-first, this
+        // transaction could hold a reset OTP row while a reset request
+        // held its user and waited for that row, deadlocking both. The
+        // locked set is discarded: only the lock order matters
+        users.findWithLockByDeletedBefore(cutoff);
         // every dependent of a purged account goes first, selected by that
         // account — not by expiry: a TTL longer than the retention window
         // would leave a live row to trip the user_id FK (PR #157 review)

@@ -12,6 +12,9 @@
 // with its resend; the resend repeats the request; the login page
 // shows the arrival notice. Rewritten from the link-token version the
 // same day, when the owner revisited the credential to an OTP code.
+// PR #179 Copilot review: a case pins that "Change email" clears the
+// typed passwords instead of silently carrying them to the next
+// address.
 // Author review: Leong Wei Zhi to review via the PR.
 
 import { render, screen, waitFor } from '@testing-library/react'
@@ -214,6 +217,28 @@ describe('code step', () => {
     expect(
       screen.getByRole('button', { name: 'Resend code' }),
     ).toBeInTheDocument()
+  })
+
+  test('Change email clears the typed passwords (PR #179 review)', async () => {
+    fetchMock.mockResolvedValue(reply(202, undefined))
+
+    const user = await requestCode('e1234567@u.nus.edu')
+    await user.type(screen.getByLabelText('New Password'), 'NewPassword456')
+    await user.type(
+      screen.getByLabelText('Confirm New Password'),
+      'NewPassword456',
+    )
+    await user.click(screen.getByRole('button', { name: 'Change email' }))
+    // back on step 1; request a code for a different address
+    await user.clear(screen.getByLabelText('NUS Email'))
+    await user.type(screen.getByLabelText('NUS Email'), 'e7654321@u.nus.edu')
+    await user.click(screen.getByRole('button', { name: 'Send Reset Code' }))
+
+    // the passwords typed for the first address must not carry over
+    await waitFor(() =>
+      expect(screen.getByLabelText('New Password')).toHaveValue(''),
+    )
+    expect(screen.getByLabelText('Confirm New Password')).toHaveValue('')
   })
 
   test('Resend code repeats the request for the same address', async () => {

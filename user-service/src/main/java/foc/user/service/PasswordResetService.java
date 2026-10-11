@@ -36,6 +36,14 @@ Scope: the password-reset flow for issue #94 (F4.2), design doc §2's
        credential, so the table takes the per-operation shape and
        naming of its siblings, without the kind discriminator).
 Author review: Leong Wei Zhi to review via the PR.
+2026-10-11 (Claude Code, Fable 5), PR #179 Copilot review: both flows'
+FIRST read is now the locked one (findWithLockByEmail) — read plain
+and lock by id later, and the managed entity keeps its stale state
+(LoginAttempts' refresh note), so a code could be mailed to, or
+checked for, an address a concurrent email change just replaced; and
+an account purged between lookups now falls through the same
+dummy-match branch as an unknown email, instead of a cheaper,
+distinguishable throw.
 */
 
 package foc.user.service;
@@ -43,7 +51,6 @@ package foc.user.service;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -125,8 +132,17 @@ public class PasswordResetService {
      */
     @Transactional
     public void requestReset(String email) {
-        Optional<User> found = userRepository.findByEmail(NewAccountDetails.normalizeEmail(email));
-        if (found.isEmpty()) {
+        // the FIRST read takes the user lock (PR #179 Copilot review:
+        // a plain read followed by a lock-by-id kept the entity's
+        // stale state, so the code could be mailed to an address a
+        // concurrent email change had just replaced). User row first,
+        // then OTP row — the account-update flows' lock order; and
+        // serializing on the user means two first requests can't both
+        // find no OTP row, so the insert below can't trip V7's
+        // per-user unique index
+        User user = userRepository.findWithLockByEmail(NewAccountDetails.normalizeEmail(email))
+            .orElse(null);
+        if (user == null) {
             return;
         }
         Instant now = clock.instant();
@@ -134,20 +150,10 @@ public class PasswordResetService {
         // 3: it stays deleted; login + restore recovers it) — past the
         // window it is waiting for the purge and answers like unknown,
         // the same line login draws (LoginAttempts.pastRetention)
-        User user = found.get();
         if (pastRetention(user, now)) {
             return;
         }
 
-        // user row first, then OTP row — the account-update flows'
-        // lock order. Serializing on the user also means two first
-        // requests can't both find no row, so the insert below can't
-        // trip V7's per-user unique index
-        user = userRepository.findWithLockById(user.getId()).orElse(null);
-        if (user == null) {
-            // purged between the lookup and the lock
-            return;
-        }
         PasswordResetOtp otp = resetOtps.findWithLockByUserId(user.getId()).orElse(null);
         if (otp != null && now.isBefore(otp.getCreatedAt().plus(otpService.resendCooldown()))) {
             // one mail per cooldown, absorbed silently (see javadoc); the
@@ -195,22 +201,23 @@ public class PasswordResetService {
     // 400 that reports it (verifySignup's trick)
     @Transactional(noRollbackFor = ResetCodeInvalidException.class)
     public void confirmReset(PasswordResetConfirmRequest request) {
-        Optional<User> found = userRepository.findByEmail(NewAccountDetails.normalizeEmail(request.email()));
+        // the FIRST read takes the user lock, and it deliberately
+        // includes soft-deleted accounts (a deleted account inside the
+        // window resets, and stays deleted). User row first, then OTP
+        // row (one lock order): the password write must not race a
+        // concurrent failed-login counter into an @Version conflict,
+        // and the attempt counter below needs the OTP row serialized
+        User user = userRepository.findWithLockByEmail(NewAccountDetails.normalizeEmail(request.email()))
+            .orElse(null);
         Instant now = clock.instant();
-        if (found.isEmpty() || pastRetention(found.get(), now)) {
-            // no account to have a code: answer exactly like a wrong
-            // code, at the same BCrypt cost
+        if (user == null || pastRetention(user, now)) {
+            // no account to have a code — unknown email, purged since
+            // the caller requested, or past the window alike: one
+            // answer, at the same BCrypt cost (PR #179 Copilot review
+            // caught the purged case throwing without the dummy match)
             otpService.matches(request.code(), unknownCodeHash);
             throw new ResetCodeInvalidException();
         }
-        // user row first, then OTP row (one lock order): the password
-        // write must not race a concurrent failed-login counter into an
-        // @Version conflict, and the attempt counter below needs the
-        // OTP row serialized. The deleted-bypassing finder on purpose
-        // — a deleted account inside the window resets (and stays
-        // deleted)
-        User user = userRepository.findWithLockById(found.get().getId())
-            .orElseThrow(ResetCodeInvalidException::new);
         PasswordResetOtp otp = resetOtps.findWithLockByUserId(user.getId()).orElse(null);
         if (otp == null) {
             otpService.matches(request.code(), unknownCodeHash);

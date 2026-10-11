@@ -3188,3 +3188,28 @@ Entry template:
   migrations must be reset (README's "Old local databases" steps) —
   noted in the migration header and the PR.
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debugging assistance, refactoring (PR #179 Copilot review)
+- **Prompt(s):** Asked to address the Copilot review's findings.
+- **Scope:** (1) stale-credential login race — LoginAttempts.record now
+  receives the hash the bcrypt check ran against and answers
+  STALE_CREDENTIAL when the locked re-read shows a different one (a
+  concurrent reset could otherwise turn an old-password match into a
+  fresh JWT); AuthService redoes the whole check, three stale rounds
+  answer as the existing concurrent-update 409. (2) Both reset flows'
+  FIRST read is the locked one (UserRepository.findWithLockByEmail) —
+  the plain-read-then-lock-by-id shape kept stale entity state, so a
+  code could be mailed to a just-replaced address; the purged-between-
+  lookups case now falls through the same dummy-BCrypt branch as an
+  unknown email. (3) The purge locks its condemned user rows before
+  touching child tables (findWithLockByDeletedBefore), matching the
+  flows' user-then-child lock order instead of deadlocking against a
+  reset request. (4) forgot-password.tsx: "Change email" clears the
+  typed passwords, and the step-2 resend/change buttons are disabled
+  while a request is in flight. (5) The README's consolidated AI Use
+  Summary extended for issue #94 (it ended at #151). Tests added or
+  updated for (1)–(4); the review's AI-policy finding is left to the
+  team, not resolved by wording changes.
+- **Author review:** Pending author review of the diff via the PR.

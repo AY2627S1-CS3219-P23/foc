@@ -12,6 +12,11 @@
 // absorbs repeats inside its cooldown silently). Rewritten the same
 // day from a link flow (a /reset-password route) when the owner
 // revisited the credential to an OTP code via options Q&A.
+// PR #179 Copilot review: "Change email" also clears the typed
+// passwords (they silently carried over to the next address), and both
+// step-2 escape hatches are disabled while a request is in flight (a
+// resend landing after a step switch yanked the user back to the old
+// address's code step).
 // Author review: Leong Wei Zhi to review via the PR.
 
 import React, { useState } from 'react'
@@ -180,21 +185,27 @@ export function ForgotPassword() {
             Didn&apos;t get it?{' '}
             <button
               type="button"
+              disabled={submitting}
               onClick={() => void requestCode()}
-              className="font-medium text-gray-900 underline cursor-pointer"
+              className="font-medium text-gray-900 underline cursor-pointer disabled:opacity-50"
             >
               Resend code
             </button>{' '}
             ·{' '}
             <button
               type="button"
+              disabled={submitting}
               onClick={() => {
                 setSentTo(null)
                 setCode('')
+                // the typed passwords must not silently carry over to
+                // whatever address is entered next (PR #179 review)
+                setNewPassword('')
+                setConfirmPassword('')
                 setNotice('')
                 setError('')
               }}
-              className="font-medium text-gray-900 underline cursor-pointer"
+              className="font-medium text-gray-900 underline cursor-pointer disabled:opacity-50"
             >
               Change email
             </button>

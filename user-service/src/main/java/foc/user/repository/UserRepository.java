@@ -38,11 +38,20 @@ gate code cannot be mailed to a just-replaced address.
 deleted-bypassing locked lookup for the two flows that must reach a
 soft-deleted account — password-reset confirm (reset leaves the account
 deleted, owner decision) and POST /users/me/recover (restores it).
+2026-10-11 (Claude Code, Fable 5), PR #179 Copilot review:
+findWithLockByEmail — the reset flows' FIRST read is the locked one
+now, so a code can't be mailed to (or checked against) an address a
+concurrent email change just replaced (the same guarantee
+getActiveUserWithLock gives the account-update flows); and
+findWithLockByDeletedBefore, taken by the purge before it touches any
+child table, so the purge acquires locks in the flows' user-then-child
+order instead of deadlocking against a concurrent reset request.
 */
 
 package foc.user.repository;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import jakarta.persistence.LockModeType;
@@ -120,6 +129,28 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.id = :id")
     Optional<User> findWithLockById(@Param("id") Long id);
+
+    // the reset flows' first read (PR #179 Copilot review): FOR UPDATE
+    // from the start, because a plain read followed by a lock-by-id
+    // leaves the entity's state stale (locking an already-managed
+    // entity does not refresh it — LoginAttempts' refresh note), so a
+    // reset code could be mailed to an address a concurrent email
+    // change had just replaced. Postgres re-checks the predicate after
+    // the lock is granted, so the row returned still holds this email.
+    // Includes soft-deleted users, like findByEmail: a deleted account
+    // inside the window may reset (and stays deleted)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.email = :email")
+    Optional<User> findWithLockByEmail(@Param("email") String email);
+
+    // the purge's first step (PR #179 Copilot review): lock the rows
+    // the sweep will delete BEFORE touching any child table, so the
+    // purge takes locks in the flows' user-then-child order — unlocked,
+    // its child bulk deletes could hold OTP row locks while a reset
+    // request held the user lock and waited for the OTP row, a deadlock
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.deletedAt < :cutoff")
+    List<User> findWithLockByDeletedBefore(@Param("cutoff") Instant cutoff);
 
     // serialises owner setup calls so two concurrent requests can't both pass
     // the email/username uniqueness checks
