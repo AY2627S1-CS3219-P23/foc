@@ -3000,8 +3000,8 @@ Entry template:
   pass-through; fail-open on Redis outage; AOF persistence; logout in
   user-service; best-effort 204 on a failed Redis write; "Token has been
   revoked" 401 detail); the tool presented factual comparisons only.
-- **Scope (this entry: the user-service/Redis half, branch
-  feat/logout-denylist):** `user-service` POST /auth/logout
+- **Scope (this entry: the user-service/Redis half of the single
+  feat/api-gateway PR):** `user-service` POST /auth/logout
   (`AuthController`), `TokenDenylist` Redis writer, `JwtVerifier`
   VerifiedToken +jti/+expiresAt, `JwtAuthenticationFilter` details,
   `SecurityConfig` authenticated() rule, `V6__drop_token_denylist.sql`,
@@ -3016,7 +3016,8 @@ Entry template:
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** implementation, documentation (design decided by the team
   first; same session as the entry above — this is the gateway half,
-  branch feat/api-gateway)
+  shipped with it in the one feat/api-gateway PR at the author's
+  request)
 - **Prompt(s):** Continuation of the issue #151 plan: build the OpenResty
   gateway and cut the frontend over to it, per the ten decisions made by
   Leong Wei Zhi via options Q&A (see the entry above and docs/gateway.md

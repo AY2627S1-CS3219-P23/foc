@@ -63,7 +63,6 @@
 # Wei Zhi via options Q&A: Redis-only TTL keys, AOF persistence + volume,
 # loopback host port following the DB convention), and REDIS_HOST/PORT
 # passed to the user service, whose POST /auth/logout writes the keys.
-# The API gateway that reads them arrives in its own PR.
 # 2026-10-11, Claude Code (Fable 5), issue #151 (gateway half): gateway
 # container added and the backend host ports unpublished (team decision:
 # full cutover — the gateway at ${GATEWAY_PORT:-8090} is the only way to
