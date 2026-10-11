@@ -2,13 +2,15 @@
  * AI-assisted (CS3219 AI Usage Policy disclosure):
  * Tool: Claude Code (Opus 5.5), 2026-10-10.
  * Scope: the credit operations interface, with the signatures the author
- * supplied; the comments point at docs/credit-service.md. No
- * implementation yet (see NotImplementedCreditOperations).
+ * supplied; the comments point at docs/credit-service.md. Implemented
+ * by CreditOperationsService (2026-10-11, issue #169).
  * PR #166 review (Leong Wei Zhi): transfer and release return a
  * SettleResult instead of void (the author's choice of the reviewer's
  * options).
  * PR #168 review (Leong Wei Zhi): reserve's comment states the
  * reward-below-1 rule and the two refusals its result tells apart.
+ * PR #175 review (Leong Wei Zhi): transfer's comment states the
+ * no-record result (team decision).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -41,6 +43,10 @@ public interface CreditOperations {
     /**
      * Moves a request's held credits to the courier (D9). The result says
      * whether it did, had already, or could not for the request's status.
+     * With no record for the request it is
+     * {@link SettleResult#NO_RESERVATION} and nothing is written. A null
+     * or blank courier is {@link SettleResult#INVALID_STATE}, whatever
+     * the record.
      */
     SettleResult transfer(String requestRef, String courierId);
 
@@ -48,7 +54,10 @@ public interface CreditOperations {
      * Returns a request's held credits to the requester (D9). With no
      * reservation for the request, gets or creates the requester's account
      * (D6) and records the request as released with amount 0, so a late
-     * reserve is ignored. The result is as for {@link #transfer}.
+     * reserve is ignored. The result is as for {@link #transfer}, never
+     * {@link SettleResult#NO_RESERVATION}. With no reservation and a null
+     * or blank requester it is {@link SettleResult#INVALID_STATE}: there
+     * is no account for the record to reference.
      */
     SettleResult release(String requestRef, String requesterId);
 }

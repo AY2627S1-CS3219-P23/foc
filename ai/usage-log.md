@@ -26,7 +26,191 @@ Entry template:
 ```
 
 ---
-<<<<<<< HEAD
+## 2026-10-11 — Ryan Ang (PR #175 review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** review assistance, refactoring, tests, docs
+- **Scope:** `credit-service/`, `docs/credit-service.md`, GitHub issues
+  #171, #173 and #174.
+  - `SettleResult.NO_RESERVATION`, returned by a transfer that finds no
+    record; `INVALID_STATE` stays for a record in the wrong status. A
+    release with no record is unchanged.
+  - `RequestEventHandler.settle` is a switch with no default;
+    `NO_RESERVATION` throws the new `ReservationNotFoundException`, so
+    the event rolls back and takes the retry path.
+  - Tests: the no-record transfer split from the released-or-rejected
+    one in `CreditOperationsServiceTest`, and the transfer-against-release
+    race removed earlier the same day restored; a mocked and a
+    real-database handler test that a completion with no record throws,
+    the second also paying the courier once the reservation exists.
+  - `transfer` answers `INVALID_STATE` for a null or blank courier,
+    checked before the record is looked up; `release` answers it for a
+    null or blank requester when the request has no record.
+  - The four log lines (reserve, transfer, release, provision) are
+    written from an after-commit hook; the class comment, the service
+    README and the PR body say "one line per operation that changes
+    credits".
+  - `application-test.yaml` pins the sign-up amount and the lifetime;
+    the new `CreditOperationsConfigurationTest` covers non-default
+    values and the below-1 refusals; the handler's real-database test
+    checks that a committed reservation logs and a rolled-back one does
+    not.
+  - `V1__baseline.sql`: the `credit_reservation` comment only (what
+    `amount` and `settled_at` hold on a `REJECTED` row). No statement
+    changed, though the file's Flyway checksum does.
+  - `docs/credit-service.md`: the event table, "What each operation
+    answers" and a failure-table row for the early completion; the
+    expiry window and the expiry instant moved from "Open items" into
+    D4 and the lots section, with the daily expiry run (D12) and the
+    Asia/Singapore display; the `REJECTED` row's `amount` and
+    `settled_at` in the schema section; the lot table and expiry
+    paragraph reworded for the configurable lifetime.
+  - Issues: #171 gains the acceptance criterion for a completion with
+    no record; #173 says the expiry run is daily; #174 says the expiry
+    is displayed in Asia/Singapore.
+- **Prompt(s):** Asked the tool to go through the PR's review comments;
+  it checked each against the branch and listed six that needed a
+  decision. These decisions were given to implement: keep the
+  amended V1; restore the race test; retry a completion that finds no
+  record, with the result name, the exception name, the tests and the
+  doc and issue wording specified; and no code change for expired lots
+  awaiting the run, the expiry instant, or `REJECTED` rows, each to be
+  written into the doc as decided. A second set of team answers
+  followed for three more comments: guard a missing courier before the
+  lookup and a missing requester on release, returning `INVALID_STATE`,
+  with a missing requester on reserve left to #171; keep `getOrCreate`
+  unlogged and soften the logging claim; and log after commit, with a
+  sketch of the hook.
+- **Author review:** The tool verified the
+  reviewers' findings, implemented the decisions and transcribed them.
+  The after-commit hook is the team's sketch, used as given. The tool
+  chose the code-comment and exception-message wording, which doc
+  paragraphs carry each decision, and the shape of the configuration
+  and log tests. The release guard applies only when the request has no
+  record, so a release naming no requester still returns the credits
+  of a `HELD` record to the requester on it: the tool's reading of the
+  decision, since confirmed by the team as the one meant. The three readings the
+  entry below leaves "for the author to confirm" are now decided as
+  implemented. `./mvnw test` on JDK 21: 127 tests, 0 failures, with
+  Docker. Pending pull request review.
+
+## 2026-10-11 — Ryan Ang (credit operations: team review fixes, issue #169)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** review assistance, refactoring, tests, docs
+- **Scope:** `credit-service/`, `docs/credit-service.md`, `compose.yaml`,
+  `.env.example`, GitHub issue #173.
+  - Flyway `V1__baseline.sql` amended: `lot_id` on a slice (foreign key
+    to its lot), a lot allowed at `remaining = 0`, and both lot indexes
+    made partial on `remaining > 0`. First written as a V2 migration,
+    then folded into V1 on the author's instruction. `CreditReservationSlice`
+    gains `lotId`; the schema and mapping tests cover the change.
+  - `CreditOperationsService`: a release adds each slice back to the lot
+    it came from instead of creating lots; a drained lot is kept and the
+    spend-order query skips it; the sign-up amount and the earned-credit
+    lifetime read from `credit.sign-up-credits` and
+    `credit.earned-credit-lifetime-months` (`CREDIT_SIGN_UP_CREDITS`,
+    `CREDIT_EARNED_CREDIT_LIFETIME_MONTHS`), refused below 1 at startup;
+    one log line per operation (request, users, amount, outcome) and
+    one per account created.
+  - `ReservedRepository.insert`: the insert that never overwrites, moved
+    out of the service so it can be called twice in a test.
+  - `CreditOperationsServiceTest`: a release refilling the same lot rows,
+    repeated reserve and release adding no lots, a release into a lot
+    past its expiry, a transfer to the requester themselves, the record
+    inserted twice, and the five races repeated five times each. A
+    sixth race (a transfer against a release of the same request) was
+    added from a further review and then removed at the author's
+    instruction: the Order Service's state machine publishes only one
+    ending per request, so the scenario is not reachable in normal use.
+  - `RequestEventHandlerCreditOperationsTest`: the handler over the real
+    operations with only the outbox mocked (a reservation commits with
+    its reply, or rolls back entirely when the reply cannot be stored;
+    completion, cancellation, expiry-first). Added on the tool's own
+    re-review of the change, which found no defect in the code.
+  - `docs/credit-service.md` (D4, D6, Schema, the lot and slice rows, the
+    lock rule, the release and same-user transfer rules, the
+    lot-expires-while-held row), the service's README and AGENTS.md.
+    Then, at the author's instruction, a section describing how lots
+    are spent, returned and expired as the code does it now, with the
+    expiry granularity and the expired-lot window added to "Open
+    items" as undecided.
+  - Issue #173 (scheduler): the account-lock rule and the
+    `remaining > 0` filter added to its scope.
+  - The team wiki's D3 design page (outside this repo): Part 2 §1 to §3
+    and Part 3 §6 brought in line with the design doc as changed here
+    (the `lot_id` column and kept lots in the schema diagram, release
+    to the original lot, the two configuration values, the operation
+    log line), cited to issue #169 and marked as on this branch until
+    it merges. Pushed at the author's request.
+  - Merge-conflict markers left in this file and in the root README by
+    the PR #168 merge removed, keeping both sides (the first commit on
+    this branch).
+- **Prompt(s):** Make
+  the two constants properties, log each operation, pin a same-user
+  transfer, add a collision test that needs no threads, and return
+  released credits to their original lots; then chose, of the two ways
+  the tool offered to find the original lot, the foreign key with
+  drained lots kept; then, since only the author had run the service,
+  asked to fold the schema change into V1 instead of keeping a V2.
+- **Author review:** All five changes and the choice of the foreign key
+  over matching lots by their dates are the team's decisions, and
+  amending V1 instead of adding a V2 is the author's, made knowing that
+  a `credit-db` volume created from the earlier V1 fails Flyway's
+  checksum and must be recreated (the service README says how); the tool
+  implemented them and transcribed them into the design doc. The tool
+  chose the property and environment variable names, the constraint and
+  index names, the log wording, and making the expiry-run index partial
+  as well as the spend-order one. Still **for the author to confirm**
+  from the first draft: "3 months" is three calendar months in UTC; a
+  `REJECTED` record stores the reward that was asked for and has
+  `settled_at` set; a lot past its expiry but not yet moved to the pool
+  is still spendable. A slice still carries `earned_at` and
+  `expires_at`, which its lot now also gives. `./mvnw test` on JDK 21:
+  113 tests, 0 failures, with Docker. The image was built and the service started once with `docker compose`: Flyway applied the amended V1, health answered UP and an unauthenticated request got 401; the containers and the database volume were then removed. The record-insert test was seen
+  failing with `insert` swapped back to `save`, and passing once
+  restored. Pending pull request review.
+
+## 2026-10-11 — Ryan Ang (credit-service: credit operations, issue #169)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs), explain
+- **Scope:** `credit-service/`, GitHub issues.
+  - GitHub issues #169 to #174: one task issue per unbuilt component
+    of `docs/credit-service.md` (credit operations, reply outbox and
+    publisher, event listener, read API, scheduler, web balance and
+    history), each citing the requirement issues it serves. Only the
+    `service:` labels were set; priority, sprint and assignee are left
+    to the team.
+  - `CreditOperationsService`: the real `CreditOperations` bean
+    (get-or-create, reserve, transfer, release), replacing
+    `NotImplementedCreditOperations`, which is deleted with its case in
+    `NotImplementedStubsTest`.
+  - Repository queries: an insert-once account (`on conflict do
+    nothing`), locking reads of an account and a reservation, a user's
+    lots in spend order, a reservation's slices.
+  - `CreditOperationsServiceTest` (22 tests, Testcontainers Postgres):
+    every row of "What each operation answers", the lot rules, four
+    races, and after each test the checks of "How their consistency is
+    maintained".
+  - The service's README and AGENTS.md, and the `CreditOperations`
+    header, updated for the implementation.
+- **Prompt(s):** Asked to open issues for the pieces citing the requirements;
+  then to implement the first issue on `feat/credit-operations`.
+- **Author review:** The outcomes per reservation status, the lock
+  order, the lot spend order, the history rows and the sign-up amount
+  are the team's design (`docs/credit-service.md`); the tool wrote the
+  code to it. Where the doc is silent the tool took the plainest
+  reading, and each is **for the author to confirm**: the sign-up
+  amount (5) and the earned-credit lifetime (3 months) are constants in
+  the class, not configuration; "3 months" is three calendar months in
+  UTC; a `REJECTED` record stores the reward that was asked for and has
+  `settled_at` set; slices are kept after a transfer or release, not
+  deleted; a lot already past its expiry but not yet moved to the pool
+  is still spendable. The first test run found a defect in the tool's
+  own first draft (the repository's `save` merged a new record over one
+  a concurrent delivery had just committed); records are now inserted
+  with `persist`, and the two-first-deliveries test covers it.
+  `./mvnw test`: 80 tests, 0 failures, with Docker; the new class run
+  three more times with the same result. Pending pull request review.
+
 ## 2026-10-10 — Ryan Ang (PR #168 review fixes)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** review assistance, refactoring, tests, docs
@@ -139,7 +323,6 @@ Entry template:
   consequences are flagged for the Order owner rather than decided. The
   author approved the push to the wiki. Pending pull request review.
 
-=======
 ## 2026-10-10 — Leong Wei Zhi (PR #149 re-review @Sinnez1: the empty-code regression and three nits)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** debug (review fixes)
@@ -391,7 +574,6 @@ Entry template:
   eslint, tsc and prettier clean; reviewed via pull request.
 
 ---
->>>>>>> 9028a1bcf8978bc561d674aeb3cef8ba4fb23407
 ## 2026-10-10 — Ryan Ang (credit-service scaffold: entities, repositories, interfaces)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (scaffold + tests + docs)

@@ -4,6 +4,8 @@
  * Scope: each scaffold entity is saved and read back through its
  * repository against the Flyway V1 schema. ddl-auto is none, so nothing
  * else checks that the mappings match the tables.
+ * 2026-10-11, Claude Code (Opus 5.5), issue #169: the slice case saves
+ * and reads back its lot_id.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.entity;
@@ -125,11 +127,13 @@ class EntityMappingTest extends PostgresTestContainer {
     @Test
     void creditReservationSlice() {
         reservations.save(new Reserved(REQUEST, REQUESTER, 3, ReservationStatus.HELD, NOW));
-        Long id = slices.save(new CreditReservationSlice(REQUEST, 3, NOW, null)).getId();
+        Long lotId = lots.save(new CreditLot(REQUESTER, 0, NOW, null)).getId();
+        Long id = slices.save(new CreditReservationSlice(REQUEST, lotId, 3, NOW, null)).getId();
         flushAndClear();
 
         CreditReservationSlice found = slices.findById(id).orElseThrow();
         assertThat(found.getRequestRef()).isEqualTo(REQUEST);
+        assertThat(found.getLotId()).isEqualTo(lotId);
         assertThat(found.getAmount()).isEqualTo(3);
         assertThat(found.getEarnedAt()).isEqualTo(NOW);
         assertThat(found.getExpiresAt()).isNull();

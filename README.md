@@ -72,6 +72,11 @@
   by Claude Code (Opus 5).
   2026-10-10: AI Use Summary extended for the PR #168 review fixes by
   Claude Code (Opus 5.5).
+  2026-10-11: AI Use Summary extended for the credit operations (issue
+  #169) by Claude Code (Opus 5.5); the conflict markers the PR #168
+  merge left in this header were removed, keeping both sides. Same day:
+  that clause extended for the team-review fixes, and again for the
+  PR #175 review fixes.
   2026-10-11: merge-conflict markers left in this header by an earlier
   merge resolved (both sides kept, in date order), and the AI Use
   Summary extended for the logout denylist + API gateway (issue #151),
@@ -460,7 +465,21 @@ fixes (#168: the reserve result split by refusal cause and an
 unhandled event logged, both the team's decisions among the reviewer's
 options, tests tying the bound events to the handler and exercising
 its transaction, and the disclosure headers the review found
-missing).
+missing); and the credit operations (issue #169: get-or-create,
+reserve, transfer and release, their repository queries and tests),
+written to the team's design in `docs/credit-service.md`, with the
+readings the tool took where the doc is silent listed in
+`ai/usage-log.md` for the author to confirm, together with the task
+issues #169 to #174 that split the remaining Credit Service work; and
+that work's team-review fixes (released credits returned to the lots
+they came from, with the V1 schema amended so a slice references its
+lot, the sign-up amount and earned-credit lifetime made configuration,
+a log line per operation, and further tests), all the team's decisions,
+recorded in `docs/credit-service.md` and `ai/usage-log.md`; and that
+PR's review fixes (#175: a completion that finds no reservation is
+retried instead of dead-lettered at once, a removed race test restored,
+and the expiry and rejected-record rules moved from open items into the
+design doc), the team's decisions on the reviewers' findings.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their

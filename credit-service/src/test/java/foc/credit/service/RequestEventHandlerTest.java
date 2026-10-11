@@ -8,11 +8,14 @@
  * PR #168 review (Leong Wei Zhi): the reply's time is checked against
  * the clock around the call instead of a fixed date, and the two
  * refusals are told apart by the result, not by the reward.
+ * 2026-10-11, PR #175 review (Leong Wei Zhi): a completion with no
+ * record throws (team decision).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -141,6 +144,18 @@ class RequestEventHandlerTest {
             List.of("u-req", "u-cou"), "r-1", "u-req", "u-cou", "UTown", "PGP", null);
 
         assertThat(handler.handle(completed)).isEqualTo(expected);
+        verifyNoInteractions(outbox);
+    }
+
+    @Test
+    void completionWithNoRecordThrowsSoTheEventIsRetried() {
+        when(operations.transfer("r-1", "u-cou")).thenReturn(SettleResult.NO_RESERVATION);
+
+        RequestCompleted completed = new RequestCompleted("evt-2", SENT_AT, "order-service", "corr-1",
+            List.of("u-req", "u-cou"), "r-1", "u-req", "u-cou", "UTown", "PGP", null);
+
+        assertThatThrownBy(() -> handler.handle(completed))
+            .isInstanceOf(ReservationNotFoundException.class).hasMessageContaining("r-1");
         verifyNoInteractions(outbox);
     }
 

@@ -3,13 +3,18 @@
  * Tool: Claude Code (Opus 5.5), 2026-10-10.
  * Scope: empty Spring Data repository for the scaffold; queries come
  * with the features that need them.
+ * 2026-10-11, Claude Code (Opus 5.5), issue #169: a reservation's slices,
+ * read back on release (D4).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.repository;
 
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import foc.credit.entity.CreditReservationSlice;
 
 public interface CreditReservationSliceRepository extends JpaRepository<CreditReservationSlice, Long> {
+
+    List<CreditReservationSlice> findByRequestRef(String requestRef);
 }

@@ -8,6 +8,9 @@
   2026-10-10, Claude Code (Opus 5.5), PR #168: status, contents and
   configuration updated for the request event handler, the broker
   topology and the message converter.
+  2026-10-11, Claude Code (Opus 5.5), issue #169: status and contents
+  updated for the credit operations implementation; then for the
+  amended V1 and the two configuration values.
   Author review: Ryan Ang, pending pull request review.
   2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the run
   section's service URL updated for the gateway cutover (#151) — the
@@ -20,10 +23,11 @@
 Credit balances, reservation, transfer and history for FoC — the
 design is [`docs/credit-service.md`](../docs/credit-service.md).
 
-**Status: scaffold plus the event handler and broker topology.** The
-service starts, applies the schema, declares its queues and verifies
-login tokens, but has no endpoints, event listener, outbox publisher or
-credit logic yet.
+**Status: the credit operations, the event handler and the broker
+topology.** The service starts, applies the schema, declares its queues
+and verifies login tokens, and the credit logic is implemented and
+tested, but nothing reaches it yet: there are no endpoints, event
+listener or outbox publisher.
 
 What is here:
 
@@ -32,18 +36,26 @@ What is here:
   pool's single row. Flyway owns the schema; Hibernate never changes it
   (`ddl-auto: none`).
 - **Entities and repositories** (`entity/`, `repository/`): one JPA
-  entity per V1 table and an empty Spring Data repository for each.
-- **Two interfaces to build against** (`service/`): `CreditOperations`
-  (get-or-create, reserve, transfer, release) and `ReplyOutbox`
-  (enqueue a reply inside the caller's transaction). Their only
-  implementations are stubs that throw `UnsupportedOperationException("not implemented")`.
+  entity per table and a Spring Data repository for each.
+- **Credit operations** (`service/CreditOperationsService`): get-or-create
+  (the sign-up credits, once per user), reserve, transfer and release,
+  each in one transaction under row locks, with the outcomes of the
+  design doc's "What each operation answers". Each one that changes credits logs one line with
+  the request, the users, the amount and the outcome, written after the
+  transaction commits. The sign-up amount
+  (`CREDIT_SIGN_UP_CREDITS`, default 5) and the months before earned
+  credits expire (`CREDIT_EARNED_CREDIT_LIFETIME_MONTHS`, default 3) are
+  configuration.
+- **Reply outbox interface** (`service/ReplyOutbox`): enqueue a reply
+  inside the caller's transaction. Its only implementation is a stub
+  that throws `UnsupportedOperationException("not implemented")`.
 - **JWT verification** (`security/`): every route except
   `/actuator/health` needs a bearer token signed with the shared
   `JWT_SECRET`; a missing or invalid one is a 401 problem+json.
 - **Request event handler** (`service/RequestEventHandler`): applies
   one request event in one transaction, calling `CreditOperations` and,
-  for a reservation, `ReplyOutbox`. It runs against the stubs until the
-  real implementations land.
+  for a reservation, `ReplyOutbox`, which is still the stub: a
+  reservation fails at the reply until the real outbox lands.
 - **Broker topology** (`messaging/rabbitmq/`): at startup the service
   declares the `request-events` and `credit-events` exchanges and its
   own work, retry and dead-letter queues
@@ -75,3 +87,14 @@ port — it is reached through the gateway at
 `http://localhost:${GATEWAY_PORT:-8090}/api/credit/**`
 (`docs/gateway.md`). Its database stays on
 `127.0.0.1:${CREDIT_DB_HOST_PORT:-5436}` for local tooling.
+
+**If the service fails to start with a Flyway checksum mismatch for
+version 1:** your `credit-db` volume was created before V1 was amended
+(issue #169: slices reference their lot). It held no real data, so
+recreate it. This deletes the credit database only:
+
+```sh
+docker compose rm -sf credit-service credit-db
+docker volume rm foc_credit-db-data
+docker compose up -d credit-service
+```

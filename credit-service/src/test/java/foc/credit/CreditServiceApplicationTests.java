@@ -7,6 +7,10 @@
  * 2026-10-10 (PR #166 review): the slice amount CHECK and index cases;
  * then the outbox index case and @Transactional on the negative cases
  * (Leong Wei Zhi's review).
+ * 2026-10-11, Claude Code (Opus 5.5), issue #169: the lot cases (a slice
+ * needs its lot, a drained lot is allowed and a negative one is not, the
+ * lot indexes skip drained lots); the slice amount case gives its slice
+ * a lot.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit;
@@ -67,9 +71,46 @@ class CreditServiceApplicationTests extends PostgresTestContainer {
 		jdbc.update("insert into credit_reservation (request_ref, requester_id, amount, status, created_at)"
 				+ " values ('r-slice', 'u-slice', 5, 'HELD', now())");
 
+		Long lotId = jdbc.queryForObject(
+				"insert into credit_lot (owner_id, remaining, earned_at) values ('u-slice', 0, now()) returning id",
+				Long.class);
+
 		assertThatThrownBy(() -> jdbc.update(
-				"insert into credit_reservation_slice (request_ref, amount, earned_at) values ('r-slice', 0, now())"))
+				"insert into credit_reservation_slice (request_ref, lot_id, amount, earned_at)"
+						+ " values ('r-slice', ?, 0, now())", lotId))
 				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	@Transactional
+	void aSliceNeedsTheLotItCameFrom() {
+		jdbc.update("insert into credit_account (user_id, available, reserved, created_at) values ('u-lot', 0, 5, now())");
+		jdbc.update("insert into credit_reservation (request_ref, requester_id, amount, status, created_at)"
+				+ " values ('r-lot', 'u-lot', 5, 'HELD', now())");
+
+		assertThatThrownBy(() -> jdbc.update(
+				"insert into credit_reservation_slice (request_ref, amount, earned_at) values ('r-lot', 5, now())"))
+				.as("no lot").isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	@Transactional
+	void aDrainedLotIsKeptButANegativeOneIsRejected() {
+		jdbc.update("insert into credit_account (user_id, available, reserved, created_at) values ('u-drained', 0, 0, now())");
+
+		assertThat(jdbc.update(
+				"insert into credit_lot (owner_id, remaining, earned_at) values ('u-drained', 0, now())")).isEqualTo(1);
+		assertThatThrownBy(() -> jdbc.update(
+				"insert into credit_lot (owner_id, remaining, earned_at) values ('u-drained', -1, now())"))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void theLotIndexesSkipDrainedLots() {
+		assertThat(jdbc.queryForList(
+				"select indexdef from pg_indexes where indexname in"
+						+ " ('idx_credit_lot_owner_expires', 'idx_credit_lot_expires')", String.class))
+				.hasSize(2).allSatisfy(indexdef -> assertThat(indexdef).contains("remaining > 0"));
 	}
 
 	@Test

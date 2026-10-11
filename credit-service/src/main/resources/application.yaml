@@ -8,6 +8,8 @@
 # 2026-10-10: RabbitMQ acknowledgement, confirm and retry settings, and
 # a fractional number refused where an integer is expected, for the
 # request event handler and topology (the values are the author's).
+# 2026-10-11, issue #169: the sign-up amount and the earned-credit
+# lifetime, read by the credit operations (the values are the team's).
 # Author review: Ryan Ang, pending pull request review.
 
 spring:
@@ -47,6 +49,12 @@ spring:
       accept-float-as-int: false
 
 credit:
+  # Credits granted once, when a user's account is created (Credit F1.1,
+  # D6). Changing it only affects accounts created afterwards.
+  sign-up-credits: ${CREDIT_SIGN_UP_CREDITS:5}
+  # Months after which earned credits expire into the common pool (D4,
+  # Credit F6.1). Fixed on each lot when it is earned.
+  earned-credit-lifetime-months: ${CREDIT_EARNED_CREDIT_LIFETIME_MONTHS:3}
   rabbitmq:
     retry:
       # Delay before a failed event is tried again (D11). Baked into the
