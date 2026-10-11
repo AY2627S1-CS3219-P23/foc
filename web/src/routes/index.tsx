@@ -11,6 +11,11 @@
 // 2026-10-07, Claude Code (Opus 5), issue #112: /admin's AdminRoute
 // wrapper restored — this branch had flattened it while adding /profile,
 // which silently dropped the role gate main added in issue #147.
+// 2026-10-11, Claude Code (Fable 5), issue #94: /forgot-password
+// (public — both of its steps run logged out) and /account-recovery
+// (inside ProtectedRoute: the choice belongs to the deleted account's
+// own session). A /reset-password link route existed for a day; it
+// went when the owner revisited the reset credential to an OTP code.
 // 2026-10-12, Claude Code (Fable 5), issue #67: NotificationProvider
 // layout route between AuthProvider and the shell — the app's single
 // STOMP client (D2), below the auth it needs, above the bell that
@@ -21,6 +26,13 @@
 // can tell a session-gated page from a public one when a 401 forces a
 // sign-out (owner decision: clear the session in place on public pages,
 // no redirect). Declared here because this is where the gating lives.
+// 2026-10-16, Claude Code (Opus 5), PR #180 main sync: the route
+// table was the one conflict git could not shelve correctly — it put
+// /forgot-password outside <AppShell /> and /account-recovery outside
+// ProtectedRoute, which would have un-gated the recovery screen. Both
+// sit where their #94 note says: the reset page public inside the
+// shell, the recovery screen inside the requiresSession branch, so a
+// 401 there signs out through ProtectedRoute's own bounce.
 // Author review: Leong Wei Zhi to review via the PR.
 
 import { createBrowserRouter, type RouteObject } from 'react-router'
@@ -31,7 +43,9 @@ import { Admin } from './admin'
 import { Home } from './home'
 import { Profile } from './profile'
 import { Suppliers } from './suppliers'
+import { AccountRecovery } from '../features/user/account-recovery'
 import { AdminRoute } from '../features/user/AdminRoute'
+import { ForgotPassword } from '../features/user/forgot-password'
 import { ProtectedRoute } from '../features/user/ProtectedRoute'
 import { Login } from '../features/user/login'
 import { Register } from '../features/user/register'
@@ -61,12 +75,14 @@ export const routes: RouteObject[] = [
               { index: true, element: <Home /> },
               { path: 'login', element: <Login /> },
               { path: 'register', element: <Register /> },
+              { path: 'forgot-password', element: <ForgotPassword /> },
               {
                 Component: ProtectedRoute,
                 handle: { requiresSession: true } satisfies RouteHandle,
                 children: [
                   { path: 'suppliers', element: <Suppliers /> },
                   { path: 'profile', element: <Profile /> },
+                  { path: 'account-recovery', element: <AccountRecovery /> },
                   {
                     Component: AdminRoute,
                     children: [{ path: 'admin', element: <Admin /> }],
