@@ -64,6 +64,12 @@ Entry template:
     items" as undecided.
   - Issue #173 (scheduler): the account-lock rule and the
     `remaining > 0` filter added to its scope.
+  - The team wiki's D3 design page (outside this repo): Part 2 §1 to §3
+    and Part 3 §6 brought in line with the design doc as changed here
+    (the `lot_id` column and kept lots in the schema diagram, release
+    to the original lot, the two configuration values, the operation
+    log line), cited to issue #169 and marked as on this branch until
+    it merges. Pushed at the author's request.
   - Merge-conflict markers left in this file and in the root README by
     the PR #168 merge removed, keeping both sides (the first commit on
     this branch).
