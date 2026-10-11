@@ -42,6 +42,9 @@
   problem+json type-URI table, V4/V5 in the Flyway paragraph, and the
   purge's two new sweeps. Contract decisions by Leong Wei Zhi via
   options Q&A.
+  2026-10-11, Claude Code (Fable 5), issue #151: logout/denylist wording
+  updated for the Redis move (POST /auth/logout, V6, gateway-only
+  enforcement — team decisions by Leong Wei Zhi via options Q&A).
 -->
 
 # User Service
@@ -172,10 +175,14 @@ sign-up never reserves an email or username.
   `type`, `title`, `status`, `detail` and `instance`.
 - `/auth/**` and `/actuator/health` never read the header, so a stale
   token in the browser can't block login or sign-up. `/auth/logout` is
-  the exception: it is filtered, and #90 adds its `authenticated()` rule
-  in `SecurityConfig`.
-- No sessions: each request stands on its own token. The logout
-  denylist (`token_denylist`) isn't checked yet (deferred).
+  the exception: it is filtered and `authenticated()` (#151) — it
+  denylists the caller's `jti` in Redis (`denylist:<jti>`, expiring with
+  the token) via `TokenDenylist`, best-effort: a failed Redis write is
+  logged, and the response is 204 either way.
+- No sessions: each request stands on its own token. This service does
+  **not** check the denylist — the API gateway rejects revoked tokens
+  platform-wide before they reach any service (team decision:
+  gateway-only enforcement; see `docs/gateway.md`).
 
 ## Account updates (#92)
 
@@ -276,8 +283,9 @@ OTP table with a pending table per operation.
 `V4__pending_email_changes` and `V5__account_update_otps` are #92's two
 tables in that shape: the parked email change awaiting the new address's
 code, and the account-update gate codes (one row per account each, FK to
-`users`). Schema changes go in a new `V<n>__<name>.sql`, never
-by editing an applied one.
+`users`). `V6__drop_token_denylist` removes the never-used denylist
+table — #151 moved the denylist to Redis TTL keys. Schema changes go in
+a new `V<n>__<name>.sql`, never by editing an applied one.
 
 **Old local databases.** `baseline-on-migrate` records *any* non-empty
 schema without Flyway history as V1, without checking that it matches

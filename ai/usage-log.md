@@ -2987,3 +2987,27 @@ Entry template:
 - **Scope:** `supplier-service` `SuppliersSeeder` (null check around the
   category split loop).
 - **Author review:** Pending author review of the diff.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** implementation, unit tests (design decided by the team first)
+- **Prompt(s):** Asked to plan and implement issue #151's logout denylist
+  with an nginx API gateway and Redis (both named in the prompt). All
+  design choices were made by Leong Wei Zhi through ten neutral
+  AskUserQuestion option rounds (gateway tech = OpenResty/Lua; Redis-only
+  TTL-key denylist replacing the token_denylist table; full routing
+  cutover behind the gateway; gateway-only enforcement; anonymous
+  pass-through; fail-open on Redis outage; AOF persistence; logout in
+  user-service; best-effort 204 on a failed Redis write; "Token has been
+  revoked" 401 detail); the tool presented factual comparisons only.
+- **Scope (this entry: the user-service/Redis half, branch
+  feat/logout-denylist):** `user-service` POST /auth/logout
+  (`AuthController`), `TokenDenylist` Redis writer, `JwtVerifier`
+  VerifiedToken +jti/+expiresAt, `JwtAuthenticationFilter` details,
+  `SecurityConfig` authenticated() rule, `V6__drop_token_denylist.sql`,
+  `TokenDenylistEntry` deleted, data-redis starter + application.yaml;
+  tests: `LogoutTest`, `TokenDenylistTest`, `JwtVerifierTest`,
+  `FlywayMigrationTest`, `EntityMappingTest`; `compose.yaml` redis
+  container + user-service env; `.env.example` Redis section;
+  user-service README.
+- **Author review:** Pending author review of the diff via the PR.

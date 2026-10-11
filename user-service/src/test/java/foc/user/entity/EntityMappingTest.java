@@ -18,6 +18,9 @@
  * rows other test classes committed.
  * 2026-09-30, Claude Code (Opus 5), merging main: that sweep clears
  * pending_signups instead of the otps table #88 dropped.
+ * 2026-10-11, Claude Code (Fable 5), issue #151: the TokenDenylistEntry
+ * round-trip went with the entity and its table (V6 — the denylist moved
+ * to Redis TTL keys checked by the API gateway).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.user.entity;
@@ -54,7 +57,6 @@ class EntityMappingTest extends PostgresTestContainer {
     void emptyTables() {
         entityManager.createNativeQuery("delete from pending_signups").executeUpdate();
         entityManager.createNativeQuery("delete from account_tokens").executeUpdate();
-        entityManager.createNativeQuery("delete from token_denylist").executeUpdate();
         entityManager.createNativeQuery("delete from users").executeUpdate();
     }
 
@@ -130,14 +132,4 @@ class EntityMappingTest extends PostgresTestContainer {
         assertThat(found.getExpiresAt()).isEqualTo(EXPIRY);
     }
 
-    @Test
-    void tokenDenylistRoundTrip() {
-        persistAndFlush(new TokenDenylistEntry("jti-123", EXPIRY));
-        entityManager.clear();
-
-        TokenDenylistEntry found = entityManager.find(TokenDenylistEntry.class, "jti-123");
-
-        assertThat(found.getJti()).isEqualTo("jti-123");
-        assertThat(found.getExpiresAt()).isEqualTo(EXPIRY);
-    }
 }

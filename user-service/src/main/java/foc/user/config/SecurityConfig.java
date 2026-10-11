@@ -28,6 +28,9 @@ token is now 401, not Spring's default 403).
 2026-09-30 (Claude Code, Fable 5), issue #92: the five account-update
 routes opened to any signed-in caller, each by its own line above the
 fail-closed admin catch-all.
+2026-10-11 (Claude Code, Fable 5), issue #151: POST /auth/logout gets the
+authenticated() rule the #90 comment reserved, above the /auth/** permit
+(the filter already runs for it and verifies the caller's token).
 */
 
 package foc.user.config;
@@ -104,9 +107,9 @@ public class SecurityConfig {
                 // forward here to render the response, and without this
                 // Spring Security blocks that internal forward, clobbering
                 // the real status/body with a bare 403.
-                // #90's POST /auth/logout needs an authenticated() rule
-                // above this line (JwtAuthenticationFilter already reads
-                // its token)
+                // Logout needs the caller's verified token (issue #151),
+                // so it sits above the /auth/** permit
+                .requestMatchers(HttpMethod.POST, "/auth/logout").authenticated()
                 .requestMatchers("/auth/**", "/error").permitAll()
                 // health checks (compose depends_on / probes) carry no credentials
                 .requestMatchers("/actuator/health").permitAll()

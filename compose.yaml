@@ -58,6 +58,12 @@
 # foc-contracts build and RabbitMQ connection (the saga, docs/credit-
 # service.md). Host ports 8088/5436 and postgres:17 chosen by Ryan Ang via
 # options Q&A.
+# 2026-10-11, Claude Code (Fable 5), issue #151: redis container added as
+# the platform store for the logout token denylist (team decisions, Leong
+# Wei Zhi via options Q&A: Redis-only TTL keys, AOF persistence + volume,
+# loopback host port following the DB convention), and REDIS_HOST/PORT
+# passed to the user service, whose POST /auth/logout writes the keys.
+# The API gateway that reads them arrives in its own PR.
 # 2026-10-10, Claude Code (Opus 5.5), PR #168: CREDIT_RETRY_TTL_MS and
 # CREDIT_RETRY_MAX_ATTEMPTS passed to the credit service for its retry
 # queue (docs/credit-service.md D11); the values are the team's.
@@ -254,12 +260,40 @@ services:
       OTP_TTL: ${OTP_TTL:-10m}
       OTP_MAX_ATTEMPTS: ${OTP_MAX_ATTEMPTS:-5}
       OTP_RESEND_COOLDOWN: ${OTP_RESEND_COOLDOWN:-60s}
+      # Logout writes denylist:<jti> TTL keys here (issue #151); the API
+      # gateway is what reads them on every request.
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     depends_on:
       user-db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       # vestigial once .env points MAIL_HOST at Gmail, but harmless
       mailpit:
         condition: service_started
+    restart: unless-stopped
+
+  # Platform Redis (issue #151): holds the logout token denylist as
+  # denylist:<jti> keys that expire with the token itself (no purge job
+  # needed). Written by the user service at logout, read by the API
+  # gateway on every request. AOF + volume so revoked-but-unexpired
+  # tokens stay revoked across container restarts (team decision).
+  redis:
+    # Minor-pinned like the DB images (PR #150 convention).
+    image: redis:8.8-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    # Published on the host for local tooling (redis-cli), loopback-bound
+    # like the DBs: this machine only.
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
 
   # User DB: PostgreSQL owned exclusively by the user service
@@ -361,5 +395,6 @@ volumes:
   credit-db-data:
   notification-db-data:
   rabbitmq-data:
+  redis-data:
   supplier-db-data:
   user-db-data:
