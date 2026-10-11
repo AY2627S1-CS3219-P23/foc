@@ -49,9 +49,11 @@ Entry template:
   - `CreditOperationsServiceTest`: a release refilling the same lot rows,
     repeated reserve and release adding no lots, a release into a lot
     past its expiry, a transfer to the requester themselves, the record
-    inserted twice, and the five races repeated five times each. Then,
-    from a further team review, a sixth race: a transfer against a
-    release of the same request, which settles it exactly once.
+    inserted twice, and the five races repeated five times each. A
+    sixth race (a transfer against a release of the same request) was
+    added from a further review and then removed at the author's
+    instruction: the Order Service's state machine publishes only one
+    ending per request, so the scenario is not reachable in normal use.
   - `RequestEventHandlerCreditOperationsTest`: the handler over the real
     operations with only the outbox mocked (a reservation commits with
     its reply, or rolls back entirely when the reply cannot be stored;
@@ -96,7 +98,7 @@ Entry template:
   `settled_at` set; a lot past its expiry but not yet moved to the pool
   is still spendable. A slice still carries `earned_at` and
   `expires_at`, which its lot now also gives. `./mvnw test` on JDK 21:
-  118 tests, 0 failures, with Docker. The image was built and the service started once with `docker compose`: Flyway applied the amended V1, health answered UP and an unauthenticated request got 401; the containers and the database volume were then removed. The record-insert test was seen
+  113 tests, 0 failures, with Docker. The image was built and the service started once with `docker compose`: Flyway applied the amended V1, health answered UP and an unauthenticated request got 401; the containers and the database volume were then removed. The record-insert test was seen
   failing with `insert` swapped back to `save`, and passing once
   restored. Pending pull request review.
 

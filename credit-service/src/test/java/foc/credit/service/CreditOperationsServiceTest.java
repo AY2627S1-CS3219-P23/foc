@@ -473,30 +473,6 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
         assertBalance(courier, 8, 0);
     }
 
-    // a completion racing a cancellation or expiry of the same request:
-    // both lock the record first, so one settles it and the other finds it settled
-    @RepeatedTest(RACE_REPETITIONS)
-    void aTransferRacingAReleaseOfOneRequestSettlesItOnce() throws Exception {
-        operations.reserve(request, requester, 3);
-
-        List<Object> results = race(
-            () -> operations.transfer(request, courier),
-            () -> operations.release(request, requester));
-
-        assertThat(results).containsExactlyInAnyOrder(SettleResult.SETTLED, SettleResult.INVALID_STATE);
-        if (statusOf(request) == ReservationStatus.TRANSFERRED) {
-            assertThat(results).containsExactly(SettleResult.SETTLED, SettleResult.INVALID_STATE);
-            assertBalance(requester, 2, 0);
-            assertBalance(courier, 8, 0);
-        } else {
-            assertThat(statusOf(request)).isEqualTo(ReservationStatus.RELEASED);
-            assertThat(results).containsExactly(SettleResult.INVALID_STATE, SettleResult.SETTLED);
-            // the losing transfer never got as far as the courier's account
-            assertBalance(requester, 5, 0);
-            assertThat(accounts.findById(courier)).isEmpty();
-        }
-    }
-
     @RepeatedTest(RACE_REPETITIONS)
     void transfersInOppositeDirectionsDoNotDeadlock() throws Exception {
         String back = request + "-back";
