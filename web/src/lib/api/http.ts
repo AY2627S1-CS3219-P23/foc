@@ -1,6 +1,8 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Fable 5), 2026-09-21, issue #108.
 // Scope: shared fetch wrapper all domains use for REST calls.
+// 2026-09-29, Claude Code (Fable 5), issue #112: errorMessage hoisted
+// here from its three per-page copies (login, register, UsersSection).
 // Reviewed by: Leong Wei Zhi (via pull request).
 // 2026-09-29, Claude Code (Opus 5.5), issue #147: errorMessage added, the
 // one error-to-text helper for every feature (was copied in the admin

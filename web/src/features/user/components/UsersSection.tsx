@@ -23,6 +23,10 @@
 // Scope: Admin Dashboard "Users" section — list, search, role filter,
 // paging, promote/demote, remove — per
 // web/docs/wireframes/admin-dashboard.png.
+// 2026-09-29, Claude Code (Fable 5), issue #112: local errorMessage
+// replaced by the copy hoisted to lib/api/http.ts (that variant shows
+// the fallback for TypeErrors, i.e. network failures, instead of the
+// browser's terse message — a small behavior improvement).
 // Reviewed by: Ryan Ang
 
 import { useEffect, useState } from 'react'
