@@ -26,6 +26,72 @@ Entry template:
 ```
 
 ---
+## 2026-10-11 — Ryan Ang (credit operations: team review fixes, issue #169)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** review assistance, refactoring, tests, docs
+- **Scope:** `credit-service/`, `docs/credit-service.md`, `compose.yaml`,
+  `.env.example`, GitHub issue #173.
+  - Flyway `V1__baseline.sql` amended: `lot_id` on a slice (foreign key
+    to its lot), a lot allowed at `remaining = 0`, and both lot indexes
+    made partial on `remaining > 0`. First written as a V2 migration,
+    then folded into V1 on the author's instruction. `CreditReservationSlice`
+    gains `lotId`; the schema and mapping tests cover the change.
+  - `CreditOperationsService`: a release adds each slice back to the lot
+    it came from instead of creating lots; a drained lot is kept and the
+    spend-order query skips it; the sign-up amount and the earned-credit
+    lifetime read from `credit.sign-up-credits` and
+    `credit.earned-credit-lifetime-months` (`CREDIT_SIGN_UP_CREDITS`,
+    `CREDIT_EARNED_CREDIT_LIFETIME_MONTHS`), refused below 1 at startup;
+    one log line per operation (request, users, amount, outcome) and
+    one per account created.
+  - `ReservedRepository.insert`: the insert that never overwrites, moved
+    out of the service so it can be called twice in a test.
+  - `CreditOperationsServiceTest`: a release refilling the same lot rows,
+    repeated reserve and release adding no lots, a release into a lot
+    past its expiry, a transfer to the requester themselves, the record
+    inserted twice, and the five races repeated five times each.
+  - `RequestEventHandlerCreditOperationsTest`: the handler over the real
+    operations with only the outbox mocked (a reservation commits with
+    its reply, or rolls back entirely when the reply cannot be stored;
+    completion, cancellation, expiry-first). Added on the tool's own
+    re-review of the change, which found no defect in the code.
+  - `docs/credit-service.md` (D4, D6, Schema, the lot and slice rows, the
+    lock rule, the release and same-user transfer rules, the
+    lot-expires-while-held row), the service's README and AGENTS.md.
+    Then, at the author's instruction, a section describing how lots
+    are spent, returned and expired as the code does it now, with the
+    expiry granularity and the expired-lot window added to "Open
+    items" as undecided.
+  - Issue #173 (scheduler): the account-lock rule and the
+    `remaining > 0` filter added to its scope.
+  - Merge-conflict markers left in this file and in the root README by
+    the PR #168 merge removed, keeping both sides (the first commit on
+    this branch).
+- **Prompt(s):** Make
+  the two constants properties, log each operation, pin a same-user
+  transfer, add a collision test that needs no threads, and return
+  released credits to their original lots; then chose, of the two ways
+  the tool offered to find the original lot, the foreign key with
+  drained lots kept; then, since only the author had run the service,
+  asked to fold the schema change into V1 instead of keeping a V2.
+- **Author review:** All five changes and the choice of the foreign key
+  over matching lots by their dates are the team's decisions, and
+  amending V1 instead of adding a V2 is the author's, made knowing that
+  a `credit-db` volume created from the earlier V1 fails Flyway's
+  checksum and must be recreated (the service README says how); the tool
+  implemented them and transcribed them into the design doc. The tool
+  chose the property and environment variable names, the constraint and
+  index names, the log wording, and making the expiry-run index partial
+  as well as the spend-order one. Still **for the author to confirm**
+  from the first draft: "3 months" is three calendar months in UTC; a
+  `REJECTED` record stores the reward that was asked for and has
+  `settled_at` set; a lot past its expiry but not yet moved to the pool
+  is still spendable. A slice still carries `earned_at` and
+  `expires_at`, which its lot now also gives. `./mvnw test` on JDK 21:
+  113 tests, 0 failures, with Docker. The image was built and the service started once with `docker compose`: Flyway applied the amended V1, health answered UP and an unauthenticated request got 401; the containers and the database volume were then removed. The record-insert test was seen
+  failing with `insert` swapped back to `save`, and passing once
+  restored. Pending pull request review.
+
 ## 2026-10-11 — Ryan Ang (credit-service: credit operations, issue #169)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (code + tests + docs), explain
@@ -49,7 +115,7 @@ Entry template:
     maintained".
   - The service's README and AGENTS.md, and the `CreditOperations`
     header, updated for the implementation.
-- **Prompt(s):** Asked how to open issues for the pieces citing the requirements;
+- **Prompt(s):** Asked to open issues for the pieces citing the requirements;
   then to implement the first issue on `feat/credit-operations`.
 - **Author review:** The outcomes per reservation status, the lock
   order, the lot spend order, the history rows and the sign-up amount

@@ -5,11 +5,15 @@
  * docs/credit-service.md's "What each operation answers", the lot rules
  * of D4, the races its failure table names, and after each test the
  * checks of "How their consistency is maintained".
+ * Same day, team review: a release returns credits to their lots, a
+ * transfer to the requester themselves, the record insert called twice,
+ * and the races repeated.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -24,10 +28,13 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import foc.credit.PostgresTestContainer;
 import foc.credit.entity.CreditAccount;
@@ -40,6 +47,9 @@ import foc.credit.repository.ReservedRepository;
 // so the races are real. Every test uses its own user and request IDs.
 @SpringBootTest
 class CreditOperationsServiceTest extends PostgresTestContainer {
+
+    // each race runs several times, since one run may not interleave
+    private static final int RACE_REPETITIONS = 5;
 
     private final String requester = "u-req-" + UUID.randomUUID();
     private final String courier = "u-cou-" + UUID.randomUUID();
@@ -56,6 +66,9 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private TransactionTemplate transaction;
 
     // "How their consistency is maintained": each check must return no rows
     @AfterEach
@@ -116,7 +129,7 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
         assertThat(lotsOf(requester)).containsExactly("5 never");
     }
 
-    @Test
+    @RepeatedTest(RACE_REPETITIONS)
     void concurrentFirstSightsOfAUserGrantTheSignUpCreditsOnce() throws Exception {
         List<Object> results = race(
             () -> operations.getOrCreate(requester).getAvailable(),
@@ -145,11 +158,11 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
     }
 
     @Test
-    void reserveOfTheWholeBalanceLeavesNoLot() {
+    void reserveOfTheWholeBalanceKeepsTheDrainedLot() {
         assertThat(operations.reserve(request, requester, 5)).isEqualTo(ReserveResult.RESERVED);
 
         assertBalance(requester, 0, 5);
-        assertThat(lotsOf(requester)).isEmpty();
+        assertThat(lotsOf(requester)).containsExactly("0 never");
     }
 
     @Test
@@ -207,7 +220,7 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
 
         assertThat(operations.reserve(spending, courier, 4)).isEqualTo(ReserveResult.RESERVED);
 
-        assertThat(lotsOf(courier)).containsExactly("4 never");
+        assertThat(lotsOf(courier)).containsExactly("0 expiring", "4 never");
         assertThat(jdbc.queryForList("""
             select amount || case when expires_at is null then ' never' else ' expiring' end
             from credit_reservation_slice where request_ref = ? order by id
@@ -258,6 +271,20 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
     }
 
     @Test
+    void transferToTheRequesterThemselvesReturnsTheCreditsAsEarned() {
+        // the Order Service never sends this; refusing it would strand the held credits
+        operations.reserve(request, requester, 3);
+
+        assertThat(operations.transfer(request, requester)).isEqualTo(SettleResult.SETTLED);
+
+        assertBalance(requester, 5, 0);
+        assertThat(lotsOf(requester)).containsExactly("3 expiring", "2 never");
+        assertThat(historyOf(requester))
+            .containsExactly("PROVISION 5", "RESERVE 3", "TRANSFER_OUT 3", "TRANSFER_IN 3");
+        assertThat(operations.transfer(request, requester)).isEqualTo(SettleResult.DUPLICATE);
+    }
+
+    @Test
     void transferWithNothingHeldIsInvalid() {
         String rejected = request + "-rejected";
         String released = request + "-released";
@@ -289,17 +316,48 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
     }
 
     @Test
-    void releaseReturnsEachSliceWithItsOriginalExpiry() {
+    void releaseReturnsEachSliceToTheLotItCameFrom() {
         // the courier holds 3 expiring credits and 5 that never expire, and reserves 4 of them
         operations.reserve(request, requester, 3);
         operations.transfer(request, courier);
         String spending = request + "-spending";
+        List<Long> lotIds = lotIdsOf(courier);
         operations.reserve(spending, courier, 4);
 
         assertThat(operations.release(spending, courier)).isEqualTo(SettleResult.SETTLED);
 
+        // the same two rows, refilled: the drained expiring lot included
         assertBalance(courier, 8, 0);
-        assertThat(lotsOf(courier)).containsExactly("3 expiring", "4 never", "1 never");
+        assertThat(lotsOf(courier)).containsExactly("3 expiring", "5 never");
+        assertThat(lotIdsOf(courier)).isEqualTo(lotIds);
+    }
+
+    @Test
+    void reservingAndReleasingAgainAndAgainAddsNoLots() {
+        for (int i = 0; i < 5; i++) {
+            operations.reserve(request + "-" + i, requester, 2);
+            operations.release(request + "-" + i, requester);
+        }
+
+        assertBalance(requester, 5, 0);
+        assertThat(lotsOf(requester)).containsExactly("5 never");
+    }
+
+    @Test
+    void releaseReturnsCreditsToALotThatHasPassedItsExpiry() {
+        operations.reserve(request, requester, 3);
+        operations.transfer(request, courier);
+        String spending = request + "-spending";
+        operations.reserve(spending, courier, 3);
+        // the earned lot expires while its credits are held
+        jdbc.update("update credit_lot set expires_at = now() - interval '1 day'"
+            + " where owner_id = ? and expires_at is not null", courier);
+
+        assertThat(operations.release(spending, courier)).isEqualTo(SettleResult.SETTLED);
+
+        // back in the expired lot, for the next expiry run to move to the pool
+        assertBalance(courier, 8, 0);
+        assertThat(lotsOf(courier)).containsExactly("3 expiring", "5 never");
     }
 
     @Test
@@ -352,9 +410,29 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
         assertBalance(courier, 8, 0);
     }
 
+    // ---- the record insert (D3) ----
+
+    // The first draft saved the record, which merged over an existing one.
+    // No threads: the second insert is the second of two first deliveries.
+    @Test
+    void aSecondInsertOfARequestsRecordFailsAndLeavesTheFirst() {
+        operations.getOrCreate(requester);
+        Instant now = Instant.now();
+        transaction.executeWithoutResult(status ->
+            reservations.insert(new Reserved(request, requester, 3, ReservationStatus.REJECTED, now)));
+
+        assertThatThrownBy(() -> transaction.executeWithoutResult(status ->
+            reservations.insert(new Reserved(request, requester, 4, ReservationStatus.RELEASED, now))))
+            .isInstanceOf(DataIntegrityViolationException.class);
+
+        Reserved kept = reservations.findById(request).orElseThrow();
+        assertThat(kept.getStatus()).isEqualTo(ReservationStatus.REJECTED);
+        assertThat(kept.getAmount()).isEqualTo(3);
+    }
+
     // ---- races ("Failure and retry behaviour") ----
 
-    @Test
+    @RepeatedTest(RACE_REPETITIONS)
     void twoReservationsRacingPastTheBalanceReserveOnce() throws Exception {
         List<Object> results = race(
             () -> operations.reserve(request + "-a", requester, 3),
@@ -365,7 +443,7 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
         assertBalance(requester, 2, 3);
     }
 
-    @Test
+    @RepeatedTest(RACE_REPETITIONS)
     void twoFirstDeliveriesOfOneRequestReserveOnce() throws Exception {
         List<Object> results = race(
             () -> operations.reserve(request, requester, 3),
@@ -382,7 +460,7 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
         assertThat(operations.reserve(request, requester, 3)).isEqualTo(ReserveResult.DUPLICATE);
     }
 
-    @Test
+    @RepeatedTest(RACE_REPETITIONS)
     void twoDeliveriesOfOneCompletionPayOnce() throws Exception {
         operations.reserve(request, requester, 3);
 
@@ -395,7 +473,7 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
         assertBalance(courier, 8, 0);
     }
 
-    @Test
+    @RepeatedTest(RACE_REPETITIONS)
     void transfersInOppositeDirectionsDoNotDeadlock() throws Exception {
         String back = request + "-back";
         operations.reserve(request, requester, 3);
@@ -428,7 +506,11 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
             "select type || ' ' || amount from credit_history where user_id = ? order by id", String.class, userId);
     }
 
-    // in spend order
+    private List<Long> lotIdsOf(String userId) {
+        return jdbc.queryForList("select id from credit_lot where owner_id = ? order by id", Long.class, userId);
+    }
+
+    // in spend order, drained lots included
     private List<String> lotsOf(String userId) {
         return jdbc.queryForList("""
             select remaining || case when expires_at is null then ' never' else ' expiring' end

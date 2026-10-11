@@ -7,17 +7,24 @@
  * and history rows are the team's design; the tool wrote the code to
  * it. Where the doc is silent the tool took the plainest reading and
  * listed each one in ai/usage-log.md for the author to confirm.
+ * Same day, team review of the first draft: the sign-up amount and the
+ * earned-credit lifetime read from configuration, one log line per
+ * operation, a release returning credits to the lots they came from,
+ * and the request's record inserted through the repository. The
+ * four decisions are the team's.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
 
-import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,33 +46,47 @@ import foc.credit.repository.ReservedRepository;
  * transaction, the caller's if there is one (the request event handler's,
  * so the reply commits with it), and takes its row locks in the fixed
  * order of D2: the request's reservation, then accounts by ascending
- * user ID.
+ * user ID. A user's lots are only read or changed under that user's
+ * account lock.
+ *
+ * <p>Each operation logs one line with the request, the users it touched
+ * and its outcome. The line is written when the operation is applied,
+ * before the caller's transaction commits.
  */
 @Service
 @Transactional
 public class CreditOperationsService implements CreditOperations {
 
-    // Credit F1.1
-    static final int SIGN_UP_CREDITS = 5;
-    // earned credits expire this long after they are earned (D4, F6.1)
-    static final int EARNED_CREDIT_LIFETIME_MONTHS = 3;
+    private static final Logger log = LoggerFactory.getLogger(CreditOperationsService.class);
 
     private final CreditAccountRepository accounts;
     private final ReservedRepository reservations;
     private final CreditReservationSliceRepository slices;
     private final CreditLotRepository lots;
     private final CreditHistoryEntryRepository history;
-    private final EntityManager entityManager;
+    private final int signUpCredits;
+    private final int earnedCreditLifetimeMonths;
 
     public CreditOperationsService(CreditAccountRepository accounts, ReservedRepository reservations,
             CreditReservationSliceRepository slices, CreditLotRepository lots,
-            CreditHistoryEntryRepository history, EntityManager entityManager) {
+            CreditHistoryEntryRepository history,
+            @Value("${credit.sign-up-credits}") int signUpCredits,
+            @Value("${credit.earned-credit-lifetime-months}") int earnedCreditLifetimeMonths) {
+        // a history row's amount is at least 1, and a lot must outlive the moment it is earned
+        if (signUpCredits < 1) {
+            throw new IllegalArgumentException("credit.sign-up-credits must be at least 1, was " + signUpCredits);
+        }
+        if (earnedCreditLifetimeMonths < 1) {
+            throw new IllegalArgumentException(
+                "credit.earned-credit-lifetime-months must be at least 1, was " + earnedCreditLifetimeMonths);
+        }
         this.accounts = accounts;
         this.reservations = reservations;
         this.slices = slices;
         this.lots = lots;
         this.history = history;
-        this.entityManager = entityManager;
+        this.signUpCredits = signUpCredits;
+        this.earnedCreditLifetimeMonths = earnedCreditLifetimeMonths;
     }
 
     @Override
@@ -76,6 +97,35 @@ public class CreditOperationsService implements CreditOperations {
 
     @Override
     public ReserveResult reserve(String requestRef, String requesterId, int amount) {
+        ReserveResult result = applyReserve(requestRef, requesterId, amount);
+        log.info("reserve request={} requester={} amount={} outcome={}", requestRef, requesterId, amount, result);
+        return result;
+    }
+
+    @Override
+    public SettleResult transfer(String requestRef, String courierId) {
+        Optional<Reserved> found = reservations.findForUpdate(requestRef);
+        SettleResult result = found.map(reservation -> applyTransfer(reservation, courierId))
+            .orElse(SettleResult.INVALID_STATE);
+        log.info("transfer request={} requester={} courier={} amount={} outcome={}", requestRef,
+            found.map(Reserved::getRequesterId).orElse(null), courierId,
+            found.map(Reserved::getAmount).orElse(null), result);
+        return result;
+    }
+
+    @Override
+    public SettleResult release(String requestRef, String requesterId) {
+        Optional<Reserved> found = reservations.findForUpdate(requestRef);
+        SettleResult result = found.map(this::applyRelease)
+            .orElseGet(() -> recordReleasedBeforeReserved(requestRef, requesterId));
+        // the requester on the record, when there is one, not the one the event names
+        log.info("release request={} requester={} amount={} outcome={}", requestRef,
+            found.map(Reserved::getRequesterId).orElse(requesterId),
+            found.map(Reserved::getAmount).orElse(0), result);
+        return result;
+    }
+
+    private ReserveResult applyReserve(String requestRef, String requesterId, int amount) {
         if (reservations.findForUpdate(requestRef).isPresent()) {
             return ReserveResult.DUPLICATE;
         }
@@ -91,7 +141,10 @@ public class CreditOperationsService implements CreditOperations {
             return ReserveResult.REJECTED_INSUFFICIENT_CREDITS;
         }
 
-        insert(new Reserved(requestRef, requesterId, amount, ReservationStatus.HELD, now));
+        // Two first deliveries of one event both find no record to lock
+        // and both get here; the second fails on the request_ref primary
+        // key, rolls back and is retried as a duplicate.
+        reservations.insert(new Reserved(requestRef, requesterId, amount, ReservationStatus.HELD, now));
         slices.saveAll(takeFromLots(requestRef, requesterId, amount));
         account.setAvailable(account.getAvailable() - amount);
         account.setReserved(account.getReserved() + amount);
@@ -99,13 +152,7 @@ public class CreditOperationsService implements CreditOperations {
         return ReserveResult.RESERVED;
     }
 
-    @Override
-    public SettleResult transfer(String requestRef, String courierId) {
-        Optional<Reserved> found = reservations.findForUpdate(requestRef);
-        if (found.isEmpty()) {
-            return SettleResult.INVALID_STATE;
-        }
-        Reserved reservation = found.get();
+    private SettleResult applyTransfer(Reserved reservation, String courierId) {
         if (reservation.getStatus() == ReservationStatus.TRANSFERRED) {
             return courierId.equals(reservation.getCourierId()) ? SettleResult.DUPLICATE : SettleResult.INVALID_STATE;
         }
@@ -114,11 +161,14 @@ public class CreditOperationsService implements CreditOperations {
         }
 
         Instant now = Instant.now();
+        String requestRef = reservation.getRequestRef();
         String requesterId = reservation.getRequesterId();
         int amount = reservation.getAmount();
         CreditAccount requester;
         CreditAccount courier;
-        // ascending user ID (D2)
+        // Ascending user ID (D2). A courier who is the requester is the
+        // same row both times: the credits end up back in their available
+        // balance, as a newly earned lot.
         if (requesterId.compareTo(courierId) <= 0) {
             requester = lockAccount(requesterId, now);
             courier = lockAccount(courierId, now);
@@ -138,20 +188,7 @@ public class CreditOperationsService implements CreditOperations {
         return SettleResult.SETTLED;
     }
 
-    @Override
-    public SettleResult release(String requestRef, String requesterId) {
-        Instant now = Instant.now();
-        Optional<Reserved> found = reservations.findForUpdate(requestRef);
-        if (found.isEmpty()) {
-            // the cancel arrived first: an amount-0 record, so a late
-            // reserve is a duplicate
-            lockAccount(requesterId, now);
-            Reserved released = new Reserved(requestRef, requesterId, 0, ReservationStatus.RELEASED, now);
-            released.setSettledAt(now);
-            insert(released);
-            return SettleResult.SETTLED;
-        }
-        Reserved reservation = found.get();
+    private SettleResult applyRelease(Reserved reservation) {
         if (reservation.getStatus() == ReservationStatus.TRANSFERRED) {
             return SettleResult.INVALID_STATE;
         }
@@ -160,12 +197,17 @@ public class CreditOperationsService implements CreditOperations {
             return SettleResult.DUPLICATE;
         }
 
-        // the requester on the record, not the one the event names
+        Instant now = Instant.now();
+        String requestRef = reservation.getRequestRef();
         String ownerId = reservation.getRequesterId();
         int amount = reservation.getAmount();
         CreditAccount account = lockAccount(ownerId, now);
+        // Back to the lot each slice came from, so the credits keep their
+        // expiry and spend order. A lot that has since passed its expiry
+        // takes them too; the next expiry run moves them to the pool.
         for (CreditReservationSlice slice : slices.findByRequestRef(requestRef)) {
-            lots.save(new CreditLot(ownerId, slice.getAmount(), slice.getEarnedAt(), slice.getExpiresAt()));
+            CreditLot lot = lots.findById(slice.getLotId()).orElseThrow();
+            lot.setRemaining(lot.getRemaining() + slice.getAmount());
         }
         account.setReserved(account.getReserved() - amount);
         account.setAvailable(account.getAvailable() + amount);
@@ -175,11 +217,22 @@ public class CreditOperationsService implements CreditOperations {
         return SettleResult.SETTLED;
     }
 
+    // the cancel arrived first: an amount-0 record, so a late reserve is a duplicate
+    private SettleResult recordReleasedBeforeReserved(String requestRef, String requesterId) {
+        Instant now = Instant.now();
+        lockAccount(requesterId, now);
+        Reserved released = new Reserved(requestRef, requesterId, 0, ReservationStatus.RELEASED, now);
+        released.setSettledAt(now);
+        reservations.insert(released);
+        return SettleResult.SETTLED;
+    }
+
     // the sign-up lot and PROVISION row are written only by the call that created the account
     private void createIfAbsent(String userId, Instant now) {
-        if (accounts.insertIfAbsent(userId, SIGN_UP_CREDITS, now) == 1) {
-            lots.save(new CreditLot(userId, SIGN_UP_CREDITS, now, null));
-            record(userId, CreditHistoryType.PROVISION, SIGN_UP_CREDITS, null, now);
+        if (accounts.insertIfAbsent(userId, signUpCredits, now) == 1) {
+            lots.save(new CreditLot(userId, signUpCredits, now, null));
+            record(userId, CreditHistoryType.PROVISION, signUpCredits, null, now);
+            log.info("provision user={} amount={} outcome=CREATED", userId, signUpCredits);
         }
     }
 
@@ -191,21 +244,7 @@ public class CreditOperationsService implements CreditOperations {
     private void reject(String requestRef, String requesterId, int amount, Instant now) {
         Reserved rejected = new Reserved(requestRef, requesterId, amount, ReservationStatus.REJECTED, now);
         rejected.setSettledAt(now);
-        insert(rejected);
-    }
-
-    /**
-     * Inserts the request's record, never updates one. Two first
-     * deliveries of one event both find no record to lock and both get
-     * here; the second fails on the request_ref primary key, rolls back
-     * and is retried as a duplicate. The repository's save would merge
-     * instead, and overwrite the record the first one committed.
-     * Flushed now, so the failure is raised here and the slices, which
-     * reference the record, are inserted after it.
-     */
-    private void insert(Reserved record) {
-        entityManager.persist(record);
-        entityManager.flush();
+        reservations.insert(rejected);
     }
 
     // spends the owner's lots soonest expiry first and returns what was taken from each
@@ -217,12 +256,9 @@ public class CreditOperationsService implements CreditOperations {
                 break;
             }
             int part = Math.min(left, lot.getRemaining());
-            taken.add(new CreditReservationSlice(requestRef, part, lot.getEarnedAt(), lot.getExpiresAt()));
-            if (part == lot.getRemaining()) {
-                lots.delete(lot);
-            } else {
-                lot.setRemaining(lot.getRemaining() - part);
-            }
+            taken.add(new CreditReservationSlice(requestRef, lot.getId(), part, lot.getEarnedAt(), lot.getExpiresAt()));
+            // a lot spent to zero is kept: the slice references it
+            lot.setRemaining(lot.getRemaining() - part);
             left -= part;
         }
         if (left > 0) {
@@ -236,7 +272,7 @@ public class CreditOperationsService implements CreditOperations {
         history.save(new CreditHistoryEntry(userId, type, amount, requestRef, now));
     }
 
-    private static Instant expiryOfCreditsEarnedAt(Instant earnedAt) {
-        return earnedAt.atOffset(ZoneOffset.UTC).plusMonths(EARNED_CREDIT_LIFETIME_MONTHS).toInstant();
+    private Instant expiryOfCreditsEarnedAt(Instant earnedAt) {
+        return earnedAt.atOffset(ZoneOffset.UTC).plusMonths(earnedCreditLifetimeMonths).toInstant();
     }
 }

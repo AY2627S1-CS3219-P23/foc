@@ -9,7 +9,8 @@
   configuration updated for the request event handler, the broker
   topology and the message converter.
   2026-10-11, Claude Code (Opus 5.5), issue #169: status and contents
-  updated for the credit operations implementation.
+  updated for the credit operations implementation; then for the
+  amended V1 and the two configuration values.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -31,11 +32,15 @@ What is here:
   pool's single row. Flyway owns the schema; Hibernate never changes it
   (`ddl-auto: none`).
 - **Entities and repositories** (`entity/`, `repository/`): one JPA
-  entity per V1 table and a Spring Data repository for each.
+  entity per table and a Spring Data repository for each.
 - **Credit operations** (`service/CreditOperationsService`): get-or-create
-  (5 sign-up credits, once per user), reserve, transfer and release, each
-  in one transaction under row locks, with the outcomes of the design
-  doc's "What each operation answers".
+  (the sign-up credits, once per user), reserve, transfer and release,
+  each in one transaction under row locks, with the outcomes of the
+  design doc's "What each operation answers". Each logs one line with
+  the request, the users, the amount and the outcome. The sign-up amount
+  (`CREDIT_SIGN_UP_CREDITS`, default 5) and the months before earned
+  credits expire (`CREDIT_EARNED_CREDIT_LIFETIME_MONTHS`, default 3) are
+  configuration.
 - **Reply outbox interface** (`service/ReplyOutbox`): enqueue a reply
   inside the caller's transaction. Its only implementation is a stub
   that throws `UnsupportedOperationException("not implemented")`.
@@ -75,3 +80,14 @@ docker compose up -d credit-service
 The service is on `http://localhost:${CREDIT_SERVICE_PORT:-8088}`, and
 its database on `127.0.0.1:${CREDIT_DB_HOST_PORT:-5436}` for local
 tooling.
+
+**If the service fails to start with a Flyway checksum mismatch for
+version 1:** your `credit-db` volume was created before V1 was amended
+(issue #169: slices reference their lot). It held no real data, so
+recreate it. This deletes the credit database only:
+
+```sh
+docker compose rm -sf credit-service credit-db
+docker volume rm foc_credit-db-data
+docker compose up -d credit-service
+```

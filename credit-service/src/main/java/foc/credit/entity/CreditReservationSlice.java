@@ -4,6 +4,9 @@
  * Scope: JPA entity for the credit_reservation_slice table, transcribed
  * from V1__baseline.sql (docs/credit-service.md "Schema"). The doc names
  * no class for this table; the name follows the table's. No logic.
+ * 2026-10-11, Claude Code (Opus 5.5), issue #169: lotId, for the new
+ * lot_id column (the team's decision that a release returns credits to
+ * the lot they came from).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.entity;
@@ -18,7 +21,7 @@ import java.time.Instant;
 
 /**
  * Part of a reservation taken from one lot, so a release returns the
- * credits with their original expiry (D4).
+ * credits to that lot (D4).
  */
 @Entity
 @Table(name = "credit_reservation_slice")
@@ -30,6 +33,10 @@ public class CreditReservationSlice {
 
     @Column(name = "request_ref", nullable = false, updatable = false)
     private String requestRef;
+
+    // the lot the credits were taken from
+    @Column(name = "lot_id", nullable = false, updatable = false)
+    private Long lotId;
 
     @Column(nullable = false, updatable = false)
     private int amount;
@@ -44,8 +51,9 @@ public class CreditReservationSlice {
     protected CreditReservationSlice() {
     }
 
-    public CreditReservationSlice(String requestRef, int amount, Instant earnedAt, Instant expiresAt) {
+    public CreditReservationSlice(String requestRef, Long lotId, int amount, Instant earnedAt, Instant expiresAt) {
         this.requestRef = requestRef;
+        this.lotId = lotId;
         this.amount = amount;
         this.earnedAt = earnedAt;
         this.expiresAt = expiresAt;
@@ -57,6 +65,10 @@ public class CreditReservationSlice {
 
     public String getRequestRef() {
         return requestRef;
+    }
+
+    public Long getLotId() {
+        return lotId;
     }
 
     public int getAmount() {

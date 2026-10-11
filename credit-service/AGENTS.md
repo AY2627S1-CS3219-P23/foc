@@ -10,7 +10,9 @@
   invariants updated for the request event handler, the broker
   topology and the message converter.
   2026-10-11, Claude Code (Opus 5.5), issue #169: the package map and
-  invariants updated for the credit operations implementation.
+  invariants updated for the credit operations implementation; then
+  for slices referencing their lot (written into V1) and the record
+  insert moving to the repository.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -28,7 +30,7 @@ IDs (D1–D12) when touching related code.
 | --- | --- |
 | `config/` | `SecurityConfig`: CORS, health open, everything else needs a valid JWT |
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
-| `entity/` | One JPA entity per V1 table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
+| `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
 | `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` (interface) and its `NotImplementedReplyOutbox` stub, which throws, `ReserveResult` / `SettleResult`, and `RequestEventHandler`, which owns the transaction for one request event |
 | `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, and `DomainEventMessageConverter`, a copy of notification-service's |
@@ -40,7 +42,9 @@ handler already calls them; `ReplyOutbox` is still a stub.
 ## Invariants — do not break
 
 - **Flyway owns the schema** (`db/migration`, `ddl-auto: none`). Change it
-  with a new `V<n>__*.sql`, never by editing an applied migration.
+  with a new `V<n>__*.sql`, never by editing an applied migration. V1 was
+  amended once, in the #169 change, before the service had run anywhere
+  but the tests; from here on it is fixed.
 - **The schema follows the design doc's "Database" section**: a schema
   change is a design change, so update the doc with it.
 - **Entities mirror V1.** With `ddl-auto: none` nothing validates the
@@ -51,13 +55,17 @@ handler already calls them; `ReplyOutbox` is still a stub.
   interface fail injection) and `NotImplementedStubsTest`.
 - **A request's record is inserted, never saved.** `ReservedRepository.save`
   merges, and would overwrite the record a concurrent first delivery just
-  committed; `CreditOperationsService` persists and flushes instead, so
-  the second delivery fails on the primary key and is retried.
+  committed; use `ReservedRepository.insert`, so the second delivery fails
+  on the primary key and is retried.
+- **A lot is never deleted.** A drained lot stays at `remaining = 0`
+  because its slices reference it and a release refills it. Any query
+  that spends or expires lots must filter `remaining > 0`.
 - **Lots change only under their owner's account lock**, and locks are
   taken in the design doc's order (D2): reservation, accounts by
   ascending user ID, then the common pool.
-- **`CreditOperationsServiceTest` commits**, so it never cleans up and
-  every test uses fresh IDs. Its after-each checks read the whole
+- **`CreditOperationsServiceTest` and
+  `RequestEventHandlerCreditOperationsTest` commit**, so they never clean
+  up and every test uses fresh IDs. The first one's after-each checks read the whole
   database: a test elsewhere that commits credit rows must keep the
   doc's invariants too.
 - **No shared code except `foc-contracts`** (root `AGENTS.md`, D15). The

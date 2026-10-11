@@ -3,6 +3,8 @@
  * Tool: Claude Code (Opus 5.5), 2026-10-10.
  * Scope: JPA entity for the credit_lot table, transcribed from
  * V1__baseline.sql (docs/credit-service.md "Schema"); no logic.
+ * 2026-10-11, Claude Code (Opus 5.5), issue #169: the comment follows
+ * the schema, which now keeps a lot spent to zero.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.entity;
@@ -17,7 +19,8 @@ import java.time.Instant;
 
 /**
  * A user's available credits that share one expiry date (D4, F6.1). The
- * row is deleted when spent to zero.
+ * row is kept when spent to zero: its slices reference it, and a release
+ * returns credits to it.
  */
 @Entity
 @Table(name = "credit_lot")
