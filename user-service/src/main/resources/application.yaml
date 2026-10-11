@@ -81,6 +81,12 @@ spring:
       # enforcement).
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # Finite timeouts, like the SMTP ones above: the write runs inside
+      # the logout request and is best-effort (G9) — with Lettuce's
+      # defaults a Redis outage pinned the request thread until the
+      # gateway's 60 s proxy timeout answered 504 instead of 204.
+      connect-timeout: 2s
+      timeout: 2s
 
 management:
   endpoints:
