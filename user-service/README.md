@@ -45,6 +45,9 @@
   2026-10-11, Claude Code (Fable 5), issue #151: logout/denylist wording
   updated for the Redis move (POST /auth/logout, V6, gateway-only
   enforcement — team decisions by Leong Wei Zhi via options Q&A).
+  2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the service
+  URL updated for the gateway cutover (host port unpublished), and the
+  old-databases warning no longer lists the dropped token_denylist.
 -->
 
 # User Service
@@ -69,8 +72,11 @@ below), and the admin endpoints
 `includeDeleted=true` to list removed accounts with their `deletedAt`),
 `PATCH /users/{id}` (promote/demote) and `DELETE /users/{id}` (soft
 delete) for ADMIN/OWNER callers (#96), backed by Postgres via
-Spring Data JPA, with the schema managed by Flyway (see below). The root `compose.yaml` runs it with its own `user-db` (host port
-`${USER_SERVICE_PORT:-8087}`); `spring-boot:run` needs that database
+Spring Data JPA, with the schema managed by Flyway (see below). The root `compose.yaml` runs it with its own `user-db`; since the
+gateway cutover (#151) the service has no published host port — it is
+reached through the gateway at
+`http://localhost:${GATEWAY_PORT:-8090}/api/user/**`
+(`docs/gateway.md`). `spring-boot:run` needs that database
 reachable (`USER_DB_*` env vars) and `JWT_SECRET` set. Tests supply
 their own database. CORS allows the web origin in `WEB_ALLOWED_ORIGIN`
 (default `http://localhost:5173`).

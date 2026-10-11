@@ -3051,3 +3051,16 @@ Entry template:
   match. Behavior-preserving fixes to recorded decisions; no new
   design decisions.
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** documentation (PR #176 Copilot re-review)
+- **Prompt(s):** Asked to address the re-review's remaining finding: the
+  service READMEs still pointed at the backend host ports the cutover
+  unpublished.
+- **Scope:** `user-service/README.md`, `credit-service/README.md`,
+  `notification-service/README.md` — run/health-check URLs now go via
+  the gateway prefix (`${GATEWAY_PORT:-8090}/api/<service>/**`), with
+  the in-network name noted where relevant. The gateway health path was
+  verified against the running stack (200).
+- **Author review:** Pending author review of the diff via the PR.

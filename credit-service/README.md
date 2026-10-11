@@ -9,6 +9,10 @@
   configuration updated for the request event handler, the broker
   topology and the message converter.
   Author review: Ryan Ang, pending pull request review.
+  2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the run
+  section's service URL updated for the gateway cutover (#151) — the
+  host port is unpublished; calls go via the gateway prefix.
+  Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
 # credit-service
@@ -66,6 +70,8 @@ With the whole stack (from the repo root, after setting
 docker compose up -d credit-service
 ```
 
-The service is on `http://localhost:${CREDIT_SERVICE_PORT:-8088}`, and
-its database on `127.0.0.1:${CREDIT_DB_HOST_PORT:-5436}` for local
-tooling.
+Since the gateway cutover (#151) the service has no published host
+port — it is reached through the gateway at
+`http://localhost:${GATEWAY_PORT:-8090}/api/credit/**`
+(`docs/gateway.md`). Its database stays on
+`127.0.0.1:${CREDIT_DB_HOST_PORT:-5436}` for local tooling.
