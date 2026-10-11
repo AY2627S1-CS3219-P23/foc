@@ -26,7 +26,48 @@ Entry template:
 ```
 
 ---
-<<<<<<< HEAD
+## 2026-10-11 — Ryan Ang (credit-service: credit operations, issue #169)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs), explain
+- **Scope:** `credit-service/`, GitHub issues.
+  - GitHub issues #169 to #174: one task issue per unbuilt component
+    of `docs/credit-service.md` (credit operations, reply outbox and
+    publisher, event listener, read API, scheduler, web balance and
+    history), each citing the requirement issues it serves. Only the
+    `service:` labels were set; priority, sprint and assignee are left
+    to the team.
+  - `CreditOperationsService`: the real `CreditOperations` bean
+    (get-or-create, reserve, transfer, release), replacing
+    `NotImplementedCreditOperations`, which is deleted with its case in
+    `NotImplementedStubsTest`.
+  - Repository queries: an insert-once account (`on conflict do
+    nothing`), locking reads of an account and a reservation, a user's
+    lots in spend order, a reservation's slices.
+  - `CreditOperationsServiceTest` (22 tests, Testcontainers Postgres):
+    every row of "What each operation answers", the lot rules, four
+    races, and after each test the checks of "How their consistency is
+    maintained".
+  - The service's README and AGENTS.md, and the `CreditOperations`
+    header, updated for the implementation.
+- **Prompt(s):** Asked how to open issues for the pieces citing the requirements;
+  then to implement the first issue on `feat/credit-operations`.
+- **Author review:** The outcomes per reservation status, the lock
+  order, the lot spend order, the history rows and the sign-up amount
+  are the team's design (`docs/credit-service.md`); the tool wrote the
+  code to it. Where the doc is silent the tool took the plainest
+  reading, and each is **for the author to confirm**: the sign-up
+  amount (5) and the earned-credit lifetime (3 months) are constants in
+  the class, not configuration; "3 months" is three calendar months in
+  UTC; a `REJECTED` record stores the reward that was asked for and has
+  `settled_at` set; slices are kept after a transfer or release, not
+  deleted; a lot already past its expiry but not yet moved to the pool
+  is still spendable. The first test run found a defect in the tool's
+  own first draft (the repository's `save` merged a new record over one
+  a concurrent delivery had just committed); records are now inserted
+  with `persist`, and the two-first-deliveries test covers it.
+  `./mvnw test`: 80 tests, 0 failures, with Docker; the new class run
+  three more times with the same result. Pending pull request review.
+
 ## 2026-10-10 — Ryan Ang (PR #168 review fixes)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** review assistance, refactoring, tests, docs
@@ -139,7 +180,6 @@ Entry template:
   consequences are flagged for the Order owner rather than decided. The
   author approved the push to the wiki. Pending pull request review.
 
-=======
 ## 2026-10-10 — Leong Wei Zhi (PR #149 re-review @Sinnez1: the empty-code regression and three nits)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** debug (review fixes)
@@ -391,7 +431,6 @@ Entry template:
   eslint, tsc and prettier clean; reviewed via pull request.
 
 ---
->>>>>>> 9028a1bcf8978bc561d674aeb3cef8ba4fb23407
 ## 2026-10-10 — Ryan Ang (credit-service scaffold: entities, repositories, interfaces)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (scaffold + tests + docs)

@@ -2,8 +2,8 @@
  * AI-assisted (CS3219 AI Usage Policy disclosure):
  * Tool: Claude Code (Opus 5.5), 2026-10-10.
  * Scope: the credit operations interface, with the signatures the author
- * supplied; the comments point at docs/credit-service.md. No
- * implementation yet (see NotImplementedCreditOperations).
+ * supplied; the comments point at docs/credit-service.md. Implemented
+ * by CreditOperationsService (2026-10-11, issue #169).
  * PR #166 review (Leong Wei Zhi): transfer and release return a
  * SettleResult instead of void (the author's choice of the reviewer's
  * options).

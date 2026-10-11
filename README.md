@@ -63,12 +63,6 @@
   flows (issue #92) by Claude Code (Fable 5).
   2026-10-07: AI Use Summary extended for the user-service and web review
   follow-ups (issues #154 and #138, PR #162) by Claude Code (Opus 5.5).
-<<<<<<< HEAD
-  2026-10-10: that clause extended for PR #162's re-review fixes by
-  Claude Code (Opus 5.5).
-  2026-10-10: AI Use Summary extended for the PR #168 review fixes by
-  Claude Code (Opus 5.5).
-=======
   2026-10-09: AI Use Summary extended for the web profile screens
   (issue #112, PR #149) and that PR's two Copilot-review rounds, by
   Claude Code (Opus 5) — the summary had no entry for #112.
@@ -76,7 +70,11 @@
   Claude Code (Opus 5.5); and the #149 clause for that PR's team review
   (@Sinnez1) and issue #167, the gate-code refactor that came out of it,
   by Claude Code (Opus 5).
->>>>>>> 9028a1bcf8978bc561d674aeb3cef8ba4fb23407
+  2026-10-10: AI Use Summary extended for the PR #168 review fixes by
+  Claude Code (Opus 5.5).
+  2026-10-11: AI Use Summary extended for the credit operations (issue
+  #169) by Claude Code (Opus 5.5); the conflict markers the PR #168
+  merge left in this header were removed, keeping both sides.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -461,7 +459,12 @@ fixes (#168: the reserve result split by refusal cause and an
 unhandled event logged, both the team's decisions among the reviewer's
 options, tests tying the bound events to the handler and exercising
 its transaction, and the disclosure headers the review found
-missing).
+missing); and the credit operations (issue #169: get-or-create,
+reserve, transfer and release, their repository queries and tests),
+written to the team's design in `docs/credit-service.md`, with the
+readings the tool took where the doc is silent listed in
+`ai/usage-log.md` for the author to confirm, together with the task
+issues #169 to #174 that split the remaining Credit Service work.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
