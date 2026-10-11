@@ -10,6 +10,17 @@ credit:
     # the main yaml's default is empty, which fails startup
     secret: test-jwt-secret-that-is-at-least-32-bytes-long
 
+  rabbitmq:
+    # no broker in the tests: nothing is declared at startup
+    provision-on-startup: false
+
+spring:
+  rabbitmq:
+    listener:
+      simple:
+        # no broker in the tests: a listener must not try to connect
+        auto-startup: false
+
 management:
   health:
     rabbit:

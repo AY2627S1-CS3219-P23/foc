@@ -10,6 +10,8 @@
   foc-contracts) are included now, and Testcontainers Postgres for
   tests, by the author's choice via options Q&A; no listener or outbox
   code uses them yet. Run `../foc-contracts/mvnw install` first.
+  2026-10-10: testcontainers-rabbitmq (test scope) for the real-broker
+  topology test, as notification-service has it.
   Author review: Ryan Ang, pending pull request review.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -141,6 +143,11 @@
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers-postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-rabbitmq</artifactId>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>

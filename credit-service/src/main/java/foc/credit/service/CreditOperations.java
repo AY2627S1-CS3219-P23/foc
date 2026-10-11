@@ -7,6 +7,8 @@
  * PR #166 review (Leong Wei Zhi): transfer and release return a
  * SettleResult instead of void (the author's choice of the reviewer's
  * options).
+ * PR #168 review (Leong Wei Zhi): reserve's comment states the
+ * reward-below-1 rule and the two refusals its result tells apart.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -27,6 +29,12 @@ public interface CreditOperations {
     /**
      * Reserves a request's reward from the requester, or refuses (D8).
      * Gets or creates the requester's account first (D6).
+     *
+     * <p>An amount below 1 is refused whatever the balance (Credit
+     * F1.2.1): {@link ReserveResult#REJECTED_INVALID_AMOUNT}, never a
+     * reservation of 0. An amount above the available balance is
+     * {@link ReserveResult#REJECTED_INSUFFICIENT_CREDITS}. Both record
+     * the request as {@code REJECTED}.
      */
     ReserveResult reserve(String requestRef, String requesterId, int amount);
 

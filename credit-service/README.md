@@ -5,6 +5,9 @@
   build, test and run it. The design is docs/credit-service.md (team).
   2026-10-10, Claude Code (Opus 5.5): status and contents updated for
   the entities, repositories and the two stubbed interfaces.
+  2026-10-10, Claude Code (Opus 5.5), PR #168: status, contents and
+  configuration updated for the request event handler, the broker
+  topology and the message converter.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -13,9 +16,10 @@
 Credit balances, reservation, transfer and history for FoC — the
 design is [`docs/credit-service.md`](../docs/credit-service.md).
 
-**Status: scaffold only.** The service starts, applies the schema and
-verifies login tokens, but has no endpoints, event listener, outbox
-publisher or business logic yet.
+**Status: scaffold plus the event handler and broker topology.** The
+service starts, applies the schema, declares its queues and verifies
+login tokens, but has no endpoints, event listener, outbox publisher or
+credit logic yet.
 
 What is here:
 
@@ -32,9 +36,19 @@ What is here:
 - **JWT verification** (`security/`): every route except
   `/actuator/health` needs a bearer token signed with the shared
   `JWT_SECRET`; a missing or invalid one is a 401 problem+json.
-- **Messaging dependencies**: `spring-boot-starter-amqp` and
-  `foc-contracts` are on the classpath and RabbitMQ is configured, for
-  the saga's listener and outbox publisher.
+- **Request event handler** (`service/RequestEventHandler`): applies
+  one request event in one transaction, calling `CreditOperations` and,
+  for a reservation, `ReplyOutbox`. It runs against the stubs until the
+  real implementations land.
+- **Broker topology** (`messaging/rabbitmq/`): at startup the service
+  declares the `request-events` and `credit-events` exchanges and its
+  own work, retry and dead-letter queues
+  (`credit-service.request-events`, `.retry`, `.dlq`), bound to the four
+  events it acts on. It therefore needs RabbitMQ to start. The retry
+  delay (`CREDIT_RETRY_TTL_MS`, default 2000) is fixed into the retry
+  queue when it is declared; changing it means deleting that queue.
+- **Message converter**: a copy of notification-service's, which reads
+  events by their `eventType`. A fractional reward is refused.
 
 ## Build and test
 

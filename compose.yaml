@@ -58,6 +58,9 @@
 # foc-contracts build and RabbitMQ connection (the saga, docs/credit-
 # service.md). Host ports 8088/5436 and postgres:17 chosen by Ryan Ang via
 # options Q&A.
+# 2026-10-10, Claude Code (Opus 5.5), PR #168: CREDIT_RETRY_TTL_MS and
+# CREDIT_RETRY_MAX_ATTEMPTS passed to the credit service for its retry
+# queue (docs/credit-service.md D11); the values are the team's.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -301,6 +304,9 @@ services:
       RABBITMQ_PORT: "5672"
       RABBITMQ_USER: ${RABBITMQ_USER:-foc}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set in .env}
+      # retry delay and attempts for a failed request event (D11)
+      CREDIT_RETRY_TTL_MS: ${CREDIT_RETRY_TTL_MS:-2000}
+      CREDIT_RETRY_MAX_ATTEMPTS: ${CREDIT_RETRY_MAX_ATTEMPTS:-5}
       # verifies login tokens; the secret user-service signs them with
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       # Browser origin allowed by CORS, shared with the other services.
