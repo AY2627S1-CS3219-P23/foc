@@ -12,6 +12,12 @@
 -- (SecurityProblemResponses: type/title/status/detail/instance) and the
 -- same WWW-Authenticate header, plus the CORS origin header so the
 -- browser can read a gateway-origin error.
+-- PR #176 Copilot review: the user-service public auth routes are
+-- skipped (except logout), mirroring JwtAuthenticationFilter's
+-- UNFILTERED/LOGOUT matchers — apiFetch attaches any stored token to
+-- every call, so without the skip a stale token in the browser would
+-- block login/sign-up at the gateway, the exact recovery case the
+-- filter's skip exists for (issue #91 decision).
 -- Reviewed by: Leong Wei Zhi (via pull request).
 
 local cjson = require "cjson.safe"
@@ -45,6 +51,19 @@ end
 
 -- preflights never carry credentials; the services answer them (CORS)
 if ngx.req.get_method() == "OPTIONS" then
+    return
+end
+
+-- user-service's public auth routes never read the Authorization
+-- header (JwtAuthenticationFilter skips them so a stale browser token
+-- can't block login or sign-up) — the gateway honors the same
+-- exception, or an expired token stored by the SPA would 401 the very
+-- login that replaces it. Logout is the carve-out from the carve-out:
+-- it needs its token verified, like the filter's LOGOUT matcher.
+-- request_uri, not uri: the locations' prefix-stripping rewrite runs
+-- before this access phase, so uri is already /auth/... here
+local path = ngx.var.request_uri:match("^[^?]*")
+if path:find("^/api/user/auth/") and path ~= "/api/user/auth/logout" then
     return
 end
 

@@ -3033,3 +3033,21 @@ Entry template:
   `docs/architecture.md`/`.mmd` gateway + Redis, D10 note in
   `docs/notification-service.md`; README AI Use Summary.
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debugging assistance, refactoring (PR #176 Copilot review)
+- **Prompt(s):** Asked to address the five Copilot findings on PR #176.
+- **Scope:** `gateway/lua/auth.lua` skips user-service's public
+  `/auth/**` routes except logout (mirrors JwtAuthenticationFilter's
+  issue-#91 skip — a stale SPA token no longer blocks login at the
+  gateway); `gateway/nginx.conf` order stub now runs the same auth
+  check and answers CORS-readably (incl. its own preflight);
+  `compose.yaml` drops the redis health gates on gateway and
+  user-service (fail-open G6 / best-effort G9 must hold at startup
+  too); `docs/architecture.md` auth note qualified (anonymous routes,
+  the /ws limit); `user-service/README.md` old-databases warning no
+  longer lists the dropped token_denylist; `docs/gateway.md` updated to
+  match. Behavior-preserving fixes to recorded decisions; no new
+  design decisions.
+- **Author review:** Pending author review of the diff via the PR.

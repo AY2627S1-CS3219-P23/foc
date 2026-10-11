@@ -86,12 +86,15 @@ below accompany it.
 | `F… / NFR… / M…` on a line | The D1 requirement or course-mandated item that this relationship implements |
 | **TBD** | A decision the team has not made yet (kept open on purpose) |
 
-**Authentication note:** every Web call carries a JWT issued by
-the User Service on login (User F7.1); tokens expire after one hour and
-logout invalidates the current token (User F7.1.1–F7.1.2) by denylisting
-its `jti` in Redis — the **API Gateway** rejects denylisted tokens on
-every route, so revocation holds platform-wide (issue #151,
-[`gateway.md`](gateway.md)). Each service still verifies the signature
+**Authentication note:** every authenticated Web API call carries a JWT
+issued by the User Service on login (User F7.1); sign-up/login and other
+public routes are anonymous. Tokens expire after one hour and logout
+invalidates the current token (User F7.1.1–F7.1.2) by denylisting its
+`jti` in Redis — the **API Gateway** rejects denylisted bearer tokens on
+every HTTP route, so revocation holds platform-wide for the REST APIs
+(issue #151, [`gateway.md`](gateway.md); accepted limit: the STOMP
+CONNECT-frame token on `/ws` is signature/expiry-checked by the
+Notification Service only, without a denylist lookup). Each service still verifies the signature
 itself and rejects requests the caller's role does not permit (User
 F6.1.5). Token-validation mechanics (shared `JWT_SECRET` per
 `.env.example`) are configuration, not a runtime call, so no arrow is

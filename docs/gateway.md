@@ -6,6 +6,10 @@
   options Q&A (factual option comparisons only — the tool recommended
   nothing); this document records them. Implementation and this write-up
   by the tool, per the allowed-use rules.
+  2026-10-11, PR #176 Copilot review: G5 row, request-flow note and the
+  order-stub row updated for the review fixes (public-auth skip, CORS-
+  readable stub, no Redis startup gating) — behavior-preserving fixes,
+  no new decisions.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -38,7 +42,7 @@ no design decisions; comparisons presented were factual only).
 | G2 | Denylist store | Redis only: `denylist:<jti>` keys with `EX` = seconds until the token's own `exp`; Redis expiry replaces any purge job. The never-used `token_denylist` table is dropped (user-service `V6`) |
 | G3 | Routing scope | Full cutover: the SPA's five service URLs all point at the gateway (`/api/user`, `/api/supplier`, `/api/credit`, `/api/notification`; `/api/order` reserved); backend containers have **no published host ports** |
 | G4 | Enforcement depth | Gateway only. No backend service reads the denylist; user-service gains Redis solely to **write** it at logout |
-| G5 | Anonymous requests | Pass through untouched (incl. OPTIONS preflights and non-Bearer schemes); each service's Spring Security still decides what needs auth. A Bearer token present is verified + denylist-checked |
+| G5 | Anonymous requests | Pass through untouched (incl. OPTIONS preflights and non-Bearer schemes); each service's Spring Security still decides what needs auth. A Bearer token present is verified + denylist-checked — except on user-service's public `/auth/**` routes (logout excluded), which the gateway skips like `JwtAuthenticationFilter` does, so a stale token stored by the SPA can never block login/sign-up (PR #176 review) |
 | G6 | Redis outage | Fail open: a connect/lookup error forwards the request if signature + exp are valid (availability over revocation, bounded by the ≤1 h token lifetime) |
 | G7 | Redis durability | AOF (`--appendonly yes`) + named volume: revoked-but-unexpired tokens stay revoked across container restarts |
 | G8 | Logout writer | user-service `POST /auth/logout` (authenticated): reads the verified token's `jti`/`exp` and writes the Redis key via Spring Data Redis |
@@ -72,6 +76,11 @@ sequenceDiagram
     end
 ```
 
+Exception mirrored from `JwtAuthenticationFilter`: `/api/user/auth/**`
+except logout is forwarded without reading the Authorization header at
+all — the SPA attaches any stored token to every call, and an expired
+one must not 401 the login that would replace it.
+
 Logout: `POST /api/user/auth/logout` → user-service
 `SET denylist:<jti> "1" EX <seconds-until-exp>` → 204 (G8/G9). From that
 moment every gateway route rejects that token.
@@ -84,7 +93,7 @@ moment every gateway route rejects that token.
 | `/api/supplier/**` | `supplier-service:8080` | prefix stripped |
 | `/api/credit/**` | `credit-service:8080` | prefix stripped |
 | `/api/notification/**` | `notification-service:8080` | prefix stripped; WebSocket upgrade + SockJS streaming enabled for `/ws/**` |
-| `/api/order/**` | — | reserved: 503 problem+json until order-service exists |
+| `/api/order/**` | — | reserved: same auth check as real routes, then a CORS-readable 503 problem+json (incl. answering the preflight itself) until order-service exists |
 | anything else | — | 404 problem+json |
 
 Upstream names resolve per request through compose's DNS

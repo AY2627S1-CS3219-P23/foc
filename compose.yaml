@@ -116,9 +116,11 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       # stamped onto gateway-origin 401s so the browser can read them
       WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
+    # No redis dependency on purpose (PR #176 Copilot review): the
+    # denylist check fails open at request time (G6), so gating startup
+    # on Redis health would block even valid traffic exactly when the
+    # design says to keep serving it.
     depends_on:
-      redis:
-        condition: service_healthy
       # start order only — per-request DNS keeps routing if one restarts
       user-service:
         condition: service_started
@@ -295,10 +297,11 @@ services:
       # gateway is what reads them on every request.
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+    # No redis dependency on purpose (PR #176 Copilot review): the
+    # logout write is best-effort (G9, finite 2 s timeouts), so the
+    # whole service must not wait on — or fail with — Redis.
     depends_on:
       user-db:
-        condition: service_healthy
-      redis:
         condition: service_healthy
       # vestigial once .env points MAIL_HOST at Gmail, but harmless
       mailpit:

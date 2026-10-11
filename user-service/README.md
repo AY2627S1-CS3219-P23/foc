@@ -290,7 +290,7 @@ a new `V<n>__<name>.sql`, never by editing an applied one.
 **Old local databases.** `baseline-on-migrate` records *any* non-empty
 schema without Flyway history as V1, without checking that it matches
 `V1__baseline.sql`. A local `user-db` created by `ddl-auto` before
-`account_tokens`, `token_denylist` or the `users.version` column
+`account_tokens` or the `users.version` column
 existed would be marked V1 with those missing, and the service then fails
 when it first touches them. If you haven't started user-service since
 the Flyway switch (#147), reset the user database before starting it
