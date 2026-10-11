@@ -63,10 +63,20 @@
   flows (issue #92) by Claude Code (Fable 5).
   2026-10-07: AI Use Summary extended for the user-service and web review
   follow-ups (issues #154 and #138, PR #162) by Claude Code (Opus 5.5).
+<<<<<<< HEAD
   2026-10-10: that clause extended for PR #162's re-review fixes by
   Claude Code (Opus 5.5).
   2026-10-10: AI Use Summary extended for the PR #168 review fixes by
   Claude Code (Opus 5.5).
+=======
+  2026-10-09: AI Use Summary extended for the web profile screens
+  (issue #112, PR #149) and that PR's two Copilot-review rounds, by
+  Claude Code (Opus 5) — the summary had no entry for #112.
+  2026-10-10: that #162 clause extended for its re-review fixes by
+  Claude Code (Opus 5.5); and the #149 clause for that PR's team review
+  (@Sinnez1) and issue #167, the gate-code refactor that came out of it,
+  by Claude Code (Opus 5).
+>>>>>>> 9028a1bcf8978bc561d674aeb3cef8ba4fb23407
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -368,8 +378,37 @@ sign-up policy re-checked, machine-readable problem+json `type` URIs
 on the OTP errors (sign-up's included), the V4/V5 migrations, purge
 sweeps, and unit and integration tests, with the scope, endpoint
 shapes, gating and response choices made by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`; and the
-user-service and web review follow-ups (issues #154 and #138, PR #162)
+neutral-options Q&A and recorded in `ai/usage-log.md`; and the `web/`
+profile screens (issue #112, PR #149) — the protected `/profile` page
+built on those endpoints: the details card, an OTP-gated Edit Account
+card, an OTP-gated password change, the second code step a new address
+confirms itself with, the delete-account confirmation, a shared
+code-step component and countdown module, a problem+json `type`
+classifier that replaced the sign-up dialog's matching on error
+sentences, and the page's tests, with the deviations from
+`docs/wireframes/profile.png` (no Current Password field, the new-email
+confirmation as a modal, the parked change snapshotted in
+localStorage) chosen by the author via neutral-options Q&A and
+recorded in `web/AGENTS.md` and `ai/usage-log.md`; plus that PR's two
+Copilot-review rounds — pending-email snapshots scoped to the account
+that parked them, the code step restored after a retryable save,
+Spring's `about:blank` read as "no type", body-validation refusals
+returning to the editable fields with the unspent code, an expired
+email change offering a restart instead of the resend user-service can
+only refuse, and the retained-code tests asserting the call that was
+meant to prove them; and that PR's team review (@Sinnez1) — the delete
+dialog sealed while its request is in flight, the page reading the
+session's one `GET /users/me` and writing saves back into it instead of
+keeping a private copy that went stale for the nav bar and the `/admin`
+guard, a resend-cooldown 429 counted down on the submit button rather
+than read as a wrong code, a kept code offered only while it is still
+alive, and an untyped 429 ending a pending sign-up on its status;
+followed by issue #167 from the same review — the account's single gate
+code moved out of the two cards into one `useGateCode` hook the page
+owns, so a code either card requests, spends or replaces is the same
+code for the other, and their drifted-apart request paths became one,
+with the shape (hook, placement, what stays per card) decided by the
+reviewer; and the user-service and web review follow-ups (issues #154 and #138, PR #162)
 — problem+json on every user-service endpoint (the shared
 `ResponseStatusException`, wrong-type-parameter and 415 handlers), a
 generic owner-setup 503, the demo seeder's `Locale.ROOT` formatting and its handling of

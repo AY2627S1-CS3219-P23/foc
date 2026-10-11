@@ -7,6 +7,10 @@
 // 2026-09-29, Claude Code (Sonnet 5): added `role`, decoded from the
 // token by AuthProvider — lets pages hide admin-only controls (e.g.
 // routes/suppliers.tsx's IS_ADMIN) for the caller's actual role.
+// 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): updateMe,
+// so a page that changes the account (the profile page's edit flows) can
+// refresh the session's shared copy instead of leaving every other
+// consumer — the nav bar, the /admin guard — on the pre-edit values.
 // 2026-09-29, Claude Code (Opus 5.5), issue #147: Prettier formatting;
 // `me`, the signed-in
 // user's account from GET /users/me, shared by the /admin guard and the
@@ -38,6 +42,9 @@ export interface AuthData {
   me: CurrentUser | null
   login(session: LoginResponse): Promise<void>
   logout(): void
+  // replaces the session's `me` with an account just saved, so the rest
+  // of the app stops showing the values it had before the edit
+  updateMe(user: AdminUser): void
 }
 
 export const AuthContext = createContext<AuthData | null>(null)

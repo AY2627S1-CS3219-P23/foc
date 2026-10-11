@@ -26,6 +26,7 @@ Entry template:
 ```
 
 ---
+<<<<<<< HEAD
 ## 2026-10-10 — Ryan Ang (PR #168 review fixes)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** review assistance, refactoring, tests, docs
@@ -138,6 +139,259 @@ Entry template:
   consequences are flagged for the Order owner rather than decided. The
   author approved the push to the wiki. Pending pull request review.
 
+=======
+## 2026-10-10 — Leong Wei Zhi (PR #149 re-review @Sinnez1: the empty-code regression and three nits)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debug (review fixes)
+- **Scope:** `web`: `features/user/otp.ts`,
+  `components/{EditAccountCard,ChangePasswordCard,EmailChangeModal}.tsx`,
+  `test/profile.test.tsx`.
+- **Prompt(s):** Asked to address @Sinnez1's re-review of the #167
+  refactor. The regression he found: sharing the code made `gate.live`
+  mean "the account holds a code", not "this card has one typed", so the
+  Edit Account card's Save could send `otp: ""` — after cancelling its
+  own code step, or when the Change Password card had requested the code
+  — and the untyped 400 that answers a blank otp routes to `amend`,
+  leaving the card resending the same empty code with no boxes to type
+  into. The hook answers `complete` now and the card opens its code step
+  unless the digits are filled, as the password card already did; its
+  hint and button follow (`Continue`, not `Save`, when there is nothing
+  to send). Three nits: a refused resend kept blanking an expiry already
+  known, so it is preserved; the expiry countdown's last tick now lands
+  on the expiry instead of up to 15s past it, which had `live` outliving
+  the code; and `resendWait` is actually used by EmailChangeModal, as
+  problemTypes.ts claimed — with `deadline` replacing its local copy of
+  the same helper. He also asked for a merge with main (conflicts since
+  #162), logged separately above.
+- **Author review:** One half of his expiry nit is deliberately not
+  fixed: a code learnt of only through a cooldown 429 has no quoted
+  life, so `live` cannot time it out without either assuming
+  user-service's TTL in the web (duplicating server config, which would
+  lie silently if the server's `otp.ttl` changed) or the 429 carrying
+  the remaining life — a user-service contract change, and so the
+  team's call, not an agent's. What the author took instead is the
+  user-visible half: with no quoted life the cards say a code was sent
+  without calling it valid, and the path self-heals (the server answers
+  `otp-expired`, which restarts the card). Raised in the PR reply for
+  @Sinnez1 to decide. Two regression tests cover the empty-code bug in
+  both shapes (requested from the other card, and cancelled here), and
+  both were checked to fail against the pre-fix submit path. Vitest
+  (97 tests), eslint, tsc and prettier clean; reviewed via pull request.
+
+---
+## 2026-10-10 — Leong Wei Zhi (merging main into feat/profile-screens, second time)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** refactor (merge conflict resolution)
+- **Scope:** `README.md`, `ai/usage-log.md`, `web/src/test/auth.test.tsx`
+  — the same three ledgers as the previous merge, conflicting only
+  because each side appended at the same place. No code conflicted.
+  (1) `auth.test.tsx`: both sides added header disclosure lines; all four
+  kept, in date order. (2) `README.md` AI Use Summary: both continued the
+  same sentence, so the shared "neutral-options Q&A and recorded in
+  `ai/usage-log.md`" prefix is kept once and the clauses chained — this
+  branch's profile screens (#112/#149/#167) first, since they follow the
+  #92 account-update clause they build on, then main's #154/#138
+  follow-ups (PR #162), then the Credit Service contracts clause (PR
+  #163) both sides already shared; the changelog comment keeps all of
+  both sides' lines. (3) `ai/usage-log.md`: every entry from both parents
+  kept with each side's internal order untouched, this branch's block
+  first at each joint; two `---` separators are the only lines authored
+  here.
+- **Prompt(s):** Asked to address @Sinnez1's PR #149 re-review, which
+  also asked for a merge with main (conflicts since #162 went in).
+- **Author review:** Checked mechanically, not by eye: a script re-parsed
+  the merged log and compared each `## ` entry against both parents —
+  59 entries from this branch and 58 from main, 0 missing and 0 altered,
+  65 in the union. `web` suite 95 tests, eslint and tsc clean after the
+  merge. Reviewed via pull request.
+
+---
+## 2026-10-10 — Leong Wei Zhi (merging main into feat/profile-screens)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** refactor (merge conflict resolution)
+- **Scope:** Two documentation ledgers, both conflicting only because each
+  side appended at the same place; no code conflicted. `README.md` AI Use
+  Summary: both sides continued the same sentence from "made by the author
+  via", so the shared "neutral-options Q&A and recorded in
+  `ai/usage-log.md`" prefix is kept once and the two clauses chained — the
+  `web/` profile screens (#112, PR #149) first, since they read directly
+  off the #92 account-update endpoints clause above them, then main's
+  Credit Service saga contracts (PR #163), whose closing text is
+  unchanged. `ai/usage-log.md`: all five new entries kept and ordered
+  newest-first, which interleaves the two sides rather than stacking them
+  — this branch's 2026-10-07 #112 entry sorts below main's 2026-10-08
+  foc-contracts entry. Nothing was dropped or reworded on either side; the
+  only line authored here is one `---` separator at the new joint.
+- **Prompt(s):** Asked to fix the merge conflict on PR #149.
+- **Author review:** Verified mechanically rather than by eye: every
+  `## ` entry from both parents is present in the merge (55 = the union of
+  the branch's 53 and main's 51), each entry's body is byte-identical to
+  its parent, no entry appears that is in neither parent, and the five
+  date inversions remaining in the file are all pre-existing in both
+  parents (none introduced). `foc-contracts` 9 tests and `web` 87 pass
+  after the merge. `notification-service` has a pre-existing flaky
+  failure unrelated to this merge, which touched no code: with Docker
+  running, `RetentionPurgeSchedulerTest` (and sometimes
+  `IdempotentEventProcessorTest`) fail to start the Rabbit listener
+  registry, and `origin/main` alone fails the same way — 33 run/2 errors
+  and 36 run/1 error on two runs of the same commit. With Docker stopped
+  the suite is 36/36 with the 3 Testcontainers tests skipped. Reviewed
+  via pull request.
+
+---
+## 2026-10-10 — Leong Wei Zhi (issue #167: one gate code for both profile cards)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** refactor
+- **Scope:** `web`: `features/user/otp.ts` (new `useGateCode` hook and a
+  shared `deadline` helper), `problemTypes.ts` (`resendWait`),
+  `components/{ProfileSection,EditAccountCard,ChangePasswordCard}.tsx`,
+  `test/profile.test.tsx`.
+- **Prompt(s):** Asked to do issue #167 — @Sinnez1's two remaining PR
+  #149 follow-ups — inside the same PR. user-service keeps ONE
+  `account_update_otps` row per account, but each profile card held its
+  own copy of it, so a code one card spent or replaced left the other
+  promising a code that was gone and spending attempts on one that had
+  been replaced; the two cards' `POST /users/me/otp` paths had also
+  drifted apart. `useGateCode()` now owns the row, the digits typed for
+  it, the request (one call for the first send and the resend, since
+  user-service treats a repeat as the resend), the cooldown-429 "a code
+  already exists" answer, and the `GateFailure` routing; ProfileSection
+  runs it once and hands it to both cards, which keep only what is
+  theirs — their fields, whether the code step is showing, and their
+  messages. Confirming an email change spends it too, because
+  user-service deletes the gate row along with the old address. The
+  shape (hook in `otp.ts`, instantiated once above the cards,
+  EmailChangeModal keeping its own `pending_email_changes` row) is the
+  reviewer's, recorded in #167 before the work started.
+- **Author review:** The refactor landed with the 91 existing tests
+  unchanged and passing, which is the regression evidence for "behaviour
+  preserved"; two cases were added for the shared code — one card using
+  a code the other requested without a second `POST /users/me/otp`, and
+  one card asking for its own once the other spent it. Both were
+  mutation-checked rather than just run: the first fails if each card is
+  given its own hook (the pre-#167 split), the second if `spent()` stops
+  clearing the shared row. The email-change resend still has its own
+  request path — a different row, endpoint, response and failure rules —
+  and shares only the cooldown detection (`resendWait`) and the
+  countdown. Vitest (93 tests), eslint, tsc and prettier clean; reviewed
+  via pull request.
+
+---
+## 2026-10-10 — Leong Wei Zhi (PR #149 review @Sinnez1: shared /users/me, delete dialog, gate-code failures)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debug (review fixes)
+- **Scope:** `web`: `features/user/AuthProvider.tsx`, `useAuth.tsx`,
+  `profileApi.ts`, `problemTypes.ts`,
+  `components/{ProfileSection,DeleteAccountModal,EditAccountCard,ChangePasswordCard,CodeStep,OtpVerificationModal}.tsx`;
+  `test/profile.test.tsx`, `test/auth.test.tsx`.
+- **Prompt(s):** Asked to address @Sinnez1's review of PR #149. The two
+  flagged items: (1) the delete dialog could be dismissed mid-request —
+  Cancel (and the ✕ / backdrop it shares a handler with) closed it while
+  the DELETE was away, so `logout()` signed the user out with no warning
+  and a failure's message landed on a dialog that was gone; both are
+  disabled while it is pending. (2) the profile page asked
+  `GET /users/me` for itself even though AuthProvider already holds that
+  answer for the session, and its private copy meant an edit here left
+  the nav bar and the `/admin` guard on pre-edit values; the page reads
+  `useAuth().me` and hands each save back through a new `updateMe`, and
+  the duplicate `profileApi.getCurrentUser` wrapper is gone. Also four of
+  his follow-ups: a resend-cooldown 429 on save is classified `wait`
+  (its own `GateFailure`) so the code stays in the boxes and `CodeStep`
+  counts the quoted wait down on the submit button, instead of being read
+  as a wrong guess; a code kept across a refusal is only offered while
+  its own expiry stands; an untyped 429 ends a pending sign-up on its
+  status alone; and the page's two email banners clear each other.
+- **Author review:** The two remaining follow-ups — one gate code tracked
+  separately by both cards, and the duplicated code-request logic — need
+  a shared owner (@Sinnez1's suggested `useGateCode()` hook, instantiated
+  once in ProfileSection); the author chose to track them as a follow-up
+  issue rather than widen an approved PR, since today's behaviour
+  degrades gracefully (a stale "still valid" hint costs one refused call,
+  then the card asks for a new code). Four regression tests added — the
+  dialog that cannot be dismissed mid-delete, the 429 countdown, a kept
+  code that has expired, and the untyped 429 — each checked to fail with
+  only its own fix reverted; the shared-`me` change is pinned by the
+  existing username-save case, which now also asserts one
+  `GET /users/me` per session. Vitest (91 tests), eslint, tsc and
+  prettier clean; reviewed via pull request.
+
+---
+## 2026-10-09 — Leong Wei Zhi (PR #149 Copilot re-review: expired email change, test strength, disclosures)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debug (review fixes) + docs (disclosures)
+- **Scope:** `web`: `features/user/components/EmailChangeModal.tsx`,
+  `register.tsx`, `test/profile.test.tsx`, and the author-review note
+  filled in on the thirteen files added for #112; `README.md` AI Use
+  Summary.
+- **Prompt(s):** Asked to address the second round of Copilot findings on
+  PR #149. (1) The confirm dialog offered "Resend code" once the parked
+  change expired, but `AccountUpdateService.resendEmailChange` deletes an
+  expired `pending_email_changes` row and answers `OTP_EXPIRED` — unlike a
+  gate code, a dead row cannot be renewed — so the CTA could only fail;
+  the dialog now says so and offers "Start over", which drops the
+  snapshot (where the doomed call ended up anyway, a round trip later).
+  (2) Two retained-code tests asserted `toHaveBeenLastCalledWith` with
+  arguments the previous failed save had already produced, so they passed
+  whether or not the second Save ran; they assert the call count now, and
+  the same gap was fixed in the pre-existing taken-name test.
+  (3) The `PasswordChecklist` import in `register.tsx` used double quotes
+  and a semicolon, which `format:check` rewrites. (4) The disclosure
+  duties in AGENTS.md were incomplete: the thirteen files added for #112
+  still carried `Reviewed by: [pending]`, and the README AI Use Summary
+  had no #112 entry at all.
+- **Author review:** The review-note wording was the author's choice via
+  an options round (2026-10-09) — `Author review: Leong Wei Zhi (via
+  PR #149).`, the form already used for author-reviewed files in this
+  repo, rather than a claim of completed teammate review (the PR's
+  2026-09-29 approval predates the endpoint rewrite). The expiry case has
+  its own test, rendering the dialog on a dead snapshot — the state it
+  really meets, since the page's sweep clears expired snapshots on mount
+  — checked to fail before the fix. The `about:blank` finding Copilot
+  still lists as open was answered in the previous round inside
+  `problemType()` and is covered by the `auth.test.tsx` case using that
+  response shape. Vitest (87 tests), eslint, tsc and prettier clean;
+  reviewed via pull request.
+
+---
+## 2026-10-09 — Leong Wei Zhi (PR #149 Copilot review: snapshot ownership + failure recovery)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debug (review fixes) + generate (regression tests)
+- **Scope:** `web`: `features/user/problemTypes.ts`, `types.ts`,
+  `components/ProfileSection.tsx`, `EditAccountCard.tsx`,
+  `ChangePasswordCard.tsx`, `EmailChangeModal.tsx`,
+  `OtpVerificationModal.tsx`; `test/profile.test.tsx`,
+  `test/auth.test.tsx`.
+- **Prompt(s):** Asked to address Copilot's four findings on PR #149.
+  (1) The pending-email snapshot used one browser-wide key with no
+  account on it and outlived both logout and account deletion, so the
+  next account to sign in was shown — and could confirm against its own
+  account — an address somebody else had parked: `PendingEmailChange`
+  carries `userId` now, the page reads only the signed-in account's own
+  (another account's is left alone, an ownerless or expired one is
+  dropped), the resend keeps the owner, and deleting the account clears
+  its snapshot. (2) After a name-taken refusal the Edit card sits at its
+  fields holding a live code; a retryable failure there cleared the
+  digits without reopening the code step, so the next Save submitted an
+  empty code with no boxes to type into — the retry branch now always
+  returns to the step. (3) `problemType()` read Spring's placeholder
+  `type: "about:blank"` as a real type, which made the sign-up dialog
+  answer for AuthService's untyped post-flush refusal and stay open over
+  a sign-up only the form could fix; `about:blank` is reported as untyped
+  now, in the one helper. (4) An untyped 400 is the request body's own
+  validation (`ProblemDetailAdvice.handleInvalidBody`), which runs before
+  the service reads the code, so it is classified `amend` rather than a
+  code retry: both cards return to their fields — the part that was
+  refused — keeping the unspent code, where before a rejected password or
+  address left the fields disabled behind a code step and cost the user
+  their edits.
+- **Author review:** Six regression tests added (account switch, an
+  ownerless snapshot, amend-then-transient-failure, an untyped 400 on
+  each card, and the `about:blank` sign-up refusal); each was checked to
+  fail against the pre-fix code and pass after. Vitest (86 tests),
+  eslint, tsc and prettier clean; reviewed via pull request.
+
+---
+>>>>>>> 9028a1bcf8978bc561d674aeb3cef8ba4fb23407
 ## 2026-10-10 — Ryan Ang (credit-service scaffold: entities, repositories, interfaces)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (scaffold + tests + docs)
@@ -387,6 +641,43 @@ Entry template:
   edges transcribed from the team's saga design (D6-D9). Root
   `README.md`: AI Use Summary clause for this PR.
 
+---
+## 2026-10-07 — Leong Wei Zhi (#112 profile screens on #92's real endpoints)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** refactor (contract swap) + generate (the two new code steps)
+- **Scope:** `web`: `features/user/profileApi.ts` rewritten on the
+  endpoints PR #157 shipped and `profileApiMock.ts` + the
+  `VITE_MOCK_PROFILE_API` switch deleted; new `problemTypes.ts`,
+  `otpCountdown.ts`, `components/CodeStep.tsx` and
+  `components/EmailChangeModal.tsx`; `EditAccountCard`,
+  `ChangePasswordCard`, `ProfileDetailsCard`, `ProfileSection` and
+  `types.ts` updated; `OtpVerificationModal` now matches problem+json
+  type URIs instead of detail sentences; `routes/index.tsx` AdminRoute
+  wrapper restored; `test/profile.test.tsx` rewritten,
+  `test/auth.test.tsx` problem helper extended; `web/AGENTS.md`.
+- **Prompt(s):** Asked to plan and execute the swap of PR #149's
+  provisional contract for the one #92 (PR #157) actually shipped.
+  Design decided by the author via an options Q&A round (2026-10-07):
+  (1) Change Password drops the wireframe's Current Password field and
+  gains an OTP step, because the shipped `POST /users/me/password` takes
+  `{newPassword, confirmPassword, otp}` and has no `currentPassword`;
+  (2) the new-email confirmation is a modal, matching the sign-up
+  dialog, rather than a third phase inside the Edit card;
+  (3) the parked email change is snapshotted in localStorage, since
+  user-service has no GET for the row and a reload would otherwise cost
+  the user a fresh gate code; (4) all four ride-along follow-ups PR #157
+  listed were taken in this PR.
+- **Author review:** Deviations from `docs/wireframes/profile.png` are
+  recorded in `web/AGENTS.md` next to the wireframe. The tool flagged two
+  things found while swapping: this branch had flattened `/admin`'s
+  `AdminRoute` wrapper (restored — main's role gate from issue #147), and
+  one sign-up uniqueness refusal is still thrown untyped in
+  `AuthService`, so the dialog keeps a single sentence fallback and the
+  one-line user-service fix is left as a follow-up. Vitest (80 tests),
+  eslint and build clean; walked end to end against docker compose +
+  Mailpit; reviewed via pull request.
+
+---
 ## 2026-10-05 — Ryan Ang (user-service + web: remaining #154 and #138 follow-ups)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor + debug + tests + docs
@@ -566,6 +857,32 @@ Entry template:
 - **Author review:** Full suite green (280 tests, 43 new); manual
   Mailpit run of all five routes. Reviewed via pull request.
 
+## 2026-09-29 — Leong Wei Zhi (#112 profile screens)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (implementation + tests)
+- **Scope:** `web`: `routes/profile.tsx` + route-table entry (the
+  already-linked /profile nav destination); `features/user/profileApi.ts`
+  and `profileApiMock.ts`; `ProfileSection`, `ProfileDetailsCard`,
+  `EditAccountCard` (OTP flow), `ChangePasswordCard`,
+  `DeleteAccountModal` components; `PasswordChecklist.tsx` extracted
+  from register.tsx; `errorMessage` hoisted from its three page-local
+  copies into `lib/api/http.ts`; `test/profile.test.tsx`.
+- **Prompt(s):** Asked to plan and resolve issue #112 (profile.png
+  wireframe). Scope decided by the author via question rounds: full edit
+  UI now against a dev-only mock (VITE_MOCK_PROFILE_API, adminApiMock
+  pattern) since #92's endpoints don't exist yet; credits shown as
+  placeholder dashes (credit-service has no API); no My Settings sidebar
+  (single card stack) until a second settings page exists.
+- **Author review:** Key deviations the tool flagged: the OTP/update/
+  password API contract is PROVISIONAL, confined to profileApi.ts, to be
+  renegotiated with #92's owner (F2.1.4's second OTP to the new email
+  deferred to #92); the email helper text follows AccountRules
+  (eXXXXXXX@u.nus.edu), not the wireframe's looser copy; deleting the
+  account lands on the login page, not home — ProtectedRoute's redirect
+  wins over logout()'s navigation from any protected page (pre-existing
+  app-wide logout behavior). Vitest suite (39 tests incl. 14 new),
+  eslint, build + mock-absent-from-bundle check; reviewed via pull
+  request.
 ## 2026-09-30 — Ryan Ang (admin dashboard: Users section only)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor (removal + tests + docs)

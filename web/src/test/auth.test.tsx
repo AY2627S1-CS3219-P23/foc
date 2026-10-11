@@ -19,14 +19,24 @@
 // line keeps up with the clock and says plainly when the code has run out.
 // 2026-10-05, Claude Code (Opus 5.5), issue #154: the "account created"
 // notice clears its navigation state, so a reload doesn't show it again.
+// 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review: the
+// back-to-the-form cases now include the untyped refusal as the server
+// really sends it — `type: "about:blank"`, which the dialog had been
+// reading as a type of its own.
 // 2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei Zhi):
 // clearing that state keeps the URL's query and hash.
+// 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): and an
+// untyped 429, which ends the sign-up on its status alone.
 // Author review: Ryan to review via the PR.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
+import {
+  OTP_ATTEMPTS_EXCEEDED,
+  OTP_EXPIRED,
+} from '@/features/user/problemTypes'
 import { router, routes } from '../routes'
 
 // user-service's URL is empty in tests; give apiFetch one to call
@@ -59,8 +69,11 @@ function problem(
   status: number,
   detail: string,
   headers?: Record<string, string>,
+  // the stable problem+json type URI user-service attaches to its OTP and
+  // uniqueness refusals (PR #157); the dialog matches on it, not on detail
+  type?: string,
 ) {
-  return reply(status, { status, detail }, headers)
+  return reply(status, { status, detail, ...(type && { type }) }, headers)
 }
 
 // the method, URL and parsed body of the n-th request sent
@@ -345,18 +358,39 @@ describe('sign-up page', () => {
       'an expired code',
       400,
       'Code has expired; sign up again to get a new code',
+      OTP_EXPIRED,
     ],
     [
       'too many wrong codes',
       429,
       'Too many incorrect codes; sign up again to get a new code',
+      OTP_ATTEMPTS_EXCEEDED,
+    ],
+    [
+      // no type at all: only an exhausted attempt budget answers verify
+      // with a 429, and that row refuses every code, so the status is
+      // enough to end the dialog (PR #149 review, @Sinnez1)
+      'an untyped 429',
+      429,
+      'Too many incorrect codes; sign up again to get a new code',
+      undefined,
+    ],
+    [
+      // AuthService's post-flush race is a plain ResponseStatusException,
+      // so Spring fills `type` with the placeholder `about:blank` — no
+      // type at all, and the sentence is the only signal. Only the form
+      // has the field that needs changing.
+      'an identifier taken after the checks',
+      400,
+      'Email or username was just taken; choose another',
+      'about:blank',
     ],
   ])(
     '%s sends the user back to the filled form',
-    async (_case, status, detail) => {
+    async (_case, status, detail, type) => {
       fetchMock
         .mockResolvedValueOnce(reply(202, accepted))
-        .mockResolvedValueOnce(problem(status, detail))
+        .mockResolvedValueOnce(problem(status, detail, {}, type))
 
       const user = await signUp()
       await typeCode(user, '482910')
