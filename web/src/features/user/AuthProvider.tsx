@@ -21,13 +21,16 @@
 // also asks GET /users/me once per session and shares the answer as
 // `me` (the /admin guard and the nav bar's Admin Dashboard link use it,
 // team decision). Merged with `role` above: both are exposed.
+// 2026-10-11, Claude Code (Fable 5), issue #151: logout() now also calls
+// POST /auth/logout (best-effort, team decision) so the server denylists
+// the token; the local session is cleared either way.
 // Reviewed by: Ryan Ang
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { useNavigate, Outlet } from 'react-router'
 import { AuthContext } from './useAuth'
 import { useLocalStorage } from './useLocalStorage'
-import { errorMessage, setTokenSource } from '@/lib/api/http'
+import { apiFetch, errorMessage, setTokenSource } from '@/lib/api/http'
 import { adminUserApi } from './adminApi'
 import { decodeJwtRole } from './jwt'
 import type { AdminUser, LoginResponse } from './types'
@@ -98,6 +101,14 @@ export const AuthProvider = () => {
 
     // call this function to sign out logged in user
     const logout = () => {
+      // denylist the token server-side (issue #151). Best-effort by team
+      // decision: signing out locally must work even when the server
+      // doesn't — an unrevoked token just lives out its remaining expiry.
+      // Fired before the token is cleared (apiFetch reads the token
+      // source synchronously while building the request).
+      void apiFetch<void>('user', '/auth/logout', { method: 'POST' }).catch(
+        () => {},
+      )
       setToken(null)
       navigate('/', { replace: true })
     }

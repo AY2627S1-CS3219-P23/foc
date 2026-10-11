@@ -31,6 +31,11 @@ Scope: POST /auth/signup (issue #87) and POST /auth/login (issues #89/#90),
        Retry-After when a resend is inside the cooldown.
        2026-10-02, Claude Code (Opus 5.5), issue #154: the
        ResponseStatusException handler moved to ProblemDetailAdvice.
+       2026-10-11, Claude Code (Fable 5), issue #151: POST /auth/logout —
+       denylists the caller's jti in Redis until the token's exp (team
+       decisions, Leong Wei Zhi 2026-10-11 options Q&A: Redis-only
+       denylist enforced at the API gateway; best-effort 204 even when
+       the Redis write fails).
 Author review: Leong Wei Zhi to review via the PR.
 2026-09-30 (Claude Code, Fable 5), issue #92: the three OTP handlers moved
 to ProblemDetailAdvice, shared with the account-update routes (same statuses,
@@ -45,6 +50,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -60,6 +66,8 @@ import foc.user.dto.SignupVerifyRequest;
 import foc.user.dto.UserResponse;
 import foc.user.exception.AccountLockedException;
 import foc.user.exception.LoginFailedException;
+import foc.user.security.JwtVerifier;
+import foc.user.security.TokenDenylist;
 import foc.user.service.AuthService;
 import jakarta.validation.Valid;
 
@@ -68,9 +76,11 @@ import jakarta.validation.Valid;
 public class AuthController {
 
     private final AuthService authService;
+    private final TokenDenylist tokenDenylist;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, TokenDenylist tokenDenylist) {
         this.authService = authService;
+        this.tokenDenylist = tokenDenylist;
     }
 
     // 202, not 201: nothing is created yet — a code was emailed and the
@@ -99,6 +109,20 @@ public class AuthController {
             // give someone typing a password. The count it lost is the
             // count it can't quote, so this one carries no tally
             throw LoginFailedException.wrongPassword();
+        }
+    }
+
+    // 204 always (idempotent, and best-effort by team decision G9: a failed
+    // Redis write is logged by TokenDenylist, not surfaced — the token then
+    // just lives out its remaining exp). The route is authenticated()
+    // in SecurityConfig, so the filter has already verified the token and
+    // stored it as the authentication's details
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(Authentication authentication) {
+        if (authentication.getDetails() instanceof JwtVerifier.VerifiedToken token
+                && token.jti() != null) {
+            tokenDenylist.revoke(token.jti(), token.expiresAt());
         }
     }
 

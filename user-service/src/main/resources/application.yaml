@@ -31,6 +31,10 @@
 # table issue #88 removed and creates pending_signups.
 # 2026-09-29, Claude Code (Opus 5.5): user.seed.demo, the switch for the
 # demo-account seeder (team decision: off unless USER_SEED_DEMO=true).
+# 2026-10-11, Claude Code (Fable 5), issue #151: spring.data.redis for the
+# logout denylist writes (team decision: Redis-only denylist, enforced at
+# the API gateway; logout is best-effort — chosen by Leong Wei Zhi via
+# options Q&A), and the Redis health indicator disabled like mail's.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -69,6 +73,20 @@ spring:
     # record it as V1 (the baseline script's schema) and apply V2 onward
     baseline-on-migrate: true
     baseline-version: 1
+  data:
+    redis:
+      # Platform Redis holding the logout denylist (issue #151). This
+      # service only WRITES denylist keys at logout; the API gateway is
+      # what reads them on every request (team decision: gateway-only
+      # enforcement).
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # Finite timeouts, like the SMTP ones above: the write runs inside
+      # the logout request and is best-effort (G9) — with Lettuce's
+      # defaults a Redis outage pinned the request thread until the
+      # gateway's 60 s proxy timeout answered 504 instead of 204.
+      connect-timeout: 2s
+      timeout: 2s
 
 management:
   endpoints:
@@ -80,6 +98,11 @@ management:
       # Don't let an SMTP outage mark the whole service down: everything
       # but the email flows keeps working, and a failed send already
       # surfaces as a 502 on sign-up (issue #88).
+      enabled: false
+    redis:
+      # Same rationale for Redis: logout's denylist write is best-effort
+      # (issue #151 — a failed write just leaves the token valid until its
+      # exp), so a Redis outage must not mark the service down.
       enabled: false
 
 user:

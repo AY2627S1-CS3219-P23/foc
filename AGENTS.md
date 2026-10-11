@@ -22,6 +22,10 @@
   2026-09-29, issue #88 (Fable 5): mailpit row added to the port table
   (SMTP 1025 / UI 8025) while wiring the local mail catcher for OTP
   emails into compose.yaml.
+  2026-10-11, issue #151 (Fable 5): redis and gateway rows added to the
+  port table while wiring the logout denylist and the API gateway
+  cutover (team decisions by Leong Wei Zhi via options Q&A, recorded in
+  docs/gateway.md).
   All decisions documented here were made by the team.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
@@ -142,6 +146,8 @@ alone is only a gate inside the server.
 | `credit-db` | `${CREDIT_DB_HOST_PORT:-5436}` (loopback only) | available |
 | `web` | — | no database (frontend itself published on `${WEB_PORT:-5173}`) |
 | `mailpit` | — | mail catcher, not a DB: SMTP `${MAILPIT_SMTP_PORT:-1025}`, web inbox `${MAILPIT_UI_PORT:-8025}` (both loopback only) |
+| `redis` | `${REDIS_HOST_PORT:-6379}` (loopback only) | logout token denylist (issue #151), not a DB profile — inspect with `redis-cli` |
+| `gateway` | — | not a DB: the API gateway itself is published on `${GATEWAY_PORT:-8090}`; since the cutover (issue #151, `docs/gateway.md`) it is the only way to the user/supplier/credit/notification services (`/api/<service>/**` — their containers have no host ports) |
 
 When a service gains its own database, its owner adds the container to
 `compose.yaml` in that service's own PR (the same convention the compose

@@ -42,6 +42,12 @@
   problem+json type-URI table, V4/V5 in the Flyway paragraph, and the
   purge's two new sweeps. Contract decisions by Leong Wei Zhi via
   options Q&A.
+  2026-10-11, Claude Code (Fable 5), issue #151: logout/denylist wording
+  updated for the Redis move (POST /auth/logout, V6, gateway-only
+  enforcement — team decisions by Leong Wei Zhi via options Q&A).
+  2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the service
+  URL updated for the gateway cutover (host port unpublished), and the
+  old-databases warning no longer lists the dropped token_denylist.
 -->
 
 # User Service
@@ -66,8 +72,11 @@ below), and the admin endpoints
 `includeDeleted=true` to list removed accounts with their `deletedAt`),
 `PATCH /users/{id}` (promote/demote) and `DELETE /users/{id}` (soft
 delete) for ADMIN/OWNER callers (#96), backed by Postgres via
-Spring Data JPA, with the schema managed by Flyway (see below). The root `compose.yaml` runs it with its own `user-db` (host port
-`${USER_SERVICE_PORT:-8087}`); `spring-boot:run` needs that database
+Spring Data JPA, with the schema managed by Flyway (see below). The root `compose.yaml` runs it with its own `user-db`; since the
+gateway cutover (#151) the service has no published host port — it is
+reached through the gateway at
+`http://localhost:${GATEWAY_PORT:-8090}/api/user/**`
+(`docs/gateway.md`). `spring-boot:run` needs that database
 reachable (`USER_DB_*` env vars) and `JWT_SECRET` set. Tests supply
 their own database. CORS allows the web origin in `WEB_ALLOWED_ORIGIN`
 (default `http://localhost:5173`).
@@ -172,10 +181,14 @@ sign-up never reserves an email or username.
   `type`, `title`, `status`, `detail` and `instance`.
 - `/auth/**` and `/actuator/health` never read the header, so a stale
   token in the browser can't block login or sign-up. `/auth/logout` is
-  the exception: it is filtered, and #90 adds its `authenticated()` rule
-  in `SecurityConfig`.
-- No sessions: each request stands on its own token. The logout
-  denylist (`token_denylist`) isn't checked yet (deferred).
+  the exception: it is filtered and `authenticated()` (#151) — it
+  denylists the caller's `jti` in Redis (`denylist:<jti>`, expiring with
+  the token) via `TokenDenylist`, best-effort: a failed Redis write is
+  logged, and the response is 204 either way.
+- No sessions: each request stands on its own token. This service does
+  **not** check the denylist — the API gateway rejects revoked tokens
+  platform-wide before they reach any service (team decision:
+  gateway-only enforcement; see `docs/gateway.md`).
 
 ## Account updates (#92)
 
@@ -276,13 +289,14 @@ OTP table with a pending table per operation.
 `V4__pending_email_changes` and `V5__account_update_otps` are #92's two
 tables in that shape: the parked email change awaiting the new address's
 code, and the account-update gate codes (one row per account each, FK to
-`users`). Schema changes go in a new `V<n>__<name>.sql`, never
-by editing an applied one.
+`users`). `V6__drop_token_denylist` removes the never-used denylist
+table — #151 moved the denylist to Redis TTL keys. Schema changes go in
+a new `V<n>__<name>.sql`, never by editing an applied one.
 
 **Old local databases.** `baseline-on-migrate` records *any* non-empty
 schema without Flyway history as V1, without checking that it matches
 `V1__baseline.sql`. A local `user-db` created by `ddl-auto` before
-`account_tokens`, `token_denylist` or the `users.version` column
+`account_tokens` or the `users.version` column
 existed would be marked V1 with those missing, and the service then fails
 when it first touches them. If you haven't started user-service since
 the Flyway switch (#147), reset the user database before starting it

@@ -16,6 +16,9 @@
   request review.
   2026-10-09, Claude Code (Opus 5.5): note recorded as nullable on the
   request events (author's decision, issue #165).
+  2026-10-11, Claude Code (Fable 5), issue #151: dated note on D10 — a
+  platform Redis now exists for the logout denylist (docs/gateway.md);
+  D10's scale-out question is unchanged and stays open.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -49,7 +52,7 @@ the team's finalized design for this service. Superseded decisions
 | D7 | Dead-letter handling | **Durable dead-letter queue**; unknown event types dead-letter (replayable after a consumer upgrade) rather than being dropped | Notif F2.3 |
 | D8 | Broker persistence | **Durable exchanges/queues + persistent messages** (durability is opt-in in RabbitMQ) | Notif NFR1.2 |
 | D9 | Retention window | `NOTIF_RETENTION_DAYS` env var, **default 30 days**; scheduled purge job | Notif F3.4 |
-| D10 | Redis / scale-out | **No Redis** in the single-instance design (see Open items) | — |
+| D10 | Redis / scale-out | **No Redis** in the single-instance design (see Open items). *2026-10-11 note:* a platform Redis now exists for the **logout token denylist** ([`gateway.md`](gateway.md), issue #151) — unrelated to this service's scale-out question, which stays open | — |
 | D11 | Broker isolation | **Ports and adapters**: all RabbitMQ code confined to one adapter package — see [Broker decoupling](#broker-decoupling-d11) | broker swap surface |
 | D12 | Topology provisioning | **App-declared at startup** via Spring AMQP beans (no broker definitions file) | topology lives beside its owner |
 | D13 | Naming convention | Exchange named after the producing domain (`request-events`); queues prefixed with the consuming service (`notification-service.request-events` + `.retry`/`.dlq`) | ownership visible in the management UI |

@@ -77,6 +77,10 @@
   merge left in this header were removed, keeping both sides. Same day:
   that clause extended for the team-review fixes, and again for the
   PR #175 review fixes.
+  2026-10-11: merge-conflict markers left in this header by an earlier
+  merge resolved (both sides kept, in date order), and the AI Use
+  Summary extended for the logout denylist + API gateway (issue #151),
+  by Claude Code (Fable 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -476,6 +480,18 @@ PR's review fixes (#175: a completion that finds no reservation is
 retried instead of dead-lettered at once, a removed race test restored,
 and the expiry and rejected-record rules moved from open items into the
 design doc), the team's decisions on the reviewers' findings.
+
+The logout denylist and API gateway (issue #151): the user-service
+logout endpoint, Redis denylist writer and V6 migration with their
+tests, the redis and gateway containers in compose, the OpenResty
+gateway (`gateway/` — nginx config and the Lua auth check), the web
+logout call and gateway base-URL cutover, and the documentation
+(`docs/gateway.md`, architecture doc/diagram updates). Every design
+decision (G1–G10: gateway technology, Redis-only store, full routing
+cutover, gateway-only enforcement, anonymous pass-through, fail-open,
+AOF persistence, logout placement, best-effort 204, revoked-token
+wording) was made by Leong Wei Zhi via neutral options Q&A, recorded in
+`docs/gateway.md` and `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

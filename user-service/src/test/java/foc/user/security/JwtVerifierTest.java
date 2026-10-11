@@ -4,6 +4,10 @@ Tool: Claude Code (Opus 5.5), date: 2026-09-29
 Scope: tests for JwtVerifier (issue #91): tokens from JwtIssuer verify to
        their sub and role; expired, wrongly signed, non-HS256, unsigned and
        claim-less tokens are rejected; a short secret fails at construction.
+       2026-10-11, Claude Code (Fable 5), issue #151: VerifiedToken now
+       carries jti and expiry for the logout denylist — the issued-token
+       case pins them, and a jti-less token still verifies (jti is only
+       needed for revocation).
 Author review: Ryan to review via the PR.
 */
 
@@ -60,14 +64,32 @@ class JwtVerifierTest {
     }
 
     @Test
-    @DisplayName("A token from JwtIssuer verifies to its sub and role")
+    @DisplayName("A token from JwtIssuer verifies to its sub, role, jti and expiry")
     void issuedToken() {
-        String token = new JwtIssuer(SECRET, Duration.ofHours(1)).issue(user(7L, Role.ADMIN));
+        Instant now = Instant.now();
+        String token = new JwtIssuer(SECRET, Duration.ofHours(1), Clock.fixed(now, ZoneOffset.UTC))
+            .issue(user(7L, Role.ADMIN));
 
         JwtVerifier.VerifiedToken verified = verifier.verify(token);
 
         assertThat(verified.subject()).isEqualTo("7");
         assertThat(verified.role()).isEqualTo(Role.ADMIN);
+        // the logout denylist key (issue #151), minted per token
+        assertThat(verified.jti()).isNotBlank();
+        // exp travels with second precision in the claim
+        assertThat(verified.expiresAt())
+            .isEqualTo(now.plus(Duration.ofHours(1)).truncatedTo(java.time.temporal.ChronoUnit.SECONDS));
+    }
+
+    @Test
+    @DisplayName("A token without a jti still verifies — jti only matters for revocation")
+    void noJti() {
+        String token = signed(token().id(null));
+
+        JwtVerifier.VerifiedToken verified = verifier.verify(token);
+
+        assertThat(verified.subject()).isEqualTo("7");
+        assertThat(verified.jti()).isNull();
     }
 
     @Test

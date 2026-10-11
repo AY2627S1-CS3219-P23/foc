@@ -5,13 +5,18 @@ Scope: JWT verification for the Spring Security filter chain (issue #91),
        per design doc §3/§4: HS256 with the shared JWT_SECRET, mirroring
        notification-service's JwtVerifier (eager key check, HS256-only,
        subject required), plus the role claim that §3 maps to authorities.
-       The logout denylist check is deferred (team decision).
+       2026-10-11, Claude Code (Fable 5), issue #151: VerifiedToken also
+       carries jti and expiry so POST /auth/logout can denylist the caller's
+       token. The denylist is checked by the API gateway, not here (team
+       decision: gateway-only enforcement, chosen by Leong Wei Zhi via
+       options Q&A).
 Author review: Ryan to review via the PR.
 */
 
 package foc.user.security;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -42,8 +47,11 @@ public class JwtVerifier {
             .build();
     }
 
-    // the verified caller: sub (user id) and role, as JwtIssuer mints them
-    public record VerifiedToken(String subject, Role role) {
+    // the verified caller, as JwtIssuer mints it: sub (user id) and role,
+    // plus the jti and expiry that logout denylists the token by. jti stays
+    // optional — every minted token carries one, but revocation is the only
+    // thing that needs it, so its absence is not a reason to refuse a call
+    public record VerifiedToken(String subject, Role role, String jti, Instant expiresAt) {
     }
 
     /**
@@ -71,7 +79,8 @@ public class JwtVerifier {
         if (claims.getExpiration() == null) {
             throw new MalformedJwtException("token has no expiry");
         }
-        return new VerifiedToken(subject, role(claims));
+        return new VerifiedToken(subject, role(claims), claims.getId(),
+            claims.getExpiration().toInstant());
     }
 
     // digits only, and small enough for the Long user ids (CallerId)

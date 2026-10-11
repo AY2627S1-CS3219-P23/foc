@@ -1,12 +1,16 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Fable 5), 2026-09-21, issue #108.
-// Scope: per-service base URLs (no API gateway — the browser talks to
-// each backend directly; see root AGENTS.md).
+// Scope: per-service base URLs.
+// 2026-10-11, Claude Code (Fable 5), issue #151: comments updated for the
+// API-gateway cutover (team decision) — the values now point at the
+// gateway with a per-service path prefix; the mechanism is unchanged.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
-// Values are browser-visible URLs (host-published ports), inlined by
-// Vite at build time from VITE_* env vars. Empty string = the owning
-// service has not claimed a host port yet (see root AGENTS.md).
+// Values are browser-visible URLs, inlined by Vite at build time from
+// VITE_* env vars. Since the gateway cutover (issue #151) each one is
+// the gateway origin plus the service's path prefix, e.g.
+// http://localhost:8090/api/user (see .env.example and docs/gateway.md).
+// Empty string = the service has no route yet (see root AGENTS.md).
 export const serviceBaseUrls = {
   user: import.meta.env.VITE_USER_SERVICE_URL ?? '',
   supplier: import.meta.env.VITE_SUPPLIER_SERVICE_URL ?? '',

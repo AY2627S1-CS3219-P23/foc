@@ -7,6 +7,9 @@
   docs/notification-service.md). Restructured 2026-09-21 from an
   issue-by-issue changelog into topic sections; the history lives in
   the GitHub issues and git log.
+  2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the health
+  check URL updated for the gateway cutover (#151) — the host port is
+  unpublished; the gateway prefix (or the in-network name) reaches it.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -37,7 +40,10 @@ event contracts: [`foc-contracts/README.md`](../foc-contracts/README.md#event-co
 docker compose up --build notification-service
 ```
 
-Health check: `GET http://localhost:${NOTIFICATION_SERVICE_PORT}/actuator/health`.
+Health check: `GET http://localhost:${GATEWAY_PORT:-8090}/api/notification/actuator/health`
+— since the gateway cutover (#151) the service has no published host
+port of its own (`docs/gateway.md`); inside the compose network it
+stays `notification-service:8080`.
 
 ## Configuration
 

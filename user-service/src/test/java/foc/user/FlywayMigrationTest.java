@@ -17,6 +17,9 @@ Scope: issue #147. Runs the Flyway migrations against their own schemas in
        2026-09-30, Claude Code (Fable 5), issue #92: V4 and V5 join them
        (pending_email_changes and account_update_otps), moving the counts
        to 4 and 5.
+       2026-10-11, Claude Code (Fable 5), issue #151: V6 joins them (drops
+       token_denylist — the denylist moved to Redis), moving the counts to
+       5 and 6; the fresh-database case also proves the table is gone.
 Author review: Ryan to review via the PR.
 */
 
@@ -45,7 +48,7 @@ import org.springframework.core.io.ClassPathResource;
 class FlywayMigrationTest extends PostgresTestContainer {
 
     // scripts in db/migration; a new V<n> bumps this
-    private static final int MIGRATION_SCRIPTS = 5;
+    private static final int MIGRATION_SCRIPTS = 6;
 
     // the application's Flyway, built from application.yaml's spring.flyway
     @Autowired
@@ -108,7 +111,7 @@ class FlywayMigrationTest extends PostgresTestContainer {
 
             MigrateResult result = migrate(schema);
 
-            // V1 is recorded as the baseline, not run again; V2..V5 run
+            // V1 is recorded as the baseline, not run again; V2..V6 run
             assertThat(result.migrationsExecuted).isEqualTo(MIGRATION_SCRIPTS - 1);
             assertThat(usernamesByEmail(statement)).containsExactly(
                 Map.entry("e1000001@u.nus.edu", "Bob"),
@@ -137,6 +140,11 @@ class FlywayMigrationTest extends PostgresTestContainer {
             insertUser(statement, "e1000001@u.nus.edu", "Bob", "2026-01-01T00:00:00Z");
             assertThatThrownBy(() -> insertUser(statement, "e1000002@u.nus.edu", "bob", "2026-01-02T00:00:00Z"))
                 .isInstanceOf(SQLException.class);
+
+            // V6: the denylist lives in Redis now, not this schema
+            assertThatThrownBy(() -> statement.execute("select 1 from token_denylist"))
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("token_denylist");
         }
     }
 }
