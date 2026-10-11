@@ -76,6 +76,11 @@
 # 2026-10-11, Claude Code (Opus 5.5), issue #169: CREDIT_SIGN_UP_CREDITS
 # and CREDIT_EARNED_CREDIT_LIFETIME_MONTHS passed to the credit service
 # (D4, D6); the values are the team's.
+# 2026-10-10, Claude Code (Opus 5.5): order-service + order-db wiring
+# added, following the notification-service pattern (RabbitMQ env and
+# depends_on included; no listener/JWT settings). Host ports 8088/5436,
+# the postgres:17 image, and the broker-wiring scope chosen by Ko-Khan
+# via options Q&A.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -419,6 +424,54 @@ services:
       retries: 10
     restart: unless-stopped
 
+  order-service:
+    # Context is the repo root so the build can include the shared
+    # foc-contracts library (D15).
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+    ports:
+      - "${ORDER_SERVICE_PORT:-8088}:8080"
+    environment:
+      ORDER_DB_HOST: order-db
+      ORDER_DB_PORT: "5432"
+      ORDER_DB_NAME: ${ORDER_DB_NAME:-order}
+      ORDER_DB_USER: ${ORDER_DB_USER:-order}
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?set in .env}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-foc}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set in .env}
+    depends_on:
+      order-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Order DB: PostgreSQL owned exclusively by the order service
+  # (database-per-service).
+  order-db:
+    image: postgres:17
+    # Published on the host so local tooling (psql, DB GUIs, the postgres
+    # MCP server) can reach the service-owned DB; the service itself talks
+    # to it over the compose network on 5432. Bound to loopback so the
+    # database is reachable from this machine only.
+    ports:
+      - "127.0.0.1:${ORDER_DB_HOST_PORT:-5436}:5432"
+    environment:
+      POSTGRES_DB: ${ORDER_DB_NAME:-order}
+      POSTGRES_USER: ${ORDER_DB_USER:-order}
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:?set in .env}
+    volumes:
+      - order-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ORDER_DB_USER:-order} -d ${ORDER_DB_NAME:-order}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   # Local mail catcher (issue #88): the default SMTP target for the user
   # service's OTP emails, so dev and demo need no real mail account.
   # Caught mail is browsable at http://localhost:8025; the store is
@@ -438,6 +491,7 @@ services:
 volumes:
   credit-db-data:
   notification-db-data:
+  order-db-data:
   rabbitmq-data:
   redis-data:
   supplier-db-data:
