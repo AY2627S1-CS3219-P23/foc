@@ -26,12 +26,21 @@ title: "Favours on Campus (FoC) — High-Level Service Architecture"
 %% pending and rejected (pending the Order F0.1 rewording listed in
 %% docs/credit-service.md); Credit DB labelled PostgreSQL (its D1).
 %% Author review: Ryan Ang, pending pull request review.
+%% 2026-10-11 (Claude Code, Fable 5), issue #151: API Gateway node and
+%% Redis denylist store added per the team's gateway/denylist decisions
+%% (Leong Wei Zhi, 2026-10-11, options Q&A — docs/gateway.md G1–G10):
+%% all WEB REST edges and the STOMP push now route through the gateway,
+%% which rejects revoked tokens platform-wide. Transcription only.
 %% Legend and dependency table: see docs/architecture.md
 flowchart TB
     USERS(["Users: requester / courier / admin<br/>(NUS students and platform admins)"])
     WEB["<b>Web App</b> (web/)<br/>TypeScript + React single-page app;<br/>responsive desktop + mobile UI (UI NFR1);<br/>renders in-app notifications"]
 
     USERS -->|"uses (browser, HTTPS)"| WEB
+
+    GATEWAY["<b>API Gateway</b> (gateway/)<br/>OpenResty (nginx + Lua) — single entry point, path-prefix<br/>routing /api/&lt;service&gt;/**; verifies bearer JWTs (HS256 + exp)<br/>and rejects denylisted (logged-out) tokens; anonymous requests<br/>pass through; proxies the notification WebSocket<br/>(docs/gateway.md, issue #151)"]
+
+    WEB -->|"REST/JSON + WebSocket: every API call,<br/>/api/&lt;service&gt;/** (backends have no published ports)"| GATEWAY
 
     USER_SVC["<b>User Service</b><br/>Java + Spring Boot — accounts, auth (JWT, OTP),<br/>roles incl. owner (User F6), profiles; hashed passwords<br/>(User F1.1.5, NFR1.1); login lockout (User F5.2);<br/>scheduler: purge deleted accounts on the 31st day (User F3.1.3)"]
     SUP_SVC["<b>Supplier Service</b><br/>Java + Spring Boot — vendor/landmark CRUD,<br/>browsing, search and filter;<br/>caching on frequently queried fields (Supplier NFR1.1.1)"]
@@ -41,12 +50,12 @@ flowchart TB
     BROKER[/"<b>Message Broker</b> — RabbitMQ<br/>shared platform infrastructure, own Docker container;<br/>durable request-events and credit-events exchanges + durable<br/>work/retry/dead-letter queues (docs/notification-service.md,<br/>docs/credit-service.md)"/]
     EMAIL[["<b>External Email Provider</b><br/>Gmail SMTP (Mailpit locally) — delivers<br/>OTP emails to users' u.nus.edu inboxes"]]
 
-    WEB -->|"REST/JSON: sign-up, login/logout, OTP flows, account<br/>update/delete/recover, roles, admin user management,<br/>profiles (User F1–F8)"| USER_SVC
-    WEB -->|"REST/JSON: browse, search, filter suppliers;<br/>admin vendor CRUD (Supplier F1–F2)"| SUP_SVC
-    WEB -->|"REST/JSON: create / list / accept / collect–arrive /<br/>cancel / complete / re-release requests (Order F1–F8)"| ORDER_SVC
-    WEB -->|"REST/JSON: available + reserved balances shown in profile<br/>(User F8.1), filtered transaction history (Credit F4); account with<br/>5 starting credits created the first time the user is seen (Credit F1.1)"| CREDIT_SVC
-    WEB -->|"REST/JSON: list recent notifications,<br/>mark read/unread"| NOTIF_SVC
-    NOTIF_SVC ==>|"async: WebSocket (STOMP) push to per-user<br/>destinations — state-change updates within 5 s"| WEB
+    GATEWAY -->|"REST/JSON: sign-up, login/logout, OTP flows, account<br/>update/delete/recover, roles, admin user management,<br/>profiles (User F1–F8)"| USER_SVC
+    GATEWAY -->|"REST/JSON: browse, search, filter suppliers;<br/>admin vendor CRUD (Supplier F1–F2)"| SUP_SVC
+    GATEWAY -->|"REST/JSON: create / list / accept / collect–arrive /<br/>cancel / complete / re-release requests (Order F1–F8)"| ORDER_SVC
+    GATEWAY -->|"REST/JSON: available + reserved balances shown in profile<br/>(User F8.1), filtered transaction history (Credit F4); account with<br/>5 starting credits created the first time the user is seen (Credit F1.1)"| CREDIT_SVC
+    GATEWAY -->|"REST/JSON: list recent notifications,<br/>mark read/unread"| NOTIF_SVC
+    NOTIF_SVC ==>|"async: WebSocket (STOMP) push to per-user<br/>destinations — state-change updates within 5 s<br/>(socket proxied through the gateway's /api/notification/ws)"| WEB
 
     USER_SVC ==>|"send OTP emails: sign-up verification,<br/>email-change confirmation, password reset<br/>(User F1.1.3, F2.1.1, F2.1.3, F4.2)"| EMAIL
     ORDER_SVC -->|"REST/JSON: validate pickup location is a known<br/>supplier/landmark (Order F1.1.1); supplier locations for the<br/>1 km acceptance-proximity check (Order F8.1)"| SUP_SVC
@@ -61,6 +70,11 @@ flowchart TB
     ORDER_DB[("Order DB<br/>engine TBD")]
     CREDIT_DB[("Credit DB<br/>PostgreSQL")]
     NOTIF_DB[("Notification DB<br/>PostgreSQL")]
+
+    REDIS[("Token denylist<br/>Redis — platform store: denylist:&lt;jti&gt; keys expiring<br/>with the token; AOF-persisted (docs/gateway.md G2/G7)")]
+
+    USER_SVC ---|"logout writes: SET denylist:&lt;jti&gt; EX &lt;until exp&gt;<br/>(POST /auth/logout, issue #151)"| REDIS
+    GATEWAY ---|"per-request reads: EXISTS denylist:&lt;jti&gt;<br/>(fail open on Redis outage, G6)"| REDIS
 
     USER_SVC ---|"Spring Data JPA"| USER_DB
     SUP_SVC ---|"Spring Data JPA"| SUP_DB

@@ -63,12 +63,6 @@
   flows (issue #92) by Claude Code (Fable 5).
   2026-10-07: AI Use Summary extended for the user-service and web review
   follow-ups (issues #154 and #138, PR #162) by Claude Code (Opus 5.5).
-<<<<<<< HEAD
-  2026-10-10: that clause extended for PR #162's re-review fixes by
-  Claude Code (Opus 5.5).
-  2026-10-10: AI Use Summary extended for the PR #168 review fixes by
-  Claude Code (Opus 5.5).
-=======
   2026-10-09: AI Use Summary extended for the web profile screens
   (issue #112, PR #149) and that PR's two Copilot-review rounds, by
   Claude Code (Opus 5) — the summary had no entry for #112.
@@ -76,7 +70,12 @@
   Claude Code (Opus 5.5); and the #149 clause for that PR's team review
   (@Sinnez1) and issue #167, the gate-code refactor that came out of it,
   by Claude Code (Opus 5).
->>>>>>> 9028a1bcf8978bc561d674aeb3cef8ba4fb23407
+  2026-10-10: AI Use Summary extended for the PR #168 review fixes by
+  Claude Code (Opus 5.5).
+  2026-10-11: merge-conflict markers left in this header by an earlier
+  merge resolved (both sides kept, in date order), and the AI Use
+  Summary extended for the logout denylist + API gateway (issue #151),
+  by Claude Code (Fable 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -462,6 +461,18 @@ unhandled event logged, both the team's decisions among the reviewer's
 options, tests tying the bound events to the handler and exercising
 its transaction, and the disclosure headers the review found
 missing).
+
+The logout denylist and API gateway (issue #151): the user-service
+logout endpoint, Redis denylist writer and V6 migration with their
+tests, the redis and gateway containers in compose, the OpenResty
+gateway (`gateway/` — nginx config and the Lua auth check), the web
+logout call and gateway base-URL cutover, and the documentation
+(`docs/gateway.md`, architecture doc/diagram updates). Every design
+decision (G1–G10: gateway technology, Redis-only store, full routing
+cutover, gateway-only enforcement, anonymous pass-through, fail-open,
+AOF persistence, logout placement, best-effort 204, revoked-token
+wording) was made by Leong Wei Zhi via neutral options Q&A, recorded in
+`docs/gateway.md` and `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

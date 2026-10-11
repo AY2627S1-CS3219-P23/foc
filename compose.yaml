@@ -64,6 +64,13 @@
 # loopback host port following the DB convention), and REDIS_HOST/PORT
 # passed to the user service, whose POST /auth/logout writes the keys.
 # The API gateway that reads them arrives in its own PR.
+# 2026-10-11, Claude Code (Fable 5), issue #151 (gateway half): gateway
+# container added and the backend host ports unpublished (team decision:
+# full cutover — the gateway at ${GATEWAY_PORT:-8090} is the only way to
+# the user/supplier/credit/notification services; path prefixes
+# /api/<service>/**, docs/gateway.md). The web frontend's VITE_* URLs now
+# point at the gateway (.env.example). DB/mailpit/rabbitmq host ports are
+# unchanged — they are tooling, not API surface.
 # 2026-10-10, Claude Code (Opus 5.5), PR #168: CREDIT_RETRY_TTL_MS and
 # CREDIT_RETRY_MAX_ATTEMPTS passed to the credit service for its retry
 # queue (docs/credit-service.md D11); the values are the team's.
@@ -76,10 +83,11 @@ services:
   # Web frontend (issue #108): the single React SPA, built with Vite and
   # served as static files by nginx. No depends_on — the shell makes no
   # API calls yet, and a static frontend shouldn't gate on backends.
-  # The VITE_* args are browser-visible URLs (host-published ports, never
-  # compose-internal hostnames); changing one requires an image rebuild.
-  # All default empty here — values live in .env (see .env.example),
-  # so each URL tracks its service's configurable host port.
+  # The VITE_* args are browser-visible URLs (never compose-internal
+  # hostnames); changing one requires an image rebuild. Since the gateway
+  # cutover (issue #151) they all point at the gateway's host port with a
+  # per-service path prefix, e.g. http://localhost:8090/api/user.
+  # All default empty here — values live in .env (see .env.example).
   web:
     build:
       context: web
@@ -93,14 +101,42 @@ services:
       - "${WEB_PORT:-5173}:80"
     restart: unless-stopped
 
+  # API gateway (issue #151, docs/gateway.md): the single entry point for
+  # all backend APIs. Verifies bearer JWTs (HS256 + exp) and rejects
+  # denylisted jtis by checking redis in-process (OpenResty/Lua);
+  # anonymous requests pass through for the services' own rules to
+  # answer. Backends have no published host ports — the gateway is the
+  # only way in, so revocation cannot be bypassed from the browser.
+  gateway:
+    build:
+      context: gateway
+    ports:
+      - "${GATEWAY_PORT:-8090}:8080"
+    environment:
+      # the same platform secret the services verify with
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
+      # stamped onto gateway-origin 401s so the browser can read them
+      WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
+    depends_on:
+      redis:
+        condition: service_healthy
+      # start order only — per-request DNS keeps routing if one restarts
+      user-service:
+        condition: service_started
+      supplier-service:
+        condition: service_started
+      credit-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+    restart: unless-stopped
+
   notification-service:
     # Context is the repo root so the build can include the shared
     # foc-contracts library (D15).
     build:
       context: .
       dockerfile: notification-service/Dockerfile
-    ports:
-      - "${NOTIFICATION_SERVICE_PORT:-8085}:8080"
     environment:
       NOTIFICATION_DB_HOST: notification-db
       NOTIFICATION_DB_PORT: "5432"
@@ -180,8 +216,6 @@ services:
     build:
       context: .
       dockerfile: supplier-service/Dockerfile
-    ports:
-      - "${SUPPLIER_SERVICE_PORT:-8086}:8080"
     environment:
       SUPPLIER_DB_HOST: supplier-db
       SUPPLIER_DB_PORT: "5432"
@@ -224,8 +258,6 @@ services:
     build:
       context: .
       dockerfile: user-service/Dockerfile
-    ports:
-      - "${USER_SERVICE_PORT:-8087}:8080"
     environment:
       USER_DB_HOST: user-db
       USER_DB_PORT: "5432"
@@ -325,8 +357,6 @@ services:
     build:
       context: .
       dockerfile: credit-service/Dockerfile
-    ports:
-      - "${CREDIT_SERVICE_PORT:-8088}:8080"
     environment:
       CREDIT_DB_HOST: credit-db
       CREDIT_DB_PORT: "5432"

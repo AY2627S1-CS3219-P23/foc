@@ -3011,3 +3011,24 @@ Entry template:
   container + user-service env; `.env.example` Redis section;
   user-service README.
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** implementation, documentation (design decided by the team
+  first; same session as the entry above — this is the gateway half,
+  branch feat/api-gateway)
+- **Prompt(s):** Continuation of the issue #151 plan: build the OpenResty
+  gateway and cut the frontend over to it, per the ten decisions made by
+  Leong Wei Zhi via options Q&A (see the entry above and docs/gateway.md
+  G1–G10).
+- **Scope:** new `gateway/` (Dockerfile pinned to
+  openresty/openresty:1.31.1.1-alpine-fat + opm lua-resty-jwt,
+  `nginx.conf` path-prefix routing + WS proxy, `lua/auth.lua` bearer
+  verify + Redis denylist check, fail-open, problem+json 401s);
+  `compose.yaml` gateway service + backend host ports unpublished;
+  `web` AuthProvider logout POST (best-effort) + auth.test.tsx logout
+  cases + config.ts comments; `.env.example` GATEWAY_PORT/VITE cutover;
+  `AGENTS.md` port rows; `docs/gateway.md` (new, decisions table),
+  `docs/architecture.md`/`.mmd` gateway + Redis, D10 note in
+  `docs/notification-service.md`; README AI Use Summary.
+- **Author review:** Pending author review of the diff via the PR.

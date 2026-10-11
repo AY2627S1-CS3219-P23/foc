@@ -27,6 +27,9 @@
 // clearing that state keeps the URL's query and hash.
 // 2026-10-10, Claude Code (Opus 5), PR #149 review (@Sinnez1): and an
 // untyped 429, which ends the sign-up on its status alone.
+// 2026-10-11, Claude Code (Fable 5), issue #151: logout cases — the nav
+// Logout button POSTs the bearer token to /auth/logout, and the local
+// sign-out survives the call failing (best-effort, team decision).
 // Author review: Ryan to review via the PR.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -611,5 +614,59 @@ describe('sign-up page', () => {
 
     expect(lengthRule).toHaveTextContent('✓')
     expect(screen.getByText(/Contains numbers/)).toHaveTextContent('✓')
+  })
+})
+
+// issue #151: logging out also revokes the token server-side
+describe('logout', () => {
+  async function logInAndWaitForNav() {
+    fetchMock
+      .mockResolvedValueOnce(reply(200, session))
+      // GET /users/me, asked once the session is stored
+      .mockResolvedValue(
+        reply(200, { id: 1, username: 'alex', email: 'e@u.nus.edu', role: 'USER' }),
+      )
+    await logIn('alex', 'ValidPassword123')
+    return await screen.findByRole('button', { name: 'Logout' })
+  }
+
+  test('posts the token to /auth/logout and clears the session', async () => {
+    const user = userEvent.setup()
+    const logoutButton = await logInAndWaitForNav()
+    fetchMock.mockClear()
+    fetchMock.mockResolvedValue(reply(204, null))
+
+    await user.click(logoutButton)
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url]) =>
+        String(url).endsWith('/auth/logout'),
+      ) as [string, RequestInit] | undefined
+      expect(call).toBeDefined()
+      expect(call?.[1].method).toBe('POST')
+      expect(new Headers(call?.[1].headers).get('Authorization')).toBe(
+        'Bearer jwt',
+      )
+    })
+    expect(localStorage.getItem('user')).toBe('null')
+    // signed out: the nav bar's Logout button is gone
+    expect(
+      screen.queryByRole('button', { name: 'Logout' }),
+    ).not.toBeInTheDocument()
+  })
+
+  test('still signs out locally when the server call fails', async () => {
+    const user = userEvent.setup()
+    const logoutButton = await logInAndWaitForNav()
+    fetchMock.mockClear()
+    // best-effort by team decision: the revocation is lost, the sign-out isn't
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    await user.click(logoutButton)
+
+    expect(localStorage.getItem('user')).toBe('null')
+    expect(
+      screen.queryByRole('button', { name: 'Logout' }),
+    ).not.toBeInTheDocument()
   })
 })
