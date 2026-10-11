@@ -19,11 +19,6 @@
 // on every ProblemDetail built without one), and an untyped 400 — the
 // DTO validation ProblemDetailAdvice answers with — is classified as a
 // refusal of the submitted values rather than of the code.
-// 2026-10-11, Claude Code (Fable 5), issue #94: RESET_CODE_INVALID,
-// the password-reset confirm's ONE refusal type — wrong code, unknown
-// email, expired and spent all carry it, so nothing a prober sends
-// can distinguish which addresses hold accounts (forgot-password.tsx
-// keys its retry copy on it).
 // Author review: Leong Wei Zhi (via PR #149).
 
 import { ApiError } from '@/lib/api/http'
@@ -44,8 +39,6 @@ export const EMAIL_CHANGE_NONE = 'urn:foc:user:email-change-none'
 export const EMAIL_TAKEN = 'urn:foc:user:email-taken'
 /** The username is already taken. 400 */
 export const USERNAME_TAKEN = 'urn:foc:user:username-taken'
-/** The password-reset code is wrong, expired, spent, or belongs to no account (#94). 400 */
-export const RESET_CODE_INVALID = 'urn:foc:user:reset-code-invalid'
 
 // RFC 9457's "no type", and what Spring stamps on every ProblemDetail
 // built without one: a body can carry the field and still say nothing.

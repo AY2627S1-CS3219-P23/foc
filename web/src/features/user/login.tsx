@@ -20,10 +20,6 @@
 // once read, so the notice doesn't come back when /login is reloaded.
 // 2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei Zhi):
 // clearing the state keeps the URL's query and hash.
-// 2026-10-11, Claude Code (Fable 5), issue #94: "Forgot password?" link
-// to the reset-request page, and a "password reset" notice (the same
-// cleared-once-read navigation-state shape as the sign-up notice) shown
-// when the reset page sends the user back here.
 // Reviewed by: Ryan Ang
 
 import React, { useEffect, useState } from 'react'
@@ -40,22 +36,17 @@ export function Login() {
   const data = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
-  // set by the sign-up page after it creates the account, and by the
-  // reset page after a password reset (issue #94)
-  const arrivalState = location.state as {
-    accountCreated?: boolean
-    passwordReset?: boolean
-  } | null
-  const cameFromSignup = arrivalState?.accountCreated === true
-  const cameFromReset = arrivalState?.passwordReset === true
+  // set by the sign-up page after it creates the account
+  const cameFromSignup =
+    (location.state as { accountCreated?: boolean } | null)?.accountCreated ===
+    true
   // kept here because the navigation state is cleared below
   const [accountCreated] = useState(cameFromSignup)
-  const [passwordReset] = useState(cameFromReset)
 
   // the browser keeps navigation state across a reload, so drop it once
   // read: the notice shows on arrival only
   useEffect(() => {
-    if (cameFromSignup || cameFromReset) {
+    if (cameFromSignup) {
       // query and hash kept: only the state is dropped
       navigate(location.pathname + location.search + location.hash, {
         replace: true,
@@ -64,7 +55,6 @@ export function Login() {
     }
   }, [
     cameFromSignup,
-    cameFromReset,
     navigate,
     location.pathname,
     location.search,
@@ -107,14 +97,6 @@ export function Login() {
           Account created. Log in to continue.
         </p>
       )}
-      {passwordReset && !error && (
-        <p
-          role="status"
-          className="mt-4 rounded-md border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-700"
-        >
-          Password reset. Log in with your new password.
-        </p>
-      )}
       {error && (
         <p
           role="alert"
@@ -143,15 +125,6 @@ export function Login() {
             className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 font-normal focus:border-gray-400 focus:outline-none"
           />
         </label>
-        <p className="text-right text-sm">
-          <button
-            type="button"
-            onClick={() => router.navigate('/forgot-password')}
-            className="font-medium text-gray-900 underline cursor-pointer"
-          >
-            Forgot password?
-          </button>
-        </p>
         <button
           type="submit"
           className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"

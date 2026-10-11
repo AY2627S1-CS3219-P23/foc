@@ -12,11 +12,6 @@
 // login's lockout could use it next). It only arrives cross-origin because
 // user-service names the header in its CORS exposedHeaders — it is not
 // CORS-safelisted, so exposing it there and reading it here go together.
-// 2026-10-11, Claude Code (Fable 5), issue #94: a 202 may carry no body —
-// POST /auth/password-reset answers an empty 202 on purpose (nothing to
-// say that wouldn't reveal account existence) — so its parse failure is
-// an undefined result, not an error. Sign-up's 202 still carries its
-// body, which is why 202 can't share 204's skip-the-parse branch.
 
 import { serviceBaseUrls, type ServiceName } from './config'
 
@@ -112,11 +107,6 @@ export async function apiFetch<T>(
   }
   if (res.status === 204) {
     return undefined as T
-  }
-  if (res.status === 202) {
-    // some 202s carry a body (sign-up's timings), some none at all
-    // (password reset, which answers every caller identically)
-    return (await res.json().catch(() => undefined)) as T
   }
   return (await res.json()) as T
 }
