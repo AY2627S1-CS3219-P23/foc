@@ -2987,3 +2987,104 @@ Entry template:
 - **Scope:** `supplier-service` `SuppliersSeeder` (null check around the
   category split loop).
 - **Author review:** Pending author review of the diff.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** implementation, unit tests (design decided by the team first)
+- **Prompt(s):** Asked to plan and implement issue #151's logout denylist
+  with an nginx API gateway and Redis (both named in the prompt). All
+  design choices were made by Leong Wei Zhi through ten neutral
+  AskUserQuestion option rounds (gateway tech = OpenResty/Lua; Redis-only
+  TTL-key denylist replacing the token_denylist table; full routing
+  cutover behind the gateway; gateway-only enforcement; anonymous
+  pass-through; fail-open on Redis outage; AOF persistence; logout in
+  user-service; best-effort 204 on a failed Redis write; "Token has been
+  revoked" 401 detail); the tool presented factual comparisons only.
+- **Scope (this entry: the user-service/Redis half of the single
+  feat/api-gateway PR):** `user-service` POST /auth/logout
+  (`AuthController`), `TokenDenylist` Redis writer, `JwtVerifier`
+  VerifiedToken +jti/+expiresAt, `JwtAuthenticationFilter` details,
+  `SecurityConfig` authenticated() rule, `V6__drop_token_denylist.sql`,
+  `TokenDenylistEntry` deleted, data-redis starter + application.yaml;
+  tests: `LogoutTest`, `TokenDenylistTest`, `JwtVerifierTest`,
+  `FlywayMigrationTest`, `EntityMappingTest`; `compose.yaml` redis
+  container + user-service env; `.env.example` Redis section;
+  user-service README.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** implementation, documentation (design decided by the team
+  first; same session as the entry above — this is the gateway half,
+  shipped with it in the one feat/api-gateway PR at the author's
+  request)
+- **Prompt(s):** Continuation of the issue #151 plan: build the OpenResty
+  gateway and cut the frontend over to it, per the ten decisions made by
+  Leong Wei Zhi via options Q&A (see the entry above and docs/gateway.md
+  G1–G10).
+- **Scope:** new `gateway/` (Dockerfile pinned to
+  openresty/openresty:1.31.1.1-alpine-fat + opm lua-resty-jwt,
+  `nginx.conf` path-prefix routing + WS proxy, `lua/auth.lua` bearer
+  verify + Redis denylist check, fail-open, problem+json 401s);
+  `compose.yaml` gateway service + backend host ports unpublished;
+  `web` AuthProvider logout POST (best-effort) + auth.test.tsx logout
+  cases + config.ts comments; `.env.example` GATEWAY_PORT/VITE cutover;
+  `AGENTS.md` port rows; `docs/gateway.md` (new, decisions table),
+  `docs/architecture.md`/`.mmd` gateway + Redis, D10 note in
+  `docs/notification-service.md`; README AI Use Summary.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debugging assistance, refactoring (PR #176 Copilot review)
+- **Prompt(s):** Asked to address the five Copilot findings on PR #176.
+- **Scope:** `gateway/lua/auth.lua` skips user-service's public
+  `/auth/**` routes except logout (mirrors JwtAuthenticationFilter's
+  issue-#91 skip — a stale SPA token no longer blocks login at the
+  gateway); `gateway/nginx.conf` order stub now runs the same auth
+  check and answers CORS-readably (incl. its own preflight);
+  `compose.yaml` drops the redis health gates on gateway and
+  user-service (fail-open G6 / best-effort G9 must hold at startup
+  too); `docs/architecture.md` auth note qualified (anonymous routes,
+  the /ws limit); `user-service/README.md` old-databases warning no
+  longer lists the dropped token_denylist; `docs/gateway.md` updated to
+  match. Behavior-preserving fixes to recorded decisions; no new
+  design decisions.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** documentation (PR #176 Copilot re-review)
+- **Prompt(s):** Asked to address the re-review's remaining finding: the
+  service READMEs still pointed at the backend host ports the cutover
+  unpublished.
+- **Scope:** `user-service/README.md`, `credit-service/README.md`,
+  `notification-service/README.md` — run/health-check URLs now go via
+  the gateway prefix (`${GATEWAY_PORT:-8090}/api/<service>/**`), with
+  the in-network name noted where relevant. The gateway health path was
+  verified against the running stack (200).
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debugging assistance, refactoring (PR #176 review, @Sinnez1)
+- **Prompt(s):** Asked to address the team review's eight findings (two
+  blocking).
+- **Scope:** `gateway/nginx.conf` — the public-auth skip rebuilt as
+  location blocks (the raw request_uri match was bypassable with
+  dot-segment/percent-encoded paths; locations match the normalized
+  URI, closing the revoked-token bypass the reviewer reproduced);
+  `/actuator/health` mirrored; the three proxy headers repeated per
+  location (location-level proxy_set_header cancels inheritance);
+  gateway-origin 404/502/504 now problem+json with the CORS origin
+  header; the order stub builds its body with cjson. `gateway/lua/auth.lua`
+  — path-skip removed (locations own it). `gateway/Dockerfile` — opm
+  package pinned to 0.3.2. `compose.yaml` — the five VITE_* defaults
+  track the gateway so an unset value no longer builds a dead bundle;
+  stale values documented as needing a .env update (also added to the
+  PR description). `docs/gateway.md` — G5, routing table, error-shape
+  note and the encoded-slash known limit. All reviewer reproductions
+  re-run against the rebuilt stack: bypass paths 401, skips intact,
+  JSON valid, CORS headers present. Behavior-preserving fixes; no new
+  design decisions.
+- **Author review:** Pending author review of the diff via the PR.

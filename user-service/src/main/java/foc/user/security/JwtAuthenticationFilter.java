@@ -8,6 +8,9 @@ Scope: bearer-token filter for the Spring Security filter chain (issue #91),
        stale token can't block login was the author's decision. Not a Spring
        bean, so the servlet container doesn't also register it outside the
        security chain.
+       2026-10-11, Claude Code (Fable 5), issue #151: the VerifiedToken is
+       stored as the authentication's details so the logout route can read
+       the jti/expiry it denylists without re-parsing the token.
 Author review: Ryan to review via the PR.
 */
 
@@ -89,6 +92,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // the principal name is the user id, which CallerId reads
         UsernamePasswordAuthenticationToken authentication = UsernamePasswordAuthenticationToken.authenticated(
             token.subject(), null, List.of(new SimpleGrantedAuthority("ROLE_" + token.role().name())));
+        // logout reads the token's jti/expiry off the details (issue #151)
+        authentication.setDetails(token);
         SecurityContext context = contextHolder.createEmptyContext();
         context.setAuthentication(authentication);
         contextHolder.setContext(context);

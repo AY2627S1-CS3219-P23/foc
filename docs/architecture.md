@@ -29,6 +29,12 @@
   submitted/rejected events; Credit DB engine no longer open
   (PostgreSQL, docs/credit-service.md D1).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-11 (Claude Code, Fable 5), issue #151: API Gateway + Redis
+  denylist added per the team's gateway decisions (Leong Wei Zhi,
+  2026-10-11, options Q&A — docs/gateway.md G1-G10): Web rows route
+  through the gateway, authentication note updated for revocation,
+  legend covers the shared Redis store. Transcription only; no
+  decisions made by the tool.
 -->
 
 # Favours on Campus (FoC) — High-Level Service Architecture
@@ -72,7 +78,7 @@ below accompany it.
 | Rounded/stadium shape | People using the system through a browser |
 | Parallelogram | Message broker (RabbitMQ) — shared platform infrastructure in its own container; the exchange is the publishing service's surface; each queue is dedicated to one consuming service (see [`notification-service.md`](notification-service.md)) |
 | Double-bordered rectangle | External system outside the platform (the email provider) |
-| Cylinder | A database owned by **exactly one** service; no service reads another service's database |
+| Cylinder | A database owned by **exactly one** service; no service reads another service's database. One exception: the Redis **token denylist** is shared platform infrastructure — written by the User Service at logout, read by the gateway on every request (see [`gateway.md`](gateway.md)) |
 | Thin arrow `-->` | **Synchronous** REST/JSON call over HTTP; the arrow points from caller to callee (request direction; the response returns along the same call) |
 | Thick arrow `==>` | **Asynchronous** event/message flow; the arrow points in the direction the data (event/email) travels |
 | Plain line `---` | Database access via Spring Data JPA (only ever from the owning service) |
@@ -80,12 +86,19 @@ below accompany it.
 | `F… / NFR… / M…` on a line | The D1 requirement or course-mandated item that this relationship implements |
 | **TBD** | A decision the team has not made yet (kept open on purpose) |
 
-**Authentication note:** every Web → service call carries a JWT issued by
-the User Service on login (User F7.1); tokens expire after one hour and
-logout invalidates the current token (User F7.1.1–F7.1.2). Each service
-rejects requests the caller's role does not permit (User F6.1.5).
-Token-validation mechanics (shared `JWT_SECRET` per `.env.example`) are
-configuration, not a runtime call, so no arrow is drawn for it.
+**Authentication note:** every authenticated Web API call carries a JWT
+issued by the User Service on login (User F7.1); sign-up/login and other
+public routes are anonymous. Tokens expire after one hour and logout
+invalidates the current token (User F7.1.1–F7.1.2) by denylisting its
+`jti` in Redis — the **API Gateway** rejects denylisted bearer tokens on
+every HTTP route, so revocation holds platform-wide for the REST APIs
+(issue #151, [`gateway.md`](gateway.md); accepted limit: the STOMP
+CONNECT-frame token on `/ws` is signature/expiry-checked by the
+Notification Service only, without a denylist lookup). Each service still verifies the signature
+itself and rejects requests the caller's role does not permit (User
+F6.1.5). Token-validation mechanics (shared `JWT_SECRET` per
+`.env.example`) are configuration, not a runtime call, so no arrow is
+drawn for it.
 Provisional convention (decided under Notification issue #67, before
 the User Service exists): the JWT's `sub` claim carries the platform
 user ID — the same ID used in event `parties[]` and notification
@@ -100,12 +113,13 @@ TBD = to be decided.
 
 | From → To | Style | Purpose | Requirement |
 | --- | --- | --- | --- |
-| Web → User Service | sync REST | sign-up, login/logout, OTP flows, account update/delete/recover, roles (user/admin/owner), admin user management, profiles; JWT issued here | User F1–F8 |
-| Web → Supplier Service | sync REST | browse/search/filter vendors; admin vendor CRUD | Supplier F1–F2 |
-| Web → Order Service | sync REST | create/list/accept/collect–arrive/cancel/complete requests; re-release expired requests | Order F1–F8 (re-release: F6.4) |
-| Web → Credit Service | sync REST | available + reserved balances (shown in the user's profile), filtered transaction history; the account with its 5 starting credits (reserved balance 0) is created the first time the user is seen (see [`credit-service.md`](credit-service.md), D6) | Credit F1.1, F4; User F8.1 |
-| Web → Notification Service | sync REST | list recent notifications in-app, mark read/unread, retention window | Notif F3.1, F3.2, F3.4 |
-| Notification Service → Web | async WebSocket (STOMP) push, per-user destinations | request state-change updates to requester and assigned courier within 5 seconds; the system's **only standing connection** — all other Web ↔ service traffic is stateless REST (see [`notification-service.md`](notification-service.md), "Connection topology") | Notif F1.2; Order NFR1.1–1.2 |
+| Web → Gateway | sync REST + WebSocket | every API call, `/api/<service>/**`; bearer JWTs verified and denylist-checked at the gateway, anonymous requests passed through (see [`gateway.md`](gateway.md)) | User F7.1.2 (revocation); M7 |
+| Web → User Service (via gateway) | sync REST | sign-up, login/logout, OTP flows, account update/delete/recover, roles (user/admin/owner), admin user management, profiles; JWT issued here | User F1–F8 |
+| Web → Supplier Service (via gateway) | sync REST | browse/search/filter vendors; admin vendor CRUD | Supplier F1–F2 |
+| Web → Order Service (via gateway) | sync REST | create/list/accept/collect–arrive/cancel/complete requests; re-release expired requests | Order F1–F8 (re-release: F6.4) |
+| Web → Credit Service (via gateway) | sync REST | available + reserved balances (shown in the user's profile), filtered transaction history; the account with its 5 starting credits (reserved balance 0) is created the first time the user is seen (see [`credit-service.md`](credit-service.md), D6) | Credit F1.1, F4; User F8.1 |
+| Web → Notification Service (via gateway) | sync REST | list recent notifications in-app, mark read/unread, retention window | Notif F3.1, F3.2, F3.4 |
+| Notification Service → Web (socket via gateway) | async WebSocket (STOMP) push, per-user destinations | request state-change updates to requester and assigned courier within 5 seconds; the system's **only standing connection** — all other Web ↔ service traffic is stateless REST (see [`notification-service.md`](notification-service.md), "Connection topology") | Notif F1.2; Order NFR1.1–1.2 |
 | User Service → Email Provider | async email (Gmail SMTP; a Mailpit container is the local dev/demo target) | OTP for sign-up verification, email-change confirmation, password reset | User F1.1.3, F2.1.1, F2.1.3, F4.2 |
 | Order Service → Supplier Service | sync REST | validate pickup location is a known supplier/landmark; fetch supplier locations for the 1 km acceptance-proximity check | Order F1.1.1, F8.1 |
 | Order Service → Broker (RabbitMQ) → Credit Service | **async events** | reserve the reward on `request.submitted`, transfer on `request.completed`, release on `request.cancelled` / `request.expired`; repeated events for the same request processed once (see [`credit-service.md`](credit-service.md)) | Credit F2.1, F2.1.1, F3.1, F5.1, NFR1.1, NFR2.2, NFR2.2.1; **M6** |
