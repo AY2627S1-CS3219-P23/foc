@@ -10,6 +10,9 @@
   2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the health
   check URL updated for the gateway cutover (#151) — the host port is
   unpublished; the gateway prefix (or the in-network name) reaches it.
+  2026-10-12, Claude Code (Fable 5), issue #67: REDIS_HOST/REDIS_PORT
+  rows added for the D23 denylist read at STOMP CONNECT (author
+  decision via options Q&A).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -51,6 +54,7 @@ stays `notification-service:8080`.
 | --- | --- | --- |
 | `JWT_SECRET` | — (required) | HS256 secret for verifying the STOMP `CONNECT` JWT |
 | `NOTIFICATION_WS_ALLOWED_ORIGINS` | `http://localhost:*` | Allowed WebSocket handshake origins for `/ws` |
+| `REDIS_HOST` / `REDIS_PORT` | `localhost` / 6379 | Platform Redis for the denylist read at STOMP `CONNECT` (D23) — revoked jti rejects the CONNECT; unreachable Redis fails open |
 | `NOTIFICATION_RETRY_TTL_MS` | 10 000 | Retry backoff (baked into the retry queue at declaration) |
 | `NOTIFICATION_RETRY_MAX_ATTEMPTS` | 3 | Total delivery attempts before dead-lettering |
 | `NOTIF_RETENTION_DAYS` | 30 | Notification retention window |

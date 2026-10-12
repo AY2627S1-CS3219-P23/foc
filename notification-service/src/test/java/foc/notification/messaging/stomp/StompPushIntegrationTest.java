@@ -9,6 +9,9 @@
  * events; entity/stale assertions removed with the mechanism (D19).
  * 2026-09-20: order→request event vocabulary rename applied (author
  * decision D22, docs/notification-service.md).
+ * 2026-10-12, issue #67: D23 denylist cases added against a fake
+ * in-memory TokenDenylist (the Redis mechanics have their own unit
+ * test; this context stays Docker- and Redis-free).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.stomp;
@@ -19,6 +22,7 @@ import static org.awaitility.Awaitility.await;
 
 import foc.contracts.events.request.RequestAccepted;
 import foc.contracts.events.request.RequestCollected;
+import foc.notification.security.TokenDenylist;
 import foc.notification.service.EventProcessor;
 import foc.notification.service.NotificationDto;
 import io.jsonwebtoken.Jwts;
@@ -30,13 +34,18 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
@@ -67,6 +76,23 @@ class StompPushIntegrationTest {
 	private static final String TEST_SECRET = "test-secret-0123456789abcdef0123456789abcdef";
 	private static final Instant OCCURRED_AT = Instant.parse("2026-09-19T08:30:00Z");
 
+	/** Revoked jtis for the fake denylist; cleared after each test. */
+	private static final Set<String> REVOKED_JTIS = ConcurrentHashMap.newKeySet();
+
+	/**
+	 * Replaces the Redis adapter so the D23 interceptor path is
+	 * exercised without a running Redis — its fail-open mechanics are
+	 * covered by RedisTokenDenylistTest.
+	 */
+	@TestConfiguration
+	static class FakeDenylistConfig {
+		@Bean
+		@Primary
+		TokenDenylist fakeTokenDenylist() {
+			return REVOKED_JTIS::contains;
+		}
+	}
+
 	@LocalServerPort
 	private int port;
 
@@ -86,11 +112,17 @@ class StompPushIntegrationTest {
 			}
 		});
 		sessions.clear();
+		REVOKED_JTIS.clear();
 	}
 
 	private static String token(String userId) {
+		return token(userId, null);
+	}
+
+	private static String token(String userId, String jti) {
 		return Jwts.builder()
 				.subject(userId)
+				.id(jti)
 				.expiration(new Date(System.currentTimeMillis() + 60_000))
 				.signWith(Keys.hmacShaKeyFor(TEST_SECRET.getBytes(StandardCharsets.UTF_8)))
 				.compact();
@@ -240,6 +272,37 @@ class StompPushIntegrationTest {
 		assertThatThrownBy(() -> connect(rawWebSocketClient(),
 				"ws://localhost:" + port + "/ws/websocket", "Bearer " + expired))
 				.isInstanceOf(Exception.class);
+	}
+
+	@Test
+	void rejectsConnectWithRevokedToken() {
+		REVOKED_JTIS.add("revoked-jti");
+
+		assertThatThrownBy(() -> connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket",
+				"Bearer " + token("usr-rev-1", "revoked-jti")))
+				.isInstanceOf(Exception.class);
+	}
+
+	@Test
+	void connectsWhenJtiIsNotRevoked() throws Exception {
+		REVOKED_JTIS.add("someone-elses-jti");
+
+		StompSession session = connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket",
+				"Bearer " + token("usr-rev-2", "live-jti"));
+
+		assertThat(session.isConnected()).isTrue();
+	}
+
+	@Test
+	void connectsWithTokenCarryingNoJti() throws Exception {
+		// Parity with the gateway's auth.lua: no jti means nothing to
+		// look up, not a reason to refuse the session.
+		StompSession session = connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket", "Bearer " + token("usr-rev-3"));
+
+		assertThat(session.isConnected()).isTrue();
 	}
 
 	@Test

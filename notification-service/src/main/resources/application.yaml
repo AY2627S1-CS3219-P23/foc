@@ -17,6 +17,10 @@
 # the retention purge scheduler (team decision D9: NOTIF_RETENTION_DAYS,
 # default 30 days; author decision: a second env var, NOTIF_PURGE_CRON,
 # controls how often the sweep runs).
+# 2026-10-12, issue #67: spring.data.redis connection for the D23
+# denylist read at STOMP CONNECT (author decision via options Q&A);
+# stale "no API gateway" origin comment refreshed (gateway merged,
+# issue #151).
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -46,6 +50,17 @@ spring:
     # republish waits for broker acceptance before acking the original
     # delivery, so a lost publish can never lose the event (issue #65).
     publisher-confirm-type: simple
+  data:
+    redis:
+      # Platform Redis holding the token denylist (D23): read once per
+      # STOMP CONNECT; the adapter fails open on errors. Finite
+      # timeouts so an outage costs a CONNECT at most ~2 s on the STOMP
+      # inbound channel, not Lettuce's default 60 s (same rationale as
+      # user-service's logout write).
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: 2s
+      timeout: 2s
 
 notification:
   rabbitmq:
@@ -64,8 +79,9 @@ notification:
     # startup failure.
     secret: ${JWT_SECRET:}
   websocket:
-    # Comma-separated Origin patterns allowed at the WS handshake.
-    # No API gateway exists, so the browser connects cross-origin.
+    # Comma-separated Origin patterns allowed at the WS handshake. The
+    # browser's Origin header passes through the API gateway unchanged
+    # (docs/gateway.md), so the patterns name the SPA origin(s).
     allowed-origins: ${NOTIFICATION_WS_ALLOWED_ORIGINS:http://localhost:*}
   retention:
     # Retention window for stored notifications (D9); the purge
@@ -81,3 +97,9 @@ management:
     web:
       exposure:
         include: health
+  health:
+    redis:
+      # The D23 denylist check fails open by design — an unreachable
+      # Redis must not mark the whole service down (same stance as
+      # user-service).
+      enabled: false

@@ -5,6 +5,10 @@
  * HS256 against the platform's shared JWT_SECRET, jjwt library, and
  * the provisional platform convention that the sub claim carries the
  * user ID (docs/architecture.md, Authentication note).
+ * 2026-10-12, Claude Code (Fable 5), issue #67: verify() replaces
+ * verifiedSubject() — exp is now required (jjwt only checks a present
+ * exp; parity with the other services' verifiers, PR #91/#143) and the
+ * jti is exposed for the D23 denylist check at STOMP CONNECT.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.security;
@@ -48,22 +52,41 @@ public class JwtVerifier {
 	}
 
 	/**
-	 * Returns the token's subject (the platform user ID).
+	 * The verified caller: the subject (platform user ID) that
+	 * user-destination routing matches on, plus the jti the D23
+	 * denylist check looks up. jti stays optional — every minted token
+	 * carries one, but revocation is the only thing that needs it, so
+	 * its absence skips the check rather than refusing the session
+	 * (same stance as the gateway's auth.lua).
+	 */
+	public record VerifiedToken(String subject, String jti) {
+	}
+
+	/**
+	 * Verifies the signature and expiry and reads the caller from the
+	 * claims.
 	 *
 	 * @throws io.jsonwebtoken.JwtException if the token is malformed,
 	 *         has an invalid signature, is expired, or has no subject
+	 *         or no expiry
 	 */
-	public String verifiedSubject(String token) {
+	public VerifiedToken verify(String token) {
 		Jws<Claims> jws = parser.parseSignedClaims(token);
 		// Defense in depth: the platform convention is HS256 exactly.
 		// (The signature was already verified against the shared key.)
 		if (!"HS256".equals(jws.getHeader().getAlgorithm())) {
 			throw new MalformedJwtException("unexpected signature algorithm");
 		}
-		String subject = jws.getPayload().getSubject();
+		Claims claims = jws.getPayload();
+		String subject = claims.getSubject();
 		if (subject == null || subject.isBlank()) {
 			throw new MalformedJwtException("token has no subject");
 		}
-		return subject;
+		// jjwt only checks exp when it is present; a token without one
+		// would hold a STOMP session forever
+		if (claims.getExpiration() == null) {
+			throw new MalformedJwtException("token has no expiry");
+		}
+		return new VerifiedToken(subject, claims.getId());
 	}
 }

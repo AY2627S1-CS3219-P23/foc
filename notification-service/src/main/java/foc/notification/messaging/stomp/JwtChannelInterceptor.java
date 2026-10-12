@@ -6,11 +6,16 @@
  * carries "Authorization: Bearer <jwt>"; invalid or missing tokens
  * reject the CONNECT (docs/notification-service.md, "Session
  * mechanics").
+ * 2026-10-12, Claude Code (Fable 5), issue #67: denylist check added
+ * per the author's D23 decision (options Q&A) — a revoked jti rejects
+ * the CONNECT; a Redis failure fails open inside the TokenDenylist
+ * port.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.stomp;
 
 import foc.notification.security.JwtVerifier;
+import foc.notification.security.TokenDenylist;
 import io.jsonwebtoken.JwtException;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -22,12 +27,14 @@ import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
 
 /**
- * Authenticates STOMP sessions at CONNECT: verifies the bearer JWT
- * and attaches a {@link StompPrincipal} named by the token's
- * {@code sub} to the session, which later frames and user-destination
- * routing inherit. A throw here makes the sub-protocol handler send a
- * STOMP ERROR frame (with this exception's message) and close the
- * session — so the messages stay generic, leaking no token detail.
+ * Authenticates STOMP sessions at CONNECT: verifies the bearer JWT,
+ * rejects revoked tokens (D23 — the CONNECT-frame token is the one
+ * bearer the gateway's denylist check can never see), and attaches a
+ * {@link StompPrincipal} named by the token's {@code sub} to the
+ * session, which later frames and user-destination routing inherit. A
+ * throw here makes the sub-protocol handler send a STOMP ERROR frame
+ * (with this exception's message) and close the session — so the
+ * messages stay generic, leaking no token detail.
  */
 @Component
 class JwtChannelInterceptor implements ChannelInterceptor {
@@ -36,9 +43,11 @@ class JwtChannelInterceptor implements ChannelInterceptor {
 	private static final String BEARER_PREFIX = "Bearer ";
 
 	private final JwtVerifier jwtVerifier;
+	private final TokenDenylist tokenDenylist;
 
-	JwtChannelInterceptor(JwtVerifier jwtVerifier) {
+	JwtChannelInterceptor(JwtVerifier jwtVerifier, TokenDenylist tokenDenylist) {
 		this.jwtVerifier = jwtVerifier;
+		this.tokenDenylist = tokenDenylist;
 	}
 
 	@Override
@@ -54,12 +63,19 @@ class JwtChannelInterceptor implements ChannelInterceptor {
 		if (header == null || !header.startsWith(BEARER_PREFIX)) {
 			throw new MessagingException("missing bearer token");
 		}
+		JwtVerifier.VerifiedToken verified;
 		try {
-			String userId = jwtVerifier.verifiedSubject(header.substring(BEARER_PREFIX.length()));
-			accessor.setUser(new StompPrincipal(userId));
+			verified = jwtVerifier.verify(header.substring(BEARER_PREFIX.length()));
 		} catch (JwtException ex) {
 			throw new MessagingException("invalid token");
 		}
+		// Outside the catch: a denylist failure already failed open to
+		// false inside the port, so a throw from here is a real reject.
+		// A jti-less token skips the lookup, like the gateway's auth.lua.
+		if (verified.jti() != null && tokenDenylist.isRevoked(verified.jti())) {
+			throw new MessagingException("token revoked");
+		}
+		accessor.setUser(new StompPrincipal(verified.subject()));
 		return message;
 	}
 }
