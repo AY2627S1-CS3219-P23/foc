@@ -25,6 +25,9 @@
 // token-bearing request (owner decision via options Q&A). Carried by
 // sessionNotice's one-shot flag, read once into state and cleared on
 // mount — navigation state loses a race here, see sessionNotice.ts.
+// PR #182 Copilot review: the login call opts out of apiFetch's token
+// injection (auth: false) — a stale stored session must not ride along,
+// or its wrong-credentials 401 would read as a revoked session.
 // Reviewed by: Ryan Ang
 
 import React, { useEffect, useState } from 'react'
@@ -83,6 +86,9 @@ export function Login() {
       const response = await apiFetch<LoginResponse>('user', '/auth/login', {
         method: 'POST',
         body: JSON.stringify({ usernameOrEmail: username, password }),
+        // no bearer token: a stale stored session would make a
+        // wrong-credentials 401 read as a revoked session (issue #178)
+        auth: false,
       })
 
       setError('')

@@ -17,6 +17,9 @@
 // (AuthProvider signs the session out) — owner decision via options Q&A:
 // any token-bearing 401, no matching on the problem detail. Requests
 // without the token (login itself) keep their inline errors.
+// PR #182 Copilot review: `auth: false` opts a call out of the token
+// injection — login uses it, so a stale stored session no longer rides
+// along and its wrong-credentials 401 can't read as a revoked session.
 
 import { serviceBaseUrls, type ServiceName } from './config'
 
@@ -88,10 +91,18 @@ export function errorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
+// RequestInit plus `auth: false` to leave the bearer token off. The
+// credential endpoints want this: a stored (possibly stale) session
+// must not ride along on POST /auth/login, where a 401 means wrong
+// credentials — an inline form error, never a revoked session.
+export interface ApiFetchInit extends RequestInit {
+  auth?: boolean
+}
+
 export async function apiFetch<T>(
   service: ServiceName,
   path: string,
-  init?: RequestInit,
+  init?: ApiFetchInit,
 ): Promise<T> {
   const baseUrl = serviceBaseUrls[service]
   if (!baseUrl) {
@@ -100,21 +111,26 @@ export async function apiFetch<T>(
     )
   }
 
+  // auth stripped so fetch sees a plain RequestInit
+  const { auth, ...request } = init ?? {}
+
   // Headers() handles every RequestInit.headers form (plain object,
   // Headers instance, or entries array); caller-supplied values win.
-  const headers = new Headers(init?.headers)
+  const headers = new Headers(request.headers)
   if (!headers.has('Accept')) {
     headers.set('Accept', 'application/json')
   }
-  if (init?.body && !headers.has('Content-Type')) {
+  if (request.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
-  const token = getToken()
-  if (token && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${token}`)
+  if (auth !== false) {
+    const token = getToken()
+    if (token && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${token}`)
+    }
   }
 
-  const res = await fetch(`${baseUrl}${path}`, { ...init, headers })
+  const res = await fetch(`${baseUrl}${path}`, { ...request, headers })
 
   if (!res.ok) {
     const problem = (await res.json().catch(() => null)) as ProblemDetail | null

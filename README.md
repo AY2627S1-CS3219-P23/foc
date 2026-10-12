@@ -97,6 +97,8 @@
   (web STOMP client + CONNECT-time denylist, D23) by Claude Code
   (Fable 5), on PR #185 Copilot review (the summary had missed the
   change).
+  2026-10-12: AI Use Summary extended for the web revoked-session
+  sign-out (issue #178, PR #182) by Claude Code (Fable 5).
   2026-10-13: the #170 clause extended for the PR #188 review round
   (Leong Wei Zhi), by Claude Code (Opus 5.5).
   2026-10-13: AI Use Summary extended for the credit read API
@@ -629,6 +631,15 @@ retries 30 s apart, then a stop the bell reports as paused updates
 rather than a frozen count. That policy was chosen by Leong Wei Zhi
 from four options via neutral options Q&A; the rest were mechanical
 fixes to reviewer-identified gaps.
+
+The web revoked-session sign-out (issue #178, PR #182): the shared
+fetch wrapper's unauthorized handler (a 401 on a token-bearing request
+forces a sign-out to /login with a one-time notice; the login call
+itself opts out of the token injection so its wrong-credentials 401
+stays an inline error) and its tests. The mechanism (any token-bearing
+401, no detail matching), the sign-out UX and the scope were decided
+by Leong Wei Zhi via neutral options Q&A, recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

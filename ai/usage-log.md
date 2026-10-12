@@ -3831,6 +3831,37 @@ Entry template:
 
 ## 2026-10-12 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (issue #178, web half — PR #182), then refactor
+  (PR #182 Copilot review)
+- **Prompt(s):** Asked to plan and resolve issue #178 (a demoted admin
+  keeps ADMIN until their token expires); the revocation mechanism
+  (option A, per-user epoch stamp), the scope (the issue's two paths
+  only), the web reaction (force sign-out on any token-bearing 401)
+  and the sign-out UX (/login with a notice) were decided by the
+  author via neutral options Q&A. Then asked to address the PR's
+  review comments.
+- **Scope:** `web/src/lib/api/http.ts` — a swappable unauthorized
+  handler, invoked before the throw when a 401 answers a request that
+  carried the bearer token; review round: `auth: false` opts a call
+  out of the token injection. `web/src/features/user/AuthProvider.tsx`
+  — registers the handler: clears the stored session and navigates to
+  /login; guarded on a live session so logout's own best-effort 401
+  doesn't re-navigate. `web/src/features/user/sessionNotice.ts` (new)
+  — one-shot flag carrying the "session ended" notice to the login
+  page; chosen over router navigation state because ProtectedRoute's
+  stateless bounce races the handler's startTransition-deferred
+  navigation and can wipe the state before the login page mounts (the
+  test caught this; the file documents it).
+  `web/src/features/user/login.tsx` — renders the notice; review
+  round: the login call sends no bearer token, so a stale stored
+  session can't make a wrong-credentials 401 read as a revoked
+  session. `web/src/test/auth.test.tsx` — revoked-session cases, plus
+  the review round's stale-session login regression.
+- **Author review:** web 102/102 (vitest), eslint, tsc, prettier; the
+  diff reviewed via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
 - **Mode:** implementation + documentation (issue #67, remaining scope)
 - **Prompt(s):** Asked to plan and resolve issue #67. Exploration found
   the server half already merged (PR #74); the remaining scope was

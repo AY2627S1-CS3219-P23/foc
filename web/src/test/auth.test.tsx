@@ -33,6 +33,8 @@
 // 2026-10-12, Claude Code (Fable 5), issue #178: revoked-session cases —
 // a 401 on a token-bearing request signs the user out to /login with the
 // "session ended" notice, and logout's own best-effort 401 does not.
+// PR #182 Copilot review: a wrong-credentials login with a stale stored
+// session keeps its inline error — the login call carries no token.
 // Author review: Ryan to review via the PR.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -725,5 +727,43 @@ describe('revoked session', () => {
     expect(
       screen.queryByRole('heading', { name: 'Log In' }),
     ).not.toBeInTheDocument()
+  })
+
+  // PR #182 Copilot review: with a stale session stored, the login form's
+  // own 401 must stay the form's inline error — the login call opts out
+  // of the token injection, so the handler never sees it
+  test('a wrong-credentials login with a stale stored session keeps its inline error', async () => {
+    localStorage.setItem('user', JSON.stringify(session))
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(
+        String(url).endsWith('/auth/login')
+          ? problem(401, 'Incorrect username/email or password')
+          : // GET /users/me from the stored session's mount fetch
+            reply(200, {
+              id: 1,
+              username: 'alex',
+              email: 'e@u.nus.edu',
+              role: 'USER',
+            }),
+      ),
+    )
+
+    renderAt('/login')
+    await user.type(screen.getByLabelText('Username or Email'), 'alex')
+    await user.type(screen.getByLabelText('Password'), 'WrongPassword1')
+    await user.click(submitButton('Log In'))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Incorrect username/email or password',
+    )
+    // the login request carried no bearer token (auth: false)
+    const loginCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith('/auth/login'),
+    ) as [string, RequestInit]
+    expect(new Headers(loginCall[1].headers).get('Authorization')).toBeNull()
+    // not treated as a revoked session: no forced sign-out, no notice
+    expect(JSON.parse(localStorage.getItem('user') ?? 'null')).toEqual(session)
+    expect(screen.queryByText(SESSION_ENDED)).not.toBeInTheDocument()
   })
 })
