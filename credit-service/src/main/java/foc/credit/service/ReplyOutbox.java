@@ -4,6 +4,8 @@
  * Scope: the reply outbox interface, with the signature the author
  * supplied; the comments point at docs/credit-service.md. No
  * implementation yet (see NotImplementedReplyOutbox).
+ * 2026-10-12, issue #170: implemented by ReplyOutboxService; the stub
+ * is gone.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;

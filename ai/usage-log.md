@@ -26,6 +26,70 @@ Entry template:
 ```
 
 ---
+## 2026-10-12 — Ryan Ang (credit-service: reply outbox and outbox publisher, issue #170)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Scope:** `credit-service/`, `docs/credit-service.md`.
+  - `ReplyOutboxService`: the real `ReplyOutbox` bean, replacing
+    `NotImplementedReplyOutbox`, which is deleted with
+    `NotImplementedStubsTest`. One `outbox_event` row per reply, in the
+    caller's transaction (`MANDATORY`), holding the message body as it
+    goes on the wire.
+  - `OutboxPublisher` (`@Scheduled`, fixed delay) and the
+    `ReplyPublisher` interface it sends through, with
+    `RabbitReplyPublisher` in `messaging/rabbitmq/`: mandatory publish
+    to `credit-events`, a correlated confirm, and a reply marked sent
+    only when it was confirmed and not returned.
+  - `OutboxEventRepository`: the poll query (unsent, oldest first,
+    limited).
+  - `application.yaml`: `credit.outbox.publisher` (poll interval,
+    batch size, confirm wait); the publisher is off in the test
+    profile.
+  - Tests: `ReplyOutboxServiceTest` (stored with its transaction, not
+    stored on rollback, refused outside one), `OutboxPublisherTest`
+    and `RabbitReplyPublisherTest` (each outcome, mocked), and
+    `OutboxPublisherIntegrationTest` (Testcontainers RabbitMQ and
+    Postgres: published and marked sent, unsent while no queue is
+    bound and delivered once one is, an unsent row from an earlier run
+    published, a sent reply not published again).
+  - `docs/credit-service.md`, the service's README and AGENTS.md, and
+    the README's AI Use Summary updated.
+- **Prompt(s):** The scope of issue #170, on
+  `feat/reply-outbox-publisher`. The tool put three behaviours the
+  design doc does not state to the team as questions with the options
+  described factually and no recommendation: the poll interval, what a
+  failed publish does to the rest of a poll, and how long to wait for
+  a confirm.
+- **Author review:** Team decisions, transcribed into
+  `docs/credit-service.md`: a 1 s poll as a fixed delay, so a slow
+  publish cannot overlap the next poll; at most 100 replies in a poll;
+  a 5 s confirm wait; no cap on attempts for now. What a failed publish
+  does to the rest of the poll was decided twice. First: an unreachable
+  broker or a lost connection stops the poll, and a nack, a missing
+  confirm or a returned reply is skipped. The tool's first version
+  followed that, and told a lost connection from a broker nack by
+  whether the nack carried a reason. **Revised team decision**, on the
+  author's review of that version: only a returned reply is skipped,
+  with a warning naming its event ID; a nack or a missing confirm stops
+  the poll like an unreachable broker, because they mean the broker is
+  in trouble, not that one reply is bad, so going on only multiplies
+  the waits. The reason check is removed with its test, and two mocked
+  tests run a poll of three replies through a confirm timeout and
+  through a nack, with the replies after it left unsent. The author
+  also reviewed and kept two choices the tool had raised: the publisher
+  split into a scheduled class in `service/` and a `ReplyPublisher`
+  interface implemented in `messaging/rabbitmq/`, which keeps broker
+  types out of `service/`; and "published after a restart" tested as an
+  unsent row already in the table when a poll runs, not by restarting
+  the application. Each reply is marked sent in its own transaction. The first run of the integration test
+  failed on the tool's own test queue (RabbitMQ 4 refuses a transient
+  non-exclusive queue); it is now durable. A run in the local compose
+  stack (rows written to the outbox by hand, a temporary queue bound
+  to `credit-events`, RabbitMQ stopped and started) showed the template
+  logging its own warning for every returned reply, so the publisher
+  now registers a returns callback that does nothing. `./mvnw test`:
+  147 tests, 0 failures, with Docker. Pending pull request review.
+
 ## 2026-10-11 — Ryan Ang (PR #175 review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** review assistance, refactoring, tests, docs

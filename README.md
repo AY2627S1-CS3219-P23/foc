@@ -86,6 +86,8 @@
   Copilot review flagged the summary as not covering #94.
   2026-10-12: the #94 clause extended for the PR #179 human-review
   round (@Sinnez1), by Claude Code (Fable 5).
+  2026-10-12: AI Use Summary extended for the credit reply outbox and
+  outbox publisher (issue #170) by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -484,7 +486,13 @@ recorded in `docs/credit-service.md` and `ai/usage-log.md`; and that
 PR's review fixes (#175: a completion that finds no reservation is
 retried instead of dead-lettered at once, a removed race test restored,
 and the expiry and rejected-record rules moved from open items into the
-design doc), the team's decisions on the reviewers' findings.
+design doc), the team's decisions on the reviewers' findings; and the
+reply outbox and outbox publisher (issue #170: the outbox row written
+in the caller's transaction, the scheduled publisher with publisher
+confirms and the mandatory flag, and their tests), written to D10 of
+`docs/credit-service.md`, with the poll interval, the batch cap, the
+confirm wait and what a failed publish does to the rest of a poll
+decided by the team and recorded there and in `ai/usage-log.md`.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their

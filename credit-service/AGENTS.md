@@ -13,6 +13,8 @@
   invariants updated for the credit operations implementation; then
   for slices referencing their lot (written into V1) and the record
   insert moving to the repository.
+  2026-10-12, Claude Code (Opus 5.5), issue #170: the package map and
+  invariants updated for the reply outbox and the outbox publisher.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -32,12 +34,12 @@ IDs (D1–D12) when touching related code.
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
 | `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
-| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` (interface) and its `NotImplementedReplyOutbox` stub, which throws, `ReserveResult` / `SettleResult`, and `RequestEventHandler`, which owns the transaction for one request event |
-| `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, and `DomainEventMessageConverter`, a copy of notification-service's |
+| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, and `RequestEventHandler`, which owns the transaction for one request event |
+| `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), and `DomainEventMessageConverter`, a copy of notification-service's |
 
-No controllers, listener, outbox publisher or scheduler yet. The two
-interfaces are the seams the features are built against, and the
-handler already calls them; `ReplyOutbox` is still a stub.
+No controllers, listener or scheduler yet. The handler already calls
+`CreditOperations` and `ReplyOutbox`, but nothing calls the handler
+until the listener exists.
 
 ## Invariants — do not break
 
@@ -50,9 +52,22 @@ handler already calls them; `ReplyOutbox` is still a stub.
 - **Entities mirror V1.** With `ddl-auto: none` nothing validates the
   mappings at startup; `EntityMappingTest` saves and reads each one back.
   A new column needs a migration, the entity field and that test.
-- **Replace the `NotImplementedReplyOutbox` stub, don't extend it.** When
-  the real `ReplyOutbox` bean lands, delete the stub (two beans of one
-  interface fail injection) and `NotImplementedStubsTest`.
+- **A reply is enqueued inside the transaction that owes it.**
+  `ReplyOutboxService.enqueue` is `MANDATORY`: it joins the caller's
+  transaction and refuses a call outside one.
+- **The stored payload is the wire body.** The publisher sends
+  `outbox_event.payload` as it is, so whatever writes a row writes the
+  JSON a consumer reads, `eventType` included.
+- **The outbox publisher marks a reply sent only on `SENT`.** Anything
+  else leaves the row for the next poll. Only a returned reply
+  (`NOT_SENT`) lets the poll go on; a nack, a missing confirm or an
+  unreachable broker (`BROKER_UNAVAILABLE`) stops it. Each reply is
+  marked in its own transaction, never one around the batch. It polls
+  on a fixed delay, not a fixed rate, so one poll never overlaps the
+  next.
+- **The publisher is off in the `test` profile**
+  (`credit.outbox.publisher.enabled: false`), as nothing there runs a
+  broker; a test that needs it turns it on against Testcontainers.
 - **A request's record is inserted, never saved.** `ReservedRepository.save`
   merges, and would overwrite the record a concurrent first delivery just
   committed; use `ReservedRepository.insert`, so the second delivery fails

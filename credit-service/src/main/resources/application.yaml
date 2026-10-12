@@ -10,6 +10,8 @@
 # request event handler and topology (the values are the author's).
 # 2026-10-11, issue #169: the sign-up amount and the earned-credit
 # lifetime, read by the credit operations (the values are the team's).
+# 2026-10-12, issue #170: the outbox publisher's poll interval, batch
+# cap and confirm wait (the values are the team's).
 # Author review: Ryan Ang, pending pull request review.
 
 spring:
@@ -66,6 +68,17 @@ credit:
       # this yet: the listener that counts attempts is a later change and
       # must bind this property name. Until then no cap is applied.
       max-attempts: ${CREDIT_RETRY_MAX_ATTEMPTS:5}
+  outbox:
+    publisher:
+      # Delay between the end of one outbox poll and the start of the
+      # next (D10). A delay, not a rate, so polls never overlap.
+      poll-interval-ms: 1000
+      # Most replies published in one poll, so a backlog after an outage
+      # drains over several polls.
+      batch-size: 100
+      # Longest wait for the broker to confirm one reply; after it the
+      # poll stops, and the next poll tries the reply again.
+      confirm-timeout-ms: 5000
   # Origin the browser calls this service from (no API gateway)
   web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
   jwt:
