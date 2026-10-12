@@ -64,6 +64,11 @@
   sections now record the accepted 30-day deleted-account access and
   admin removal staying self-restorable. Decisions by Leong Wei Zhi
   via options Q&A.
+  2026-10-12, Claude Code (Fable 5), PR #179 approval follow-up
+  (@Sinnez1): admin removal now demotes to USER, a failed renewal
+  send restores the pre-renewal OTP row, and the stale old-JWT
+  sentence (pre-G11) was corrected to the Redis-failure and
+  same-second exceptions. Decisions by Leong Wei Zhi via options Q&A.
 -->
 
 # User Service
@@ -180,7 +185,10 @@ sign-up never reserves an email or username.
   keep using the other services for the whole 30-day window, not just
   one token's hour (PR #179 review, @Sinnez1). Accepted, owner
   decision: the same user can restore with one click at any moment, so
-  the deleted state withholds nothing but the profile routes.
+  the deleted state withholds nothing but the profile routes — and no
+  admin powers ride along, because admin removal demotes to USER
+  first (below); only a pre-removal ADMIN token keeps them, for its
+  ≤ 1 h `exp`.
   Login therefore tells a caller whether an account exists — the author
   chose that over the non-revealing failures of #89, as sign-up's
   "already taken" 400s reveal the same thing.
@@ -315,7 +323,12 @@ a deleted account is recovered by logging in and explicitly restoring
   The email is sent after the row's transaction commits, so no user-row
   lock is held across SMTP timeouts (same review: an unauthenticated
   caller could stall that user's logins); a failed send retracts the
-  unreceived code best-effort and answers 502.
+  unreceived code best-effort and answers 502 — and when the failed
+  send was a renewal, the retraction puts the pre-renewal row back
+  (code, clock and carried count) instead of deleting it, so a mail
+  outage neither kills the code already delivered nor becomes a
+  second budget-renewal path besides expiry (PR #179 approval
+  follow-up, @Sinnez1).
   Accepted leaks, on the record: the 502 is observable only for real
   accounts (consistent with sign-up's), and the synchronous send makes
   a known email answer measurably slower than an unknown one.
@@ -356,8 +369,9 @@ a deleted account is recovered by logging in and explicitly restoring
   knobs whole (TTL, attempts, cooldown), and `OtpService` generates
   and BCrypt-hashes them like every other code (10^6 possibilities is
   exactly the space that slow hash exists for). The code is never
-  stored plain or logged. An old JWT stays valid after a reset until
-  its `exp` (≤ 1 h); logout's denylist is the existing remedy.
+  stored plain or logged. A reset evicts the account's earlier
+  sessions at the gateway (above); only a Redis failure or a token
+  minted the same second lets one live out its ≤ 1 h `exp`.
 
 ## Errors
 
@@ -448,7 +462,12 @@ removed (`DELETE /users/{id}`) is the same recoverable soft-delete, and
 the removed user can restore it the same way — owner decision (PR #179
 review, @Sinnez1): admin removal is a deletion on the user's behalf,
 not a ban; nothing records who deleted, and `main`'s login silently
-restored the same accounts. A daily scheduler
+restored the same accounts. Removal does demote the target to USER
+(owner decision, PR #179 approval follow-up: a removed admin could
+otherwise keep using the admin endpoints while deleted — they trust
+the token's role — and restore itself as an admin), so later logins
+and a self-restored account carry no admin powers until re-promoted;
+a token minted before the removal keeps ADMIN until its ≤ 1 h `exp`. A daily scheduler
 (`AccountPurgeScheduler`, default 03:00) hard-deletes accounts whose
 `deleted_at` is older than the retention window, together with their
 `password_reset_otps` rows — that purge is what frees the identifiers. The

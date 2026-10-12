@@ -23,6 +23,10 @@ now pins the carried attempt count, the spent-row absorb and the
 expired-row fresh budget; the mail-failure case pins the retraction
 (and its renewed-row escape) now that the send sits outside the
 transaction; confirm success pins the session eviction.
+2026-10-12 (Claude Code, Fable 5), PR #179 approval follow-up
+(@Sinnez1): a failed send on a renewal now pins the pre-renewal row
+restored — code, clock and carried count — instead of deleted (owner
+decision via options Q&A).
 */
 
 package foc.user.service;
@@ -302,6 +306,37 @@ class PasswordResetServiceTest {
         // hold the user-row lock across SMTP timeouts — PR #179 review,
         // @Sinnez1), so the old rollback became an explicit retraction
         verify(resetOtps).delete(parked.get());
+    }
+
+    @Test
+    @DisplayName("A mail failure on a renewal restores the delivered code, count intact")
+    void requestReset_mailFailureOnRenewalRestoresPriorRow() {
+        accountFound();
+        Instant priorCreatedAt = NOW.minusSeconds(61);
+        Instant priorExpiresAt = priorCreatedAt.plus(OTP_TTL);
+        PasswordResetOtp existing = new PasswordResetOtp(user, "hashed:111111",
+            priorCreatedAt, priorExpiresAt);
+        existing.incrementAttempts();
+        existing.incrementAttempts();
+        when(resetOtps.findWithLockByUserId(USER_ID))
+            .thenReturn(Optional.of(existing));
+        when(userRepository.findWithLockById(USER_ID)).thenReturn(Optional.of(user));
+        doThrow(new MailSendException("smtp down"))
+            .when(otpEmailSender).sendPasswordResetCode(anyString(), anyString(), any());
+
+        assertThatThrownBy(() -> service.requestReset(EMAIL))
+            .isInstanceOfSatisfying(ResponseStatusException.class,
+                e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY));
+
+        // deleting the renewed row discarded the carried wrong-guess
+        // count (a second budget-renewal path besides expiry) and killed
+        // the code already in the inbox (PR #179 approval follow-up,
+        // @Sinnez1); the pre-renewal row comes back instead
+        verify(resetOtps, never()).delete(any());
+        assertThat(existing.getCodeHash()).isEqualTo("hashed:111111");
+        assertThat(existing.getCreatedAt()).isEqualTo(priorCreatedAt);
+        assertThat(existing.getExpiresAt()).isEqualTo(priorExpiresAt);
+        assertThat(existing.getAttempts()).isEqualTo(2);
     }
 
     @Test

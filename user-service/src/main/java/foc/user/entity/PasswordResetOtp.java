@@ -15,6 +15,11 @@
  * replace() split into renew() (live row: attempts carried, the
  * brute-force fix the owner chose via options Q&A) and
  * replaceExpired() (dead row: fresh budget).
+ * 2026-10-12 (Claude Code, Fable 5), PR #179 approval follow-up
+ * (@Sinnez1): restore() added so a failed send on a renewal puts the
+ * pre-renewal row back (owner decision via options Q&A; the
+ * alternatives were leaving the renewed row in place or documenting
+ * the budget-reset exception).
  */
 package foc.user.entity;
 
@@ -108,6 +113,21 @@ public class PasswordResetOtp {
         this.createdAt = now;
         this.expiresAt = expiresAt;
         this.attempts = 0;
+    }
+
+    /**
+     * Puts a renewed row back to its pre-renewal state after the new
+     * code's email failed to send: the delivered code (and its clock)
+     * return, so the user's inbox stays truthful and the failed send
+     * does not become a second budget-renewal path besides expiry
+     * (PR #179 approval follow-up, @Sinnez1). {@code attempts} is
+     * deliberately untouched — {@link #renew} carried it, and any
+     * wrong guesses since only incremented it.
+     */
+    public void restore(String codeHash, Instant createdAt, Instant expiresAt) {
+        this.codeHash = codeHash;
+        this.createdAt = createdAt;
+        this.expiresAt = expiresAt;
     }
 
     public Long getId() {

@@ -51,6 +51,10 @@ budget per cooldown let a guesser cycle indefinitely); the email is
 sent after the parking transaction commits so no user-row lock spans
 SMTP, with a best-effort retraction on failure; a successful confirm
 evicts the account's outstanding sessions via TokenDenylist (G11).
+2026-10-12 (Claude Code, Fable 5), PR #179 approval follow-up
+(@Sinnez1): a failed send on a renewal restores the pre-renewal row
+instead of deleting it (owner decision via options Q&A) — the delete
+discarded the carried wrong-guess count and killed the delivered code.
 */
 
 package foc.user.service;
@@ -182,8 +186,17 @@ public class PasswordResetService {
 
     // what the send needs once the locks are gone: where to mail, the
     // plain code, and enough to recognize (and retract) the exact row
-    // version it came from if the send fails
-    private record PreparedReset(Long userId, String email, String code, String codeHash) {
+    // version it came from if the send fails. prior is the live row a
+    // renewal overwrote (null when the row was new or expired): retract
+    // puts it back, because deleting a renewed row would discard the
+    // carried wrong-guess count and kill the code already delivered
+    private record PreparedReset(Long userId, String email, String code, String codeHash,
+            PriorRow prior) {
+    }
+
+    // the delivered code a renewal replaced: enough to put the row back
+    // exactly (attempts need no snapshot — renew carries them)
+    private record PriorRow(String codeHash, Instant createdAt, Instant expiresAt) {
     }
 
     private PreparedReset park(String email) {
@@ -229,27 +242,37 @@ public class PasswordResetService {
         String code = otpService.generateCode();
         String codeHash = otpService.hash(code);
         Instant expiresAt = now.plus(otpService.ttl());
+        PriorRow prior = null;
         if (otp == null) {
             otp = new PasswordResetOtp(user, codeHash, now, expiresAt);
         } else if (expired) {
             // the locked row is dead (confirm refuses it on sight), so
-            // it is taken over whole, attempt budget included
+            // it is taken over whole, attempt budget included — and not
+            // worth snapshotting: retract's delete leaves the same
+            // nothing-live state the expiry already reached
             otp.replaceExpired(codeHash, now, expiresAt);
         } else {
             // the live row renews in place — fresh code and life, but
             // the wrong-guess count carries over (PR #179 review: a
             // fresh budget every cooldown let a guesser cycle five
             // guesses a minute indefinitely; now it is five per OTP_TTL)
+            prior = new PriorRow(otp.getCodeHash(), otp.getCreatedAt(), otp.getExpiresAt());
             otp.renew(codeHash, now, expiresAt);
         }
         resetOtps.save(otp);
-        return new PreparedReset(user.getId(), user.getEmail(), code, codeHash);
+        return new PreparedReset(user.getId(), user.getEmail(), code, codeHash, prior);
     }
 
     // undoes park() after a failed send: the same lock order as every
-    // flow (user row, then OTP row), and the row is deleted only while
+    // flow (user row, then OTP row), and the row is touched only while
     // it still holds the never-delivered code — a concurrent request
-    // may have renewed it with one that WAS delivered
+    // may have renewed it with one that WAS delivered. A new or
+    // taken-over-expired row is deleted; a renewed live row is put back
+    // to its pre-renewal state instead (PR #179 approval follow-up,
+    // @Sinnez1: deleting it reset the carried wrong-guess count — a
+    // second budget-renewal path besides expiry — and killed the code
+    // already in the inbox). Attempts stay as they are: renew carried
+    // them, and wrong guesses meanwhile only added
     private void retract(PreparedReset prepared) {
         if (userRepository.findWithLockById(prepared.userId()).isEmpty()) {
             // purged meanwhile; the sweep owns any leftovers
@@ -257,7 +280,15 @@ public class PasswordResetService {
         }
         resetOtps.findWithLockByUserId(prepared.userId())
             .filter(otp -> otp.getCodeHash().equals(prepared.codeHash()))
-            .ifPresent(resetOtps::delete);
+            .ifPresent(otp -> {
+                if (prepared.prior() == null) {
+                    resetOtps.delete(otp);
+                } else {
+                    PriorRow prior = prepared.prior();
+                    otp.restore(prior.codeHash(), prior.createdAt(), prior.expiresAt());
+                    resetOtps.save(otp);
+                }
+            });
     }
 
     /**

@@ -3243,3 +3243,38 @@ Entry template:
   same as self-delete) — recorded in AdminService and the README.
   Tests: suite 354 → 359 (renewal/absorb/retract/eviction pins).
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debugging assistance, refactoring, documentation (PR #179
+  approval follow-ups by @Sinnez1)
+- **Prompt(s):** Asked to address the latest PR #179 comments — the
+  seven non-blocking follow-ups on @Sinnez1's approval. The two that
+  were design/security choices (what admin removal does to the ADMIN
+  role; how retract handles a failed send on a renewal) were put to
+  Leong Wei Zhi as neutral options Q&A; the tool implemented the
+  choices and the mechanical corrections.
+- **Scope:** (1) Admin removal (chosen: demote to USER; alternatives
+  were an active-check in the admin routes or documenting as
+  accepted) — AdminService.removeUser sets the role before the
+  soft-delete, so a removed admin's later logins and a self-restored
+  account carry no admin powers; a pre-removal ADMIN token lasts its
+  ≤1 h exp. Pinned in AdminServiceTest. (2) Failed renewal send
+  (chosen: restore the pre-renewal row; alternatives were leaving the
+  renewed row in place or documenting the budget-reset exception) —
+  PreparedReset snapshots the live row before renew, retract restores
+  code/clock via PasswordResetOtp.restore instead of deleting (new or
+  expired-takeover rows still delete), closing the second
+  budget-renewal path and keeping the delivered code working. Pinned
+  in PasswordResetServiceTest. (3) user-service README: the stale
+  pre-G11 "old JWT stays valid" sentence replaced with the
+  Redis-failure/same-second exceptions; the retract and soft-delete
+  passages updated for (1)/(2). (4) Root README AI Use Summary: web
+  clauses moved out (the web half is PR #180's), scope corrected to
+  backend-only, this round appended. (5) TokenDenylist javadoc records
+  the reviewer-reproduced same-second survivor and the
+  login-racing-the-reset gap as the same accepted leak. (6) Test
+  isolation: PasswordResetControllerTest and AccountPurgeSchedulerTest
+  clear password_reset_otps in @AfterEach (AccountUpdateControllerTest's
+  rule) so a leftover row cannot break other classes' deleteAll setup.
+- **Author review:** Pending author review of the diff via the PR.

@@ -28,6 +28,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -102,6 +103,15 @@ class PasswordResetControllerTest extends PostgresTestContainer {
         userRepository.deleteAll();
         alex = userRepository.save(
             new User(EMAIL, "student_alex", encoder.encode(OLD_PASSWORD), Role.USER));
+    }
+
+    // a reset row outliving its test breaks the other classes' setup:
+    // they call userRepository.deleteAll() without knowing this FK'd
+    // table exists (AccountUpdateControllerTest's rule, PR #179
+    // approval follow-up — @Sinnez1 hit 48 failures from one left row)
+    @AfterEach
+    void clearResetRows() {
+        resetOtpRepository.deleteAll();
     }
 
     private ResultActions postJson(String path, Map<String, String> body) throws Exception {

@@ -11,6 +11,10 @@ Author review: Leong Wei Zhi to review via the PR.
 revokeUserSessions added — a password reset stamps denylist:user:<id>
 so the gateway refuses the account's pre-reset tokens (decision G11,
 Leong Wei Zhi via options Q&A).
+2026-10-12 (Claude Code, Fable 5), PR #179 approval follow-up
+(@Sinnez1): the javadoc records the reviewer-reproduced same-second
+survivor and the login-racing-the-reset gap as the same accepted
+leak; no behaviour change.
 */
 
 package foc.user.security;
@@ -90,8 +94,13 @@ public class TokenDenylist {
      * token issued before the stamp has expired on its own. The strict
      * comparison means a token minted the same second as the stamp
      * survives — sparing the owner's own immediate post-reset login —
-     * and a repeat reset simply moves the stamp forward. Best-effort
-     * like {@link #revoke} (G9).
+     * and a repeat reset simply moves the stamp forward. Accepted and
+     * reviewer-reproduced (PR #179 approval, @Sinnez1); the same
+     * acceptance covers an old-password login racing the reset: the
+     * token is minted after the login's row lock is released, so a
+     * reset landing in that gap stamps before the mint and the token
+     * passes with {@code iat >= stamp}. Best-effort like
+     * {@link #revoke} (G9).
      */
     public void revokeUserSessions(Long userId) {
         String cutoff = String.valueOf(clock.instant().getEpochSecond());

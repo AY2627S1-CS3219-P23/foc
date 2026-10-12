@@ -33,6 +33,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -89,6 +90,14 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
         accountUpdateOtpRepository.deleteAll();
         pendingEmailChangeRepository.deleteAll();
         userRepository.deleteAll();
+    }
+
+    // the surviving-row assertions leave reset rows behind, and other
+    // classes' setup deletes users without knowing this FK'd table
+    // (PR #179 approval follow-up, @Sinnez1)
+    @AfterEach
+    void clearResetRows() {
+        resetOtpRepository.deleteAll();
     }
 
     @Test
