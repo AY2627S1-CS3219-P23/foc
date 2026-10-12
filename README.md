@@ -93,6 +93,10 @@
   round (@Sinnez1), by Claude Code (Fable 5).
   2026-10-12: AI Use Summary extended for the credit reply outbox and
   outbox publisher (issue #170) by Claude Code (Opus 5.5).
+  2026-10-12: AI Use Summary extended for the issue #67 remaining scope
+  (web STOMP client + CONNECT-time denylist, D23) by Claude Code
+  (Fable 5), on PR #185 Copilot review (the summary had missed the
+  change).
   2026-10-13: the #170 clause extended for the PR #188 review round
   (Leong Wei Zhi), by Claude Code (Opus 5.5).
   2026-10-13: AI Use Summary extended for the credit read API
@@ -584,6 +588,19 @@ by the author via neutral-options Q&A and recorded in
 `ai/usage-log.md`; and the order-service `Requests` entity and
 repository (table name and columns given by the author as an ER
 diagram, which the tool transcribed into the entity unchanged).
+
+The issue #67 remaining scope (the server-side STOMP push gateway had
+merged earlier in PR #74): the web notification client
+(`web/src/features/notifications/` — the app's single STOMP client with
+reconnect/backoff, and the bell's unread badge), the notification-service
+JWT verifier's missing-expiry fix, and the D23 CONNECT-time Redis
+denylist read (port + adapter, interceptor check, ArchUnit rule,
+compose/.env wiring) with the matching doc updates (`docs/
+notification-service.md` D23, `docs/gateway.md` known-limit retirement).
+The scope decisions (badge-only UI, native WebSocket without
+sockjs-client, folding the expiry fix in, service-side denylist read as
+a narrow G4 exception) were made by Leong Wei Zhi via neutral options
+Q&A, recorded in `docs/notification-service.md` and `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

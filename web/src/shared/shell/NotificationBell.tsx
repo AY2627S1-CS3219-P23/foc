@@ -4,7 +4,9 @@
 // (wireframes show a bell with a red count badge).
 // 2026-10-12, Claude Code (Fable 5), issue #67: badge wired to the
 // STOMP push count from useNotifications (badge-only by the author's
-// scope decision).
+// scope decision). PR #185 Copilot review: the count joins the
+// button's accessible name — aria-label overrides descendant text, so
+// screen readers never heard the badge.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 // TODO(notification-service owner): link the bell to the Notification
@@ -13,12 +15,17 @@ import { useNotifications } from '@/features/notifications/useNotifications'
 
 export function NotificationBell() {
   const { unreadCount } = useNotifications()
+  const capped = unreadCount > 99 ? '99+' : String(unreadCount)
 
   return (
     <button
       type="button"
       className="relative rounded-md p-2 hover:bg-gray-100"
-      aria-label="Notifications"
+      // aria-label overrides descendant text, so the badge must be part
+      // of the name for assistive technologies (PR #185 Copilot review)
+      aria-label={
+        unreadCount > 0 ? `Notifications (${capped} unread)` : 'Notifications'
+      }
     >
       <svg
         className="h-5 w-5"
@@ -33,7 +40,7 @@ export function NotificationBell() {
       </svg>
       {unreadCount > 0 && (
         <span className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-red-500 px-1 text-center text-[10px] leading-4 font-semibold text-white">
-          {unreadCount > 99 ? '99+' : unreadCount}
+          {capped}
         </span>
       )}
     </button>

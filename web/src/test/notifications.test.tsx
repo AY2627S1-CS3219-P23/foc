@@ -5,6 +5,8 @@
 // through the gateway, bearer CONNECT header, exponential 1 s → 30 s
 // backoff), no client while logged out or without a base URL, badge
 // counting pushed frames, teardown on logout and on a STOMP ERROR.
+// PR #185 Copilot review: the badge count joins the bell's accessible
+// name, so the queries here follow it.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import { act, render, screen, waitFor } from '@testing-library/react'
@@ -183,7 +185,7 @@ describe('notification STOMP client', () => {
     }
   })
 
-  test('pushed frames raise the bell badge count', () => {
+  test('pushed frames raise the bell badge count and its accessible name', () => {
     renderApp(true)
 
     const onMessage = connectAndSubscribe()
@@ -194,6 +196,11 @@ describe('notification STOMP client', () => {
     pushFrame(onMessage)
 
     expect(bell).toHaveTextContent('2')
+    // aria-label overrides the badge text, so the count must be in the
+    // accessible name for screen readers (PR #185 Copilot review)
+    expect(
+      screen.getByRole('button', { name: 'Notifications (2 unread)' }),
+    ).toBe(bell)
   })
 
   test('resubscribes on every (re)connect', () => {
@@ -211,7 +218,7 @@ describe('notification STOMP client', () => {
     const onMessage = connectAndSubscribe()
     pushFrame(onMessage)
     expect(
-      screen.getByRole('button', { name: 'Notifications' }),
+      screen.getByRole('button', { name: 'Notifications (1 unread)' }),
     ).toHaveTextContent('1')
 
     await user.click(await screen.findByRole('button', { name: 'Logout' }))

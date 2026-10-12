@@ -3862,3 +3862,16 @@ Entry template:
   implemented); `docs/gateway.md` known limit retired + G4 exception
   noted; user-service `TokenDenylist` javadoc updated.
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** review fixes (PR #185 Copilot review)
+- **Prompt(s):** Asked to check and address the Copilot review's two
+  findings.
+- **Scope:** `web/src/shared/shell/NotificationBell.tsx` — the unread
+  count joins the button's accessible name (`Notifications (N unread)`)
+  since `aria-label` overrides the badge's descendant text for screen
+  readers; the test suite asserts the name. `README.md` — the AI Use
+  Summary extended for the #67 remaining scope, which the PR had missed
+  (policy: the summary stays current).
+- **Author review:** Pending author review of the diff via the PR.
