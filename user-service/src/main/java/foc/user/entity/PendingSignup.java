@@ -86,17 +86,21 @@ public class PendingSignup {
     @Column(nullable = false)
     private int attempts = 0;
 
+    @Column(name = "owner_key")
+    private String ownerKey;
+
     protected PendingSignup() {
     }
 
     public PendingSignup(String email, String username, String passwordHash,
-            String codeHash, Instant sentAt, Instant expiresAt) {
+            String codeHash, Instant sentAt, Instant expiresAt, String ownerKey) {
         this.email = email;
         this.username = username;
         this.passwordHash = passwordHash;
         this.codeHash = codeHash;
         this.lastSentAt = sentAt;
         this.expiresAt = expiresAt;
+        this.ownerKey = ownerKey;
     }
 
     /**
@@ -136,13 +140,14 @@ public class PendingSignup {
      * revives only for its own requester via {@link #reviveSpent}.
      */
     public void replaceExpired(String username, String passwordHash, String codeHash,
-            Instant sentAt, Instant expiresAt) {
+            Instant sentAt, Instant expiresAt, String ownerKey) {
         this.username = username;
         this.passwordHash = passwordHash;
         this.codeHash = codeHash;
         this.lastSentAt = sentAt;
         this.expiresAt = expiresAt;
         this.attempts = 0;
+        this.ownerKey = ownerKey;
     }
 
     /**
@@ -198,5 +203,9 @@ public class PendingSignup {
 
     public void incrementAttempts() {
         this.attempts++;
+    }
+
+    public String getOwnerKey() {
+        return ownerKey;
     }
 }
