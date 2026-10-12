@@ -22,6 +22,10 @@
   limit retired and G4's exception noted — notification-service now
   checks the denylist at STOMP CONNECT itself (author decision D23,
   docs/notification-service.md, via options Q&A).
+  2026-10-12, Claude Code (Fable 5), issue #178: G12 added — admin role
+  change and removal write the same G11 stamp, decided by Leong Wei Zhi
+  via options Q&A (option A of the issue's table; issue scope only) —
+  with its request-flow note. No gateway code changed.
   2026-10-14, Claude Code (Fable 5), PR #185 review (@Sinnez1): that
   limit's wording corrected — the CONNECT check now covers the G11
   cutoff too, and what it still does not cover (an already-open
@@ -51,8 +55,8 @@ Redis denylist.
 
 All decided by **Leong Wei Zhi via options Q&A** — G1–G10 on
 2026-10-11, G11 on 2026-10-12 with the rest of the PR #179 review
-response (AI made no design decisions; comparisons presented were
-factual only).
+response, G12 on 2026-10-12 with issue #178 (AI made no design
+decisions; comparisons presented were factual only).
 
 | # | Decision | Choice |
 | --- | --- | --- |
@@ -67,6 +71,7 @@ factual only).
 | G9 | Logout on Redis failure | Best-effort **204**: the failed write is logged, never surfaced — the token lives out its remaining `exp` (consistent with G6) |
 | G10 | Revoked-token response | 401 problem+json with detail **"Token has been revoked"** (alongside the existing "Token has expired" / "Invalid token") |
 | G11 | Per-user revocation (PR #179) | A password reset writes `denylist:user:<id>` = the reset's epoch second, `EX` = one token TTL; the gateway rejects that subject's tokens whose `iat` is strictly before the stamp, so the old password's sessions end with it. Same G6/G9 best-effort semantics; a token minted the same second as the reset survives (spares the owner's own post-reset login) |
+| G12 | Privilege revoke (issue #178) | Admin role change (any actual change, self-demotion included — a promotion's old token carries a stale claim too) and admin removal write the same G11 stamp, so the target's outstanding tokens die on the next gateway request instead of at `exp`. The target signs in again for a fresh token with the current role; a removed account can still log in and self-restore (login postdates the stamp). No new gateway code — the G11 check covers it, and D23's CONNECT lookup reads the same stamp, so a new STOMP session is refused too |
 
 ## Request flow
 
@@ -113,6 +118,11 @@ user-service `SET denylist:user:<id> <epoch-second> EX <token-TTL>`
 (G11). From that moment every gateway route rejects the account's
 tokens issued before the stamp.
 
+Privilege revoke: `PATCH /api/user/users/<id>` (role actually changed)
+and `DELETE /api/user/users/<id>` write the same stamp for the target
+(G12) — a demoted admin's next request answers 401 "Token has been
+revoked" rather than keeping the admin API until `exp`.
+
 ## Routing table
 
 | Prefix | Upstream | Notes |
@@ -145,8 +155,10 @@ individual backends restart or are rebuilt.
   failing open on a Redis outage like the gateway (G6).
 - **A revoked token keeps an already-open WebSocket session.** The
   CONNECT check is a point-in-time one; nothing re-checks a live STOMP
-  session, so a logout, a password reset or the token's own `exp` ends
-  it only once the socket closes (the SPA closes its own on logout).
+  session, so a logout, a password reset, an admin demote/remove (G12)
+  or the token's own `exp` ends it only once the socket closes (the SPA
+  closes its own on logout, and on the forced sign-out any of those
+  revocations triggers — issue #178's web half, PR #182).
   Recorded with D23's Session mechanics
   ([`notification-service.md`](notification-service.md)).
 - **CORS stays per-service.** The browser origin (`WEB_ALLOWED_ORIGIN`)

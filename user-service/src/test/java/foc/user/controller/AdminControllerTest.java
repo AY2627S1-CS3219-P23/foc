@@ -27,6 +27,10 @@ still untouched) instead of the old fail-closed 403.
        2026-09-29 (Claude Code, Opus 5.5), issue #147: includeDeleted cases
        (team decision), and the invalid-body reasons now that
        ProblemDetailAdvice reports them.
+2026-10-12 (Claude Code, Fable 5), issue #178: TokenDenylist is a
+@MockitoBean (like LogoutTest — no Redis in the test stack) and the
+endpoint cases pin the session eviction: PATCH role change and DELETE
+stamp the target, the no-op PATCH and a USER caller's 403 don't.
 */
 
 package foc.user.controller;
@@ -39,6 +43,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -55,6 +61,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.jayway.jsonpath.JsonPath;
 
@@ -62,6 +69,7 @@ import foc.user.PostgresTestContainer;
 import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.repository.UserRepository;
+import foc.user.security.TokenDenylist;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -72,6 +80,11 @@ class AdminControllerTest extends PostgresTestContainer {
 
     @Autowired
     private UserRepository userRepository;
+
+    // mocked like LogoutTest's: the test stack runs no Redis, and the
+    // mock lets the eviction calls be asserted (issue #178)
+    @MockitoBean
+    private TokenDenylist tokenDenylist;
 
     private User owner;
     private User admin;
@@ -114,6 +127,8 @@ class AdminControllerTest extends PostgresTestContainer {
             .andExpect(status().isForbidden());
 
         assertThat(userRepository.findById(admin.getId()).orElseThrow().getRole()).isEqualTo(Role.ADMIN);
+        // refused calls evict nothing (issue #178)
+        verifyNoInteractions(tokenDenylist);
     }
 
     @Test
@@ -437,6 +452,8 @@ class AdminControllerTest extends PostgresTestContainer {
             .andExpect(jsonPath("$.role").value("ADMIN"));
 
         assertThat(userRepository.findById(alex.getId()).orElseThrow().getRole()).isEqualTo(Role.ADMIN);
+        // issue #178: the change evicts the target's outstanding sessions
+        verify(tokenDenylist).revokeUserSessions(alex.getId());
     }
 
     @Test
@@ -466,6 +483,8 @@ class AdminControllerTest extends PostgresTestContainer {
             .andExpect(jsonPath("$.role").value("USER"));
 
         assertThat(userRepository.findById(admin.getId()).orElseThrow().getRole()).isEqualTo(Role.USER);
+        // issue #178: self-demotion behaves like any demotion — signed out too
+        verify(tokenDenylist).revokeUserSessions(admin.getId());
     }
 
     @Test
@@ -475,6 +494,9 @@ class AdminControllerTest extends PostgresTestContainer {
                 .contentType(MediaType.APPLICATION_JSON).content(roleBody("USER")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.role").value("USER"));
+
+        // no change, no eviction (issue #178)
+        verifyNoInteractions(tokenDenylist);
     }
 
     @Test
@@ -555,6 +577,8 @@ class AdminControllerTest extends PostgresTestContainer {
             .andExpect(status().isNoContent());
 
         assertThat(userRepository.findById(alex.getId()).orElseThrow().getDeletedAt()).isNotNull();
+        // issue #178: removal evicts the account's outstanding sessions
+        verify(tokenDenylist).revokeUserSessions(alex.getId());
     }
 
     @Test
