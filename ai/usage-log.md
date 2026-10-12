@@ -3828,3 +3828,37 @@ Entry template:
   clear password_reset_otps in @AfterEach (AccountUpdateControllerTest's
   rule) so a leftover row cannot break other classes' deleteAll setup.
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** implementation + documentation (issue #67, remaining scope)
+- **Prompt(s):** Asked to plan and resolve issue #67. Exploration found
+  the server half already merged (PR #74); the remaining scope was
+  decided by the author via neutral options Q&A: badge-only UI (no
+  dropdown/toasts — issue #66 owns the Notification Center), native
+  WebSocket only (no sockjs-client), the verifier's missing-exp fix
+  folded in, and D23 — notification-service reads the Redis denylist at
+  STOMP CONNECT itself, fail-open, as a narrow exception to gateway
+  decision G4 (the CONNECT-frame token never reaches the gateway).
+- **Scope:** `notification-service` — `JwtVerifier.verify()` now
+  requires `exp` and exposes `jti` (parity with the other services);
+  new `TokenDenylist` port + `security.redis.RedisTokenDenylist`
+  adapter (`EXISTS denylist:<jti>`, fails open on `DataAccessException`,
+  finite 2 s client timeouts); `JwtChannelInterceptor` rejects revoked
+  jtis at CONNECT; ArchUnit rule confining Redis types; yaml/compose/
+  .env.example/README wiring (no `depends_on: redis`, mirroring the
+  gateway's stance). Tests: no-expiry/jti verifier cases, adapter unit
+  tests, revoked/not-revoked/jti-less CONNECT cases against a fake
+  denylist (the STOMP integration test stays Docker- and Redis-free).
+  `web` — `@stomp/stompjs` added; `features/notifications/`
+  (`NotificationProvider` layout route owning the app's single STOMP
+  client: gateway `/ws/websocket` URL, bearer CONNECT header,
+  exponential 1 s→30 s reconnect, resubscribe in onConnect, stop on
+  STOMP ERROR; `useNotifications`; `stompUrl`); `NotificationBell`
+  badge wired to the session count; test suite for URL derivation,
+  connect config, badge counting, logout teardown and ERROR handling.
+  Docs: D23 recorded in `docs/notification-service.md` (plus the stale
+  "no API gateway" wording fixed and the client policy marked
+  implemented); `docs/gateway.md` known limit retired + G4 exception
+  noted; user-service `TokenDenylist` javadoc updated.
+- **Author review:** Pending author review of the diff via the PR.

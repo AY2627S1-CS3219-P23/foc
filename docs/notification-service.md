@@ -3,7 +3,7 @@
   Tool: Claude Code (Fable 5), 2026-09-15 – 2026-09-21.
   Scope: transcribed and maintained the team-decided notification-service
   design in this document and the companion diagram. Every design decision
-  (D1–D22) was made by a team member — recorded per decision in the
+  (D1–D23) was made by a team member — recorded per decision in the
   Decisions table, chosen via neutral options Q&As where AI assisted — and
   the decision-by-decision history lives in ai/usage-log.md and git
   history. The tool documented decisions, derived the traceability
@@ -19,6 +19,10 @@
   2026-10-11, Claude Code (Fable 5), issue #151: dated note on D10 — a
   platform Redis now exists for the logout denylist (docs/gateway.md);
   D10's scale-out question is unchanged and stays open.
+  2026-10-12, Claude Code (Fable 5), issue #67: D23 added (CONNECT-time
+  denylist read — author decision via options Q&A), the D10 note
+  extended, the stale "no API gateway" wording in Session mechanics
+  fixed, and the provisional client policy rewritten as implemented.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -38,7 +42,8 @@ Companion diagram: [`notification-service.mmd`](notification-service.mmd)
 ## Design decisions (made by the team)
 
 All decisions were made by Leong Wei Zhi (D1–D10 on 2026-09-15, D11 on
-2026-09-18, D12–D19 on 2026-09-19, D20–D22 on 2026-09-20) and count as
+2026-09-18, D12–D19 on 2026-09-19, D20–D22 on 2026-09-20, D23 on
+2026-10-12) and count as
 the team's finalized design for this service. Superseded decisions
 (D5, D14) have been removed; gaps in the numbering are intentional.
 
@@ -52,7 +57,7 @@ the team's finalized design for this service. Superseded decisions
 | D7 | Dead-letter handling | **Durable dead-letter queue**; unknown event types dead-letter (replayable after a consumer upgrade) rather than being dropped | Notif F2.3 |
 | D8 | Broker persistence | **Durable exchanges/queues + persistent messages** (durability is opt-in in RabbitMQ) | Notif NFR1.2 |
 | D9 | Retention window | `NOTIF_RETENTION_DAYS` env var, **default 30 days**; scheduled purge job | Notif F3.4 |
-| D10 | Redis / scale-out | **No Redis** in the single-instance design (see Open items). *2026-10-11 note:* a platform Redis now exists for the **logout token denylist** ([`gateway.md`](gateway.md), issue #151) — unrelated to this service's scale-out question, which stays open | — |
+| D10 | Redis / scale-out | **No Redis** in the single-instance design (see Open items). *2026-10-11 note:* a platform Redis now exists for the **logout token denylist** ([`gateway.md`](gateway.md), issue #151) — unrelated to this service's scale-out question, which stays open. *2026-10-12 note:* this service now **reads** that denylist at STOMP CONNECT (D23); the scale-out question is still open | — |
 | D11 | Broker isolation | **Ports and adapters**: all RabbitMQ code confined to one adapter package — see [Broker decoupling](#broker-decoupling-d11) | broker swap surface |
 | D12 | Topology provisioning | **App-declared at startup** via Spring AMQP beans (no broker definitions file) | topology lives beside its owner |
 | D13 | Naming convention | Exchange named after the producing domain (`request-events`); queues prefixed with the consuming service (`notification-service.request-events` + `.retry`/`.dlq`) | ownership visible in the management UI |
@@ -64,6 +69,7 @@ the team's finalized design for this service. Superseded decisions
 | D20 | Dead-letter exchange form | **The default exchange (`""`)** serves as the dead-letter exchange on both legs — see [Failure handling](#failure-handling-d6d7-d20d21) | minimal topology |
 | D21 | Unconvertible-message path | **Dead-letter on first rejection**, skipping the retry queue — retrying a message that cannot convert could never succeed | Notif F2.3 |
 | D22 | Event vocabulary | **`request` replaces `order`** across classes, routing keys, exchange and queue names, and fixtures; `foc-contracts` split into `events.core` / `events.request` packages. A one-time pre-production break (no producer existed yet) | consistency with the D1 backlog |
+| D23 | WebSocket revocation check | **This service checks `EXISTS denylist:<jti>` itself at STOMP CONNECT** — the token travels in the CONNECT frame, which never reaches the gateway's access phase. jti-less tokens skip the check; a Redis failure **fails open** behind finite 2 s timeouts (G6 semantics). A deliberate, narrow exception to gateway decision G4 | closes [`gateway.md`](gateway.md)'s logged-out-socket known limit |
 
 ## Components
 
@@ -334,26 +340,36 @@ Why the push channel is centralized here rather than per service:
 - **Endpoint:** `/ws`, STOMP over WebSocket **with SockJS fallback** —
   native WebSocket is SockJS's first transport, so capable browsers pay
   nothing; networks that block the upgrade degrade to XHR transports.
-  Allowed handshake origins come from `NOTIFICATION_WS_ALLOWED_ORIGINS`
-  (no API gateway exists, so the browser connects cross-origin).
+  Allowed handshake origins come from `NOTIFICATION_WS_ALLOWED_ORIGINS`.
+  The browser connects through the API gateway at
+  `/api/notification/ws` ([`gateway.md`](gateway.md), issue #151): the
+  gateway proxies the upgrade and SockJS streaming and the `Origin`
+  header passes through unchanged.
 - **Authentication:** the handshake/upgrade is unauthenticated; the
   STOMP `CONNECT` frame carries `Authorization: Bearer <JWT>` (HS256,
   shared `JWT_SECRET`, verified with jjwt). A channel interceptor
   validates it and sets the session principal to the token's `sub` —
   the platform user ID, the same ID in event `parties[]` and
   notification `recipientId`, which is what `/user/...` routing matches
-  on. Invalid or missing tokens reject the CONNECT with a STOMP ERROR
-  frame and the session closes.
+  on. The interceptor also rejects **revoked** tokens via the D23
+  denylist lookup. Invalid, revoked or missing tokens reject the
+  CONNECT with a STOMP ERROR frame and the session closes.
 - **Destination:** clients subscribe to `/user/queue/notifications`;
   the push listener sends each stored notification there after the
   processor's transaction commits (`AFTER_COMMIT`) — well inside the
   5 s budget. Push is best-effort: an offline user misses the frame and
   catches up via the REST list (F3.1).
 - **Heartbeats:** 10 s / 10 s both directions.
-- **Provisional client policy** (the SPA does not exist yet, so the
-  client half of issue #67 is deferred): a single STOMP client in the
-  shared app shell, auto-reconnect with exponential backoff 1 s
-  doubling to a 30 s cap, resubscribe on reconnect.
+- **Client policy** (implemented under issue #67): a single STOMP
+  client for the whole SPA, owned by a `NotificationProvider` layout
+  route in the shared app shell. Native WebSocket only — no
+  `sockjs-client` dependency; the client connects straight to the
+  endpoint's raw-WebSocket transport (`/ws/websocket`) — auto-reconnect
+  with exponential backoff 1 s doubling to a 30 s cap, resubscribe on
+  reconnect (subscription made in `onConnect`). A STOMP ERROR frame
+  stops the client (the server only sends one for CONNECT auth
+  failures, which retrying cannot fix); recovery is a re-login. UI is
+  badge-only until the Notification Center (issue #66).
 
 > ✍️ Historical note: the earlier backlog's committed requester–courier
 > chat implied a second real-time channel. The latest backlog moved
@@ -364,7 +380,8 @@ Why the push channel is centralized here rather than per service:
 ## Open items (team decisions still pending)
 
 - **Scale-out** (team decision 2026-09-15): the current design is
-  single-instance and includes **no Redis**. If the service is later
+  single-instance and uses Redis only for the D23 denylist read — not
+  for connection state. If the service is later
   scaled to multiple instances (nice-to-have N5.4), the team will then
   choose between Redis pub/sub and a RabbitMQ STOMP broker relay for
   cross-instance WebSocket fan-out.

@@ -18,6 +18,10 @@
   2026-10-12, Claude Code (Fable 5), PR #179 review (@Sinnez1): G11
   added — per-user session revocation on password reset, decided by
   Leong Wei Zhi via options Q&A — with its request-flow note.
+  2026-10-12, Claude Code (Fable 5), issue #67: the WebSocket known
+  limit retired and G4's exception noted — notification-service now
+  checks the denylist at STOMP CONNECT itself (author decision D23,
+  docs/notification-service.md, via options Q&A).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -51,7 +55,7 @@ factual only).
 | G1 | Gateway technology | OpenResty (nginx + Lua): `lua-resty-jwt` verifies HS256 signature + exp, `lua-resty-redis` checks the denylist in-process — no extra HTTP hop per request |
 | G2 | Denylist store | Redis only: `denylist:<jti>` keys with `EX` = seconds until the token's own `exp`; Redis expiry replaces any purge job. The never-used `token_denylist` table is dropped (user-service `V6`) |
 | G3 | Routing scope | Full cutover: the SPA's five service URLs all point at the gateway (`/api/user`, `/api/supplier`, `/api/credit`, `/api/notification`; `/api/order` reserved); backend containers have **no published host ports** |
-| G4 | Enforcement depth | Gateway only. No backend service reads the denylist; user-service gains Redis solely to **write** it at logout |
+| G4 | Enforcement depth | Gateway only. No backend service reads the denylist; user-service gains Redis solely to **write** it at logout. *2026-10-12 exception (D23, issue #67):* notification-service reads it at STOMP CONNECT — the frame-level token never reaches the gateway's access phase |
 | G5 | Anonymous requests | Pass through untouched (incl. OPTIONS preflights and non-Bearer schemes); each service's Spring Security still decides what needs auth. A Bearer token present is verified + denylist-checked — except on user-service's public `/auth/**` routes (logout excluded) and `/actuator/health`, which get their own auth-free location blocks mirroring `JwtAuthenticationFilter`'s skip, so a stale token stored by the SPA can never block login/sign-up. Location blocks, not a path match in Lua: nginx routes on the normalized URI, so a dot-segment path cannot be skipped one way and routed another (PR #176 reviews) |
 | G6 | Redis outage | Fail open: a connect/lookup error forwards the request if signature + exp are valid (availability over revocation, bounded by the ≤1 h token lifetime) |
 | G7 | Redis durability | AOF (`--appendonly yes`) + named volume: revoked-but-unexpired tokens stay revoked across container restarts |
@@ -127,10 +131,13 @@ individual backends restart or are rebuilt.
 
 ## Known limits (accepted with G4/G5)
 
-- **WebSocket CONNECT tokens are not denylist-checked.** The STOMP JWT
+- ~~WebSocket CONNECT tokens are not denylist-checked.~~ *Resolved
+  2026-10-12 (issue #67, decision D23 in
+  [`notification-service.md`](notification-service.md)):* the STOMP JWT
   travels in the CONNECT frame, not an HTTP header, so the gateway
-  proxies the upgrade and notification-service verifies signature + exp
-  itself. A logged-out token can open the socket until its `exp`.
+  still cannot check it — notification-service now does the
+  `denylist:<jti>` lookup itself at CONNECT, failing open on a Redis
+  outage like the gateway (G6).
 - **CORS stays per-service.** The browser origin (`WEB_ALLOWED_ORIGIN`)
   differs from the gateway origin, and services' CORS headers pass
   through unchanged; only the gateway's own Lua-generated 401s stamp
