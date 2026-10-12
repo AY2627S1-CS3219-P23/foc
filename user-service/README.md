@@ -58,6 +58,12 @@
   settled as password_reset_otps without kind (third round). The
   branch's three stacked migrations were squashed into one V7 before
   merge.
+  2026-10-12, Claude Code (Fable 5), PR #179 review (@Sinnez1): the
+  reset section updated for the carried guess budget, the post-commit
+  send and the session eviction (G11); the login and soft-delete
+  sections now record the accepted 30-day deleted-account access and
+  admin removal staying self-restorable. Decisions by Leong Wei Zhi
+  via options Q&A.
 -->
 
 # User Service
@@ -169,8 +175,12 @@ sign-up never reserves an email or username.
   choice): its 200 carries `deletionScheduledFor`, the purge date, and
   the SPA shows the restore-or-keep-deleted screen; restoring is
   `POST /users/me/recover` (below). Until then the account stays
-  deleted — `GET /users/me` answers 404, and the (valid) JWT is honored
-  by the other services until it expires, an accepted consequence.
+  deleted — `GET /users/me` answers 404 — but the token is a normal
+  one and login keeps minting fresh ones, so a deleted account can
+  keep using the other services for the whole 30-day window, not just
+  one token's hour (PR #179 review, @Sinnez1). Accepted, owner
+  decision: the same user can restore with one click at any moment, so
+  the deleted state withholds nothing but the profile routes.
   Login therefore tells a caller whether an account exists — the author
   chose that over the non-revealing failures of #89, as sign-up's
   "already taken" 400s reveal the same thing.
@@ -296,13 +306,19 @@ a deleted account is recovered by logging in and explicitly restoring
   caller already named an account). For a live account (soft-deleted
   within the window included — that user has no other door), a code is
   emailed, valid for `OTP_TTL`; one live code per account — a repeat
-  past the cooldown replaces it, with a fresh attempt budget (nothing
-  is held hostage here, unlike a pending sign-up, so the cooldown
-  alone caps renewal speed).
-  Accepted leaks, on the record: a mail failure still answers 502
-  (observable only for real accounts, consistent with sign-up's), and
-  the synchronous send makes a known email answer measurably slower
-  than an unknown one.
+  past the cooldown renews it with the wrong-guess count carried over
+  (PR #179 review, @Sinnez1: a fresh budget per renewal let a guesser
+  cycle five guesses a minute indefinitely; a budget now renews only
+  when a row expires, capping it at `OTP_MAX_ATTEMPTS` guesses per
+  `OTP_TTL`), and a spent live row absorbs the request outright — same
+  202, no mail — until it expires.
+  The email is sent after the row's transaction commits, so no user-row
+  lock is held across SMTP timeouts (same review: an unauthenticated
+  caller could stall that user's logins); a failed send retracts the
+  unreceived code best-effort and answers 502.
+  Accepted leaks, on the record: the 502 is observable only for real
+  accounts (consistent with sign-up's), and the synchronous send makes
+  a known email answer measurably slower than an unknown one.
 - `POST /auth/password-reset/confirm` `{ email, code, newPassword,
   confirmPassword }` → **204**. The email names whose code to check —
   a salted BCrypt hash can't be looked up — the password is
@@ -317,11 +333,20 @@ a deleted account is recovered by logging in and explicitly restoring
   pending row, while this route is where an outsider would probe other
   people's accounts, so even those distinctions would leak existence.
   The 5-guess cap (`OTP_MAX_ATTEMPTS`) holds silently: the exhausted
-  row refuses even the right code — same answer — until a fresh
-  request replaces it past the cooldown.
+  row refuses even the right code — same answer — until the row
+  expires and a fresh request replaces it (a renewal carries the
+  count, so burning the attempts buys no new budget).
   Success also clears the lockout counters: the reset doubles as the
   lockout escape hatch (possession of the inbox outranks a guesser's
-  five attempts). `deleted_at` is deliberately untouched — a deleted
+  five attempts). And success evicts the account's outstanding
+  sessions: a `denylist:user:<id>` stamp in Redis makes the gateway
+  refuse this account's tokens issued before the reset (PR #179
+  review, @Sinnez1 — whoever held the leaked old password must not
+  keep a session through the reset that evicted it). Best-effort like
+  logout (G9): on a Redis failure the old sessions live out their
+  ≤ 1 h `exp`, and a token minted the same second as the reset
+  survives (which spares the owner's own first post-reset login).
+  `deleted_at` is deliberately untouched — a deleted
   account resets its password, then logs in and restores.
 - `POST /users/me/recover` (bearer) → **200** with the account: clears
   `deleted_at` within the window. The one route a deleted caller's
@@ -418,7 +443,12 @@ stays, so the account's unique email/username remain reserved and the
 user can recover within 30 days by logging in and restoring
 (`POST /users/me/recover`, #94). Repeat deletion, like every other
 `/users/me` call on a deleted account, returns 404 (`…/recover` is the
-one exception — it exists for exactly that caller). A daily scheduler
+one exception — it exists for exactly that caller). An account an admin
+removed (`DELETE /users/{id}`) is the same recoverable soft-delete, and
+the removed user can restore it the same way — owner decision (PR #179
+review, @Sinnez1): admin removal is a deletion on the user's behalf,
+not a ban; nothing records who deleted, and `main`'s login silently
+restored the same accounts. A daily scheduler
 (`AccountPurgeScheduler`, default 03:00) hard-deletes accounts whose
 `deleted_at` is older than the retention window, together with their
 `password_reset_otps` rows — that purge is what frees the identifiers. The

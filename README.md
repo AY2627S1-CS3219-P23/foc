@@ -79,6 +79,8 @@
   2026-10-11: AI Use Summary extended for password reset + account
   recovery (issue #94, PR #179), by Claude Code (Fable 5) — the PR #179
   Copilot review flagged the summary as not covering #94.
+  2026-10-12: the #94 clause extended for the PR #179 human-review
+  round (@Sinnez1), by Claude Code (Fable 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -491,7 +493,13 @@ column, and the backend-plus-web scope — was made by Leong Wei Zhi
 via neutral options Q&A, recorded in `ai/usage-log.md` and the files'
 disclosure headers; the PR #179 Copilot-review fixes (stale-credential
 login recheck, lock-first email reads, purge lock ordering, form-state
-clearing) followed the same pattern.
+clearing) followed the same pattern, as did the PR #179 human-review
+round (@Sinnez1): the carried OTP guess budget, the post-commit email
+send, the per-user session eviction on reset (gateway decision G11 —
+`TokenDenylist`, `gateway/lua/auth.lua`), the accepted 30-day
+deleted-account access, admin removal staying self-restorable, and the
+Windows test-precision fix, each chosen by Leong Wei Zhi via neutral
+options Q&A on 2026-10-12.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

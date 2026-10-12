@@ -11,6 +11,10 @@
  * representation carries over from the scaffold; decisions by
  * Leong Wei Zhi via options Q&A throughout.
  * Author review: Leong Wei Zhi to review via the PR.
+ * 2026-10-12 (Claude Code, Fable 5), PR #179 review (@Sinnez1):
+ * replace() split into renew() (live row: attempts carried, the
+ * brute-force fix the owner chose via options Q&A) and
+ * replaceExpired() (dead row: fresh budget).
  */
 package foc.user.entity;
 
@@ -72,18 +76,34 @@ public class PasswordResetOtp {
     }
 
     /**
-     * A repeat request (past the cooldown) renews the row in place:
-     * fresh code, fresh life, fresh attempt budget — unlike a pending
-     * sign-up's resend, which keeps both the expiry and the count. The
-     * difference is deliberate: this row holds nothing hostage (the
-     * code only ever lands in the account's own inbox), so the
-     * hold-the-address-for-ever and attempt-cycling concerns behind
-     * {@link PendingSignup#renewCode}'s rules don't apply, and the
-     * cooldown alone caps how fast budgets can be renewed. Reuse in
-     * place keeps the row in its unique user_id slot
+     * A repeat request (past the cooldown) renews the live row in
+     * place — fresh code, fresh life, but the wrong-guess count
+     * carries over, {@link PendingSignup#renewCode}'s rule. An earlier
+     * revision handed out a fresh budget on the grounds that the
+     * cooldown caps renewal speed, but the cooldown only limits how
+     * often a code can be <em>read</em> from the inbox; a guesser who
+     * never sees it could cycle request-then-five-guesses every minute
+     * indefinitely (PR #179 review, @Sinnez1). Carrying the count
+     * holds the budget to {@code OTP_MAX_ATTEMPTS} guesses per row
+     * lifetime; only a dead row ({@link #replaceExpired}) starts a new
+     * one. Reuse in place keeps the row in its unique user_id slot
      * ({@link AccountUpdateOtp#replaceExpired}'s reasoning).
      */
-    public void replace(String codeHash, Instant now, Instant expiresAt) {
+    public void renew(String codeHash, Instant now, Instant expiresAt) {
+        this.codeHash = codeHash;
+        this.createdAt = now;
+        this.expiresAt = expiresAt;
+    }
+
+    /**
+     * Takes an expired row over for a new request: everything replaced,
+     * attempts included — the code those attempts were spent against is
+     * dead (confirm refuses an expired row on sight), so the count
+     * protects nothing. Natural expiry is deliberately the <em>only</em>
+     * way a fresh budget appears: with {@link #renew} carrying the
+     * count, a guesser gets at most one budget per {@code OTP_TTL}.
+     */
+    public void replaceExpired(String codeHash, Instant now, Instant expiresAt) {
         this.codeHash = codeHash;
         this.createdAt = now;
         this.expiresAt = expiresAt;

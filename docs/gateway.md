@@ -15,6 +15,9 @@
   /actuator/health mirrored, gateway-origin errors made CORS-readable
   problem+json, the opm package pinned, and the encoded-slash limit
   recorded. Fixes to recorded behavior; no new decisions.
+  2026-10-12, Claude Code (Fable 5), PR #179 review (@Sinnez1): G11
+  added — per-user session revocation on password reset, decided by
+  Leong Wei Zhi via options Q&A — with its request-flow note.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -38,8 +41,10 @@ Redis denylist.
 
 ## Decisions
 
-All decided by **Leong Wei Zhi, 2026-10-11, via options Q&A** (AI made
-no design decisions; comparisons presented were factual only).
+All decided by **Leong Wei Zhi via options Q&A** — G1–G10 on
+2026-10-11, G11 on 2026-10-12 with the rest of the PR #179 review
+response (AI made no design decisions; comparisons presented were
+factual only).
 
 | # | Decision | Choice |
 | --- | --- | --- |
@@ -53,6 +58,7 @@ no design decisions; comparisons presented were factual only).
 | G8 | Logout writer | user-service `POST /auth/logout` (authenticated): reads the verified token's `jti`/`exp` and writes the Redis key via Spring Data Redis |
 | G9 | Logout on Redis failure | Best-effort **204**: the failed write is logged, never surfaced — the token lives out its remaining `exp` (consistent with G6) |
 | G10 | Revoked-token response | 401 problem+json with detail **"Token has been revoked"** (alongside the existing "Token has expired" / "Invalid token") |
+| G11 | Per-user revocation (PR #179) | A password reset writes `denylist:user:<id>` = the reset's epoch second, `EX` = one token TTL; the gateway rejects that subject's tokens whose `iat` is strictly before the stamp, so the old password's sessions end with it. Same G6/G9 best-effort semantics; a token minted the same second as the reset survives (spares the owner's own post-reset login) |
 
 ## Request flow
 
@@ -93,6 +99,11 @@ public one.
 Logout: `POST /api/user/auth/logout` → user-service
 `SET denylist:<jti> "1" EX <seconds-until-exp>` → 204 (G8/G9). From that
 moment every gateway route rejects that token.
+
+Password reset: `POST /api/user/auth/password-reset/confirm` →
+user-service `SET denylist:user:<id> <epoch-second> EX <token-TTL>`
+(G11). From that moment every gateway route rejects the account's
+tokens issued before the stamp.
 
 ## Routing table
 

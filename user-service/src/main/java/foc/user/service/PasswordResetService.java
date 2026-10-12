@@ -44,6 +44,13 @@ checked for, an address a concurrent email change just replaced; and
 an account purged between lookups now falls through the same
 dummy-match branch as an unknown email, instead of a cheaper,
 distinguishable throw.
+2026-10-12 (Claude Code, Fable 5), PR #179 review (@Sinnez1), fixes
+decided by Leong Wei Zhi via options Q&A: renewals carry the
+wrong-guess count and a spent live row absorbs requests (the fresh
+budget per cooldown let a guesser cycle indefinitely); the email is
+sent after the parking transaction commits so no user-row lock spans
+SMTP, with a best-effort retraction on failure; a successful confirm
+evicts the account's outstanding sessions via TokenDenylist (G11).
 */
 
 package foc.user.service;
@@ -58,7 +65,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.mail.MailException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import foc.user.dto.PasswordResetConfirmRequest;
@@ -67,6 +76,7 @@ import foc.user.entity.User;
 import foc.user.exception.ResetCodeInvalidException;
 import foc.user.repository.PasswordResetOtpRepository;
 import foc.user.repository.UserRepository;
+import foc.user.security.TokenDenylist;
 
 /**
  * Password reset via emailed single-use 6-digit code (issue #94,
@@ -85,6 +95,10 @@ public class PasswordResetService {
     private final PasswordEncoder passwordEncoder;
     private final OtpService otpService;
     private final OtpEmailSender otpEmailSender;
+    private final TokenDenylist tokenDenylist;
+    // explicit transactions so requestReset can commit (and release its
+    // row locks) before the synchronous SMTP send — see its javadoc
+    private final TransactionTemplate transaction;
     private final Clock clock;
     private final int retentionDays;
     // matched when there is no row to check, so an unknown email pays
@@ -98,9 +112,12 @@ public class PasswordResetService {
             PasswordEncoder passwordEncoder,
             OtpService otpService,
             OtpEmailSender otpEmailSender,
+            TokenDenylist tokenDenylist,
+            PlatformTransactionManager transactionManager,
             @Value("${user.retention.days}") int retentionDays) {
         this(userRepository, resetOtps, passwordEncoder, otpService,
-            otpEmailSender, retentionDays, Clock.systemUTC());
+            otpEmailSender, tokenDenylist, transactionManager, retentionDays,
+            Clock.systemUTC());
     }
 
     PasswordResetService(
@@ -109,6 +126,8 @@ public class PasswordResetService {
             PasswordEncoder passwordEncoder,
             OtpService otpService,
             OtpEmailSender otpEmailSender,
+            TokenDenylist tokenDenylist,
+            PlatformTransactionManager transactionManager,
             int retentionDays,
             Clock clock) {
         this.userRepository = userRepository;
@@ -116,6 +135,8 @@ public class PasswordResetService {
         this.passwordEncoder = passwordEncoder;
         this.otpService = otpService;
         this.otpEmailSender = otpEmailSender;
+        this.tokenDenylist = tokenDenylist;
+        this.transaction = new TransactionTemplate(transactionManager);
         this.retentionDays = retentionDays;
         this.clock = clock;
         this.unknownCodeHash = otpService.hash("no-reset-code");
@@ -124,14 +145,48 @@ public class PasswordResetService {
     /**
      * Parks a hashed reset code and emails it. Returns silently — the
      * controller's 202 — for an unknown email, an account past the
-     * retention window, and a repeat inside the resend cooldown alike:
-     * any distinct answer (a 404, a 429 with Retry-After) would reveal
-     * which addresses hold accounts, which is the one thing this
-     * endpoint must not do (owner decision; contrast #146's revealing
-     * login errors, where the caller already named an account).
+     * retention window, a repeat inside the resend cooldown, and a live
+     * row whose attempt budget is spent alike: any distinct answer (a
+     * 404, a 429 with Retry-After) would reveal which addresses hold
+     * accounts, which is the one thing this endpoint must not do (owner
+     * decision; contrast #146's revealing login errors, where the
+     * caller already named an account).
+     *
+     * <p>Deliberately not {@code @Transactional}: the row is parked and
+     * committed first, then the mail goes out with no locks held. The
+     * send used to sit inside the transaction so a failure rolled the
+     * row back, but that held the user-row lock across SMTP timeouts —
+     * an unauthenticated caller could stall that user's logins for
+     * seconds per request (PR #179 review, @Sinnez1). A failed send now
+     * retracts the row in a second transaction, keeping the old
+     * rollback's promise (no live code nobody received) best-effort,
+     * and still answers 502.
      */
-    @Transactional
     public void requestReset(String email) {
+        PreparedReset prepared = transaction.execute(status -> park(email));
+        if (prepared == null) {
+            return;
+        }
+        try {
+            otpEmailSender.sendPasswordResetCode(prepared.email(), prepared.code(), otpService.ttl());
+        } catch (MailException e) {
+            transaction.executeWithoutResult(status -> retract(prepared));
+            // the 502 is observable only for real accounts — an accepted
+            // existence leak, consistent with sign-up's (documented in
+            // the README); swallowing it would strand a legitimate user
+            // waiting on an email that never comes
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                "Could not send the reset email; try again later");
+        }
+    }
+
+    // what the send needs once the locks are gone: where to mail, the
+    // plain code, and enough to recognize (and retract) the exact row
+    // version it came from if the send fails
+    private record PreparedReset(Long userId, String email, String code, String codeHash) {
+    }
+
+    private PreparedReset park(String email) {
         // the FIRST read takes the user lock (PR #179 Copilot review:
         // a plain read followed by a lock-by-id kept the entity's
         // stale state, so the code could be mailed to an address a
@@ -143,7 +198,7 @@ public class PasswordResetService {
         User user = userRepository.findWithLockByEmail(NewAccountDetails.normalizeEmail(email))
             .orElse(null);
         if (user == null) {
-            return;
+            return null;
         }
         Instant now = clock.instant();
         // a deleted account inside the window can still reset (decision
@@ -151,14 +206,24 @@ public class PasswordResetService {
         // window it is waiting for the purge and answers like unknown,
         // the same line login draws (LoginAttempts.pastRetention)
         if (pastRetention(user, now)) {
-            return;
+            return null;
         }
 
         PasswordResetOtp otp = resetOtps.findWithLockByUserId(user.getId()).orElse(null);
         if (otp != null && now.isBefore(otp.getCreatedAt().plus(otpService.resendCooldown()))) {
             // one mail per cooldown, absorbed silently (see javadoc); the
             // code already in the inbox stays live
-            return;
+            return null;
+        }
+        boolean expired = otp != null && !otp.getExpiresAt().isAfter(now);
+        if (otp != null && !expired && otp.getAttempts() >= otpService.maxAttempts()) {
+            // a live row whose budget is spent: absorbed silently — a
+            // renewal carries the count (PasswordResetOtp.renew), so the
+            // mail would deliver a code confirm refuses; the budget (and
+            // the mail) come back once the row expires. The silence also
+            // means burning a victim's attempts buys an outsider no
+            // distinct answer here
+            return null;
         }
 
         String code = otpService.generateCode();
@@ -166,24 +231,33 @@ public class PasswordResetService {
         Instant expiresAt = now.plus(otpService.ttl());
         if (otp == null) {
             otp = new PasswordResetOtp(user, codeHash, now, expiresAt);
+        } else if (expired) {
+            // the locked row is dead (confirm refuses it on sight), so
+            // it is taken over whole, attempt budget included
+            otp.replaceExpired(codeHash, now, expiresAt);
         } else {
-            // the locked row renews in place — fresh code, life and
-            // attempt budget — keeping its unique per-user slot
-            otp.replace(codeHash, now, expiresAt);
+            // the live row renews in place — fresh code and life, but
+            // the wrong-guess count carries over (PR #179 review: a
+            // fresh budget every cooldown let a guesser cycle five
+            // guesses a minute indefinitely; now it is five per OTP_TTL)
+            otp.renew(codeHash, now, expiresAt);
         }
         resetOtps.save(otp);
+        return new PreparedReset(user.getId(), user.getEmail(), code, codeHash);
+    }
 
-        try {
-            otpEmailSender.sendPasswordResetCode(user.getEmail(), code, otpService.ttl());
-        } catch (MailException e) {
-            // rolls the token row back: no live code nobody received.
-            // The 502 is observable only for real accounts — an accepted
-            // existence leak, consistent with sign-up's (documented in
-            // the README); swallowing it would strand a legitimate user
-            // waiting on an email that never comes
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                "Could not send the reset email; try again later");
+    // undoes park() after a failed send: the same lock order as every
+    // flow (user row, then OTP row), and the row is deleted only while
+    // it still holds the never-delivered code — a concurrent request
+    // may have renewed it with one that WAS delivered
+    private void retract(PreparedReset prepared) {
+        if (userRepository.findWithLockById(prepared.userId()).isEmpty()) {
+            // purged meanwhile; the sweep owns any leftovers
+            return;
         }
+        resetOtps.findWithLockByUserId(prepared.userId())
+            .filter(otp -> otp.getCodeHash().equals(prepared.codeHash()))
+            .ifPresent(resetOtps::delete);
     }
 
     /**
@@ -232,9 +306,10 @@ public class PasswordResetService {
             throw new ResetCodeInvalidException();
         }
         // spent: answers like a wrong code — same message, same cost —
-        // and stays until a fresh request replaces it past the cooldown
-        // (createdAt still gates that), so burning the attempts neither
-        // buys a fresh budget nor announces itself with a 429
+        // and stays until it expires (a renewal carries the count, and
+        // requestReset won't even renew a spent live row), so burning
+        // the attempts neither buys a fresh budget nor announces itself
+        // with a 429
         if (otp.getAttempts() >= otpService.maxAttempts()) {
             otpService.matches(request.code(), unknownCodeHash);
             throw new ResetCodeInvalidException();
@@ -258,6 +333,13 @@ public class PasswordResetService {
         userRepository.save(user);
         // single use
         resetOtps.delete(otp);
+        // outstanding sessions die with the password they were opened
+        // under: the gateway refuses this account's tokens issued before
+        // this instant (PR #179 review, @Sinnez1 — whoever holds the old
+        // password must not keep a session through the reset that
+        // evicted it). Best-effort like logout (G9): a Redis failure is
+        // logged and the old sessions live out their ≤1 h exp
+        tokenDenylist.revokeUserSessions(user.getId());
     }
 
     private boolean pastRetention(User user, Instant now) {

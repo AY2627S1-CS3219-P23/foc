@@ -13,6 +13,10 @@ Scope: MockMvc tests for issue #94's password-reset routes, in
        Rewritten from the link-token version the same day, when the
        owner revisited the credential to an OTP code.
 Author review: Leong Wei Zhi to review via the PR.
+2026-10-12 (Claude Code, Fable 5), PR #179 review (@Sinnez1): the
+exhaustion case now also proves a repeat request buys no fresh budget
+while the spent row lives, and the round trip pins the session
+eviction (TokenDenylist mocked like LogoutTest's).
 */
 
 package foc.user.controller;
@@ -32,6 +36,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -39,6 +44,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -47,10 +53,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import foc.user.PostgresTestContainer;
+import foc.user.entity.PasswordResetOtp;
 import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.repository.PasswordResetOtpRepository;
 import foc.user.repository.UserRepository;
+import foc.user.security.TokenDenylist;
 import foc.user.service.OtpEmailSender;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
@@ -77,6 +85,11 @@ class PasswordResetControllerTest extends PostgresTestContainer {
     // captures the plain code instead of speaking SMTP; reset per test
     @MockitoBean
     private OtpEmailSender otpEmailSender;
+
+    // the Redis writer, mocked like LogoutTest's: no Redis runs in the
+    // test stack, and the write itself is unit-tested
+    @MockitoBean
+    private TokenDenylist tokenDenylist;
 
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
@@ -134,6 +147,10 @@ class PasswordResetControllerTest extends PostgresTestContainer {
         postJson("/auth/login", Map.of("usernameOrEmail", EMAIL, "password", NEW_PASSWORD))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.accessToken").isNotEmpty());
+
+        // and the old password's sessions were evicted (PR #179 review):
+        // the gateway refuses this account's pre-reset tokens
+        verify(tokenDenylist).revokeUserSessions(alex.getId());
     }
 
     @Test
@@ -206,6 +223,20 @@ class PasswordResetControllerTest extends PostgresTestContainer {
 
         User reloaded = userRepository.findById(alex.getId()).orElseThrow();
         assertThat(encoder.matches(OLD_PASSWORD, reloaded.getPasswordHash())).isTrue();
+
+        // and a repeat request past the cooldown buys no fresh budget:
+        // the spent row absorbs it (same 202, no new mail) until it
+        // expires — before PR #179's review this was 5 guesses per
+        // cooldown, forever
+        PasswordResetOtp spent = resetOtpRepository.findAll().get(0);
+        ReflectionTestUtils.setField(spent, "createdAt",
+            Instant.now().minusSeconds(61));
+        resetOtpRepository.save(spent);
+        requestReset(EMAIL)
+            .andExpect(status().isAccepted())
+            .andExpect(content().string(""));
+        verify(otpEmailSender, times(1))
+            .sendPasswordResetCode(anyString(), anyString(), any());
     }
 
     @Test

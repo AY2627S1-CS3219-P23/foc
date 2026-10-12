@@ -3213,3 +3213,33 @@ Entry template:
   updated for (1)–(4); the review's AI-policy finding is left to the
   team, not resolved by wording changes.
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debugging assistance, refactoring, documentation (PR #179
+  review by @Sinnez1)
+- **Prompt(s):** Asked to address the latest PR #179 review comments.
+  The review's four security/design questions (OTP brute-force cap,
+  deleted-account access scope, admin-removal recoverability, fix vs
+  document for the lock-across-send and surviving-sessions findings)
+  were put to Leong Wei Zhi as neutral options Q&A; the tool
+  implemented the choices.
+- **Scope:** (1) Windows test fix — the deleted-login test truncates
+  its Instant to microseconds, matching what Postgres stores. (2) OTP
+  brute-force cap (chosen: carry attempts across renewals) —
+  PasswordResetOtp.replace split into renew (live row, count carried)
+  and replaceExpired (dead row, fresh budget); a spent live row absorbs
+  requests silently, so the budget is OTP_MAX_ATTEMPTS guesses per
+  OTP_TTL, not per cooldown. (3) Lock-across-send (chosen: fix) —
+  requestReset parks the row in a TransactionTemplate transaction that
+  commits before the SMTP send; a failed send retracts the undelivered
+  code best-effort and still answers 502. (4) Sessions surviving a
+  reset (chosen: fix) — gateway decision G11: confirmReset stamps
+  denylist:user:<id> via TokenDenylist.revokeUserSessions, and
+  gateway/lua/auth.lua rejects the subject's tokens whose iat predates
+  the stamp (fail-open, best-effort, docs/gateway.md updated).
+  (5) Deleted-account access (chosen: accept) — README and PR body now
+  say the full 30-day window, not ≤1 h. (6) Admin removal (chosen:
+  same as self-delete) — recorded in AdminService and the README.
+  Tests: suite 354 → 359 (renewal/absorb/retract/eviction pins).
+- **Author review:** Pending author review of the diff via the PR.

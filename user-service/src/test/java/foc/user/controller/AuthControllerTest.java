@@ -47,6 +47,9 @@ and cooldown-bypass regressions added.
 now carries deletionScheduledFor instead of recovering — its case pins
 the field (and its absence on an active login), since recovery moved to
 POST /users/me/recover.
+2026-10-12 (Claude Code, Fable 5), PR #179 review (@Sinnez1): that case's
+deletedAt is truncated to microseconds — Postgres stores no finer, so a
+sub-microsecond clock (Windows) read back rounded and failed the compare.
 */
 
 package foc.user.controller;
@@ -490,7 +493,11 @@ class AuthControllerTest extends PostgresTestContainer {
     void login_deletedAccountCarriesDeletionSchedule() throws Exception {
         createAccount("e1234567@u.nus.edu", "student_alex");
         User deleted = userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow();
-        Instant deletedAt = Instant.now().minus(10, ChronoUnit.DAYS);
+        // truncated because the column stores microseconds: a finer clock
+        // (Windows' 100 ns ticks) would read back rounded and fail the
+        // string comparison below (PR #179 review, @Sinnez1)
+        Instant deletedAt = Instant.now().minus(10, ChronoUnit.DAYS)
+            .truncatedTo(ChronoUnit.MICROS);
         deleted.setDeletedAt(deletedAt);
         userRepository.save(deleted);
 

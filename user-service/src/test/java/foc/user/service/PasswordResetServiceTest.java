@@ -18,6 +18,11 @@ Scope: unit tests for issue #94's PasswordResetService, in
        V7's shape (PasswordResetOtp / password_reset_otps, no kind —
        owner decisions via options Q&A).
 Author review: Leong Wei Zhi to review via the PR.
+2026-10-12 (Claude Code, Fable 5), PR #179 review (@Sinnez1): renewal
+now pins the carried attempt count, the spent-row absorb and the
+expired-row fresh budget; the mail-failure case pins the retraction
+(and its renewed-row escape) now that the send sits outside the
+transaction; confirm success pins the session eviction.
 */
 
 package foc.user.service;
@@ -28,6 +33,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -43,12 +49,14 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.MailSendException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import foc.user.dto.PasswordResetConfirmRequest;
@@ -58,6 +66,7 @@ import foc.user.entity.User;
 import foc.user.exception.ResetCodeInvalidException;
 import foc.user.repository.PasswordResetOtpRepository;
 import foc.user.repository.UserRepository;
+import foc.user.security.TokenDenylist;
 
 @ExtendWith(MockitoExtension.class)
 class PasswordResetServiceTest {
@@ -92,6 +101,15 @@ class PasswordResetServiceTest {
     @Mock
     private OtpEmailSender otpEmailSender;
 
+    @Mock
+    private TokenDenylist tokenDenylist;
+
+    // the TransactionTemplate runs its callbacks straight through the
+    // mock manager — the real transaction boundaries are integration
+    // tests' (PasswordResetControllerTest) business
+    @Mock
+    private PlatformTransactionManager transactionManager;
+
     private PasswordResetService service;
     private User user;
 
@@ -100,7 +118,8 @@ class PasswordResetServiceTest {
         OtpService otpService =
             new OtpService(PLAIN_ENCODER, OTP_TTL, OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN);
         service = new PasswordResetService(userRepository, resetOtps, PLAIN_ENCODER,
-            otpService, otpEmailSender, RETENTION_DAYS, Clock.fixed(NOW, ZoneOffset.UTC));
+            otpService, otpEmailSender, tokenDenylist, transactionManager,
+            RETENTION_DAYS, Clock.fixed(NOW, ZoneOffset.UTC));
         user = new User(EMAIL, "student_alex", PLAIN_ENCODER.encode("OldPassword123"), Role.USER);
         ReflectionTestUtils.setField(user, "id", USER_ID);
     }
@@ -193,8 +212,8 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    @DisplayName("A repeat past the cooldown renews the one row: fresh code, life and attempt budget")
-    void requestReset_pastCooldownRenews() {
+    @DisplayName("A repeat past the cooldown renews the row — fresh code and life, attempts carried")
+    void requestReset_pastCooldownRenewsCarryingAttempts() {
         accountFound();
         PasswordResetOtp existing = new PasswordResetOtp(user, "hashed:111111",
             NOW.minusSeconds(61), NOW.minusSeconds(61).plus(OTP_TTL));
@@ -209,23 +228,102 @@ class PasswordResetServiceTest {
         assertThat(existing.getCodeHash()).isEqualTo(PLAIN_ENCODER.encode(emailedCode()));
         assertThat(existing.getCreatedAt()).isEqualTo(NOW);
         assertThat(existing.getExpiresAt()).isEqualTo(NOW.plus(OTP_TTL));
-        // a fresh budget, unlike a sign-up resend: nothing is held
-        // hostage here, so the cooldown alone caps renewal speed
+        // carried, like a sign-up resend: a fresh budget per renewal
+        // let a guesser cycle 5 guesses per cooldown indefinitely
+        // (PR #179 review, @Sinnez1)
+        assertThat(existing.getAttempts()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("A spent live row absorbs the request: no renewal, no mail, until it expires")
+    void requestReset_spentLiveRowAbsorbed() {
+        accountFound();
+        PasswordResetOtp existing = new PasswordResetOtp(user, "hashed:111111",
+            NOW.minusSeconds(61), NOW.minusSeconds(61).plus(OTP_TTL));
+        for (int i = 0; i < OTP_MAX_ATTEMPTS; i++) {
+            existing.incrementAttempts();
+        }
+        when(resetOtps.findWithLockByUserId(USER_ID))
+            .thenReturn(Optional.of(existing));
+
+        service.requestReset(EMAIL);
+
+        // renewing would mail a code the carried count refuses; the
+        // budget (and the mail) come back when the row expires
+        assertThat(existing.getCodeHash()).isEqualTo("hashed:111111");
+        verify(resetOtps, never()).save(any());
+        verify(otpEmailSender, never()).sendPasswordResetCode(anyString(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("An expired row is taken over whole: fresh code, life AND attempt budget")
+    void requestReset_expiredRowReplacedWithFreshBudget() {
+        accountFound();
+        PasswordResetOtp existing = new PasswordResetOtp(user, "hashed:111111",
+            NOW.minus(OTP_TTL).minusSeconds(1), NOW.minusSeconds(1));
+        for (int i = 0; i < OTP_MAX_ATTEMPTS; i++) {
+            existing.incrementAttempts();
+        }
+        when(resetOtps.findWithLockByUserId(USER_ID))
+            .thenReturn(Optional.of(existing));
+
+        service.requestReset(EMAIL);
+
+        verify(resetOtps).save(existing);
+        assertThat(existing.getCodeHash()).isEqualTo(PLAIN_ENCODER.encode(emailedCode()));
+        assertThat(existing.getExpiresAt()).isEqualTo(NOW.plus(OTP_TTL));
+        // natural expiry is the one way a budget renews: the code those
+        // attempts were spent against is dead, so the count guards nothing
         assertThat(existing.getAttempts()).isZero();
     }
 
     @Test
-    @DisplayName("A mail failure is a 502 — the rollback leaves no code nobody received")
-    void requestReset_mailFailureIs502() {
+    @DisplayName("A mail failure is a 502, and the never-delivered code is retracted")
+    void requestReset_mailFailureIs502AndRetracts() {
         accountFound();
+        AtomicReference<PasswordResetOtp> parked = new AtomicReference<>();
+        when(resetOtps.save(any())).thenAnswer(inv -> {
+            parked.set(inv.getArgument(0));
+            return inv.getArgument(0);
+        });
         when(resetOtps.findWithLockByUserId(USER_ID))
-            .thenReturn(Optional.empty());
+            .thenReturn(Optional.empty())
+            // the retract's locked re-read, after the park committed
+            .thenAnswer(inv -> Optional.of(parked.get()));
+        when(userRepository.findWithLockById(USER_ID)).thenReturn(Optional.of(user));
         doThrow(new MailSendException("smtp down"))
             .when(otpEmailSender).sendPasswordResetCode(anyString(), anyString(), any());
 
         assertThatThrownBy(() -> service.requestReset(EMAIL))
             .isInstanceOfSatisfying(ResponseStatusException.class,
                 e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY));
+
+        // the send sits outside the parking transaction now (it used to
+        // hold the user-row lock across SMTP timeouts — PR #179 review,
+        // @Sinnez1), so the old rollback became an explicit retraction
+        verify(resetOtps).delete(parked.get());
+    }
+
+    @Test
+    @DisplayName("The retraction spares a row a concurrent request already renewed")
+    void requestReset_mailFailureSparesRenewedRow() {
+        accountFound();
+        // by the time the retract re-reads, another request's code (one
+        // that WAS delivered) occupies the row: deleting it would kill
+        // a working reset
+        PasswordResetOtp renewed = new PasswordResetOtp(user, "hashed:999999",
+            NOW, NOW.plus(OTP_TTL));
+        when(resetOtps.findWithLockByUserId(USER_ID))
+            .thenReturn(Optional.empty())
+            .thenReturn(Optional.of(renewed));
+        when(userRepository.findWithLockById(USER_ID)).thenReturn(Optional.of(user));
+        doThrow(new MailSendException("smtp down"))
+            .when(otpEmailSender).sendPasswordResetCode(anyString(), anyString(), any());
+
+        assertThatThrownBy(() -> service.requestReset(EMAIL))
+            .isInstanceOf(ResponseStatusException.class);
+
+        verify(resetOtps, never()).delete(any());
     }
 
     // confirm
@@ -257,6 +355,8 @@ class PasswordResetServiceTest {
         assertThat(user.getLockedUntil()).isNull();
         verify(userRepository).save(user);
         verify(resetOtps).delete(token);
+        // the old password's sessions end with it (PR #179 review)
+        verify(tokenDenylist).revokeUserSessions(USER_ID);
     }
 
     @Test
@@ -311,6 +411,8 @@ class PasswordResetServiceTest {
         verify(resetOtps).save(token);
         verify(resetOtps, never()).delete(any(PasswordResetOtp.class));
         verify(userRepository, never()).save(any());
+        // only a successful reset evicts sessions
+        verifyNoInteractions(tokenDenylist);
     }
 
     @Test
