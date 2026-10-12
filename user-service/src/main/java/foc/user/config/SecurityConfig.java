@@ -31,6 +31,9 @@ fail-closed admin catch-all.
 2026-10-11 (Claude Code, Fable 5), issue #151: POST /auth/logout gets the
 authenticated() rule the #90 comment reserved, above the /auth/** permit
 (the filter already runs for it and verifies the caller's token).
+2026-10-11 (Claude Code, Fable 5), issue #94: POST /users/me/recover's
+authenticated() line, above the admin catch-all as the #92 comment
+prescribes; the reset routes need no line — they live under /auth/**.
 */
 
 package foc.user.config;
@@ -125,6 +128,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/users/me/email/verify").authenticated()
                 .requestMatchers(HttpMethod.POST, "/users/me/email/resend").authenticated()
                 .requestMatchers(HttpMethod.POST, "/users/me/password").authenticated()
+                // the recovery restore (#94): must be reachable by a
+                // soft-deleted caller, whose JWT is valid like anyone's
+                .requestMatchers(HttpMethod.POST, "/users/me/recover").authenticated()
                 // everything else under /users, whatever the method, is an
                 // admin endpoint (#96). Method-less so unlisted methods (HEAD,
                 // OPTIONS, POST, ...) fail closed, and checked here rather

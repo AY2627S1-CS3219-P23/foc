@@ -18,11 +18,16 @@ Author review: Ryan reviewed and ensured tests run successfully.
        403).
 2026-10-02 (Claude Code, Opus 5.5), issue #154: problem+json checks for
        the non-numeric principal 401 and a non-numeric id (400).
+2026-10-11 (Claude Code, Fable 5), issue #94: POST /users/me/recover cases
+       — restore inside the window (proving the SecurityConfig line lets a
+       deleted caller through), idempotent on active, 404 past the window,
+       401 without credentials.
 */
 
 package foc.user.controller;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,6 +41,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -157,6 +163,55 @@ class ProfileControllerTest extends PostgresTestContainer {
             .andExpect(status().isUnauthorized());
 
         assertThat(userRepository.findById(alex.getId()).orElseThrow().isActive()).isTrue();
+    }
+
+    // recover own account (issue #94)
+
+    @Test
+    @DisplayName("POST /users/me/recover should restore a deleted caller inside the window")
+    void recoverOwnAccount_restores() throws Exception {
+        User deleted = saveDeletedUser();
+
+        mockMvc.perform(post("/users/me/recover").with(user(deleted.getId().toString())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(deleted.getId()))
+            .andExpect(jsonPath("$.username").value("gone_user"))
+            .andExpect(jsonPath("$.deletedAt").doesNotExist());
+
+        assertThat(userRepository.findById(deleted.getId()).orElseThrow().isActive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("POST /users/me/recover should answer an active caller idempotently")
+    void recoverOwnAccount_idempotent() throws Exception {
+        mockMvc.perform(post("/users/me/recover").with(user(alex.getId().toString())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.username").value("student_alex"));
+    }
+
+    @Test
+    @DisplayName("POST /users/me/recover should return 404 past the retention window")
+    void recoverOwnAccount_pastWindow() throws Exception {
+        User longGone = new User("e7654322@u.nus.edu", "long_gone", "hashed_password", Role.USER);
+        longGone.setDeletedAt(Instant.now().minus(31, ChronoUnit.DAYS));
+        longGone = userRepository.save(longGone);
+
+        mockMvc.perform(post("/users/me/recover").with(user(longGone.getId().toString())))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.detail").value("User not found"));
+
+        assertThat(userRepository.findById(longGone.getId()).orElseThrow().isActive()).isFalse();
+    }
+
+    @Test
+    @DisplayName("POST /users/me/recover should be rejected without credentials")
+    void recoverOwnAccount_unauthenticated() throws Exception {
+        User deleted = saveDeletedUser();
+
+        mockMvc.perform(post("/users/me/recover"))
+            .andExpect(status().isUnauthorized());
+
+        assertThat(userRepository.findById(deleted.getId()).orElseThrow().isActive()).isFalse();
     }
 
     // public profile

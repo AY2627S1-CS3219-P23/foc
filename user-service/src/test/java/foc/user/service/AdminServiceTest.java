@@ -11,6 +11,9 @@ Author review: Ryan reviewed and ensured tests run successfully.
        calls real default methods, so getActiveUser uses the stubbed finder.
 2026-09-29 (Claude Code, Opus 5.5), issue #147: listUsers calls pass
 includeDeleted.
+2026-10-12 (Claude Code, Fable 5), PR #179 approval follow-up (@Sinnez1):
+the remove-another-admin test pins the demotion to USER (owner decision
+via options Q&A).
 */
 
 package foc.user.service;
@@ -162,14 +165,17 @@ class AdminServiceTest {
     }
 
     @Test
-    @DisplayName("Should allow removing another ADMIN")
-    void removeUser_otherAdmin() {
+    @DisplayName("Should remove another ADMIN and demote them to USER")
+    void removeUser_otherAdminDemoted() {
         target.setRole(Role.ADMIN);
         targetIsActive();
 
         adminService.removeUser(CALLER_ID, TARGET_ID);
 
         assertThat(target.getDeletedAt()).isNotNull();
+        // PR #179 approval follow-up: a removed admin's later logins and
+        // any self-restore must carry no admin powers
+        assertThat(target.getRole()).isEqualTo(Role.USER);
     }
 
     @Test

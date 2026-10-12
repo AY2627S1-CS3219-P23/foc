@@ -19,6 +19,14 @@ removed users no longer come back on the admin page's next reload.
 2026-09-29 (Claude Code, Opus 5.5), issue #147: includeDeleted lists
 soft-deleted accounts too, so admins can see removed accounts before the
 purge (team decision: a filter on GET /users, not a separate table).
+2026-10-12 (Claude Code, Fable 5), PR #179 review (@Sinnez1): removeUser's
+comment now records the owner decision (via options Q&A) that admin
+removal stays self-restorable — same soft-delete, no deleted-by record.
+2026-10-12 (Claude Code, Fable 5), PR #179 approval follow-up (@Sinnez1):
+removal demotes the target to USER (owner decision via options Q&A — the
+reviewer showed a removed admin keeping the admin endpoints while deleted
+and restoring itself as an admin; the alternatives were an active-check
+in the admin routes or documenting the behaviour as accepted).
 */
 
 package foc.user.service;
@@ -101,7 +109,16 @@ public class AdminService {
         return UserResponse.from(userRepository.save(target));
     }
 
-    // soft delete, same as self-deletion: the account stays recoverable for 30 days
+    // soft delete, same as self-deletion: the account stays recoverable
+    // for 30 days — by the removed user themselves, via login + POST
+    // /users/me/recover. Owner decisions (PR #179 review, @Sinnez1):
+    // admin removal is a deletion on the user's behalf, not a ban, so
+    // nothing records who deleted and nothing blocks the self-restore —
+    // but removal demotes to USER, so a removed admin's later logins
+    // (deleted accounts can still log in) and any self-restored account
+    // carry no admin powers; only re-promotion gives them back. A token
+    // minted before the removal keeps ADMIN until its exp (≤ 1 h) —
+    // admin routes trust the token's role.
     @Transactional
     public void removeUser(Long callerId, Long targetId) {
         if (targetId.equals(callerId)) {
@@ -111,6 +128,7 @@ public class AdminService {
         User target = userRepository.getActiveUser(targetId);
         ensureNotOwner(target);
 
+        target.setRole(Role.USER);
         target.softDelete(Instant.now());
         userRepository.save(target);
     }

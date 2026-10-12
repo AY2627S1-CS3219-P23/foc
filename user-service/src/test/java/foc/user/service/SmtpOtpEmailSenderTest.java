@@ -15,6 +15,10 @@ Scope: unit test for issue #88's SmtpOtpEmailSender: the composed
        method mailing the wrong address or dropping its code — the
        email-change code reaching the NEW address especially.
 Reviewed by: Leong Wei Zhi (via pull request).
+2026-10-11 (Claude Code, Fable 5), issue #94: the password-reset code
+message gets its case — the body must carry the exact code and the
+single-use wording. (It pinned a reset link until the owner revisited
+the credential to an OTP code the same day.)
 */
 
 package foc.user.service;
@@ -121,5 +125,24 @@ class SmtpOtpEmailSenderTest {
         assertThat(message.getValue().getText())
             .contains("30 seconds")
             .doesNotContain("0 minutes");
+    }
+
+    @Test
+    @DisplayName("The reset email carries the code, its lifetime and the single-use wording")
+    void sendPasswordResetCode() {
+        SmtpOtpEmailSender sender = new SmtpOtpEmailSender(mailSender, "no-reply@foc.local");
+
+        sender.sendPasswordResetCode("e1234567@u.nus.edu", "042042", Duration.ofMinutes(10));
+
+        ArgumentCaptor<SimpleMailMessage> message = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(mailSender).send(message.capture());
+        assertThat(message.getValue().getFrom()).isEqualTo("no-reply@foc.local");
+        assertThat(message.getValue().getTo()).containsExactly("e1234567@u.nus.edu");
+        assertThat(message.getValue().getSubject()).isEqualTo("Your FoC password reset code");
+        assertThat(message.getValue().getText())
+            .contains("042042")
+            .contains("used once")
+            .contains("10 minutes")
+            .contains("ignore this email");
     }
 }

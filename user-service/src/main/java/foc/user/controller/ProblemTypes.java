@@ -57,4 +57,13 @@ public final class ProblemTypes {
 
     /** The username is already taken (ignoring case; includes soft-deleted accounts). */
     public static final URI USERNAME_TAKEN = URI.create("urn:foc:user:username-taken");
+
+    /**
+     * The password-reset code is wrong, expired, spent, or belongs to
+     * no account — indistinguishable on purpose (#94): unlike the OTP
+     * types above, whose caller owns the flow, this route is where an
+     * outsider would probe other people's accounts. The remedy is one
+     * and the same: request a fresh code.
+     */
+    public static final URI RESET_CODE_INVALID = URI.create("urn:foc:user:reset-code-invalid");
 }

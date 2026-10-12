@@ -14,19 +14,25 @@ Author review: Ryan reviewed and ensured tests run successfully.
        calls real default methods, so getActiveUser uses the stubbed finder.
 2026-09-29 (Claude Code, Opus 5.5), issue #147: UserResponse gained
 deletedAt (null for an active account).
+2026-10-11 (Claude Code, Fable 5), issue #94: recoverOwnAccount cases
+(restore inside the window, idempotent on active, gone past the window).
+The service is built by hand now — @InjectMocks passed 0 for the new
+retention-days knob, which made every deleted account "past window".
 */
 
 package foc.user.service;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Answers;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -49,8 +55,13 @@ class ProfileServiceTest {
     @Mock(answer = Answers.CALLS_REAL_METHODS)
     private UserRepository userRepository;
 
-    @InjectMocks
     private ProfileService profileService;
+
+    @BeforeEach
+    void buildService() {
+        // 30 days, the main yaml's default retention window
+        profileService = new ProfileService(userRepository, 30);
+    }
 
     private final User user = new User("e1234567@u.nus.edu", "student_alex", "hashed_password", Role.USER);
 
@@ -99,6 +110,56 @@ class ProfileServiceTest {
         assertThatThrownBy(() -> profileService.deleteOwnAccount(1L))
             .isInstanceOf(UserNotFoundException.class);
         verify(userRepository, never()).save(any());
+    }
+
+    // recover own account (issue #94)
+
+    @Test
+    @DisplayName("Should clear deleted_at when recovering inside the window")
+    void recoverOwnAccount_restores() {
+        user.softDelete(Instant.now().minus(10, ChronoUnit.DAYS));
+        ReflectionTestUtils.setField(user, "id", 1L);
+        when(userRepository.findWithLockById(1L)).thenReturn(Optional.of(user));
+
+        UserResponse response = profileService.recoverOwnAccount(1L);
+
+        assertThat(user.isActive()).isTrue();
+        assertThat(response.deletedAt()).isNull();
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    @DisplayName("Should answer an active caller idempotently, without writing")
+    void recoverOwnAccount_idempotentWhenActive() {
+        ReflectionTestUtils.setField(user, "id", 1L);
+        when(userRepository.findWithLockById(1L)).thenReturn(Optional.of(user));
+
+        UserResponse response = profileService.recoverOwnAccount(1L);
+
+        assertThat(response.username()).isEqualTo("student_alex");
+        // no write: an unconditional save bumps @Version for nothing
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should answer as gone past the retention window")
+    void recoverOwnAccount_goneAfterWindow() {
+        user.softDelete(Instant.now().minus(31, ChronoUnit.DAYS));
+        when(userRepository.findWithLockById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> profileService.recoverOwnAccount(1L))
+            .isInstanceOf(UserNotFoundException.class);
+        assertThat(user.isActive()).isFalse();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should answer as gone when the account was purged")
+    void recoverOwnAccount_goneWhenMissing() {
+        when(userRepository.findWithLockById(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> profileService.recoverOwnAccount(1L))
+            .isInstanceOf(UserNotFoundException.class);
     }
 
     // public profile

@@ -81,6 +81,11 @@
   merge resolved (both sides kept, in date order), and the AI Use
   Summary extended for the logout denylist + API gateway (issue #151),
   by Claude Code (Fable 5).
+  2026-10-11: AI Use Summary extended for password reset + account
+  recovery (issue #94, PR #179), by Claude Code (Fable 5) — the PR #179
+  Copilot review flagged the summary as not covering #94.
+  2026-10-12: the #94 clause extended for the PR #179 human-review
+  round (@Sinnez1), by Claude Code (Fable 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -492,6 +497,33 @@ cutover, gateway-only enforcement, anonymous pass-through, fail-open,
 AOF persistence, logout placement, best-effort 204, revoked-token
 wording) was made by Leong Wei Zhi via neutral options Q&A, recorded in
 `docs/gateway.md` and `ai/usage-log.md`.
+
+Password reset and account recovery (issue #94, PR #179): the
+user-service reset endpoints, `PasswordResetService`, the
+`password_reset_otps` entity/repository and V7 migration, the login
+change (no silent recovery; `deletionScheduledFor`) with
+`POST /users/me/recover`, and the purge-sweep addition (the web
+screens moved to PR #180, which discloses them). Every
+flow decision — OTP-code credential (revisited from an emailed link
+the same day), login-plus-explicit-restore recovery, reset leaving a
+deleted account deleted, the always-202/one-400 non-revealing error
+contract, the storage's `password_reset_otps` shape without a kind
+column, and the backend-only scope with the web half split to
+PR #180 — was made by Leong Wei Zhi
+via neutral options Q&A, recorded in `ai/usage-log.md` and the files'
+disclosure headers; the PR #179 Copilot-review fixes (stale-credential
+login recheck, lock-first email reads, purge lock ordering, form-state
+clearing) followed the same pattern, as did the PR #179 human-review
+round (@Sinnez1): the carried OTP guess budget, the post-commit email
+send, the per-user session eviction on reset (gateway decision G11 —
+`TokenDenylist`, `gateway/lua/auth.lua`), the accepted 30-day
+deleted-account access, admin removal staying self-restorable, and the
+Windows test-precision fix, each chosen by Leong Wei Zhi via neutral
+options Q&A on 2026-10-12, and the approval round's follow-ups the
+same day (admin removal demoting to USER, a failed renewal send
+restoring the pre-renewal OTP row — both chosen by Leong Wei Zhi via
+neutral options Q&A — plus the reviewer-flagged documentation and
+test-isolation corrections).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

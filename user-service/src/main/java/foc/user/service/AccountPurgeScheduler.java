@@ -21,6 +21,14 @@ independently configurable, so a TTL longer than the recovery window would
 leave a LIVE gate or pending row on a purged account and fail the whole
 purge transaction; the purged set's rows are now deleted by user, as the
 account_tokens cleanup already did, with the expiry sweep left as hygiene.
+2026-10-11 (Claude Code, Fable 5), issue #94: the hygiene sweep covers
+expired reset-code rows too, now that the password-reset flow writes
+them (password_reset_otps — V7 remakes the account_tokens scaffold).
+Same day, PR #179 Copilot review: the purge now locks the users it
+will delete BEFORE touching any child table, so it takes locks in the
+flows' user-then-child order — unlocked, its child bulk deletes could
+hold an OTP row while a reset request held that user and waited for
+the same row, a deadlock.
 */
 
 package foc.user.service;
@@ -35,8 +43,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import foc.user.repository.AccountTokenRepository;
 import foc.user.repository.AccountUpdateOtpRepository;
+import foc.user.repository.PasswordResetOtpRepository;
 import foc.user.repository.PendingEmailChangeRepository;
 import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
@@ -46,33 +54,33 @@ import foc.user.repository.UserRepository;
  * passed (design doc §2: soft delete = 30-day reuse block, purge on
  * day 31). Until this job runs, a deleted row keeps occupying its
  * unique email/username; the purge is what releases them. Dependent
- * account_tokens, account_update_otps and pending_email_changes rows
+ * password_reset_otps, account_update_otps and pending_email_changes rows
  * are removed first, in the same transaction, so the users delete never
  * trips their user_id FKs — by purged user, not by expiry, since a
  * TTL longer than the recovery window could leave a live row behind
  * (PR #157 review). The run also sweeps rows whose code has expired,
- * whoever owns them: pending sign-ups (issue #88) and the two
- * account-update tables (issue #92). That sweep is hygiene only — the
- * flows reject an expired row on sight.
+ * whoever owns them: pending sign-ups (issue #88), the two
+ * account-update tables (issue #92) and reset codes (issue #94). That
+ * sweep is hygiene only — the flows reject an expired row on sight.
  */
 @Component
 class AccountPurgeScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(AccountPurgeScheduler.class);
 
-    private final AccountTokenRepository accountTokens;
+    private final PasswordResetOtpRepository resetOtps;
     private final PendingSignupRepository pendingSignups;
     private final AccountUpdateOtpRepository accountUpdateOtps;
     private final PendingEmailChangeRepository pendingEmailChanges;
     private final UserRepository users;
     private final int retentionDays;
 
-    AccountPurgeScheduler(AccountTokenRepository accountTokens,
+    AccountPurgeScheduler(PasswordResetOtpRepository resetOtps,
             PendingSignupRepository pendingSignups,
             AccountUpdateOtpRepository accountUpdateOtps,
             PendingEmailChangeRepository pendingEmailChanges,
             UserRepository users, @Value("${user.retention.days}") int retentionDays) {
-        this.accountTokens = accountTokens;
+        this.resetOtps = resetOtps;
         this.pendingSignups = pendingSignups;
         this.accountUpdateOtps = accountUpdateOtps;
         this.pendingEmailChanges = pendingEmailChanges;
@@ -85,10 +93,17 @@ class AccountPurgeScheduler {
     void purgeExpiredDeletedAccounts() {
         Instant now = Instant.now();
         Instant cutoff = now.minus(retentionDays, ChronoUnit.DAYS);
+        // lock the condemned user rows FIRST (PR #179 Copilot review):
+        // the flows lock user-then-child, and the child deletes below
+        // acquire child-row locks — taken unlocked-first, this
+        // transaction could hold a reset OTP row while a reset request
+        // held its user and waited for that row, deadlocking both. The
+        // locked set is discarded: only the lock order matters
+        users.findWithLockByDeletedBefore(cutoff);
         // every dependent of a purged account goes first, selected by that
         // account — not by expiry: a TTL longer than the retention window
         // would leave a live row to trip the user_id FK (PR #157 review)
-        int tokenCount = accountTokens.deleteByUserDeletedBefore(cutoff);
+        int resetByUserCount = resetOtps.deleteByUserDeletedBefore(cutoff);
         int purgedGateCount = accountUpdateOtps.deleteByUserDeletedBefore(cutoff);
         int purgedChangeCount = pendingEmailChanges.deleteByUserDeletedBefore(cutoff);
         int userCount = users.deleteByDeletedBefore(cutoff);
@@ -97,11 +112,12 @@ class AccountPurgeScheduler {
         int pendingCount = pendingSignups.deleteByExpiresAtBefore(now);
         int gateCount = accountUpdateOtps.deleteByExpiresAtNotAfter(now);
         int emailChangeCount = pendingEmailChanges.deleteByExpiresAtNotAfter(now);
-        log.info("purged {} account(s) deleted before {} (with {} account token(s),"
+        int expiredResetCount = resetOtps.deleteByExpiresAtNotAfter(now);
+        log.info("purged {} account(s) deleted before {} (with {} reset code(s),"
                 + " {} gate code(s), {} pending email change(s)) and swept"
                 + " {} expired pending sign-up(s), {} expired gate code(s),"
-                + " {} expired pending email change(s)",
-                userCount, cutoff, tokenCount, purgedGateCount, purgedChangeCount,
-                pendingCount, gateCount, emailChangeCount);
+                + " {} expired pending email change(s), {} expired reset code(s)",
+                userCount, cutoff, resetByUserCount, purgedGateCount, purgedChangeCount,
+                pendingCount, gateCount, emailChangeCount, expiredResetCount);
     }
 }

@@ -7,6 +7,14 @@ Scope: Redis denylist writer for POST /auth/logout (issue #151), per the
        best-effort semantics — a failed write is logged, never surfaced,
        mirroring the gateway's fail-open stance.
 Author review: Leong Wei Zhi to review via the PR.
+2026-10-12 (Claude Code, Fable 5), PR #179 review (@Sinnez1):
+revokeUserSessions added — a password reset stamps denylist:user:<id>
+so the gateway refuses the account's pre-reset tokens (decision G11,
+Leong Wei Zhi via options Q&A).
+2026-10-12 (Claude Code, Fable 5), PR #179 approval follow-up
+(@Sinnez1): the javadoc records the reviewer-reproduced same-second
+survivor and the login-racing-the-reset gap as the same accepted
+leak; no behaviour change.
 */
 
 package foc.user.security;
@@ -23,11 +31,14 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Writes revoked token ids into the platform Redis as
- * {@code denylist:<jti>} keys that expire when the token itself would
- * have (design doc §3, issue #151). The API gateway rejects any bearer
- * token whose jti has a live key here; no backend service reads the
- * denylist (team decision: gateway-only enforcement).
+ * Writes revocations into the platform Redis (design doc §3, issue
+ * #151): {@code denylist:<jti>} keys that expire when the token itself
+ * would have, and {@code denylist:user:<id>} cutoff stamps that outlaw
+ * every token issued to the user before the stamp (PR #179 — a
+ * password reset ends the old password's sessions). The API gateway
+ * rejects a bearer token whose jti has a live key here or whose iat
+ * predates its subject's stamp; no backend service reads the denylist
+ * (team decision: gateway-only enforcement).
  */
 @Component
 public class TokenDenylist {
@@ -35,17 +46,20 @@ public class TokenDenylist {
     private static final Logger log = LoggerFactory.getLogger(TokenDenylist.class);
 
     static final String KEY_PREFIX = "denylist:";
+    static final String USER_KEY_PREFIX = "denylist:user:";
 
     private final StringRedisTemplate redis;
+    private final JwtIssuer jwtIssuer;
     private final Clock clock;
 
     @Autowired
-    public TokenDenylist(StringRedisTemplate redis) {
-        this(redis, Clock.systemUTC());
+    public TokenDenylist(StringRedisTemplate redis, JwtIssuer jwtIssuer) {
+        this(redis, jwtIssuer, Clock.systemUTC());
     }
 
-    TokenDenylist(StringRedisTemplate redis, Clock clock) {
+    TokenDenylist(StringRedisTemplate redis, JwtIssuer jwtIssuer, Clock clock) {
         this.redis = redis;
+        this.jwtIssuer = jwtIssuer;
         this.clock = clock;
     }
 
@@ -68,6 +82,33 @@ public class TokenDenylist {
         } catch (DataAccessException e) {
             log.warn("denylist write failed for jti {}; token stays valid until {}",
                 jti, expiresAt, e);
+        }
+    }
+
+    /**
+     * Revokes every outstanding token the user holds: stamps the current
+     * epoch second under {@code denylist:user:<id>}; the gateway refuses
+     * this subject's tokens whose {@code iat} is strictly before the
+     * stamp (PR #179 review — a password reset must end the sessions the
+     * old password opened). The key lives one token TTL: by then every
+     * token issued before the stamp has expired on its own. The strict
+     * comparison means a token minted the same second as the stamp
+     * survives — sparing the owner's own immediate post-reset login —
+     * and a repeat reset simply moves the stamp forward. Accepted and
+     * reviewer-reproduced (PR #179 approval, @Sinnez1); the same
+     * acceptance covers an old-password login racing the reset: the
+     * token is minted after the login's row lock is released, so a
+     * reset landing in that gap stamps before the mint and the token
+     * passes with {@code iat >= stamp}. Best-effort like
+     * {@link #revoke} (G9).
+     */
+    public void revokeUserSessions(Long userId) {
+        String cutoff = String.valueOf(clock.instant().getEpochSecond());
+        try {
+            redis.opsForValue().set(USER_KEY_PREFIX + userId, cutoff, jwtIssuer.ttl());
+        } catch (DataAccessException e) {
+            log.warn("user denylist write failed for user {}; pre-reset tokens stay valid"
+                + " up to their own exp", userId, e);
         }
     }
 }

@@ -3270,3 +3270,193 @@ Entry template:
   JSON valid, CORS headers present. Behavior-preserving fixes; no new
   design decisions.
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** code generation with options Q&A (issue #94)
+- **Prompt(s):** Asked to plan and implement issue #94 (account recovery
+  + password reset via token table). Five flow decisions made by the
+  author via options Q&A before coding: reset credential is an opaque
+  token in an emailed link (not an OTP code); recovery is login +
+  explicit restore (login stops silently recovering — reverses the
+  #93-era behavior; POST /users/me/recover restores); a reset on a
+  soft-deleted account inside the window works but leaves it deleted;
+  the request endpoint answers 202 whatever the email maps to (with the
+  silent-202 cooldown corollary, since a 429 would reveal account
+  existence); scope covers backend and the web screens together.
+- **Scope:** user-service — `V7__account_tokens_reset.sql` (created_at,
+  unique token_hash, unique user_id+kind), `AccountToken` (createdAt,
+  replace(), RECOVERY dropped from the enum), `AccountTokenRepository` +
+  `UserRepository.findWithLockById` (one lock order: user then token),
+  new `PasswordResetService`/`PasswordResetController`/DTOs/
+  `ResetTokenInvalidException` (+ ProblemTypes URI and advice handler),
+  `OtpEmailSender.sendPasswordResetLink` (+ SMTP impl), SHA-256 token
+  hashing (lookup-by-hash needs a deterministic hash; 256-bit entropy
+  needs no slow one — documented as the inverse of the OTP BCrypt
+  rationale), `LoginAttempts` no longer clears deletedAt (+ purgeAt),
+  `LoginResponse.deletionScheduledFor`, `ProfileService/Controller`
+  recover route + SecurityConfig line, purge scheduler sweep,
+  application.yaml/.env.example `PASSWORD_RESET_TTL`. web — login's
+  forgot-password link and reset notice, `forgot-password.tsx`,
+  `reset-password.tsx` (URL token strip), `account-recovery.tsx`
+  (wireframe's restore/keep-deleted), AuthProvider/useAuth `restored()`
+  + deleted-session guard in ProtectedRoute, `apiFetch` tolerates the
+  bodyless 202. Tests: new PasswordResetService/Controller tests, web
+  password-reset and account-recovery suites; existing login/profile/
+  purge/Flyway/entity tests updated (user-service 350 green, web 112
+  green). Docs: README #94 section + corrections to the two sections
+  that said login recovers.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** code generation with options Q&A (issue #94, revision)
+- **Prompt(s):** Asked whether the reset flow could use an OTP instead;
+  the author chose "reset via OTP code" via options Q&A, revisiting the
+  same day's link-token decision. Follow-on shapes applied and
+  documented: confirm carries email + code (a salted BCrypt code hash
+  cannot be looked up); the codes ride the user.otp.* knobs whole (the
+  PASSWORD_RESET_TTL knob went); and every confirm failure is the one
+  reset-code-invalid 400 — stricter than sign-up's verify on purpose,
+  since a 429 or an expired-specific answer on this public route would
+  reveal which addresses hold accounts.
+- **Scope:** user-service — V8 (attempts column, V7's unique hash index
+  dropped), AccountToken (codeHash naming, attempts, replace() resets
+  the budget), AccountTokenRepository (by-hash finders removed),
+  PasswordResetService rewritten for the code flow (dummy-hash cost for
+  missing rows, spent-until-replaced attempts), DTO gains email + code,
+  ResetTokenInvalidException → ResetCodeInvalidException with
+  urn:foc:user:reset-code-invalid, sendPasswordResetCode replaces the
+  link mail, yaml/.env/test pins drop the reset TTL knob. web — the
+  /reset-password route went; forgot-password.tsx is the wireframe's
+  two steps on one page (email → code + new password, resend/change
+  affordances). Tests reworked on both sides (user-service 353 green,
+  web 112 green); README #94 section and Flyway paragraph rewritten.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactoring with options Q&A (issue #94, PR #179 review)
+- **Prompt(s):** Asked to rename account_tokens to something
+  reset-specific and remove the kind column, now that recovery carries
+  no emailed credential. Names chosen by the author via options Q&A:
+  table password_reset_otps / entity PasswordResetOtp (the
+  account_update_otps parallel), and the token_hash column follows as
+  code_hash (revisiting the earlier keep-tokenHash call now that the
+  table itself says OTP).
+- **Scope:** `V9__password_reset_otps.sql` (rename table and column,
+  drop kind — V7's composite index and V1's CHECK go with it —
+  per-user unique index, FK renamed to the siblings' convention; a new
+  migration, not an edit, since V7/V8 are applied on dev DBs).
+  AccountToken/AccountTokenRepository → PasswordResetOtp/
+  PasswordResetOtpRepository (Kind enum gone, finders lose the kind
+  parameter); PasswordResetService and AccountPurgeScheduler follow;
+  stale comments updated (UserRepository's "login recovers" note
+  included). Tests track the rename (user-service suite green);
+  README/application.yaml/.env.example wording updated.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactoring (issue #94, PR #179 review)
+- **Prompt(s):** Asked to collapse the branch's three stacked
+  migrations into one, since they all belong to one PR.
+- **Scope:** V7/V8/V9 squashed into a single `V7__password_reset_otps.sql`
+  (rename + code_hash + drop kind + created_at + attempts + per-user
+  unique index + FK rename, with the design iterations noted in its
+  header); FlywayMigrationTest counts back to 6/7 and its proof block
+  rewritten; the V8/V9 references in headers, comments and the README's
+  Flyway paragraph updated. Dev databases that ran the branch's stacked
+  migrations must be reset (README's "Old local databases" steps) —
+  noted in the migration header and the PR.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debugging assistance, refactoring (PR #179 Copilot review)
+- **Prompt(s):** Asked to address the Copilot review's findings.
+- **Scope:** (1) stale-credential login race — LoginAttempts.record now
+  receives the hash the bcrypt check ran against and answers
+  STALE_CREDENTIAL when the locked re-read shows a different one (a
+  concurrent reset could otherwise turn an old-password match into a
+  fresh JWT); AuthService redoes the whole check, three stale rounds
+  answer as the existing concurrent-update 409. (2) Both reset flows'
+  FIRST read is the locked one (UserRepository.findWithLockByEmail) —
+  the plain-read-then-lock-by-id shape kept stale entity state, so a
+  code could be mailed to a just-replaced address; the purged-between-
+  lookups case now falls through the same dummy-BCrypt branch as an
+  unknown email. (3) The purge locks its condemned user rows before
+  touching child tables (findWithLockByDeletedBefore), matching the
+  flows' user-then-child lock order instead of deadlocking against a
+  reset request. (4) forgot-password.tsx: "Change email" clears the
+  typed passwords, and the step-2 resend/change buttons are disabled
+  while a request is in flight. (5) The README's consolidated AI Use
+  Summary extended for issue #94 (it ended at #151). Tests added or
+  updated for (1)–(4); the review's AI-policy finding is left to the
+  team, not resolved by wording changes.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debugging assistance, refactoring, documentation (PR #179
+  review by @Sinnez1)
+- **Prompt(s):** Asked to address the latest PR #179 review comments.
+  The review's four security/design questions (OTP brute-force cap,
+  deleted-account access scope, admin-removal recoverability, fix vs
+  document for the lock-across-send and surviving-sessions findings)
+  were put to Leong Wei Zhi as neutral options Q&A; the tool
+  implemented the choices.
+- **Scope:** (1) Windows test fix — the deleted-login test truncates
+  its Instant to microseconds, matching what Postgres stores. (2) OTP
+  brute-force cap (chosen: carry attempts across renewals) —
+  PasswordResetOtp.replace split into renew (live row, count carried)
+  and replaceExpired (dead row, fresh budget); a spent live row absorbs
+  requests silently, so the budget is OTP_MAX_ATTEMPTS guesses per
+  OTP_TTL, not per cooldown. (3) Lock-across-send (chosen: fix) —
+  requestReset parks the row in a TransactionTemplate transaction that
+  commits before the SMTP send; a failed send retracts the undelivered
+  code best-effort and still answers 502. (4) Sessions surviving a
+  reset (chosen: fix) — gateway decision G11: confirmReset stamps
+  denylist:user:<id> via TokenDenylist.revokeUserSessions, and
+  gateway/lua/auth.lua rejects the subject's tokens whose iat predates
+  the stamp (fail-open, best-effort, docs/gateway.md updated).
+  (5) Deleted-account access (chosen: accept) — README and PR body now
+  say the full 30-day window, not ≤1 h. (6) Admin removal (chosen:
+  same as self-delete) — recorded in AdminService and the README.
+  Tests: suite 354 → 359 (renewal/absorb/retract/eviction pins).
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debugging assistance, refactoring, documentation (PR #179
+  approval follow-ups by @Sinnez1)
+- **Prompt(s):** Asked to address the latest PR #179 comments — the
+  seven non-blocking follow-ups on @Sinnez1's approval. The two that
+  were design/security choices (what admin removal does to the ADMIN
+  role; how retract handles a failed send on a renewal) were put to
+  Leong Wei Zhi as neutral options Q&A; the tool implemented the
+  choices and the mechanical corrections.
+- **Scope:** (1) Admin removal (chosen: demote to USER; alternatives
+  were an active-check in the admin routes or documenting as
+  accepted) — AdminService.removeUser sets the role before the
+  soft-delete, so a removed admin's later logins and a self-restored
+  account carry no admin powers; a pre-removal ADMIN token lasts its
+  ≤1 h exp. Pinned in AdminServiceTest. (2) Failed renewal send
+  (chosen: restore the pre-renewal row; alternatives were leaving the
+  renewed row in place or documenting the budget-reset exception) —
+  PreparedReset snapshots the live row before renew, retract restores
+  code/clock via PasswordResetOtp.restore instead of deleting (new or
+  expired-takeover rows still delete), closing the second
+  budget-renewal path and keeping the delivered code working. Pinned
+  in PasswordResetServiceTest. (3) user-service README: the stale
+  pre-G11 "old JWT stays valid" sentence replaced with the
+  Redis-failure/same-second exceptions; the retract and soft-delete
+  passages updated for (1)/(2). (4) Root README AI Use Summary: web
+  clauses moved out (the web half is PR #180's), scope corrected to
+  backend-only, this round appended. (5) TokenDenylist javadoc records
+  the reviewer-reproduced same-second survivor and the
+  login-racing-the-reset gap as the same accepted leak. (6) Test
+  isolation: PasswordResetControllerTest and AccountPurgeSchedulerTest
+  clear password_reset_otps in @AfterEach (AccountUpdateControllerTest's
+  rule) so a leftover row cannot break other classes' deleteAll setup.
+- **Author review:** Pending author review of the diff via the PR.

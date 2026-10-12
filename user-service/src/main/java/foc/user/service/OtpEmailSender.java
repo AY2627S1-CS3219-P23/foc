@@ -9,6 +9,10 @@ Reviewed by: Leong Wei Zhi (via pull request).
 2026-09-30 (Claude Code, Fable 5), issue #92: the two account-update
 methods this header promised — the gate code to the current email and
 the confirmation code to the new one.
+2026-10-11 (Claude Code, Fable 5), issue #94: the password-reset method,
+the last one the #88 header promised. A code like every other flow's —
+the owner first chose an emailed link, then revisited the same day via
+options Q&A: the OTP shape the SPA's code dialog already speaks won.
 */
 
 package foc.user.service;
@@ -43,4 +47,13 @@ public interface OtpEmailSender {
      * @param validity how long the code stays valid, quoted in the email
      */
     void sendEmailChangeCode(String toEmail, String code, Duration validity);
+
+    /**
+     * Emails a password-reset code (#94, F4.2) to the account's
+     * registered address: possession of this inbox is what authorizes
+     * the reset. Never log the code.
+     *
+     * @param validity how long the code stays valid, quoted in the email
+     */
+    void sendPasswordResetCode(String toEmail, String code, Duration validity);
 }
