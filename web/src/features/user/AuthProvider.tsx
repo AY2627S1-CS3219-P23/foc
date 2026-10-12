@@ -24,15 +24,29 @@
 // 2026-10-11, Claude Code (Fable 5), issue #151: logout() now also calls
 // POST /auth/logout (best-effort, team decision) so the server denylists
 // the token; the local session is cleared either way.
+// 2026-10-12, Claude Code (Fable 5), issue #178: registers apiFetch's
+// unauthorized handler — a 401 on a token-bearing request (admin demoted
+// or removed the account, password reset elsewhere, token expired) clears
+// the session and lands on /login with a notice (owner decision via
+// options Q&A). The notice travels via sessionNotice's one-shot flag,
+// not navigation state — see sessionNotice.ts for the race that rules
+// state out. Guarded on a live session so a late 401, e.g. from logout's
+// own best-effort call, doesn't re-navigate after sign-out.
 // Reviewed by: Ryan Ang
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { useNavigate, Outlet } from 'react-router'
 import { AuthContext } from './useAuth'
 import { useLocalStorage } from './useLocalStorage'
-import { apiFetch, errorMessage, setTokenSource } from '@/lib/api/http'
+import {
+  apiFetch,
+  errorMessage,
+  setTokenSource,
+  setUnauthorizedHandler,
+} from '@/lib/api/http'
 import { adminUserApi } from './adminApi'
 import { decodeJwtRole } from './jwt'
+import { flagSessionEnded } from './sessionNotice'
 import type { AdminUser, LoginResponse } from './types'
 import type { CurrentUser } from './useAuth'
 
@@ -56,7 +70,17 @@ export const AuthProvider = () => {
   // effect set the source; layout effects all run before any of them.
   useLayoutEffect(() => {
     setTokenSource(() => token?.accessToken ?? null)
-  }, [token])
+    // a 401 on a token-bearing request: the session is no longer
+    // honoured (issue #178 — revoked, expired, or invalid), so drop it
+    // and ask the user to sign in again. No-op without a live session:
+    // logout's best-effort POST can 401 after the token is cleared.
+    setUnauthorizedHandler(() => {
+      if (!token) return
+      flagSessionEnded()
+      setToken(null)
+      navigate('/login', { replace: true })
+    })
+  }, [token, navigate, setToken])
 
   const [meCheck, setMeCheck] = useState<MeCheck | null>(null)
   useEffect(() => {

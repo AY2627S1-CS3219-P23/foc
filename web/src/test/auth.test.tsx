@@ -30,6 +30,9 @@
 // 2026-10-11, Claude Code (Fable 5), issue #151: logout cases — the nav
 // Logout button POSTs the bearer token to /auth/logout, and the local
 // sign-out survives the call failing (best-effort, team decision).
+// 2026-10-12, Claude Code (Fable 5), issue #178: revoked-session cases —
+// a 401 on a token-bearing request signs the user out to /login with the
+// "session ended" notice, and logout's own best-effort 401 does not.
 // Author review: Ryan to review via the PR.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -624,7 +627,12 @@ describe('logout', () => {
       .mockResolvedValueOnce(reply(200, session))
       // GET /users/me, asked once the session is stored
       .mockResolvedValue(
-        reply(200, { id: 1, username: 'alex', email: 'e@u.nus.edu', role: 'USER' }),
+        reply(200, {
+          id: 1,
+          username: 'alex',
+          email: 'e@u.nus.edu',
+          role: 'USER',
+        }),
       )
     await logIn('alex', 'ValidPassword123')
     return await screen.findByRole('button', { name: 'Logout' })
@@ -667,6 +675,55 @@ describe('logout', () => {
     expect(localStorage.getItem('user')).toBe('null')
     expect(
       screen.queryByRole('button', { name: 'Logout' }),
+    ).not.toBeInTheDocument()
+  })
+})
+
+// issue #178: a 401 on a request that carried the bearer token means the
+// session was revoked server-side (admin demotion/removal, a password
+// reset elsewhere, or plain expiry) — the app signs out instead of
+// leaving the user on a page whose every call fails
+describe('revoked session', () => {
+  const SESSION_ENDED = 'Your session has ended. Please sign in again.'
+
+  test('a 401 on a token-bearing request signs out to the login page with a notice', async () => {
+    localStorage.setItem('user', JSON.stringify(session))
+    // GET /users/me, asked on mount with the stored token
+    fetchMock.mockResolvedValue(problem(401, 'Token has been revoked'))
+
+    renderAt('/profile')
+
+    expect(await screen.findByRole('status')).toHaveTextContent(SESSION_ENDED)
+    expect(screen.getByRole('heading', { name: 'Log In' })).toBeInTheDocument()
+    expect(localStorage.getItem('user')).toBe('null')
+  })
+
+  test("logout's own best-effort 401 does not bounce the signed-out user to the login page", async () => {
+    const user = userEvent.setup()
+    // reuse the logged-in shell from the logout cases
+    fetchMock.mockResolvedValueOnce(reply(200, session)).mockResolvedValue(
+      reply(200, {
+        id: 1,
+        username: 'alex',
+        email: 'e@u.nus.edu',
+        role: 'USER',
+      }),
+    )
+    await logIn('alex', 'ValidPassword123')
+    const logoutButton = await screen.findByRole('button', { name: 'Logout' })
+    fetchMock.mockClear()
+    // the token was already revoked server-side; the sign-out had begun
+    // locally, so the late 401 must not re-navigate (guard in AuthProvider)
+    fetchMock.mockResolvedValue(problem(401, 'Token has been revoked'))
+
+    await user.click(logoutButton)
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(localStorage.getItem('user')).toBe('null')
+    // landed on the home page per the manual logout, not on /login
+    expect(screen.queryByText(SESSION_ENDED)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Log In' }),
     ).not.toBeInTheDocument()
   })
 })

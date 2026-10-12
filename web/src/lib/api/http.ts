@@ -12,6 +12,11 @@
 // login's lockout could use it next). It only arrives cross-origin because
 // user-service names the header in its CORS exposedHeaders — it is not
 // CORS-safelisted, so exposing it there and reading it here go together.
+// 2026-10-12, Claude Code (Fable 5), issue #178: a 401 on a request that
+// carried the bearer token invokes a swappable unauthorized handler
+// (AuthProvider signs the session out) — owner decision via options Q&A:
+// any token-bearing 401, no matching on the problem detail. Requests
+// without the token (login itself) keep their inline errors.
 
 import { serviceBaseUrls, type ServiceName } from './config'
 
@@ -21,6 +26,16 @@ let getToken: () => string | null = () => null
 
 export function setTokenSource(source: () => string | null) {
   getToken = source
+}
+
+// Called when a request that carried the bearer token is answered 401 —
+// the server no longer honours the session (token revoked, expired, or
+// invalid), so holding on to it client-side only leaves broken pages.
+// The auth owner (AuthProvider) replaces this with a forced sign-out.
+let onUnauthorized: () => void = () => {}
+
+export function setUnauthorizedHandler(handler: () => void) {
+  onUnauthorized = handler
 }
 
 // Shape of an RFC 9457 application/problem+json error body, which the
@@ -103,6 +118,13 @@ export async function apiFetch<T>(
 
   if (!res.ok) {
     const problem = (await res.json().catch(() => null)) as ProblemDetail | null
+    // a 401 despite a token means the session is dead (revoked by an
+    // admin action or password reset, expired, or malformed) — tell the
+    // auth owner before throwing, so the user is signed out instead of
+    // stranded on a page whose every call fails (issue #178)
+    if (res.status === 401 && headers.has('Authorization')) {
+      onUnauthorized()
+    }
     throw new ApiError(res.status, problem, retryAfterSeconds(res))
   }
   if (res.status === 204) {

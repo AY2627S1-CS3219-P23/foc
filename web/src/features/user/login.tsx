@@ -20,6 +20,11 @@
 // once read, so the notice doesn't come back when /login is reloaded.
 // 2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei Zhi):
 // clearing the state keeps the URL's query and hash.
+// 2026-10-12, Claude Code (Fable 5), issue #178: "session ended" notice,
+// shown when AuthProvider forces a sign-out after a 401 on a
+// token-bearing request (owner decision via options Q&A). Carried by
+// sessionNotice's one-shot flag, read once into state and cleared on
+// mount — navigation state loses a race here, see sessionNotice.ts.
 // Reviewed by: Ryan Ang
 
 import React, { useEffect, useState } from 'react'
@@ -27,6 +32,7 @@ import { useLocation, useNavigate } from 'react-router'
 import { apiFetch, errorMessage } from '@/lib/api/http'
 import { router } from '../../routes/index'
 import { useAuth } from './useAuth'
+import { clearSessionEnded, sessionEndedFlag } from './sessionNotice'
 import type { LoginResponse } from './types'
 
 export function Login() {
@@ -42,6 +48,12 @@ export function Login() {
     true
   // kept here because the navigation state is cleared below
   const [accountCreated] = useState(cameFromSignup)
+  // set by AuthProvider when a 401 forced a sign-out (issue #178); read
+  // once into state, then cleared so it shows on arrival only
+  const [sessionEnded] = useState(sessionEndedFlag)
+  useEffect(() => {
+    clearSessionEnded()
+  }, [])
 
   // the browser keeps navigation state across a reload, so drop it once
   // read: the notice shows on arrival only
@@ -89,6 +101,14 @@ export function Login() {
       <p className="mt-1 text-sm text-gray-500">
         Access your student errand portal.
       </p>
+      {sessionEnded && !error && (
+        <p
+          role="status"
+          className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700"
+        >
+          Your session has ended. Please sign in again.
+        </p>
+      )}
       {accountCreated && !error && (
         <p
           role="status"
