@@ -32,6 +32,10 @@
 // not navigation state — see sessionNotice.ts for the race that rules
 // state out. Guarded on a live session so a late 401, e.g. from logout's
 // own best-effort call, doesn't re-navigate after sign-out.
+// PR #182 review (@Sinnez1): that guard now compares the refused token
+// with the live one, not merely that some session exists — a 401
+// answering a previous token (a slow request outlived by a fresh login)
+// was ending the new session.
 // Reviewed by: Ryan Ang
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
@@ -72,10 +76,14 @@ export const AuthProvider = () => {
     setTokenSource(() => token?.accessToken ?? null)
     // a 401 on a token-bearing request: the session is no longer
     // honoured (issue #178 — revoked, expired, or invalid), so drop it
-    // and ask the user to sign in again. No-op without a live session:
-    // logout's best-effort POST can 401 after the token is cleared.
-    setUnauthorizedHandler(() => {
-      if (!token) return
+    // and ask the user to sign in again. Only when the refused token is
+    // the one live now: a reply arriving late for an earlier token —
+    // logout's best-effort POST, or a slow call from a session the user
+    // has already replaced by signing in again — says nothing about the
+    // current session, and acting on it would sign out a user who was
+    // never refused.
+    setUnauthorizedHandler((refusedToken) => {
+      if (refusedToken !== token?.accessToken) return
       flagSessionEnded()
       setToken(null)
       navigate('/login', { replace: true })

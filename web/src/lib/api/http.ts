@@ -20,6 +20,9 @@
 // PR #182 Copilot review: `auth: false` opts a call out of the token
 // injection — login uses it, so a stale stored session no longer rides
 // along and its wrong-credentials 401 can't read as a revoked session.
+// PR #182 review (@Sinnez1): the handler is given the token the refused
+// request carried, so AuthProvider can ignore a 401 that answers an
+// older token instead of ending whichever session is live now.
 
 import { serviceBaseUrls, type ServiceName } from './config'
 
@@ -35,9 +38,12 @@ export function setTokenSource(source: () => string | null) {
 // the server no longer honours the session (token revoked, expired, or
 // invalid), so holding on to it client-side only leaves broken pages.
 // The auth owner (AuthProvider) replaces this with a forced sign-out.
-let onUnauthorized: () => void = () => {}
+// It is handed the token the refused request actually carried, so a
+// reply arriving late for an older token can be told apart from one
+// refusing the session that is live now.
+let onUnauthorized: (token: string) => void = () => {}
 
-export function setUnauthorizedHandler(handler: () => void) {
+export function setUnauthorizedHandler(handler: (token: string) => void) {
   onUnauthorized = handler
 }
 
@@ -130,6 +136,15 @@ export async function apiFetch<T>(
     }
   }
 
+  // the bearer token this request goes out with, read back off the
+  // headers so a caller-supplied Authorization counts the same as an
+  // injected one. Kept for the 401 below: the handler needs to know
+  // which token was refused, not just that one was sent.
+  const sentAuth = headers.get('Authorization')
+  const sentToken = sentAuth?.startsWith('Bearer ')
+    ? sentAuth.slice('Bearer '.length)
+    : null
+
   const res = await fetch(`${baseUrl}${path}`, { ...request, headers })
 
   if (!res.ok) {
@@ -138,8 +153,8 @@ export async function apiFetch<T>(
     // admin action or password reset, expired, or malformed) — tell the
     // auth owner before throwing, so the user is signed out instead of
     // stranded on a page whose every call fails (issue #178)
-    if (res.status === 401 && headers.has('Authorization')) {
-      onUnauthorized()
+    if (res.status === 401 && sentToken) {
+      onUnauthorized(sentToken)
     }
     throw new ApiError(res.status, problem, retryAfterSeconds(res))
   }

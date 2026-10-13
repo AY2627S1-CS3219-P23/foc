@@ -3907,6 +3907,33 @@ Entry template:
   (policy: the summary stays current).
 - **Author review:** Pending author review of the diff via the PR.
 
+## 2026-10-13 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debugging assistance, refactoring (PR #182 review by
+  @Sinnez1)
+- **Prompt(s):** Asked to address the PR #182 review comments — the
+  blocking session-identity finding and the lower-priority notice-timing
+  one. Both were defects with a stated fix direction, so no new design
+  decisions were put to the author.
+- **Scope:** (1) A late 401 for an old token was signing out a new
+  session: `apiFetch` now hands the unauthorized handler the bearer
+  token the refused request actually carried (read back off the request
+  headers, so a caller-supplied Authorization counts the same), and
+  `AuthProvider`'s guard compares it against the live session's token
+  instead of merely checking that some session exists — a reply
+  outlived by a fresh login is ignored. (2) The "session ended" notice
+  could show at the wrong time: `sessionNotice` publishes the flag to
+  listeners as well as holding it, and the login page subscribes, so a
+  401 landing while the page is already open shows the notice then and
+  consumes the flag — it can no longer surface on a later visit, e.g.
+  after a plain manual logout. (3) `web/src/test/auth.test.tsx` — a case
+  per finding (both verified to fail without the fix), and the flag is
+  reset between tests since it is module state. Also merged `main`
+  (PR #179), resolving the README and usage-log conflicts by keeping
+  both sides in date order.
+- **Author review:** web 104/104 (vitest), `tsc -b`, eslint, prettier
+  clean on the touched files; the diff reviewed via the PR.
+
 ## 2026-10-14 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** review fixes + documentation (PR #185 review by @Sinnez1)

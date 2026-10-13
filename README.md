@@ -103,6 +103,8 @@
   (Leong Wei Zhi), by Claude Code (Opus 5.5).
   2026-10-13: AI Use Summary extended for the credit read API
   (issue #172) by Claude Code (Opus 5.5).
+  2026-10-13: the #178 clause extended for the PR #182 human-review
+  round (@Sinnez1), by Claude Code (Opus 5).
   2026-10-14: the #172 clause extended for the PR #189 review
   follow-ups, by Claude Code (Opus 5.5).
   2026-10-14: AI Use Summary extended for the credit request event
@@ -639,7 +641,13 @@ itself opts out of the token injection so its wrong-credentials 401
 stays an inline error) and its tests. The mechanism (any token-bearing
 401, no detail matching), the sign-out UX and the scope were decided
 by Leong Wei Zhi via neutral options Q&A, recorded in
-`ai/usage-log.md`.
+`ai/usage-log.md`. The PR #182 human-review round (@Sinnez1) added two
+defect fixes with no new design decisions: the handler is given the
+token the refused request carried, so a 401 answering a replaced token
+no longer ends the session the user has just started; and the notice
+is published to the login page rather than read at mount only, so a
+401 arriving while that page is open shows it there instead of saving
+it for a later visit.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
