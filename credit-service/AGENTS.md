@@ -13,6 +13,8 @@
   invariants updated for the credit operations implementation; then
   for slices referencing their lot (written into V1) and the record
   insert moving to the repository.
+  2026-10-13, Claude Code (Opus 5.5), issue #172: the package map and
+  invariants updated for the read API.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -29,15 +31,17 @@ IDs (D1–D12) when touching related code.
 | Package | Contents |
 | --- | --- |
 | `config/` | `SecurityConfig`: CORS, health open, everything else needs a valid JWT |
+| `controller/` | `CreditController` (the two read routes and the checks behind the contract's 400s), `ApiExceptionHandler` (400 problem+json), `InvalidQueryParameterException` |
+| `dto/` | The read API's bodies: `BalanceResponse`, `HistoryEntryResponse`, and `PageResponse`, a copy of supplier-service's shape |
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
 | `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
-| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` (interface) and its `NotImplementedReplyOutbox` stub, which throws, `ReserveResult` / `SettleResult`, and `RequestEventHandler`, which owns the transaction for one request event |
+| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` (interface) and its `NotImplementedReplyOutbox` stub, which throws, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, and `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API |
 | `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, and `DomainEventMessageConverter`, a copy of notification-service's |
 
-No controllers, listener, outbox publisher or scheduler yet. The two
-interfaces are the seams the features are built against, and the
-handler already calls them; `ReplyOutbox` is still a stub.
+No listener, outbox publisher or scheduler yet. The two interfaces are
+the seams the features are built against, and the handler already
+calls them; `ReplyOutbox` is still a stub.
 
 ## Invariants — do not break
 
@@ -76,6 +80,22 @@ handler already calls them; `ReplyOutbox` is still a stub.
   delivery.
 - **What each operation answers is specified** in the design doc ("What
   each operation answers"); the handler depends on it.
+- **The REST API only reads, and only the caller's own data.** The user
+  is the token's subject (`Authentication.getName()`); no route takes a
+  user ID. The one write a read causes is get-or-create (D6). Every
+  balance change arrives as an event.
+- **The read API is specified** in the design doc's "Read API
+  contract": routes, fields, order, bounds and each 400. A change to
+  any of them is a design change, so update the doc with it.
+  `CreditControllerTest` follows the contract row by row.
+- **`page` and `size` are plain integers, never Spring's `Pageable`**,
+  which turns a negative page into 0, caps an oversized size silently
+  and admits a `sort` parameter: the contract's 400s would never
+  happen. `from` and `to` bind as `OffsetDateTime`, so a date alone or
+  an instant with no offset is refused.
+- **`CreditControllerTest` is `@Transactional` and commits nothing.** Its
+  history rows are made up for the filters and do not add up to a
+  balance; committed, they would fail the whole-database checks below.
 - **Amounts are integers** (Credit F1.2); balances never go negative
   (`CHECK` constraints back this up).
 

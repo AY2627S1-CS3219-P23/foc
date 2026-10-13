@@ -86,6 +86,8 @@
   Copilot review flagged the summary as not covering #94.
   2026-10-12: the #94 clause extended for the PR #179 human-review
   round (@Sinnez1), by Claude Code (Fable 5).
+  2026-10-13: AI Use Summary extended for the credit read API
+  (issue #172) by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -484,7 +486,11 @@ recorded in `docs/credit-service.md` and `ai/usage-log.md`; and that
 PR's review fixes (#175: a completion that finds no reservation is
 retried instead of dead-lettered at once, a removed race test restored,
 and the expiry and rejected-record rules moved from open items into the
-design doc), the team's decisions on the reviewers' findings.
+design doc), the team's decisions on the reviewers' findings; and the
+read API (issue #172: the balance and history routes, the history
+filters as a JPA Specification, the 400 problem+json mapping, and
+their tests), transcribed from the "Read API contract" the team wrote
+in `docs/credit-service.md`.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their
