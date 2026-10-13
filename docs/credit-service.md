@@ -49,6 +49,12 @@
   well, and revised it the same day: they mean the broker is in
   trouble, not that one reply is bad, so going on only multiplies the
   waits.
+  2026-10-13, PR #188 review (Leong Wei Zhi), team decision
+  transcribed: a reply returned as unroutable is not due again for
+  30 s (`outbox_event.next_attempt_at`, a new column) and a poll reads
+  only the unsent replies that are due, so replies no queue takes
+  cannot fill every batch and hold back the ones behind them. Still no
+  cap on attempts.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -72,7 +78,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D7 | Cross-service consistency | **Saga between the Order and Credit Services, by choreography.** Each service reacts to the other's events, and the request's status in the Order Service is the saga's state. No synchronous call exists between the two services. | F2, F3, NFR2 |
 | D8 | Reservation | Saga step 1. The Credit Service consumes `request.submitted`, reserves or refuses, and replies with `credit.reserved` or `credit.reservation-rejected`. | F2.1, F2.1.2, F2.1.3 |
 | D9 | Transfer and release | Saga endings. `request.completed` transfers the held credits. `request.cancelled` and `request.expired` release them, with release being the compensation for a reservation. | F2.1.1, F3.1, NFR1.1 |
-| D10 | Reply publishing | **Transactional outbox.** The reply is written to an outbox table in the same transaction as the balance change, and a publisher sends it to the broker with publisher confirms and the mandatory flag: a reply is marked sent only when the broker confirmed it and did not return it as unroutable. The publisher polls every 1 s, as a fixed delay so that one poll never overlaps the next, publishes at most 100 replies in a poll and waits up to 5 s for each confirm. | NFR2.1 |
+| D10 | Reply publishing | **Transactional outbox.** The reply is written to an outbox table in the same transaction as the balance change, and a publisher sends it to the broker with publisher confirms and the mandatory flag: a reply is marked sent only when the broker confirmed it and did not return it as unroutable. The publisher polls every 1 s, as a fixed delay so that one poll never overlaps the next, publishes at most 100 replies in a poll and waits up to 5 s for each confirm. A reply returned as unroutable is not due again for 30 s, and a poll reads only the unsent replies that are due, so replies no queue takes cannot fill every batch and hold back the ones behind them. | NFR2.1 |
 | D11 | Event failure handling | Transient failures go to a retry queue and are redelivered after a short delay, up to a fixed number of attempts, then to a dead-letter queue. Events that conflict with the recorded state go straight to the dead-letter queue. A `request.completed` with no record is not such a conflict: its reservation may not have been applied yet, so it is retried like a transient failure. The queue layout is the Notification Service's (a work, a retry and a dead-letter queue), with two differences: the four consumed routing keys are bound one by one instead of `request.#`, and the retry delay is 2 s with up to 5 attempts (`CREDIT_RETRY_TTL_MS`, `CREDIT_RETRY_MAX_ATTEMPTS`). The service declares both the `request-events` and `credit-events` exchanges, so it starts without the Order Service. | F5.1.1, NFR2.1 |
 | D12 | Scheduler | Done by a **cron job** through use of `@Scheduled`. The expiry run is daily; redistribution is monthly. | F6.1.1, F6.1.2 |
 
@@ -113,7 +119,7 @@ Web App; every balance change arrives as a request event. Its state lives only i
 | **Error mapping** (Spring Boot, `@RestControllerAdvice`) | Maps invalid query parameters on the read API (for example the history's amount and date-range filters) to HTTP error responses. Event-path failures never reach it: they are refused with a reply or dead-lettered (see "How each event is handled"). |
 | **Idempotent credit operations service** (Spring Boot, `@Transactional`) | Core logic: provisions accounts with 5 available / 0 reserved, once per user (F1.1.1, F1.1.2). It reserves only if available credit >= amount needed (F2.1, F2.1.2, F2.1.3) and releases or transfers each request's held credits at most once (F2.1.1, F3.1.1, F3.1.2, NFR2.2.1). It spends lots in soonest-expiry order, with the never-expiring sign-up lot last, returns released credits to the lots they came from (D4), and commits balance change, held-credits status, lots, history rows and the outgoing reply in one transaction (F5.1, NFR2.1). It logs one line per operation that changes credits (the request, the users affected, the amount and the outcome) and one per account created, each written after the transaction commits. |
 | **Credit history** (Spring Boot) | Appends one immutable row per transaction such as account provision, reservation, release, transfer, expiry, redistribution, with timestamps and request reference (F4.1.1). It will also serve the filtered history queries (F4.1.2, F4.1.3). |
-| **Outbox publisher** (Spring Boot, `@Scheduled`) | Reads unsent replies from the outbox table, publishes them to the `credit-events` exchange with the mandatory flag, and marks each one sent once the broker confirms it without returning it. A returned reply stays unsent and is retried on the next poll (D10). It is logged with its event ID and the poll goes on to the next reply, since a return is the one failure that is about a single reply. Any other failure stops the poll: the broker cannot be reached, the connection is lost, the broker nacks the reply, or no confirm arrives within 5 s. Each means the broker is in trouble, so every other reply would fail the same way. The replies not yet sent stay unsent for the next poll. There is no cap on attempts. |
+| **Outbox publisher** (Spring Boot, `@Scheduled`) | Reads the unsent replies that are due from the outbox table, publishes them to the `credit-events` exchange with the mandatory flag, and marks each one sent once the broker confirms it without returning it. A returned reply stays unsent and is due again 30 s later (D10); until then no poll reads it. It is logged with its event ID and the poll goes on to the next reply, since a return is the one failure that is about a single reply. Any other failure stops the poll: the broker cannot be reached, the connection is lost, the broker nacks the reply, or no confirm arrives within 5 s. Each means the broker is in trouble, so every other reply would fail the same way. The replies not yet sent stay unsent for the next poll. There is no cap on attempts. |
 | **Expiry and redistribution scheduler** (Spring Boot, `@Scheduled`) | Once a day, moves earned credits past their expiry into the common pool (F6.1). At the start of each month, it shares the pool equally in integer amounts (F6.1.1) and gives the remainder to random users (F6.1.2). |
 | **Credit Database** (PostgreSQL) | Holds credit accounts, held credits records, credit lots, common pool and history. |
 
@@ -195,6 +201,7 @@ erDiagram
         text payload
         timestamptz created_at
         timestamptz sent_at "null = not yet published"
+        timestamptz next_attempt_at "null = due at once"
     }
 ```
  
@@ -207,7 +214,7 @@ erDiagram
 | `credit_history` (`CreditHistoryEntry`) | **The record of every credit operation.** Append-only. | One row per affected account per operation (F4.1.1). `amount` is always positive and `type` says which way it moved. Indexed by user and time for the history view (F4.1.2, F4.1.3). |
 | `common_pool` | Expired credits awaiting redistribution. | A single row, enforced by `CHECK (id = 1)` (F6.1). |
 | `redistribution_run` (`RedistributionRun`) | Months already redistributed. | The primary key on `period` lets only one run per month commit (F6.1.1). |
-| `outbox_event` (`OutboxEvent`) | Replies waiting to be published. | Written in the same transaction as the balance change (D10). The unsent rows are indexed by `created_at`, which is the publisher's poll. |
+| `outbox_event` (`OutboxEvent`) | Replies waiting to be published. | Written in the same transaction as the balance change (D10). The unsent rows are indexed by `created_at`, which is the publisher's poll. A reply the broker returned as unroutable is given a `next_attempt_at`, and the poll leaves it out until then. |
  
 History `type` values and what each does to the account's balances:
  
@@ -573,7 +580,7 @@ tests.
 | A reply is published twice | The Order Service ignores a reply for a request that is no longer `pending` |
 | A refused `request.submitted` is redelivered after the requester's balance has grown | The `REJECTED` record stands; the request is not approved the second time |
 | Two deliveries of one event are processed at the same time | Once a record exists, the lock on it makes them run one after the other; the second changes nothing. Two first deliveries have no record to lock: the second insert fails on the `request_ref` primary key, that event goes to the retry queue, and its redelivery finds the record and changes nothing |
-| A reply is published while no queue is bound to `credit-events` (the Order Service has not started) | The broker returns it as unroutable, so it stays unsent in the outbox and is retried on every poll until a queue is bound |
+| A reply is published while no queue is bound to `credit-events` (the Order Service has not started) | The broker returns it as unroutable, so it stays unsent in the outbox and is tried again every 30 s until a queue is bound. Between attempts no poll reads it, so the replies behind it are not held back |
 | The broker is unreachable, the connection is lost, the broker nacks a reply, or no confirm arrives within 5 s, while the outbox is being published | The poll stops at that reply. It and the replies after it stay unsent, the ones already confirmed stay marked sent, and the next poll, 1 s later, starts again from the oldest unsent |
 | A `request.submitted` carries a fractional reward | It fails conversion and is dead-lettered. No reply is sent, so the request is cancelled when the Order Service's waiting time runs out |
 | Two reservations by the same requester race past the balance | The lock on the account makes them run one after the other; the second is refused if the balance is now insufficient (F2.1.2) |

@@ -8,6 +8,10 @@
  * that one reply; a nack or a missing confirm means the broker is in
  * trouble (revised the same day, replacing a first version that
  * skipped them).
+ * 2026-10-13, Claude Code (Opus 5.5), PR #188 review (Leong Wei Zhi):
+ * the no-op returns callback removed (team decision): the shared
+ * template takes only one, and the next component to need it would
+ * have failed at startup.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
@@ -44,6 +48,14 @@ import foc.credit.service.ReplyPublisher;
  * application.yaml): the broker returns a reply no queue took before it
  * confirms it, so by the time the confirm arrives the return, if any,
  * is already on the {@link CorrelationData}.
+ *
+ * <p>The return is read from the {@link CorrelationData}, which the
+ * channel fills in whether or not the template has a returns callback,
+ * so none is registered here. The template is the application's shared
+ * one and takes a single returns callback: it is left free for whatever
+ * needs it. The cost is the template's own "Returned message but no
+ * callback available" warning beside ours for each returned reply. Do
+ * not register a callback to silence it.
  */
 @Component
 class RabbitReplyPublisher implements ReplyPublisher {
@@ -57,11 +69,6 @@ class RabbitReplyPublisher implements ReplyPublisher {
 			@Value("${credit.outbox.publisher.confirm-timeout-ms}") long confirmTimeoutMs) {
 		this.rabbitTemplate = rabbitTemplate;
 		this.confirmTimeoutMs = confirmTimeoutMs;
-		// A return is read from the CorrelationData in publish(). Without
-		// a callback the template also logs "Returned message but no
-		// callback available" for every one, so it is given one that has
-		// nothing left to do.
-		rabbitTemplate.setReturnsCallback(returned -> { });
 	}
 
 	@Override

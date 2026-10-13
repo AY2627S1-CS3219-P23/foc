@@ -26,6 +26,63 @@ Entry template:
 ```
 
 ---
+## 2026-10-13 — Ryan Ang (PR #188 review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** review assistance, refactoring, tests, docs
+- **Scope:** `credit-service/`, `docs/credit-service.md`.
+  - `V2__outbox_next_attempt_at.sql` and `OutboxEvent.nextAttemptAt`: a
+    nullable column, null meaning due at once.
+  - `OutboxEventRepository`: `findDue` replaces the unsent-rows query
+    (unsent and due, oldest first, limited), and an `insert` that never
+    overwrites, as `ReservedRepository` has.
+  - `OutboxPublisher`: a returned reply gets its next attempt time and
+    is saved; the poll reads only the replies that are due.
+  - `ReplyOutboxService`: the row is inserted, not saved.
+  - `RabbitReplyPublisher`: the no-op returns callback is removed, and
+    the class comment says a return is read from the `CorrelationData`
+    without one.
+  - `application.yaml`: `unroutable-retry-delay-ms` (30 000) and
+    `spring.task.scheduling.pool.size` (2).
+  - Tests: `OutboxEventRepositoryTest` (new: which replies are due,
+    their order, the batch counted over the due ones only), a repeated
+    event ID refused in `ReplyOutboxServiceTest`, the next attempt time
+    in `OutboxPublisherTest`, no callback registered in
+    `RabbitReplyPublisherTest`, the new column in `EntityMappingTest`,
+    and in `OutboxPublisherIntegrationTest` two unroutable replies
+    filling a batch of two while the routable reply behind them is
+    still delivered.
+  - `docs/credit-service.md` (D10, the component and failure rows, the
+    `outbox_event` table), the service's README and AGENTS.md, two
+    wording fixes from the Copilot review, and the README's AI Use
+    Summary.
+- **Prompt(s):** Summary: asked to assess the review comments on
+  PR #188. The tool checked
+  each against the code and the spring-rabbit jar, reported all six as
+  accurate, and left the approach to the two that needed a decision to
+  the team. It was then asked to implement the decisions below and the
+  four items that needed none.
+- **Author review:** Team decisions, transcribed into
+  `docs/credit-service.md`. (1) Head-of-line blocking: a
+  `next_attempt_at` column, in this PR; on a return it is set to now
+  plus 30 s, and the poll reads only rows that are unsent and due. No
+  cap on attempts, as before. (2) The returns callback is removed
+  rather than moved to a template of its own: the return is still read
+  from the `CorrelationData`, and the cost is the template's own
+  warning beside ours for each returned reply, a few lines at the 30 s
+  spacing. A private template inside `RabbitReplyPublisher` is the
+  fallback if that warning is a nuisance in the demo logs; a template
+  bean is ruled out. The reviewer's other two points (a second
+  scheduler thread; insert, not save) and Copilot's two wording points
+  were accepted as raised. Choices the tool made within those
+  decisions, for the author to review: the column is nullable with
+  null meaning due at once, so existing rows need no backfill; the
+  delay is a `credit.outbox.publisher` setting so the integration test
+  can shorten it; the unsent index is unchanged; a stopped poll
+  (`BROKER_UNAVAILABLE`) sets no delay. `./mvnw test` on JDK 21 with
+  Docker: 156 tests, 0 failures, including the existing
+  unbound-then-bound integration test after the callback's removal.
+  Pending pull request review.
+
 ## 2026-10-12 — Ryan Ang (credit-service: reply outbox and outbox publisher, issue #170)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (code + tests + docs)

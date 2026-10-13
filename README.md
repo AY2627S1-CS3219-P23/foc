@@ -88,6 +88,8 @@
   round (@Sinnez1), by Claude Code (Fable 5).
   2026-10-12: AI Use Summary extended for the credit reply outbox and
   outbox publisher (issue #170) by Claude Code (Opus 5.5).
+  2026-10-13: the #170 clause extended for the PR #188 review round
+  (Leong Wei Zhi), by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -492,7 +494,12 @@ in the caller's transaction, the scheduled publisher with publisher
 confirms and the mandatory flag, and their tests), written to D10 of
 `docs/credit-service.md`, with the poll interval, the batch cap, the
 confirm wait and what a failed publish does to the rest of a poll
-decided by the team and recorded there and in `ai/usage-log.md`.
+decided by the team and recorded there and in `ai/usage-log.md`; and
+that PR's review fixes (#188: a returned reply waits 30 s before its
+next attempt, on a new `next_attempt_at` column, so that unroutable
+replies cannot fill every batch; the reply row inserted, not saved; no
+returns callback on the shared template; a second scheduler thread),
+the approach to each decided by the team.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their

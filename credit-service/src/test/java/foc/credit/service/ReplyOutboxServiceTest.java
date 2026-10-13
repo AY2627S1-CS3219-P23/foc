@@ -4,6 +4,8 @@
  * Scope: the reply outbox against a real Postgres: a reply is stored
  * with its transaction, not stored when it rolls back, and refused
  * outside one.
+ * 2026-10-13, Claude Code (Opus 5.5), PR #188 review (Leong Wei Zhi):
+ * a repeated event ID is refused and leaves the stored reply alone.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -18,6 +20,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -102,6 +105,21 @@ class ReplyOutboxServiceTest extends PostgresTestContainer {
             .isInstanceOf(IllegalTransactionStateException.class);
 
         assertThat(outboxEvents.findById(eventId)).isEmpty();
+    }
+
+    // save would have merged: the second enqueue would have set the
+    // published reply back to unsent, and it would have gone out again
+    @Test
+    void aRepeatedEventIdIsRefusedAndLeavesTheStoredReplyAsItWas() {
+        transaction.executeWithoutResult(status -> outbox.enqueue(reserved()));
+        OutboxEvent published = outboxEvents.findById(eventId).orElseThrow();
+        published.setSentAt(OCCURRED_AT);
+        outboxEvents.save(published);
+
+        assertThatThrownBy(() -> transaction.executeWithoutResult(status -> outbox.enqueue(reserved())))
+            .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThat(outboxEvents.findById(eventId).orElseThrow().getSentAt()).isEqualTo(OCCURRED_AT);
     }
 
     private CreditReserved reserved() {

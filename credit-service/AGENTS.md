@@ -15,6 +15,10 @@
   insert moving to the repository.
   2026-10-12, Claude Code (Opus 5.5), issue #170: the package map and
   invariants updated for the reply outbox and the outbox publisher.
+  2026-10-13, Claude Code (Opus 5.5), PR #188 review (Leong Wei Zhi):
+  invariants updated for V2, the due-replies poll, the outbox insert
+  and the returns callback; "scheduler" narrowed to the one still
+  missing (Copilot review).
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -37,7 +41,8 @@ IDs (D1–D12) when touching related code.
 | `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, and `RequestEventHandler`, which owns the transaction for one request event |
 | `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), and `DomainEventMessageConverter`, a copy of notification-service's |
 
-No controllers, listener or scheduler yet. The handler already calls
+No controllers, listener or expiry and redistribution scheduler yet
+(the outbox publisher is the only scheduled job). The handler already calls
 `CreditOperations` and `ReplyOutbox`, but nothing calls the handler
 until the listener exists.
 
@@ -49,7 +54,8 @@ until the listener exists.
   but the tests; from here on it is fixed.
 - **The schema follows the design doc's "Database" section**: a schema
   change is a design change, so update the doc with it.
-- **Entities mirror V1.** With `ddl-auto: none` nothing validates the
+- **Entities mirror the migrations** (V1, and V2 for
+  `outbox_event.next_attempt_at`). With `ddl-auto: none` nothing validates the
   mappings at startup; `EntityMappingTest` saves and reads each one back.
   A new column needs a migration, the entity field and that test.
 - **A reply is enqueued inside the transaction that owes it.**
@@ -59,12 +65,28 @@ until the listener exists.
   `outbox_event.payload` as it is, so whatever writes a row writes the
   JSON a consumer reads, `eventType` included.
 - **The outbox publisher marks a reply sent only on `SENT`.** Anything
-  else leaves the row for the next poll. Only a returned reply
-  (`NOT_SENT`) lets the poll go on; a nack, a missing confirm or an
-  unreachable broker (`BROKER_UNAVAILABLE`) stops it. Each reply is
-  marked in its own transaction, never one around the batch. It polls
-  on a fixed delay, not a fixed rate, so one poll never overlaps the
-  next.
+  else leaves the row unsent. Only a returned reply (`NOT_SENT`) lets
+  the poll go on; a nack, a missing confirm or an unreachable broker
+  (`BROKER_UNAVAILABLE`) stops it. Each reply is marked in its own
+  transaction, never one around the batch. It polls on a fixed delay,
+  not a fixed rate, so one poll never overlaps the next.
+- **The poll reads only the replies that are due.** A returned reply
+  gets `next_attempt_at` = now + `unroutable-retry-delay-ms` (30 s) and
+  `OutboxEventRepository.findDue` leaves it out until then. Do not go
+  back to reading every unsent row: replies no queue takes would fill
+  every batch and nothing behind them would be published (PR #188).
+  `BROKER_UNAVAILABLE` sets no delay; those replies are due on the
+  next poll.
+- **A reply is inserted, never saved.** `OutboxEventRepository.save`
+  merges: it reads the row first, and for an event ID already stored
+  would set a published reply back to unsent. `insert` fails on the
+  primary key instead. `save` is for the publisher's updates only.
+- **`RabbitReplyPublisher` registers no returns callback.** The
+  `RabbitTemplate` is the application's shared one and takes a single
+  returns callback; a return is read from the `CorrelationData`
+  without it. The template's "Returned message but no callback
+  available" warning is the accepted cost: do not add a callback to
+  silence it.
 - **The publisher is off in the `test` profile**
   (`credit.outbox.publisher.enabled: false`), as nothing there runs a
   broker; a test that needs it turns it on against Testcontainers.

@@ -7,6 +7,8 @@
  * is in trouble. The last two tests run a poll of three replies through
  * it, for the team's revised decision that a nack or a missing confirm
  * stops the poll.
+ * 2026-10-13, Claude Code (Opus 5.5), PR #188 review (Leong Wei Zhi):
+ * the publisher registers no returns callback on the shared template.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
@@ -118,6 +120,13 @@ class RabbitReplyPublisherTest {
 		assertThePollStopsAtTheSecondReplyWhenItIs(RabbitReplyPublisherTest::neverConfirmed);
 	}
 
+	// the shared template takes one returns callback; a return is read
+	// from the CorrelationData without it (PR #188 review)
+	@Test
+	void noReturnsCallbackIsRegisteredOnTheSharedTemplate() {
+		verify(rabbitTemplate, never()).setReturnsCallback(any());
+	}
+
 	@Test
 	void aNackStopsThePoll() {
 		assertThePollStopsAtTheSecondReplyWhenItIs(RabbitReplyPublisherTest::nacked);
@@ -177,8 +186,8 @@ class RabbitReplyPublisherTest {
 	}
 
 	private OutboxPublisher pollOver(OutboxEventRepository outboxEvents, OutboxEvent... unsent) {
-		when(outboxEvents.findBySentAtIsNullOrderByCreatedAtAsc(Limit.of(BATCH_SIZE))).thenReturn(List.of(unsent));
-		return new OutboxPublisher(outboxEvents, publisher, BATCH_SIZE);
+		when(outboxEvents.findDue(any(Instant.class), eq(Limit.of(BATCH_SIZE)))).thenReturn(List.of(unsent));
+		return new OutboxPublisher(outboxEvents, publisher, BATCH_SIZE, 30_000);
 	}
 
 	private void brokerAnswers(Consumer<CorrelationData> answer) {
