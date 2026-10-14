@@ -78,7 +78,7 @@
 # (D4, D6); the values are the team's.
 # 2026-10-10, Claude Code (Opus 5.5): order-service + order-db wiring
 # added, following the notification-service pattern (RabbitMQ env and
-# depends_on included; no listener/JWT settings). Host ports 8088/5436,
+# depends_on included; no listener/JWT settings). Host ports 8088/5437 (DB moved off 5436 on 2026-10-14, which credit-service uses),
 # the postgres:17 image, and the broker-wiring scope chosen by Ko-Khan
 # via options Q&A.
 # Other services add their own entries in their own PRs.
@@ -458,7 +458,7 @@ services:
     # to it over the compose network on 5432. Bound to loopback so the
     # database is reachable from this machine only.
     ports:
-      - "127.0.0.1:${ORDER_DB_HOST_PORT:-5436}:5432"
+      - "127.0.0.1:${ORDER_DB_HOST_PORT:-5437}:5432"
     environment:
       POSTGRES_DB: ${ORDER_DB_NAME:-order}
       POSTGRES_USER: ${ORDER_DB_USER:-order}
