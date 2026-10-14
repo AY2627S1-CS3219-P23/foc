@@ -26,6 +26,19 @@ Entry template:
 ```
 
 ---
+## 2026-10-15 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** docs
+- **Scope:** PR #187 review items 4 and 5 (Leong Wei Zhi):
+  `order-service/mvnw` committed executable (`100755`);
+  `docs/architecture.md` "Database engine for the Order Service" bullet
+  struck from the open decisions and the Order DB node in
+  `docs/architecture.mmd` labelled PostgreSQL.
+- **Prompt(s):** "You can address 4 and 5". The engine (PostgreSQL 17)
+  was the author's choice when order-db was wired into compose.yaml
+  (2026-10-10); the tool only recorded it.
+- **Author review:** Reviewed via pull request.
+
 ## 2026-10-14 — Ryan Ang (PR #189 review follow-ups)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor, docs
