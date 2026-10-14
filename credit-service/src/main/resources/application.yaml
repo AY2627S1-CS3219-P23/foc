@@ -10,6 +10,10 @@
 # request event handler and topology (the values are the author's).
 # 2026-10-11, issue #169: the sign-up amount and the earned-credit
 # lifetime, read by the credit operations (the values are the team's).
+# 2026-10-12, issue #170: the outbox publisher's poll interval, batch
+# cap and confirm wait (the values are the team's).
+# 2026-10-13, PR #188 review (Leong Wei Zhi): the delay before a returned
+# reply is due again (the team's value), and a second scheduler thread.
 # Author review: Ryan Ang, pending pull request review.
 
 spring:
@@ -24,6 +28,14 @@ spring:
       # Flyway (db/migration) owns the schema; Hibernate never changes it
       ddl-auto: none
     open-in-view: false
+  task:
+    scheduling:
+      pool:
+        # The default is one thread for every @Scheduled job. The outbox
+        # poll can block on a confirm (up to confirm-timeout-ms, longer
+        # while a connection attempt times out), and must not hold up
+        # the expiry and redistribution runs (D12).
+        size: 2
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -66,6 +78,21 @@ credit:
       # this yet: the listener that counts attempts is a later change and
       # must bind this property name. Until then no cap is applied.
       max-attempts: ${CREDIT_RETRY_MAX_ATTEMPTS:5}
+  outbox:
+    publisher:
+      # Delay between the end of one outbox poll and the start of the
+      # next (D10). A delay, not a rate, so polls never overlap.
+      poll-interval-ms: 1000
+      # Most replies published in one poll, so a backlog after an outage
+      # drains over several polls.
+      batch-size: 100
+      # Longest wait for the broker to confirm one reply; after it the
+      # poll stops, and the next poll tries the reply again.
+      confirm-timeout-ms: 5000
+      # How long a reply the broker returned as unroutable waits before
+      # it is due again. Until then the poll does not read it, so
+      # replies no queue takes cannot fill every batch.
+      unroutable-retry-delay-ms: 30000
   # Origin the browser calls this service from (no API gateway)
   web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
   jwt:

@@ -5,6 +5,7 @@
 # the Testcontainers @ServiceConnection.
 # 2026-10-11, PR #175 review (Leong Wei Zhi): the sign-up amount and
 # the earned-credit lifetime pinned.
+# 2026-10-12, issue #170: the outbox publisher off.
 # Author review: Ryan Ang, pending pull request review.
 
 credit:
@@ -19,6 +20,11 @@ credit:
   rabbitmq:
     # no broker in the tests: nothing is declared at startup
     provision-on-startup: false
+  outbox:
+    publisher:
+      # no broker in the tests: the publisher does not poll. The tests
+      # that need it turn it on against a Testcontainers broker
+      enabled: false
 
 spring:
   rabbitmq:
@@ -30,6 +36,6 @@ spring:
 management:
   health:
     rabbit:
-      # no broker in the tests (nothing consumes or publishes yet); the
+      # no broker in the tests (the publisher is off, see above); the
       # deployed service keeps this check, so health reports a lost broker
       enabled: false

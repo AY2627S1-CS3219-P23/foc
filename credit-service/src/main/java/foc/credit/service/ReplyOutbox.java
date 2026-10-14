@@ -2,8 +2,10 @@
  * AI-assisted (CS3219 AI Usage Policy disclosure):
  * Tool: Claude Code (Opus 5.5), 2026-10-10.
  * Scope: the reply outbox interface, with the signature the author
- * supplied; the comments point at docs/credit-service.md. No
- * implementation yet (see NotImplementedReplyOutbox).
+ * supplied; the comments point at docs/credit-service.md. As first
+ * scaffolded it had no implementation, only a stub that threw.
+ * 2026-10-12, issue #170: implemented by ReplyOutboxService; the stub
+ * is gone.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;

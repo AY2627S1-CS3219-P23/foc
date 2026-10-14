@@ -11,8 +11,15 @@
   2026-10-11, Claude Code (Opus 5.5), issue #169: status and contents
   updated for the credit operations implementation; then for the
   amended V1 and the two configuration values.
+<<<<<<< HEAD
   2026-10-13, Claude Code (Opus 5.5), issue #172: status and contents
   updated for the read API, with how to call it.
+=======
+  2026-10-12, Claude Code (Opus 5.5), issue #170: status and contents
+  updated for the reply outbox and the outbox publisher.
+  2026-10-13, Claude Code (Opus 5.5), PR #188 review (Leong Wei Zhi):
+  V2, the 30 s wait of a returned reply and the scheduler threads.
+>>>>>>> 91292b73f6e487eb5fbcd58bfbaf5a7f4f760436
   Author review: Ryan Ang, pending pull request review.
   2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the run
   section's service URL updated for the gateway cutover (#151) — the
@@ -25,12 +32,21 @@
 Credit balances, reservation, transfer and history for FoC — the
 design is [`docs/credit-service.md`](../docs/credit-service.md).
 
+<<<<<<< HEAD
 **Status: the credit operations, the read API, the event handler and
 the broker topology.** The service starts, applies the schema, declares
 its queues and verifies login tokens. A signed-in user can read their
 balance and history. The credit logic that changes balances is
 implemented and tested, but no event reaches it yet: there is no event
 listener or outbox publisher.
+=======
+**Status: the credit operations, the event handler, the reply outbox
+with its publisher, and the broker topology.** The service starts,
+applies the schema, declares its queues and verifies login tokens, and
+the credit logic is implemented and tested, but nothing reaches it yet:
+there are no endpoints or event listener, so no reply is written
+outside the tests.
+>>>>>>> 91292b73f6e487eb5fbcd58bfbaf5a7f4f760436
 
 What is here:
 
@@ -38,6 +54,9 @@ What is here:
   schema from the design doc's "Database" section, with the common
   pool's single row. Flyway owns the schema; Hibernate never changes it
   (`ddl-auto: none`).
+- **Flyway V2** (`V2__outbox_next_attempt_at.sql`): adds
+  `outbox_event.next_attempt_at`. It is applied on the next start of
+  the service; an existing `credit-db` volume is kept.
 - **Entities and repositories** (`entity/`, `repository/`): one JPA
   entity per table and a Spring Data repository for each.
 - **Credit operations** (`service/CreditOperationsService`): get-or-create
@@ -49,6 +68,7 @@ What is here:
   (`CREDIT_SIGN_UP_CREDITS`, default 5) and the months before earned
   credits expire (`CREDIT_EARNED_CREDIT_LIFETIME_MONTHS`, default 3) are
   configuration.
+<<<<<<< HEAD
 - **Read API** (`controller/`, `service/CreditQueryService`): the two
   routes of the design doc's "Read API contract", for the token's user
   only.
@@ -64,13 +84,38 @@ What is here:
 - **Reply outbox interface** (`service/ReplyOutbox`): enqueue a reply
   inside the caller's transaction. Its only implementation is a stub
   that throws `UnsupportedOperationException("not implemented")`.
+=======
+- **Reply outbox** (`service/ReplyOutbox`, `ReplyOutboxService`):
+  enqueue writes the reply as an `outbox_event` row inside the
+  caller's transaction, so it commits with the balance change or not at
+  all. A call outside a transaction is refused. The row is inserted,
+  not saved, so a repeated event ID fails instead of overwriting the
+  reply already stored.
+- **Outbox publisher** (`service/OutboxPublisher`, with
+  `messaging/rabbitmq/RabbitReplyPublisher`): every second, publishes
+  the unsent replies that are due, oldest first and at most 100 in a
+  poll, to the `credit-events` exchange, and marks each one sent once
+  the broker confirmed it without returning it. A reply no queue took
+  stays unsent and is due again 30 s later, with a warning that names
+  its event ID, while the rest of the poll goes on; until then no poll
+  reads it, so such replies cannot fill every batch. Any other failure
+  (the broker unreachable, a nack, no confirm within 5 s) stops the
+  poll until the next one. The interval, the batch, the 5 s confirm
+  wait and the 30 s retry delay are under `credit.outbox.publisher` in
+  `application.yaml`. For each returned reply the log also carries
+  Spring's own "Returned message but no callback available" warning:
+  the publisher registers no returns callback on the shared
+  `RabbitTemplate`, which takes only one.
+- **Scheduler threads**: `spring.task.scheduling.pool.size` is 2, so
+  an outbox poll waiting on the broker does not hold up another
+  `@Scheduled` job.
+>>>>>>> 91292b73f6e487eb5fbcd58bfbaf5a7f4f760436
 - **JWT verification** (`security/`): every route except
   `/actuator/health` needs a bearer token signed with the shared
   `JWT_SECRET`; a missing or invalid one is a 401 problem+json.
 - **Request event handler** (`service/RequestEventHandler`): applies
   one request event in one transaction, calling `CreditOperations` and,
-  for a reservation, `ReplyOutbox`, which is still the stub: a
-  reservation fails at the reply until the real outbox lands.
+  for a reservation, `ReplyOutbox`.
 - **Broker topology** (`messaging/rabbitmq/`): at startup the service
   declares the `request-events` and `credit-events` exchanges and its
   own work, retry and dead-letter queues
