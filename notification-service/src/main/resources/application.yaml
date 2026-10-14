@@ -21,6 +21,9 @@
 # denylist read at STOMP CONNECT (author decision via options Q&A);
 # stale "no API gateway" origin comment refreshed (gateway merged,
 # issue #151).
+# 2026-10-14, PR #185 review (@Sinnez1): Redis repository scanning
+# switched off — the starter's scan logged a store-assignment warning
+# per JPA repository on every start.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -61,6 +64,11 @@ spring:
       port: ${REDIS_PORT:6379}
       connect-timeout: 2s
       timeout: 2s
+      repositories:
+        # Only StringRedisTemplate is used here. Left on, Spring Data
+        # scans the JPA repositories for a Redis store and logs
+        # "Could not safely identify store assignment" for each.
+        enabled: false
 
 notification:
   rabbitmq:

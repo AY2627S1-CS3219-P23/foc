@@ -6,6 +6,8 @@
  * failure).
  * 2026-10-12, issue #67: call sites moved to verify(); no-expiry
  * rejection and jti exposure covered (D23).
+ * 2026-10-14, PR #185 review (@Sinnez1): iat exposure covered — the
+ * D23 check needs it for the per-user reset cutoff (G11).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.security;
@@ -19,6 +21,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Date;
 import javax.crypto.SecretKey;
 import org.junit.jupiter.api.Test;
@@ -106,6 +109,26 @@ class JwtVerifierTest {
 				.compact();
 
 		assertThat(verifier.verify(token).jti()).isEqualTo("jti-1");
+	}
+
+	@Test
+	void exposesIssuedAtWhenPresent() {
+		Instant issuedAt = Instant.ofEpochSecond(1_760_000_000L);
+		String token = Jwts.builder()
+				.subject("usr-req-1001")
+				.issuedAt(Date.from(issuedAt))
+				.expiration(new Date(System.currentTimeMillis() + 60_000))
+				.signWith(key(SECRET))
+				.compact();
+
+		assertThat(verifier.verify(token).issuedAt()).isEqualTo(issuedAt);
+	}
+
+	@Test
+	void issuedAtIsOptional() {
+		String token = token("usr-req-1001", new Date(System.currentTimeMillis() + 60_000), SECRET);
+
+		assertThat(verifier.verify(token).issuedAt()).isNull();
 	}
 
 	@Test

@@ -23,6 +23,9 @@
   denylist read — author decision via options Q&A), the D10 note
   extended, the stale "no API gateway" wording in Session mechanics
   fixed, and the provisional client policy rewritten as implemented.
+  2026-10-14, Claude Code (Fable 5), PR #185 review (@Sinnez1): D23
+  extended to the per-user reset cutoff (G11) and its CONNECT-only
+  timing recorded as an accepted limit.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -69,7 +72,7 @@ the team's finalized design for this service. Superseded decisions
 | D20 | Dead-letter exchange form | **The default exchange (`""`)** serves as the dead-letter exchange on both legs — see [Failure handling](#failure-handling-d6d7-d20d21) | minimal topology |
 | D21 | Unconvertible-message path | **Dead-letter on first rejection**, skipping the retry queue — retrying a message that cannot convert could never succeed | Notif F2.3 |
 | D22 | Event vocabulary | **`request` replaces `order`** across classes, routing keys, exchange and queue names, and fixtures; `foc-contracts` split into `events.core` / `events.request` packages. A one-time pre-production break (no producer existed yet) | consistency with the D1 backlog |
-| D23 | WebSocket revocation check | **This service checks `EXISTS denylist:<jti>` itself at STOMP CONNECT** — the token travels in the CONNECT frame, which never reaches the gateway's access phase. jti-less tokens skip the check; a Redis failure **fails open** behind finite 2 s timeouts (G6 semantics). A deliberate, narrow exception to gateway decision G4 | closes [`gateway.md`](gateway.md)'s logged-out-socket known limit |
+| D23 | WebSocket revocation check | **This service makes the gateway's denylist lookups itself at STOMP CONNECT** — the token travels in the CONNECT frame, which never reaches the gateway's access phase. Both key shapes: `EXISTS denylist:<jti>` for a logged-out token (G10) and the account's `denylist:user:<id>` cutoff stamp, which refuses a token whose `iat` is strictly before it (G11, a password reset). A token missing the claim a lookup needs skips that lookup, and a Redis failure **fails open** behind finite 2 s timeouts (G6 semantics). The check runs at CONNECT only (see Session mechanics). A deliberate, narrow exception to gateway decision G4 | closes [`gateway.md`](gateway.md)'s logged-out-socket known limit |
 
 ## Components
 
@@ -352,14 +355,23 @@ Why the push channel is centralized here rather than per service:
   the platform user ID, the same ID in event `parties[]` and
   notification `recipientId`, which is what `/user/...` routing matches
   on. The interceptor also rejects **revoked** tokens via the D23
-  denylist lookup. Invalid, revoked or missing tokens reject the
-  CONNECT with a STOMP ERROR frame and the session closes.
+  denylist lookups — the token's own key and the account's password-
+  reset cutoff. Invalid, revoked or missing tokens reject the CONNECT
+  with a STOMP ERROR frame and the session closes.
 - **Destination:** clients subscribe to `/user/queue/notifications`;
   the push listener sends each stored notification there after the
   processor's transaction commits (`AFTER_COMMIT`) — well inside the
   5 s budget. Push is best-effort: an offline user misses the frame and
   catches up via the REST list (F3.1).
 - **Heartbeats:** 10 s / 10 s both directions.
+- **Accepted limit — revocation is checked at CONNECT only** (PR #185
+  review): the denylist lookups run once, when the session opens. An
+  already-open session keeps receiving pushes after that token is
+  logged out elsewhere, after a password reset, and past the token's
+  own `exp`, until the socket closes. The SPA closes its own socket on
+  logout, so the exposure is a second session holding the same
+  token — bounded by that session's lifetime. Re-checking on a timer
+  or disconnecting on a revocation event is not implemented.
 - **Client policy** (implemented under issue #67): a single STOMP
   client for the whole SPA, owned by a `NotificationProvider` layout
   route in the shared app shell. Native WebSocket only — no

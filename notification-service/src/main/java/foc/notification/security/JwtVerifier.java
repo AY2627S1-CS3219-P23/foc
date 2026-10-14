@@ -9,6 +9,9 @@
  * verifiedSubject() — exp is now required (jjwt only checks a present
  * exp; parity with the other services' verifiers, PR #91/#143) and the
  * jti is exposed for the D23 denylist check at STOMP CONNECT.
+ * 2026-10-14, Claude Code (Fable 5), PR #185 review (@Sinnez1): iat is
+ * exposed too — the D23 check also needs it for the per-user cutoff
+ * stamp a password reset writes (gateway decision G11).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.security;
@@ -20,6 +23,8 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.Date;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -53,13 +58,16 @@ public class JwtVerifier {
 
 	/**
 	 * The verified caller: the subject (platform user ID) that
-	 * user-destination routing matches on, plus the jti the D23
-	 * denylist check looks up. jti stays optional — every minted token
-	 * carries one, but revocation is the only thing that needs it, so
-	 * its absence skips the check rather than refusing the session
-	 * (same stance as the gateway's auth.lua).
+	 * user-destination routing matches on, plus the jti and issue time
+	 * the D23 denylist check looks up — the jti against
+	 * {@code denylist:<jti>}, the issue time against the account's
+	 * {@code denylist:user:<id>} cutoff stamp (G11). Both stay
+	 * optional: every minted token carries them, but revocation is the
+	 * only thing that needs them, so an absent claim skips its check
+	 * rather than refusing the session (same stance as the gateway's
+	 * auth.lua).
 	 */
-	public record VerifiedToken(String subject, String jti) {
+	public record VerifiedToken(String subject, String jti, Instant issuedAt) {
 	}
 
 	/**
@@ -87,6 +95,8 @@ public class JwtVerifier {
 		if (claims.getExpiration() == null) {
 			throw new MalformedJwtException("token has no expiry");
 		}
-		return new VerifiedToken(subject, claims.getId());
+		Date issuedAt = claims.getIssuedAt();
+		return new VerifiedToken(subject, claims.getId(),
+				issuedAt == null ? null : issuedAt.toInstant());
 	}
 }

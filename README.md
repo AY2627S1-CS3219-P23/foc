@@ -105,6 +105,8 @@
   follow-ups, by Claude Code (Opus 5.5).
   2026-10-14: AI Use Summary extended for the credit request event
   listener (issue #171) by Claude Code (Opus 5.5).
+  2026-10-14: the #67 clause extended for the PR #185 human-review
+  round (@Sinnez1), by Claude Code (Fable 5).
   2026-10-16: the #171 clause extended for the PR #190 review round
   (Leong Wei Zhi), by Claude Code (Opus 5.5); same day, again for its
   re-review.
@@ -595,12 +597,19 @@ merged earlier in PR #74): the web notification client
 reconnect/backoff, and the bell's unread badge), the notification-service
 JWT verifier's missing-expiry fix, and the D23 CONNECT-time Redis
 denylist read (port + adapter, interceptor check, ArchUnit rule,
-compose/.env wiring) with the matching doc updates (`docs/
-notification-service.md` D23, `docs/gateway.md` known-limit retirement).
+compose/.env wiring) with the matching doc updates
+(`docs/notification-service.md` D23, `docs/gateway.md` known-limit
+retirement).
 The scope decisions (badge-only UI, native WebSocket without
 sockjs-client, folding the expiry fix in, service-side denylist read as
 a narrow G4 exception) were made by Leong Wei Zhi via neutral options
 Q&A, recorded in `docs/notification-service.md` and `ai/usage-log.md`.
+The PR #185 review round (@Sinnez1) extended that denylist read to the
+G11 per-user reset cutoff (the jti lookup alone let a pre-reset token
+still open a socket), recorded the CONNECT-only timing as an accepted
+limit in both design docs, and switched off the Redis starter's
+repository scan; the Copilot round before it fixed the bell's
+accessible name.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

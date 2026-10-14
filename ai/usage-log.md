@@ -3875,3 +3875,32 @@ Entry template:
   Summary extended for the #67 remaining scope, which the PR had missed
   (policy: the summary stays current).
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-14 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** review fixes + documentation (PR #185 review by @Sinnez1)
+- **Prompt(s):** Asked to resolve the PR #185 review comments. The
+  blocking finding offered two routes (implement the check or correct
+  the docs); the review's own wording asked for the check, which is
+  what the gateway already does for REST — implemented rather than put
+  back to the author as a new decision, since G11 was already the
+  author's.
+- **Scope:** `origin/main` merged into the branch first (the branch's
+  `docs/gateway.md` edits predated #179, so the merge keeps main's G11
+  rows and request-flow note). (1) Reset cutoff at CONNECT —
+  `JwtVerifier.VerifiedToken` exposes `iat`; `TokenDenylist` gains
+  `isUserRevokedSince`; `RedisTokenDenylist` reads
+  `denylist:user:<id>` and compares strictly, like `auth.lua`
+  (unparseable stamp and Redis error both fail open);
+  `JwtChannelInterceptor` runs both lookups in the gateway's order.
+  (2) Docs: D23 extended to both key shapes, and the CONNECT-only
+  timing recorded as an accepted limit in `docs/notification-service.md`
+  (Session mechanics) with the matching entry in `docs/gateway.md`'s
+  known limits — the reviewer's second finding. (3)
+  `spring.data.redis.repositories.enabled: false` in both yamls, which
+  stops the starter scanning the JPA repositories for a Redis store
+  (the reviewer's startup-log nit). Tests: 5 adapter cases, 2 verifier
+  cases, 3 CONNECT cases (pre-cutoff rejected, post-cutoff and
+  iat-less accepted) — notification-service 53 run, the 2 pre-existing
+  Java-26 AMQP context-restart errors unchanged.
+- **Author review:** Pending author review of the diff via the PR.

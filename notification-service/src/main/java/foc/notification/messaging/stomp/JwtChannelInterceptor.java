@@ -10,6 +10,9 @@
  * per the author's D23 decision (options Q&A) — a revoked jti rejects
  * the CONNECT; a Redis failure fails open inside the TokenDenylist
  * port.
+ * 2026-10-14, Claude Code (Fable 5), PR #185 review (@Sinnez1): the
+ * per-user cutoff a password reset stamps (G11, PR #179) is checked
+ * too — the jti lookup alone let a pre-reset token open a session.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.stomp;
@@ -28,8 +31,9 @@ import org.springframework.stereotype.Component;
 
 /**
  * Authenticates STOMP sessions at CONNECT: verifies the bearer JWT,
- * rejects revoked tokens (D23 — the CONNECT-frame token is the one
- * bearer the gateway's denylist check can never see), and attaches a
+ * rejects revoked tokens — logged out or outlawed by their account's
+ * reset cutoff (D23 — the CONNECT-frame token is the one bearer the
+ * gateway's denylist check can never see), and attaches a
  * {@link StompPrincipal} named by the token's {@code sub} to the
  * session, which later frames and user-destination routing inherit. A
  * throw here makes the sub-protocol handler send a STOMP ERROR frame
@@ -71,11 +75,24 @@ class JwtChannelInterceptor implements ChannelInterceptor {
 		}
 		// Outside the catch: a denylist failure already failed open to
 		// false inside the port, so a throw from here is a real reject.
-		// A jti-less token skips the lookup, like the gateway's auth.lua.
-		if (verified.jti() != null && tokenDenylist.isRevoked(verified.jti())) {
+		if (isRevoked(verified)) {
 			throw new MessagingException("token revoked");
 		}
 		accessor.setUser(new StompPrincipal(verified.subject()));
 		return message;
+	}
+
+	/**
+	 * Both of the gateway's revocation lookups, in its order (auth.lua):
+	 * the token's own denylist key, then the account's reset cutoff. A
+	 * token missing the claim a lookup needs skips that lookup rather
+	 * than being refused — same stance as the gateway.
+	 */
+	private boolean isRevoked(JwtVerifier.VerifiedToken verified) {
+		if (verified.jti() != null && tokenDenylist.isRevoked(verified.jti())) {
+			return true;
+		}
+		return verified.issuedAt() != null
+				&& tokenDenylist.isUserRevokedSince(verified.subject(), verified.issuedAt());
 	}
 }

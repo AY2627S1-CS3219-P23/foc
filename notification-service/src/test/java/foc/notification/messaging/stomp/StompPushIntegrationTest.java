@@ -12,6 +12,8 @@
  * 2026-10-12, issue #67: D23 denylist cases added against a fake
  * in-memory TokenDenylist (the Redis mechanics have their own unit
  * test; this context stays Docker- and Redis-free).
+ * 2026-10-14, PR #185 review (@Sinnez1): per-user reset-cutoff CONNECT
+ * cases added (G11), driven through the same fake.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.stomp;
@@ -37,6 +39,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
@@ -79,17 +82,32 @@ class StompPushIntegrationTest {
 	/** Revoked jtis for the fake denylist; cleared after each test. */
 	private static final Set<String> REVOKED_JTIS = ConcurrentHashMap.newKeySet();
 
+	/** Per-user reset cutoffs (G11) for the fake denylist. */
+	private static final ConcurrentMap<String, Instant> USER_CUTOFFS = new ConcurrentHashMap<>();
+
 	/**
 	 * Replaces the Redis adapter so the D23 interceptor path is
-	 * exercised without a running Redis — its fail-open mechanics are
-	 * covered by RedisTokenDenylistTest.
+	 * exercised without a running Redis — the key shapes, the strict
+	 * iat comparison and the fail-open mechanics are covered by
+	 * RedisTokenDenylistTest.
 	 */
 	@TestConfiguration
 	static class FakeDenylistConfig {
 		@Bean
 		@Primary
 		TokenDenylist fakeTokenDenylist() {
-			return REVOKED_JTIS::contains;
+			return new TokenDenylist() {
+				@Override
+				public boolean isRevoked(String jti) {
+					return REVOKED_JTIS.contains(jti);
+				}
+
+				@Override
+				public boolean isUserRevokedSince(String subject, Instant issuedAt) {
+					Instant cutoff = USER_CUTOFFS.get(subject);
+					return cutoff != null && issuedAt.isBefore(cutoff);
+				}
+			};
 		}
 	}
 
@@ -113,6 +131,7 @@ class StompPushIntegrationTest {
 		});
 		sessions.clear();
 		REVOKED_JTIS.clear();
+		USER_CUTOFFS.clear();
 	}
 
 	private static String token(String userId) {
@@ -120,9 +139,14 @@ class StompPushIntegrationTest {
 	}
 
 	private static String token(String userId, String jti) {
+		return token(userId, jti, Instant.now());
+	}
+
+	private static String token(String userId, String jti, Instant issuedAt) {
 		return Jwts.builder()
 				.subject(userId)
 				.id(jti)
+				.issuedAt(issuedAt == null ? null : Date.from(issuedAt))
 				.expiration(new Date(System.currentTimeMillis() + 60_000))
 				.signWith(Keys.hmacShaKeyFor(TEST_SECRET.getBytes(StandardCharsets.UTF_8)))
 				.compact();
@@ -301,6 +325,45 @@ class StompPushIntegrationTest {
 		// look up, not a reason to refuse the session.
 		StompSession session = connect(rawWebSocketClient(),
 				"ws://localhost:" + port + "/ws/websocket", "Bearer " + token("usr-rev-3"));
+
+		assertThat(session.isConnected()).isTrue();
+	}
+
+	@Test
+	void rejectsConnectWithTokenIssuedBeforeThePasswordResetCutoff() {
+		// G11 (PR #185 review): a reset stamps the account's cutoff
+		// instead of each outstanding jti, so the jti lookup alone would
+		// let this token open a session until its own exp.
+		Instant issuedAt = Instant.now().minusSeconds(600);
+		USER_CUTOFFS.put("usr-cut-1", issuedAt.plusSeconds(1));
+
+		assertThatThrownBy(() -> connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket",
+				"Bearer " + token("usr-cut-1", "live-jti", issuedAt)))
+				.isInstanceOf(Exception.class);
+	}
+
+	@Test
+	void connectsWithTokenIssuedAfterThePasswordResetCutoff() throws Exception {
+		Instant cutoff = Instant.now().minusSeconds(600);
+		USER_CUTOFFS.put("usr-cut-2", cutoff);
+
+		StompSession session = connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket",
+				"Bearer " + token("usr-cut-2", "live-jti", cutoff.plusSeconds(1)));
+
+		assertThat(session.isConnected()).isTrue();
+	}
+
+	@Test
+	void connectsWithTokenCarryingNoIssuedAt() throws Exception {
+		// Parity with auth.lua: a missing iat skips the cutoff lookup
+		// rather than refusing the session.
+		USER_CUTOFFS.put("usr-cut-3", Instant.now());
+
+		StompSession session = connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket",
+				"Bearer " + token("usr-cut-3", "live-jti", null));
 
 		assertThat(session.isConnected()).isTrue();
 	}
