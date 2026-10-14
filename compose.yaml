@@ -81,6 +81,10 @@
 # depends_on included; no listener/JWT settings). Host ports 8088/5437 (DB moved off 5436 on 2026-10-14, which credit-service uses),
 # the postgres:17 image, and the broker-wiring scope chosen by Ko-Khan
 # via options Q&A.
+# 2026-10-14, Claude Code (Opus 5.5): order-service host port removed on
+# rebasing onto the gateway cutover (issue #151, PR review): like the
+# other backends it has no published port and is reached only through
+# the gateway's /api/order/** prefix (docs/gateway.md).
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -430,8 +434,6 @@ services:
     build:
       context: .
       dockerfile: order-service/Dockerfile
-    ports:
-      - "${ORDER_SERVICE_PORT:-8088}:8080"
     environment:
       ORDER_DB_HOST: order-db
       ORDER_DB_PORT: "5432"

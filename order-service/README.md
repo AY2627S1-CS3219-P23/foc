@@ -36,5 +36,6 @@ curl localhost:8080/actuator/health
 # Full stack (from the repo root; copy .env.example to .env first and
 # set ORDER_DB_PASSWORD and RABBITMQ_PASSWORD)
 docker compose up --build order-service
-curl localhost:8088/actuator/health
+# No host port since the gateway cutover (issue #151): the service is
+# reached through the gateway at /api/order/** (docs/gateway.md).
 ```
