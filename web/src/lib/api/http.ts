@@ -23,6 +23,11 @@
 // PR #182 review (@Sinnez1): the handler is given the token the refused
 // request carried, so AuthProvider can ignore a 401 that answers an
 // older token instead of ending whichever session is live now.
+// 2026-10-14, Claude Code (Opus 5), PR #182 re-review (@Sinnez1): the
+// bearer scheme is matched case-insensitively, as the gateway matches
+// it, and a handler that throws no longer replaces the ApiError callers
+// match on (err.status === 401, errorMessage()).
+// Author review: Leong Wei Zhi to review via the PR.
 
 import { serviceBaseUrls, type ServiceName } from './config'
 
@@ -139,24 +144,32 @@ export async function apiFetch<T>(
   // the bearer token this request goes out with, read back off the
   // headers so a caller-supplied Authorization counts the same as an
   // injected one. Kept for the 401 below: the handler needs to know
-  // which token was refused, not just that one was sent.
-  const sentAuth = headers.get('Authorization')
-  const sentToken = sentAuth?.startsWith('Bearer ')
-    ? sentAuth.slice('Bearer '.length)
-    : null
+  // which token was refused, not just that one was sent. The scheme is
+  // matched case-insensitively, as the gateway matches it — a header
+  // the gateway accepts and can answer 401 must reach the handler.
+  const sentToken =
+    /^bearer\s+(.+)$/i.exec(headers.get('Authorization') ?? '')?.[1] ?? null
 
   const res = await fetch(`${baseUrl}${path}`, { ...request, headers })
 
   if (!res.ok) {
     const problem = (await res.json().catch(() => null)) as ProblemDetail | null
+    const error = new ApiError(res.status, problem, retryAfterSeconds(res))
     // a 401 despite a token means the session is dead (revoked by an
     // admin action or password reset, expired, or malformed) — tell the
     // auth owner before throwing, so the user is signed out instead of
-    // stranded on a page whose every call fails (issue #178)
+    // stranded on a page whose every call fails (issue #178). Whatever
+    // the handler does is its own business: callers were promised an
+    // ApiError for a failed response, so its failure is logged, not
+    // raised in place of one.
     if (res.status === 401 && sentToken) {
-      onUnauthorized(sentToken)
+      try {
+        onUnauthorized(sentToken)
+      } catch (err) {
+        console.error('unauthorized handler failed', err)
+      }
     }
-    throw new ApiError(res.status, problem, retryAfterSeconds(res))
+    throw error
   }
   if (res.status === 204) {
     return undefined as T

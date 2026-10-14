@@ -20,6 +20,7 @@
 // once read, so the notice doesn't come back when /login is reloaded.
 // 2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei Zhi):
 // clearing the state keeps the URL's query and hash.
+// Reviewed by: Ryan Ang (everything above).
 // 2026-10-12, Claude Code (Fable 5), issue #178: "session ended" notice,
 // shown when AuthProvider forces a sign-out after a 401 on a
 // token-bearing request (owner decision via options Q&A). Carried by
@@ -32,7 +33,7 @@
 // also subscribes to the flag, so a 401 arriving while it is already
 // open shows the notice then — rather than being skipped and surfacing
 // on the next visit, after a manual logout.
-// Reviewed by: Ryan Ang
+// Reviewed by: Ryan Ang (@Sinnez1), PR #182 review rounds.
 
 import React, { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
@@ -63,6 +64,10 @@ export function Login() {
   // on arrival, and subscribed to for the 401 that lands while this page
   // is already open. Either way the flag is consumed, so it can't show
   // up on a later visit — after a plain manual logout, say.
+  // Read and clear are deliberately separate: StrictMode invokes a
+  // useState initializer twice, so a read-and-clear in there would spend
+  // the flag on a call whose result React may discard. The effect below
+  // clears what the first render read.
   const [sessionEnded, setSessionEnded] = useState(sessionEndedFlag)
   useEffect(() => {
     // takes the flag the first render above already read

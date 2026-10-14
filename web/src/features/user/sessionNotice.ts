@@ -15,7 +15,13 @@
 // the flag then survived to a later visit, where the notice appeared
 // after a plain manual logout. The page subscribes and consumes it
 // whichever way it arrives.
-// Author review: Leong Wei Zhi to review via the PR.
+// 2026-10-14, Claude Code (Opus 5), PR #182 re-review (@Sinnez1): the
+// forced sign-out no longer navigates at all — it clears the session and
+// ProtectedRoute's own bounce takes a gated page to /login — so there is
+// no navigation of its own to attach state to, and AuthProvider only
+// raises the flag when the user ends up at the login form (a gated page
+// or /login itself). Nothing else changes here.
+// Author review: Leong Wei Zhi; Ryan Ang to re-review via PR #182.
 
 let sessionEnded = false
 const listeners = new Set<() => void>()

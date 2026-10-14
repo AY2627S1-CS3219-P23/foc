@@ -3935,6 +3935,47 @@ Entry template:
   clean on the touched files; the diff reviewed via the PR.
 
 ## 2026-10-14 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debugging assistance, refactoring (PR #182 second review
+  round by @Sinnez1)
+- **Prompt(s):** Asked to resolve the PR #182 review comments. Eight of
+  the nine findings were defects with a stated fix direction, so no
+  decision was put to the author. The ninth asked a behaviour question
+  — whether a forced sign-out should redirect a visitor off a public
+  page, and whether to return them to the page afterwards — which was
+  put to Leong Wei Zhi as neutral options and answered: clear the
+  session in place on public pages (no redirect, no notice), and leave
+  return-to-location alone, as no flow in the app has it today.
+- **Scope:** (1) `AuthProvider` compares the refused token with what
+  `localStorage` holds at call time instead of the token of the last
+  committed render: the rendered value lags `login()`'s `setToken` by a
+  render, and another tab can have stored a newer session under the
+  shared key — the handler was clearing both. (2) The notice and the
+  redirect are limited to the case where the user ends up at the login
+  form (a route behind `ProtectedRoute`, which carries a new
+  `handle.requiresSession` in `src/routes/index.tsx`, or `/login`
+  itself); the handler no longer navigates at all, since clearing the
+  token makes `ProtectedRoute` bounce a gated page on its own. (3) The
+  layout effect unregisters the handler and the token source on
+  unmount. (4) `web/src/lib/api/http.ts` — a handler that throws is
+  logged rather than raised in place of the `ApiError` callers match
+  on, and the bearer scheme is matched case-insensitively, as the
+  gateway matches it. (5) `web/src/features/user/useLocalStorage.tsx` —
+  `readStoredValue` added for (1); the hook is unchanged.
+  (6) `web/src/test/auth.test.tsx` — a case per blocking finding, each
+  verified to fail without its fix, and the double-wrapped `me` fixture
+  the reviewer spotted is unwrapped; `web/src/test/http.test.ts` (new)
+  — the two apiFetch contracts above. (7) File-header review notes
+  split per entry, as the reviewer asked.
+- **Not changed:** the login page still reads the notice flag in a
+  `useState` initializer and clears it in an effect rather than in one
+  read-and-clear call — StrictMode invokes an initializer twice, which
+  would spend the flag on a call whose result React may discard. The
+  reviewer left this one optional.
+- **Author review:** web 113/113 (vitest), `tsc -b`, eslint, prettier
+  clean on the touched files; the diff reviewed via the PR.
+
+## 2026-10-14 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** review fixes + documentation (PR #185 review by @Sinnez1)
 - **Prompt(s):** Asked to resolve the PR #185 review comments. The

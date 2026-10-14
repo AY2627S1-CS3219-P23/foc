@@ -647,7 +647,18 @@ token the refused request carried, so a 401 answering a replaced token
 no longer ends the session the user has just started; and the notice
 is published to the login page rather than read at mount only, so a
 401 arriving while that page is open shows it there instead of saving
-it for a later visit.
+it for a later visit. The second review round (@Sinnez1) added four
+more defect fixes — the refused token is compared with what
+localStorage holds rather than with the last rendered session (so
+neither another tab's newer session nor one stored a render ago is
+cleared), the handler and token source are unregistered when the
+provider unmounts, a failing handler no longer replaces the ApiError
+callers match on, and the bearer scheme is matched case-insensitively
+as the gateway matches it — plus one behaviour question put to Leong
+Wei Zhi via neutral options Q&A (2026-10-14): on a page that needs no
+session the dead token is now dropped in place, with no redirect and
+no notice, and the redirect for a session-gated page is
+ProtectedRoute's own bounce.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
