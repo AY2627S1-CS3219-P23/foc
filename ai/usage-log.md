@@ -26,6 +26,56 @@ Entry template:
 ```
 
 ---
+## 2026-10-14 — Ryan Ang (credit-service: request event listener, issue #171)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Scope:** `credit-service/`.
+  - `messaging/rabbitmq/RequestEventsListener`: consumes
+    `credit-service.request-events` with manual acknowledgement and
+    hands each event to `RequestEventHandler`. `HANDLED` is acked after
+    the handler's transaction commits; `INVALID_STATE` is nacked
+    without requeue, so it is dead-lettered at once; any exception
+    (including `ReservationNotFoundException`) is republished to the
+    retry queue until `credit.rabbitmq.retry.max-attempts`, then
+    dead-lettered. Each settled delivery logs its event type, event
+    ID, request and outcome.
+  - Tests: `RequestEventsListenerTest` (mocked: each outcome, the
+    attempt header, the cap, and a nacked, returned or unconfirmed
+    retry copy leaving the original unsettled) and
+    `RequestEventsListenerIntegrationTest` (Testcontainers RabbitMQ and
+    Postgres: a reservation with its reply in the outbox, a duplicate
+    delivery changing nothing, a completion that overtook its
+    reservation transferred on a retry, a completion with no
+    reservation retried then dead-lettered, a conflict dead-lettered
+    without a retry, and a fractional reward dead-lettered on first
+    delivery).
+  - The service's README and AGENTS.md, and the README's AI Use
+    Summary updated.
+- **Prompt(s):** The scope of issue #171, on
+  `feat/credit-event-listener`.
+- **Author review:** The settlement rules, the retry delay and the
+  attempt cap are the team's, from `docs/credit-service.md` D11 and
+  issue #171; the design doc is unchanged. Choices the tool made for
+  the author to review, following notification-service's
+  `DomainEventsListener`: attempts counted in an `x-retry-attempts`
+  header the listener stamps, since RabbitMQ 4 resets `x-death` on a
+  client republish; the original acked only after the retry copy is
+  confirmed, and left unacked if the copy is nacked, returned or not
+  confirmed within 5 s. One difference from notification-service: the
+  retry copy is confirmed through a `CorrelationData` future, because
+  this service uses correlated publisher confirms (PR #188) and
+  notification-service's `waitForConfirmsOrDie` needs simple ones. The
+  listener container keeps Boot's defaults (one consumer). A retry copy
+  the broker does not accept requeues the original at once (it was
+  left unacknowledged, so stuck until the channel closed), recorded as
+  a row in the design doc's failure table, and that the two
+  dead-letters the listener decides are logged at ERROR. The cap is
+  now asserted as total attempts, and a `request.submitted` with no
+  requester is shown to be dead-lettered on first delivery by the
+  converter. Four unit tests now cover the requeue (a nacked, returned,
+  unconfirmed or unsendable retry copy).
+  Pending pull request review.
+
 ## 2026-10-13 — Ryan Ang (PR #188 review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** review assistance, refactoring, tests, docs

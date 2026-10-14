@@ -55,6 +55,9 @@
   only the unsent replies that are due, so replies no queue takes
   cannot fill every batch and hold back the ones behind them. Still no
   cap on attempts.
+  2026-10-14, issue #171, team decision transcribed: when the broker
+  does not accept a failed event's retry copy, the original is
+  requeued at once instead of being left unacknowledged.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -589,6 +592,7 @@ tests.
 | A `request.completed` arrives before its reservation (its `request.submitted` is still in the retry queue) | Retried, then dead-lettered after the attempt cap. A retry that finds the `HELD` record transfers it as usual |
 | Credit Service is down when delivery is confirmed | The Order Service completes the request regardless. The transfer runs when the Credit Service is back. |
 | Database is briefly unavailable while an event is processed | The event goes to the retry queue and is redelivered after the retry delay (2 s); after the maximum attempts (5) it is dead-lettered for inspection |
+| An event failed, and the broker does not accept its copy for the retry queue (nacked, returned, or not confirmed within 5 s) | The original is requeued at once, without using up an attempt, rather than left unacknowledged and invisible until the service restarts. It is redelivered straight away, so it repeats only while the broker keeps refusing the copy with the connection still up |
 | A user's lot expires while its credits are held | Nothing happens to the held credits. If the request is released later, the slice returns to its lot, which is past its expiry, and the next expiry run moves it to the pool. |
 | Scheduler runs twice for one month (restart, overlap, or more than one instance) | The unique `period` key lets only one run commit |
 

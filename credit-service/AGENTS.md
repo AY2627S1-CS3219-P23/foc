@@ -19,6 +19,8 @@
   invariants updated for V2, the due-replies poll, the outbox insert
   and the returns callback; "scheduler" narrowed to the one still
   missing (Copilot review).
+  2026-10-14, Claude Code (Opus 5.5), issue #171: the package map,
+  status and invariants updated for the request event listener.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -39,12 +41,10 @@ IDs (D1–D12) when touching related code.
 | `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
 | `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, and `RequestEventHandler`, which owns the transaction for one request event |
-| `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), and `DomainEventMessageConverter`, a copy of notification-service's |
+| `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), `RequestEventsListener` (settles each request event on the handler's outcome: ack, dead-letter, or a confirmed republish to the retry queue), and `DomainEventMessageConverter`, a copy of notification-service's |
 
-No controllers, listener or expiry and redistribution scheduler yet
-(the outbox publisher is the only scheduled job). The handler already calls
-`CreditOperations` and `ReplyOutbox`, but nothing calls the handler
-until the listener exists.
+No controllers or expiry and redistribution scheduler yet (the outbox
+publisher is the only scheduled job).
 
 ## Invariants — do not break
 
@@ -100,8 +100,9 @@ until the listener exists.
 - **Lots change only under their owner's account lock**, and locks are
   taken in the design doc's order (D2): reservation, accounts by
   ascending user ID, then the common pool.
-- **`CreditOperationsServiceTest` and
-  `RequestEventHandlerCreditOperationsTest` commit**, so they never clean
+- **`CreditOperationsServiceTest`,
+  `RequestEventHandlerCreditOperationsTest` and
+  `RequestEventsListenerIntegrationTest` commit**, so they never clean
   up and every test uses fresh IDs. The first one's after-each checks read the whole
   database: a test elsewhere that commits credit rows must keep the
   doc's invariants too.
@@ -111,6 +112,17 @@ until the listener exists.
 - **Broker types stay in `messaging/rabbitmq/`.** `service/` imports
   none; the handler returns an outcome and the listener settles the
   delivery.
+- **The listener acknowledges only after the handler returns**, so the
+  transaction has committed first (D11). `HANDLED` is acked,
+  `INVALID_STATE` nacked without requeue (straight to the DLQ), and any
+  exception republished to the retry queue until
+  `credit.rabbitmq.retry.max-attempts`, then dead-lettered. Attempts
+  are counted in the listener's `x-retry-attempts` header, never
+  `x-death`, which RabbitMQ 4 resets on every client republish. The
+  original is acked only once the retry copy is confirmed and not
+  returned; otherwise it is requeued at once (design doc failure
+  table), never dropped and never left unacked. The two dead-letters
+  the listener decides are logged at ERROR.
 - **What each operation answers is specified** in the design doc ("What
   each operation answers"); the handler depends on it.
 - **Amounts are integers** (Credit F1.2); balances never go negative
