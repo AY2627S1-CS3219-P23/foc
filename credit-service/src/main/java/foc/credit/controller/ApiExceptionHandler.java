@@ -4,6 +4,9 @@
  * Scope: the "Error mapping" component of docs/credit-service.md: the
  * read API's invalid query parameters answered 400 problem+json, the
  * error format the web client reads ("Read API contract", "Errors").
+ * 2026-10-14, PR #189 review (Leong Wei Zhi): a type mismatch on a
+ * parameter that is neither an instant nor an integer reads "must be a
+ * valid value", per the reviewer's comment.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.controller;
@@ -35,9 +38,15 @@ public class ApiExceptionHandler {
     // for a number, a date alone or an instant with no offset
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
-        String expected = OffsetDateTime.class.equals(ex.getRequiredType())
-            ? "a full ISO-8601 instant with an offset, such as 2026-10-10T08:00:00Z"
-            : "an integer";
+        Class<?> required = ex.getRequiredType();
+        String expected;
+        if (OffsetDateTime.class.equals(required)) {
+            expected = "a full ISO-8601 instant with an offset, such as 2026-10-10T08:00:00Z";
+        } else if (Integer.class.equals(required) || int.class.equals(required)) {
+            expected = "an integer";
+        } else {
+            expected = "a valid value";
+        }
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getName() + " must be " + expected);
     }
 }

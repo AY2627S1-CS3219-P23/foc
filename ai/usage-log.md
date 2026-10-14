@@ -26,6 +26,25 @@ Entry template:
 ```
 
 ---
+## 2026-10-14 — Ryan Ang (PR #189 review follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, docs
+- **Scope:** `credit-service/`, following review
+  comments on PR #189.
+  - `service/CreditOperationsService.getOrCreate` reads an existing
+    account first and only attempts the insert when there is none.
+  - `controller/ApiExceptionHandler`: a type mismatch reads "must be an
+    integer" only for an integer parameter; any other non-instant type
+    reads "must be a valid value".
+  - `config/SecurityConfig`: the CORS comment updated for the gateway
+    cutover (issue #151).
+  - `AGENTS.md`: the `CreditControllerTest` invariant now states the
+    two `NOT_SUPPORTED` first-read cases that commit.
+- **Prompt(s):** Review the four review comments on PR #189 as
+  the reviewer suggested.
+- **Author review:** Each change follows the reviewer's comment.
+  Pending pull request review.
+
 ## 2026-10-13 — Ryan Ang (credit-service: read API, issue #172)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (code + tests + docs)

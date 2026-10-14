@@ -88,6 +88,8 @@
   round (@Sinnez1), by Claude Code (Fable 5).
   2026-10-13: AI Use Summary extended for the credit read API
   (issue #172) by Claude Code (Opus 5.5).
+  2026-10-14: the #172 clause extended for the PR #189 review
+  follow-ups, by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -490,7 +492,8 @@ design doc), the team's decisions on the reviewers' findings; and the
 read API (issue #172: the balance and history routes, the history
 filters as a JPA Specification, the 400 problem+json mapping, and
 their tests), transcribed from the "Read API contract" the team wrote
-in `docs/credit-service.md`.
+in `docs/credit-service.md`, with its PR #189 review follow-ups made as
+the reviewer suggested.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their

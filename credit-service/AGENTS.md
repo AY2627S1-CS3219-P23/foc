@@ -15,6 +15,9 @@
   insert moving to the repository.
   2026-10-13, Claude Code (Opus 5.5), issue #172: the package map and
   invariants updated for the read API.
+  2026-10-14, Claude Code (Opus 5.5), PR #189 review (Leong Wei Zhi):
+  the CreditControllerTest invariant names its two committing cases,
+  per the reviewer's comment.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -123,9 +126,13 @@ calls them; `ReplyOutbox` is still a stub.
   and admits a `sort` parameter: the contract's 400s would never
   happen. `from` and `to` bind as `OffsetDateTime`, so a date alone or
   an instant with no offset is refused.
-- **`CreditControllerTest` is `@Transactional` and commits nothing.** Its
-  history rows are made up for the filters and do not add up to a
-  balance; committed, they would fail the whole-database checks below.
+- **`CreditControllerTest` commits nothing but a provisioned account.**
+  It is `@Transactional`: its history rows are made up for the filters
+  and do not add up to a balance, so committed they would fail the
+  whole-database checks below. The two first-read cases marked
+  `Propagation.NOT_SUPPORTED` are the exception: they commit, as a real
+  first request does, and what they commit keeps every invariant. A new
+  `NOT_SUPPORTED` case must write nothing else.
 - **Amounts are integers** (Credit F1.2); balances never go negative
   (`CHECK` constraints back this up).
 
