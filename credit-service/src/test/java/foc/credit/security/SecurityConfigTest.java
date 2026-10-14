@@ -8,6 +8,8 @@
  * 2026-10-10, Claude Code (Opus 5.5), PR #166 Copilot review: the 401
  * asserts WWW-Authenticate, no request creates a session, and the JWT
  * filter is not a bean (so not a servlet-container filter too).
+ * 2026-10-13, Claude Code (Opus 5.5), issue #172: a valid token now
+ * reaches the balance route, which exists, instead of a 404.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.security;
@@ -101,11 +103,11 @@ class SecurityConfigTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("A valid token gets past security (404: no endpoints yet), with no session")
+    @DisplayName("A valid token gets past security to the balance, with no session")
     void validTokenPassesSecurity() throws Exception {
         String valid = token(SECRET, Instant.now().plusSeconds(3600));
         MvcResult result = mockMvc.perform(get("/credits/me").header("Authorization", "Bearer " + valid))
-                .andExpect(status().isNotFound())
+                .andExpect(status().isOk())
                 .andReturn();
         assertThat(result.getRequest().getSession(false)).isNull();
     }

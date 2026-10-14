@@ -26,6 +26,79 @@ Entry template:
 ```
 
 ---
+## 2026-10-14 — Ryan Ang (PR #189 review follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, docs
+- **Scope:** `credit-service/`, following review
+  comments on PR #189.
+  - `service/CreditOperationsService.getOrCreate` reads an existing
+    account first and only attempts the insert when there is none.
+  - `controller/ApiExceptionHandler`: a type mismatch reads "must be an
+    integer" only for an integer parameter; any other non-instant type
+    reads "must be a valid value".
+  - `config/SecurityConfig`: the CORS comment updated for the gateway
+    cutover (issue #151).
+  - `AGENTS.md`: the `CreditControllerTest` invariant now states the
+    two `NOT_SUPPORTED` first-read cases that commit.
+  - Second review round: the `main` merge resolution redone for
+    `ai/usage-log.md`, the root README, and the service's README and
+    AGENTS.md. Each was rebuilt from `main`'s copy with only #172's
+    and #189's additions on top, so the #170 and PR #188 text the
+    first resolution dropped is back, and the conflict markers left in
+    the service README are gone.
+- **Prompt(s):** Review the four review comments on PR #189 as
+  the reviewer suggested; then fix the merge resolution as the
+  reviewer's second round suggested.
+- **Author review:** Each change follows the reviewer's comment.
+  Pending pull request review.
+
+## 2026-10-13 — Ryan Ang (credit-service: read API, issue #172)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Scope:** `credit-service/`.
+  - `controller/CreditController`: `GET /credits/me` and
+    `GET /credits/me/history`, for the token's user only. `page` and
+    `size` are plain integers and `from` / `to` bind as
+    `OffsetDateTime`, as the design doc's "Implementation notes" say;
+    the checks behind the contract's 400s are in the controller.
+  - `controller/ApiExceptionHandler` (`@RestControllerAdvice`) and
+    `InvalidQueryParameterException`: an out-of-range or contradictory
+    parameter, or one of the wrong type, is a 400 problem+json whose
+    detail names the parameter.
+  - `service/CreditQueryService` and `HistoryFilter`: both reads get
+    or create the account first (D6); the history is a JPA
+    Specification over the caller's rows with the optional filters, in
+    the fixed order `occurredAt` descending then `id` descending.
+  - `dto/`: `BalanceResponse`, `HistoryEntryResponse`, and
+    `PageResponse`, a copy of supplier-service's shape.
+  - `CreditHistoryEntryRepository` now extends
+    `JpaSpecificationExecutor`.
+  - Tests: `CreditControllerTest` (42 cases through the security chain
+    against a real Postgres: the balance on first read and with held
+    credits, the history's fields, order, filters and paging, an empty
+    page, a page past the last one, both instant formats, and each row
+    of the contract's "Errors" table). `SecurityConfigTest`'s
+    valid-token case now expects the balance, not a 404.
+  - The service's README and AGENTS.md, and the README's AI Use
+    Summary updated.
+- **Prompt(s):** The scope of issue #172, on `feat/credit-read-api`.
+- **Author review:** The routes, fields, order, parameter bounds,
+  errors and the two implementation notes are the team's, from
+  `docs/credit-service.md` "Read API contract"; the tool transcribed
+  them and the design doc is unchanged. Choices the tool made where the
+  contract is silent, for the author to review: the wording of each
+  400's `detail`; the checks placed in the controller rather than bean
+  validation, so each has its own message; a refused request creating
+  no account, since validation runs before the read; an unknown
+  parameter such as `sort` being ignored; and the test class being
+  `@Transactional`, so its made-up history rows are never committed.
+  On the author's review, two first-read cases (balance and history)
+  were added that run outside the test transaction and commit, so a
+  read that could not write on its own would fail a test; no read-only
+  transaction was found in the code.
+  `./mvnw test` on JDK 21 with Docker: 169 tests, 0 failures. Pending
+  pull request review.
+
 ## 2026-10-13 — Ryan Ang (PR #188 review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** review assistance, refactoring, tests, docs

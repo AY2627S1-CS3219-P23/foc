@@ -18,6 +18,9 @@
  * release naming no requester for a request with no record, answers
  * INVALID_STATE; and the log lines are written after the commit (the
  * hook is the team's sketch).
+ * PR #189 review (Leong Wei Zhi), 2026-10-14: getOrCreate reads an
+ * existing account before attempting the insert, per the reviewer's
+ * comment.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -100,6 +103,12 @@ public class CreditOperationsService implements CreditOperations {
 
     @Override
     public CreditAccount getOrCreate(String userId) {
+        // an existing account is read without the insert attempt, which
+        // would leave a dead tuple behind on every read
+        Optional<CreditAccount> existing = accounts.findById(userId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
         createIfAbsent(userId, Instant.now());
         return accounts.findById(userId).orElseThrow();
     }
