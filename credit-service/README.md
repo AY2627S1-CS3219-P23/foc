@@ -11,15 +11,14 @@
   2026-10-11, Claude Code (Opus 5.5), issue #169: status and contents
   updated for the credit operations implementation; then for the
   amended V1 and the two configuration values.
-<<<<<<< HEAD
-  2026-10-13, Claude Code (Opus 5.5), issue #172: status and contents
-  updated for the read API, with how to call it.
-=======
   2026-10-12, Claude Code (Opus 5.5), issue #170: status and contents
   updated for the reply outbox and the outbox publisher.
   2026-10-13, Claude Code (Opus 5.5), PR #188 review (Leong Wei Zhi):
   V2, the 30 s wait of a returned reply and the scheduler threads.
->>>>>>> 91292b73f6e487eb5fbcd58bfbaf5a7f4f760436
+  2026-10-13, Claude Code (Opus 5.5), issue #172: status and contents
+  updated for the read API, with how to call it.
+  2026-10-14, Claude Code (Opus 5.5), PR #189 review (Leong Wei Zhi):
+  merge resolution redone so the #170 and PR #188 text is kept.
   Author review: Ryan Ang, pending pull request review.
   2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the run
   section's service URL updated for the gateway cutover (#151) — the
@@ -32,21 +31,14 @@
 Credit balances, reservation, transfer and history for FoC — the
 design is [`docs/credit-service.md`](../docs/credit-service.md).
 
-<<<<<<< HEAD
-**Status: the credit operations, the read API, the event handler and
-the broker topology.** The service starts, applies the schema, declares
-its queues and verifies login tokens. A signed-in user can read their
-balance and history. The credit logic that changes balances is
-implemented and tested, but no event reaches it yet: there is no event
-listener or outbox publisher.
-=======
-**Status: the credit operations, the event handler, the reply outbox
-with its publisher, and the broker topology.** The service starts,
-applies the schema, declares its queues and verifies login tokens, and
-the credit logic is implemented and tested, but nothing reaches it yet:
-there are no endpoints or event listener, so no reply is written
-outside the tests.
->>>>>>> 91292b73f6e487eb5fbcd58bfbaf5a7f4f760436
+**Status: the credit operations, the read API, the event handler, the
+reply outbox with its publisher, and the broker topology.** The service
+starts, applies the schema, declares its queues and verifies login
+tokens. A signed-in user can read their balance and history. The credit
+logic that changes balances is implemented and tested, but no event
+reaches it yet: there is no event listener, so no reply is written
+outside the tests. The expiry and redistribution scheduler is not built
+either.
 
 What is here:
 
@@ -68,7 +60,6 @@ What is here:
   (`CREDIT_SIGN_UP_CREDITS`, default 5) and the months before earned
   credits expire (`CREDIT_EARNED_CREDIT_LIFETIME_MONTHS`, default 3) are
   configuration.
-<<<<<<< HEAD
 - **Read API** (`controller/`, `service/CreditQueryService`): the two
   routes of the design doc's "Read API contract", for the token's user
   only.
@@ -81,10 +72,6 @@ What is here:
   Either one creates the caller's account with its sign-up credits on
   first use, so neither answers 404. An invalid parameter is a 400
   problem+json whose `detail` names it.
-- **Reply outbox interface** (`service/ReplyOutbox`): enqueue a reply
-  inside the caller's transaction. Its only implementation is a stub
-  that throws `UnsupportedOperationException("not implemented")`.
-=======
 - **Reply outbox** (`service/ReplyOutbox`, `ReplyOutboxService`):
   enqueue writes the reply as an `outbox_event` row inside the
   caller's transaction, so it commits with the balance change or not at
@@ -109,7 +96,6 @@ What is here:
 - **Scheduler threads**: `spring.task.scheduling.pool.size` is 2, so
   an outbox poll waiting on the broker does not hold up another
   `@Scheduled` job.
->>>>>>> 91292b73f6e487eb5fbcd58bfbaf5a7f4f760436
 - **JWT verification** (`security/`): every route except
   `/actuator/health` needs a bearer token signed with the shared
   `JWT_SECRET`; a missing or invalid one is a 401 problem+json.

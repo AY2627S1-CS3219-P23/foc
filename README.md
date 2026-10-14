@@ -86,6 +86,10 @@
   Copilot review flagged the summary as not covering #94.
   2026-10-12: the #94 clause extended for the PR #179 human-review
   round (@Sinnez1), by Claude Code (Fable 5).
+  2026-10-12: AI Use Summary extended for the credit reply outbox and
+  outbox publisher (issue #170) by Claude Code (Opus 5.5).
+  2026-10-13: the #170 clause extended for the PR #188 review round
+  (Leong Wei Zhi), by Claude Code (Opus 5.5).
   2026-10-13: AI Use Summary extended for the credit read API
   (issue #172) by Claude Code (Opus 5.5).
   2026-10-14: the #172 clause extended for the PR #189 review
@@ -489,10 +493,21 @@ PR's review fixes (#175: a completion that finds no reservation is
 retried instead of dead-lettered at once, a removed race test restored,
 and the expiry and rejected-record rules moved from open items into the
 design doc), the team's decisions on the reviewers' findings; and the
-read API (issue #172: the balance and history routes, the history
-filters as a JPA Specification, the 400 problem+json mapping, and
-their tests), transcribed from the "Read API contract" the team wrote
-in `docs/credit-service.md`, with its PR #189 review follow-ups made as
+reply outbox and outbox publisher (issue #170: the outbox row written
+in the caller's transaction, the scheduled publisher with publisher
+confirms and the mandatory flag, and their tests), written to D10 of
+`docs/credit-service.md`, with the poll interval, the batch cap, the
+confirm wait and what a failed publish does to the rest of a poll
+decided by the team and recorded there and in `ai/usage-log.md`; and
+that PR's review fixes (#188: a returned reply waits 30 s before its
+next attempt, on a new `next_attempt_at` column, so that unroutable
+replies cannot fill every batch; the reply row inserted, not saved; no
+returns callback on the shared template; a second scheduler thread),
+the approach to each decided by the team; and the read API (issue #172:
+the balance and history routes, the history filters as a JPA
+Specification, the 400 problem+json mapping, and their tests),
+transcribed from the "Read API contract" the team wrote in
+`docs/credit-service.md`, with its PR #189 review follow-ups made as
 the reviewer suggested.
 
 The logout denylist and API gateway (issue #151): the user-service

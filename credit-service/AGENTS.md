@@ -13,11 +13,18 @@
   invariants updated for the credit operations implementation; then
   for slices referencing their lot (written into V1) and the record
   insert moving to the repository.
+  2026-10-12, Claude Code (Opus 5.5), issue #170: the package map and
+  invariants updated for the reply outbox and the outbox publisher.
+  2026-10-13, Claude Code (Opus 5.5), PR #188 review (Leong Wei Zhi):
+  invariants updated for V2, the due-replies poll, the outbox insert
+  and the returns callback; "scheduler" narrowed to the one still
+  missing (Copilot review).
   2026-10-13, Claude Code (Opus 5.5), issue #172: the package map and
   invariants updated for the read API.
   2026-10-14, Claude Code (Opus 5.5), PR #189 review (Leong Wei Zhi):
   the CreditControllerTest invariant names its two committing cases,
-  per the reviewer's comment.
+  per the reviewer's comment; the package map and status rebuilt on
+  main's after a bad merge resolution.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -39,12 +46,13 @@ IDs (D1–D12) when touching related code.
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
 | `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
-| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` (interface) and its `NotImplementedReplyOutbox` stub, which throws, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, and `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API |
-| `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, and `DomainEventMessageConverter`, a copy of notification-service's |
+| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, and `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API |
+| `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), and `DomainEventMessageConverter`, a copy of notification-service's |
 
-No listener, outbox publisher or scheduler yet. The two interfaces are
-the seams the features are built against, and the handler already
-calls them; `ReplyOutbox` is still a stub.
+No listener or expiry and redistribution scheduler yet
+(the outbox publisher is the only scheduled job). The handler already calls
+`CreditOperations` and `ReplyOutbox`, but nothing calls the handler
+until the listener exists.
 
 ## Invariants — do not break
 
