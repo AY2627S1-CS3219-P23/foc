@@ -39,6 +39,25 @@ Entry template:
   (2026-10-10); the tool only recorded it.
 - **Author review:** Reviewed via pull request.
 
+## 2026-10-14 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, docs
+- **Scope:** `order-db` host port default 5436 -> 5437 in
+  `compose.yaml`, `.env.example`, `AGENTS.md` (service DB table) and
+  `order-service/README.md`.
+- **Prompt(s):** "I need to use port 5437 instead as 5436 is used by
+  credit service". Port chosen by the author; the tool only applied it.
+- **Author review:** Reviewed via pull request.
+- **Same day:** rebased `feat/order-service-scaffold` onto main after
+  the gateway cutover (#151) and, per the PR review, removed
+  order-service's `ports:` block and `ORDER_SERVICE_PORT` (compose,
+  `.env.example`, order-service README). Conflicts with the
+  credit-service work resolved by keeping both sides (credit-db on
+  5436, order-db on 5437; main's gateway `VITE_*` URLs kept).
+  Prompt: "Please carry out 1" (rebase and drop the ports block, as
+  the reviewer asked). `docker compose config` validated; the service
+  build and tests were not re-run.
+
 ## 2026-10-14 — Ryan Ang (PR #189 review follow-ups)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor, docs
