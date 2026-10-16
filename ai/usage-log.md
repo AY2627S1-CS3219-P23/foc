@@ -26,6 +26,13 @@ Entry template:
 ```
 
 ---
+## 2026-10-16 — Alastair Tan (order-service frontend pages)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** generate
+- **Scope:** web/ only — `src/features/order/` (types, status helpers, API client, dev-only in-memory mock, components), `src/features/credit/api.ts` (balance read), and the pages `my-requests`, `create-request`, `open-requests`, `active-delivery`, `request-history` plus their route entries in `src/routes/index.tsx`, built from `web/docs/wireframes/`. No backend files touched. The order-service endpoint paths and field names in `features/order/api.ts` and `types.ts` are placeholders pending the order-service owner's contract; the mock (`VITE_MOCK_ORDER_API=true`, dev server only) is temporary.
+- **Prompt(s):** "build the frontend pages for this service and run the UI to let me take a look at it; backend no need to be touched, we only work on the frontend."
+- **Author review:** Pending — author to review the diff via the PR, and the API contract with the order-service owner.
+
 ## 2026-10-14 — Ryan Ang (PR #189 review follow-ups)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor, docs

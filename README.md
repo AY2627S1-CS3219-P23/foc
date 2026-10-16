@@ -160,7 +160,7 @@ This section is the consolidated AI-use disclosure required by the CS3219
 AI Usage Policy (project document, Appendix 2). The detailed log with
 prompts and timestamps lives in [`ai/usage-log.md`](ai/usage-log.md).
 
-**Tools:** Claude Code (Fable 5, Opus 5, Opus 5.5, Sonnet 4.6, Sonnet 5), Claude (Sonnet 5)
+**Tools:** Claude Code (Fable 5, Opus 5, Opus 5.5, Sonnet 4.6, Sonnet 5, Sonnet 5.5), Claude (Sonnet 5)
 
 **Prohibited phases avoided:** requirements elicitation and
 prioritization; architecture and design decisions. Requirements, service
@@ -548,6 +548,11 @@ same day (admin removal demoting to USER, a failed renewal send
 restoring the pre-renewal OTP row — both chosen by Leong Wei Zhi via
 neutral options Q&A — plus the reviewer-flagged documentation and
 test-isolation corrections).
+
+The order-service frontend pages (Create Request, My Requests, Open
+Requests, Active Delivery, Request History) were generated in `web/` from
+the committed wireframes, against a placeholder API contract and a
+dev-only in-memory mock; the backend was not touched.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
