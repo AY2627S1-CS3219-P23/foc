@@ -3931,3 +3931,46 @@ Entry template:
   and without token), spoofed-SEND and stray-SUBSCRIBE rejection, two
   untranslated-exception fail-open adapter cases.
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-16 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** review response with options Q&A (PR #185 re-review)
+- **Prompt(s):** Asked to rebase the branch onto `origin/main` and then
+  address the PR #185 comments. The one open thread was @Sinnez1's
+  blocking note that `onStompError` permanently deactivates the app's
+  only STOMP client: with no token refresh in the SPA, a session that
+  outlives the 1 h token TTL and then loses its socket reconnects with
+  a dead token, gets an ERROR frame, and push stops silently behind a
+  frozen badge. Exploration established that neither direction the
+  reviewer suggested exists on this branch — notification-service has
+  no REST controllers, so there is no unread count to re-fetch (issue
+  #66 owns it), and `apiFetch` has no 401/expired-session path to route
+  the ERROR frame through (PR #182 is adding one for #178). The author
+  was given four options — sign out via `useAuth().logout()`, report it
+  in the bell only, both, or bounded retry then report — with the
+  trade-offs stated factually, and chose **bounded retry, then
+  reported stop**.
+- **Scope:** web — `NotificationProvider` retries a rejected CONNECT
+  three times 30 s apart (the reconnect cap, so a dead token is not
+  re-sent every second), resets the budget on a successful CONNECT, and
+  then marks the session stopped instead of dying quietly; the stop is
+  derived per token, so a re-login starts live, and an unset
+  `VITE_NOTIFICATION_SERVICE_URL` derives the same state without a
+  setState in the effect. `useNotifications` exposes `pushStopped`;
+  `NotificationBell` greys the badge and appends "updates paused, sign
+  in again" to its accessible name, keeping the count visible (those
+  notifications did arrive) without presenting it as current. Tests:
+  retry-then-reactivate, budget exhaustion with the bell's paused name,
+  a reconnect earning a fresh budget, and the unset-URL case (web 111
+  green; `tsc -b` and eslint clean — eslint's
+  `react-hooks/set-state-in-effect` is what pushed the unset-URL case
+  to a derived value). Docs: an ERROR-frame policy bullet in
+  `docs/notification-service.md` Session mechanics, and the root README
+  AI Use Summary extended for this round plus the frame-policing round
+  its 2026-10-14 disclosure line claimed but never wrote into the
+  clause. Also in this session: the branch rebased onto `origin/main`
+  (the flattened merge put the pre-#179 commits against post-#189 main;
+  `README.md`, `ai/usage-log.md`, `docs/gateway.md` and user-service's
+  `TokenDenylist` javadoc resolved by keeping both sides, in date order
+  where the file keeps one).
+- **Author review:** Pending author review of the diff via the PR.

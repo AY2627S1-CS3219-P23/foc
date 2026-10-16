@@ -110,6 +110,10 @@
   2026-10-16: the #171 clause extended for the PR #190 review round
   (Leong Wei Zhi), by Claude Code (Opus 5.5); same day, again for its
   re-review.
+  2026-10-16: the #67 clause extended for the PR #185 re-review rounds
+  (@Sinnez1) by Claude Code (Opus 5) — the STOMP frame policing round
+  the 2026-10-14 line claims but never wrote into the clause, and the
+  client's ERROR-frame policy.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -609,7 +613,15 @@ G11 per-user reset cutoff (the jti lookup alone let a pre-reset token
 still open a socket), recorded the CONNECT-only timing as an accepted
 limit in both design docs, and switched off the Redis starter's
 repository scan; the Copilot round before it fixed the bell's
-accessible name.
+accessible name. The re-review rounds that followed added the
+interceptor's frame policing (a STOMP-command session authenticated
+like CONNECT, every client SEND refused, SUBSCRIBE confined to the one
+destination — together they had let an untokened client push a spoofed
+notification to any user ID) and the client's ERROR-frame policy: three
+retries 30 s apart, then a stop the bell reports as paused updates
+rather than a frozen count. That policy was chosen by Leong Wei Zhi
+from four options via neutral options Q&A; the rest were mechanical
+fixes to reviewer-identified gaps.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

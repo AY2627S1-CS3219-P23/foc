@@ -7,6 +7,9 @@
 // counting pushed frames, teardown on logout and on a STOMP ERROR.
 // PR #185 Copilot review: the badge count joins the bell's accessible
 // name, so the queries here follow it.
+// 2026-10-16, Claude Code (Opus 5), PR #185 re-review (@Sinnez1): the
+// ERROR-frame case rewritten for the bounded retry and the stopped
+// state the bell now reports.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import { act, render, screen, waitFor } from '@testing-library/react'
@@ -229,11 +232,94 @@ describe('notification STOMP client', () => {
     ).not.toHaveTextContent('1')
   })
 
-  test('a STOMP ERROR frame stops the client instead of retrying a dead token', () => {
-    renderApp(true)
+  test('an ERROR frame stops the client and retries it once the delay passes', () => {
+    vi.useFakeTimers()
+    try {
+      renderApp(true)
+      expect(client().activate).toHaveBeenCalledTimes(1)
 
-    act(() => client().config.onStompError?.(undefined as never))
+      act(() => client().config.onStompError?.(undefined as never))
 
-    expect(client().deactivate).toHaveBeenCalled()
+      // the client's own 1 s reconnect must not re-send the rejected
+      // CONNECT; the provider re-activates on its own schedule instead
+      expect(client().deactivate).toHaveBeenCalled()
+      expect(client().activate).toHaveBeenCalledTimes(1)
+
+      act(() => vi.advanceTimersByTime(30_000))
+
+      expect(client().activate).toHaveBeenCalledTimes(2)
+      // still live as far as the bell is concerned
+      screen.getByRole('button', { name: 'Notifications' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('push stops and the bell says so after the retry budget runs out', () => {
+    vi.useFakeTimers()
+    try {
+      renderApp(true)
+      const onMessage = connectAndSubscribe()
+      pushFrame(onMessage)
+
+      // three retries, then the fourth ERROR gives up
+      for (let i = 0; i < 3; i++) {
+        act(() => client().config.onStompError?.(undefined as never))
+        act(() => vi.advanceTimersByTime(30_000))
+      }
+      expect(client().activate).toHaveBeenCalledTimes(4)
+
+      act(() => client().config.onStompError?.(undefined as never))
+      act(() => vi.advanceTimersByTime(30_000))
+
+      // no fifth attempt, and the count is kept but no longer sold as live
+      expect(client().activate).toHaveBeenCalledTimes(4)
+      const bell = screen.getByRole('button', {
+        name: 'Notifications (1 unread) — updates paused, sign in again',
+      })
+      expect(bell).toHaveTextContent('1')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('a successful reconnect earns a fresh retry budget', () => {
+    vi.useFakeTimers()
+    try {
+      renderApp(true)
+
+      for (let i = 0; i < 3; i++) {
+        act(() => client().config.onStompError?.(undefined as never))
+        act(() => vi.advanceTimersByTime(30_000))
+      }
+      // the last retry reached CONNECTED, so the next ERROR is a new
+      // failure rather than the end of the old one
+      act(() => client().config.onConnect?.(undefined as never))
+
+      act(() => client().config.onStompError?.(undefined as never))
+      act(() => vi.advanceTimersByTime(30_000))
+
+      expect(client().activate).toHaveBeenCalledTimes(5)
+      screen.getByRole('button', { name: 'Notifications' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('the bell reports a paused channel when the notification URL is unset', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const base = serviceBaseUrls.notification
+    ;(serviceBaseUrls as { notification: string }).notification = ''
+
+    try {
+      renderApp(true)
+
+      // no socket will ever open, so the bell must not imply a live one
+      screen.getByRole('button', {
+        name: 'Notifications — updates paused, sign in again',
+      })
+    } finally {
+      ;(serviceBaseUrls as { notification: string }).notification = base
+    }
   })
 })

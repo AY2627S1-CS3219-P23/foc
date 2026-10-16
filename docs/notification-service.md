@@ -30,6 +30,10 @@
   Session mechanics updated for the interceptor's frame policing (STOMP
   frame authenticated like CONNECT, SEND rejected, SUBSCRIBE limited to
   the one destination) and the ERROR-frame wording softened.
+  2026-10-16, Claude Code (Opus 5), PR #185 re-review (@Sinnez1): the
+  client policy's ERROR-frame handling rewritten — bounded retry then a
+  reported stop, chosen by Leong Wei Zhi from four options via neutral
+  options Q&A.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -392,12 +396,31 @@ Why the push channel is centralized here rather than per service:
   `sockjs-client` dependency; the client connects straight to the
   endpoint's raw-WebSocket transport (`/ws/websocket`) — auto-reconnect
   with exponential backoff 1 s doubling to a 30 s cap, resubscribe on
-  reconnect (subscription made in `onConnect`). A STOMP ERROR frame
-  stops the client: the server sends one for any frame-handling
-  failure, and with this client's traffic (CONNECT plus one fixed
-  subscribe) that is in practice a CONNECT auth failure, which
-  retrying cannot fix; recovery is a re-login. UI is badge-only until
+  reconnect (subscription made in `onConnect`). UI is badge-only until
   the Notification Center (issue #66).
+- **ERROR-frame policy** (PR #185 re-review; chosen by Leong Wei Zhi
+  from four options via neutral options Q&A): the server sends an ERROR
+  frame for any frame-handling failure, and with this client's traffic
+  (CONNECT plus one fixed subscribe) it is in practice a rejected
+  CONNECT token — invalid, revoked, or expired. The client cannot tell
+  those apart from the frame, so it **retries three times, 30 s apart**
+  (the reconnect cap, not its 1 s floor — a dead token must not be
+  re-sent every second), then stops for good. Each run is bounded
+  because the SPA has no token refresh: a session that outlives the 1 h
+  token TTL can never reconnect, and retrying forever would hammer the
+  server with credentials that cannot work. Reaching CONNECTED resets
+  the budget, so a later expiry gets its own three tries.
+  A give-up is **reported, not silent**: the provider marks the session
+  stopped and the bell greys its badge and says "updates paused, sign
+  in again" in its accessible name — the count stays visible (those
+  notifications did arrive) but stops being presented as current.
+  Nothing is re-fetched, because there is no count endpoint to re-fetch
+  from: the count is session-local until issue #66's REST API. An unset
+  `VITE_NOTIFICATION_SERVICE_URL` reports the same paused state, since
+  no socket is ever opened. Recovery is a re-login, which changes the
+  token and re-runs the provider's effect. Transport drops with no
+  ERROR frame are untouched and still auto-reconnect with the policy
+  above.
 
 > ✍️ Historical note: the earlier backlog's committed requester–courier
 > chat implied a second real-time channel. The latest backlog moved
