@@ -4234,6 +4234,43 @@ Entry template:
   not newly executed by Codex. This retrospective disclosure is pending
   Leong Wei Zhi's review via PR #180.
 
+## 2026-10-16 — Leong Wei Zhi (PR #183 main sync)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** repository maintenance (PR #183 main sync) + docs
+- **Prompt(s):** Asked to bring PR #183 up to date with the merged
+  PR #179, its base. The scope of that update was put to the author as
+  neutral options: fix the claims #179 left stale and add the owed
+  disclosures (chosen), conflicts only, or conflicts plus claims
+  without the disclosures; likewise retargeting to `main` and marking
+  the PR ready (chosen), and running the full user-service suite
+  (chosen). No design decision was made by AI.
+- **Scope:** The branch was rebased onto `main` (its base branch
+  `feat/account-recovery-password-reset` merged as #179, and #182 and
+  #185 landed since; #180 was still open at that point). Three files
+  conflicted and all three were resolved by keeping both sides:
+  `docs/gateway.md`'s header log (this branch's G12 line placed in date
+  order among #185's two entries), `AdminService`'s header log (#179's
+  approval follow-up entry, then this branch's), and
+  `AdminServiceTest`'s header plus the remove-another-admin case, where
+  #179's demotion assertion and this branch's eviction `verify` now both
+  stand.
+  One semantic change beyond the seams: #179's approval follow-up had
+  written, in `AdminService.removeUser`'s comment and in
+  `user-service/README.md`, that a token minted before a removal keeps
+  ADMIN until its `exp` — true of `main`, false once this branch's
+  stamp lands. Both copies now describe the revocation, with the
+  demotion to USER kept and re-framed as the fallback for a failed
+  best-effort write (G9) against a gateway failing open (G6).
+  `user-service/README.md` also gains the stamp in its admin-endpoint
+  list and in the token section's account of what this service writes
+  to the denylist, and `docs/gateway.md` records the two facts #185's
+  D23 content creates for G12: notification-service's CONNECT lookup
+  reads the same stamp, so a new STOMP session is refused too, while
+  an already-open session still is not (that accepted known limit now
+  names a demote/remove among its triggers).
+- **Author review:** user-service suite via Testcontainers after the
+  rebase; the resolution and the doc corrections reviewed via PR #183.
+
 ## 2026-10-17 — Leong Wei Zhi (PR #180 review)
 - **Tool:** Codex (GPT-6).
 - **Mode:** debug + refactor + documentation (issue #94).

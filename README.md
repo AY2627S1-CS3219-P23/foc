@@ -138,6 +138,12 @@
   2026-10-16: AI Use Summary extended for the server half of issue #178
   (PR #183) by Claude Code (Opus 5) — the summary covered the web half
   only.
+  2026-10-16: PR #183 rebased onto main now that its base PR #179 has
+  merged — the conflicts `docs/gateway.md`, `AdminService.java` and
+  `AdminServiceTest.java` carried resolved by keeping both sides, and
+  the one claim #179's approval follow-up left stale (a removed admin's
+  token keeping ADMIN until its exp) corrected, by Claude Code
+  (Opus 5).
   Reviewed by: Leong Wei Zhi (via pull request).
   2026-10-17, Codex (GPT-6), PR #180 review: added the web #94
   disclosure and the missing 2026-10-16 main-sync coverage.
