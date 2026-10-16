@@ -46,13 +46,21 @@ interface LabeledSelectProps {
   options: LabeledSelectOption[]
 }
 
-function LabeledSelect({ label, ariaLabel, value, onChange, options }: LabeledSelectProps) {
-  const selectedLabel = options.find((o) => o.value === value)?.label ?? options[0]?.label ?? ''
+function LabeledSelect({
+  label,
+  ariaLabel,
+  value,
+  onChange,
+  options,
+}: LabeledSelectProps) {
+  const selectedLabel =
+    options.find((o) => o.value === value)?.label ?? options[0]?.label ?? ''
 
   return (
     <div className="relative flex w-full items-center gap-1.5 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700 focus-within:border-gray-400 sm:w-44">
       <span className="pointer-events-none">
-        <span className="text-gray-500">{label}:</span> <span className="text-gray-900">{selectedLabel}</span>
+        <span className="text-gray-500">{label}:</span>{' '}
+        <span className="text-gray-900">{selectedLabel}</span>
       </span>
       <svg
         aria-hidden="true"
@@ -114,7 +122,10 @@ export function SupplierFilterBar({
           ariaLabel="Filter by category"
           value={category}
           onChange={onCategoryChange}
-          options={[{ value: '', label: 'All' }, ...categories.map((c) => ({ value: c, label: c }))]}
+          options={[
+            { value: '', label: 'All' },
+            ...categories.map((c) => ({ value: c, label: c })),
+          ]}
         />
 
         <LabeledSelect
@@ -130,7 +141,9 @@ export function SupplierFilterBar({
         />
       </div>
 
-      {locationNotice && <p className="text-xs text-gray-500">{locationNotice}</p>}
+      {locationNotice && (
+        <p className="text-xs text-gray-500">{locationNotice}</p>
+      )}
     </div>
   )
 }

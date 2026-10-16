@@ -1,0 +1,229 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5), 2026-10-16.
+# Scope: CI pipeline — per-module build/test with path filtering and a
+# Docker build check (no registry push; local compose stays the deploy
+# story per docs/architecture.md N5).
+# Reviewed by: Leong Wei Zhi (via pull request).
+
+# One always-running workflow with dorny/paths-filter inside, instead of
+# per-workflow `on.paths`: a required check from a paths-filtered workflow
+# hangs as "Expected" when the workflow doesn't trigger, blocking merges
+# on the protected main branch. Here only the `ci-ok` gate job is meant
+# to be marked required; skipped jobs pass through it.
+name: CI
+
+on:
+  pull_request: # no paths filter — the ci-ok gate must always report
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      java_modules: ${{ steps.java.outputs.changes }}
+      docker_images: ${{ steps.docker.outputs.changes }}
+      web: ${{ steps.areas.outputs.web }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # paths-filter needs history on push events
+
+      # Workflow edits rerun everything, so every filter also matches
+      # .github/workflows/**. order/credit/notification also rebuild when
+      # foc-contracts changes (they depend on foc:foc-contracts:0.0.1-SNAPSHOT).
+      - uses: dorny/paths-filter@v3
+        id: java
+        with:
+          filters: |
+            foc-contracts:
+              - 'foc-contracts/**'
+              - '.github/workflows/**'
+            user-service:
+              - 'user-service/**'
+              - '.github/workflows/**'
+            supplier-service:
+              - 'supplier-service/**'
+              - '.github/workflows/**'
+            order-service:
+              - 'order-service/**'
+              - 'foc-contracts/**'
+              - '.github/workflows/**'
+            credit-service:
+              - 'credit-service/**'
+              - 'foc-contracts/**'
+              - '.github/workflows/**'
+            notification-service:
+              - 'notification-service/**'
+              - 'foc-contracts/**'
+              - '.github/workflows/**'
+
+      # Same paths again, as a separate step so its `changes` output maps
+      # 1:1 onto Docker images (adds web + gateway, drops foc-contracts,
+      # which has no image of its own).
+      - uses: dorny/paths-filter@v3
+        id: docker
+        with:
+          filters: |
+            user-service:
+              - 'user-service/**'
+              - '.github/workflows/**'
+            supplier-service:
+              - 'supplier-service/**'
+              - '.github/workflows/**'
+            order-service:
+              - 'order-service/**'
+              - 'foc-contracts/**'
+              - '.github/workflows/**'
+            credit-service:
+              - 'credit-service/**'
+              - 'foc-contracts/**'
+              - '.github/workflows/**'
+            notification-service:
+              - 'notification-service/**'
+              - 'foc-contracts/**'
+              - '.github/workflows/**'
+            web:
+              - 'web/**'
+              - '.github/workflows/**'
+            gateway:
+              - 'gateway/**'
+              - '.github/workflows/**'
+
+      - uses: dorny/paths-filter@v3
+        id: areas
+        with:
+          filters: |
+            web:
+              - 'web/**'
+              - '.github/workflows/**'
+
+  java:
+    needs: changes
+    if: needs.changes.outputs.java_modules != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJSON(needs.changes.outputs.java_modules) }}
+    runs-on: ubuntu-latest
+    name: java (${{ matrix.module }})
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          # Per-module cache key: one repo-wide key would only ever save
+          # the first-finishing matrix leg's dependencies.
+          cache-dependency-path: |
+            ${{ matrix.module }}/pom.xml
+            foc-contracts/pom.xml
+      # Unconditional: order/credit/notification need the snapshot jar in
+      # the local repo; for the other legs it is a cheap no-op-sized step.
+      - name: Install shared contracts
+        run: ./mvnw -B -ntp install -DskipTests
+        working-directory: foc-contracts
+      # Testcontainers legs (user-service, credit-service) use the
+      # runner's Docker daemon — no extra setup needed.
+      - name: Build and test
+        run: ./mvnw -B -ntp verify
+        working-directory: ${{ matrix.module }}
+
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      # Vite inlines VITE_* at build time; placeholder values keep the CI
+      # build aligned with the Dockerfile's build-arg contract.
+      - run: npm run build
+        env:
+          VITE_USER_SERVICE_URL: http://localhost:8081
+          VITE_SUPPLIER_SERVICE_URL: http://localhost:8082
+          VITE_ORDER_SERVICE_URL: http://localhost:8083
+          VITE_CREDIT_SERVICE_URL: http://localhost:8084
+          VITE_NOTIFICATION_SERVICE_URL: http://localhost:8085
+
+  docker:
+    needs: changes
+    if: needs.changes.outputs.docker_images != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.changes.outputs.docker_images) }}
+    runs-on: ubuntu-latest
+    name: docker (${{ matrix.image }})
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      # Java services build from the repo root (contracts-dependent ones
+      # copy foc-contracts in-stage); web and gateway from their folders.
+      - name: Resolve build context
+        id: meta
+        run: |
+          case "${{ matrix.image }}" in
+            web)
+              echo "context=web" >> "$GITHUB_OUTPUT"
+              echo "file=web/Dockerfile" >> "$GITHUB_OUTPUT"
+              {
+                echo "build_args<<EOF"
+                echo "VITE_USER_SERVICE_URL=http://localhost:8081"
+                echo "VITE_SUPPLIER_SERVICE_URL=http://localhost:8082"
+                echo "VITE_ORDER_SERVICE_URL=http://localhost:8083"
+                echo "VITE_CREDIT_SERVICE_URL=http://localhost:8084"
+                echo "VITE_NOTIFICATION_SERVICE_URL=http://localhost:8085"
+                echo "EOF"
+              } >> "$GITHUB_OUTPUT"
+              ;;
+            gateway)
+              echo "context=gateway" >> "$GITHUB_OUTPUT"
+              echo "file=gateway/Dockerfile" >> "$GITHUB_OUTPUT"
+              echo "build_args=" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "context=." >> "$GITHUB_OUTPUT"
+              echo "file=${{ matrix.image }}/Dockerfile" >> "$GITHUB_OUTPUT"
+              echo "build_args=" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.meta.outputs.context }}
+          file: ${{ steps.meta.outputs.file }}
+          push: false
+          build-args: ${{ steps.meta.outputs.build_args }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+  # The single job to mark as a required status check on main. Skipped
+  # jobs pass through; any failure or cancellation fails the gate.
+  ci-ok:
+    if: always()
+    needs: [changes, java, web, docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any needed job failed or was cancelled
+        run: |
+          [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "false" ]]
