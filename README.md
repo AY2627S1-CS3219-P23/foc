@@ -72,6 +72,11 @@
   by Claude Code (Opus 5).
   2026-10-10: AI Use Summary extended for the PR #168 review fixes by
   Claude Code (Opus 5.5).
+  2026-10-10: AI Use Summary extended for the order-service Spring Boot
+  scaffold and its compose.yaml/AGENTS.md/.env.example wiring by
+  Claude Code (Opus 5.5).
+  2026-10-11: AI Use Summary extended for the order-service Requests
+  entity/repository skeleton by Claude Code (Opus 5.5).
   2026-10-11: AI Use Summary extended for the credit operations (issue
   #169) by Claude Code (Opus 5.5); the conflict markers the PR #168
   merge left in this header were removed, keeping both sides. Same day:
@@ -94,11 +99,11 @@
   (issue #172) by Claude Code (Opus 5.5).
   2026-10-14: the #172 clause extended for the PR #189 review
   follow-ups, by Claude Code (Opus 5.5).
-  2026-10-10: AI Use Summary extended for the order-service Spring Boot
-  scaffold and its compose.yaml/AGENTS.md/.env.example wiring by
-  Claude Code (Opus 5.5).
-  2026-10-11: AI Use Summary extended for the order-service Requests
-  entity/repository skeleton by Claude Code (Opus 5.5).
+  2026-10-14: AI Use Summary extended for the credit request event
+  listener (issue #171) by Claude Code (Opus 5.5).
+  2026-10-16: the #171 clause extended for the PR #190 review round
+  (Leong Wei Zhi), by Claude Code (Opus 5.5); same day, again for its
+  re-review.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -508,12 +513,25 @@ that PR's review fixes (#188: a returned reply waits 30 s before its
 next attempt, on a new `next_attempt_at` column, so that unroutable
 replies cannot fill every batch; the reply row inserted, not saved; no
 returns callback on the shared template; a second scheduler thread),
-the approach to each decided by the team; and the read API (issue #172:
+the approach to each decided by the team; the read API (issue #172:
 the balance and history routes, the history filters as a JPA
 Specification, the 400 problem+json mapping, and their tests),
 transcribed from the "Read API contract" the team wrote in
 `docs/credit-service.md`, with its PR #189 review follow-ups made as
-the reviewer suggested.
+the reviewer suggested; and the request event
+listener (issue #171: manual acknowledgement after the handler's
+commit, a conflicting event dead-lettered, failures retried through
+the retry queue up to the attempt cap, and its unit and broker
+integration tests), written to D11 of `docs/credit-service.md` and
+following notification-service's listener, with the team's review
+decisions (a retry copy the broker refuses requeues the original;
+dead-letters logged at ERROR) recorded in that doc's failure table,
+and its PR #190 review fixes (a returned retry copy dead-letters the
+original, a nacked or unconfirmed one requeues it after a 5 s pause,
+and a timed-out confirm documented as possibly running the event
+twice), the approach to each decided by the team, and its re-review
+follow-ups (the confirm timeout's environment variable, an
+unresolvable broker host in the test profile, and doc wording).
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their

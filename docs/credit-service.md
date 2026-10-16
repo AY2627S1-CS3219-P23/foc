@@ -55,6 +55,15 @@
   only the unsent replies that are due, so replies no queue takes
   cannot fill every batch and hold back the ones behind them. Still no
   cap on attempts.
+  2026-10-14, issue #171, team decision transcribed: when the broker
+  does not accept a failed event's retry copy, the original is
+  requeued at once instead of being left unacknowledged.
+  2026-10-16, PR #190 review (Leong Wei Zhi), team decisions
+  transcribed: a returned retry copy dead-letters the original; a
+  nacked or unconfirmed one requeues it after a 5 s pause; a confirm
+  timeout may leave the event as two copies (new failure-table row).
+  Same day, re-review: the returned-copy row notes that a missing
+  dead-letter queue discards the event.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -589,6 +598,9 @@ tests.
 | A `request.completed` arrives before its reservation (its `request.submitted` is still in the retry queue) | Retried, then dead-lettered after the attempt cap. A retry that finds the `HELD` record transfers it as usual |
 | Credit Service is down when delivery is confirmed | The Order Service completes the request regardless. The transfer runs when the Credit Service is back. |
 | Database is briefly unavailable while an event is processed | The event goes to the retry queue and is redelivered after the retry delay (2 s); after the maximum attempts (5) it is dead-lettered for inspection |
+| An event failed, and the broker returns its copy for the retry queue as unroutable (the retry queue does not exist) | The original is dead-lettered at once. No retry can succeed while the queue is missing, so nothing loops on it. If the dead-letter queue is missing too, the broker discards the event, as it would for any other dead-letter |
+| An event failed, and the broker nacks its copy for the retry queue or does not confirm it within 5 s | The original is requeued after a 5 s pause (up to 10 s after a timeout: the 5 s wait for the confirm, then the pause), without using up an attempt, rather than left unacknowledged and invisible until the service restarts. With one consumer the pause holds up the events behind it, which would fail the same way while the broker is in trouble. It repeats once every 5 s and stops when the broker recovers |
+| A retry copy's confirm times out | The original is requeued, so the event may run as two copies, each with its own attempt count. Balances are unaffected (idempotent handler); the dead-letter queue may hold the same event twice |
 | A user's lot expires while its credits are held | Nothing happens to the held credits. If the request is released later, the slice returns to its lot, which is past its expiry, and the next expiry run moves it to the pool. |
 | Scheduler runs twice for one month (restart, overlap, or more than one instance) | The unique `period` key lets only one run commit |
 
