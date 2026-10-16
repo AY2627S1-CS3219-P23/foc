@@ -111,6 +111,8 @@
   listener (issue #171) by Claude Code (Opus 5.5).
   2026-10-14: the #67 clause extended for the PR #185 human-review
   round (@Sinnez1), by Claude Code (Fable 5).
+  2026-10-14: that #178 clause extended again for the PR #182 second
+  review round, by Claude Code (Opus 5).
   2026-10-16: the #171 clause extended for the PR #190 review round
   (Leong Wei Zhi), by Claude Code (Opus 5.5); same day, again for its
   re-review.
@@ -125,6 +127,14 @@
   order-service lines main had meanwhile moved into date order were
   left to main's copy rather than re-added here, and this branch's #67
   lines take their own date positions, by Claude Code (Opus 5).
+  2026-10-16: PR #182 rebased onto main twice the same day (first with
+  PRs #187/#188/#189 landed, then with #190/#185) — the conflicts this
+  header, the AI Use Summary and `ai/usage-log.md` carried resolved by
+  keeping both sides in date order, no clause reworded; in the second
+  pass `web/src/routes/index.tsx` also conflicted with #185's
+  NotificationProvider layout route, resolved by keeping that route and
+  moving this branch's `handle: { requiresSession: true }` onto the
+  nested ProtectedRoute it gates, by Claude Code (Opus 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 

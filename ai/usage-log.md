@@ -4109,3 +4109,45 @@ Entry template:
   context-restart errors that also fail on `main` locally
   (`IdempotentEventProcessorTest`, `RetentionPurgeSchedulerTest`).
   Author review of the resolution pending via the PR.
+
+## 2026-10-16 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** repository maintenance (PR #182 main sync)
+- **Prompt(s):** Asked to address the PR #182 review comments and to
+  rebase onto `origin/main` before pushing. The three open review
+  rounds were checked against the branch first: every finding already
+  has a fix in the code and a reply on the thread, so no code change
+  was needed and no decision was put to the author.
+- **Scope:** No source change. The branch was rebased onto `main`
+  (PRs #187/#188/#189 landed), which dropped the earlier
+  `main`-into-branch merge commit and replayed the four #178 commits.
+  Conflicts in `README.md` (the header disclosure log and the AI Use
+  Summary) and in `ai/usage-log.md` were resolved by keeping both
+  sides in date order — `main`'s entries first, then this branch's —
+  with no clause reworded and nothing removed; the two paragraph
+  breaks the conflict seams swallowed were restored. The README header
+  also gained the 2026-10-14 line the second review round had left out.
+  Later the same day PRs #190 and #185 landed and the branch was
+  rebased again, this time with a code conflict: `web/src/routes/index.tsx`
+  — #185 had added a `NotificationProvider` layout route between
+  `AuthProvider` and the shell, while this branch adds the
+  `RouteHandle` type and the `handle` on the session-gated branch. The
+  seam paired the wrong layers (main's `element: <AppShell />` against
+  this branch's `Component: ProtectedRoute`), so it was resolved by
+  hand: #185's layout route and import kept, `RouteHandle` kept, and
+  `handle: { requiresSession: true } satisfies RouteHandle` placed on
+  the nested `ProtectedRoute` that actually gates
+  /suppliers, /profile and /admin. The `README.md` and
+  `ai/usage-log.md` conflicts were resolved by keeping both sides in
+  date order, with the order-service header lines left to `main`'s copy
+  (its #190 merge had moved them into date order, so re-adding this
+  branch's copy would have duplicated them). Checked afterwards: the
+  branch's added and removed lines are identical to the pre-rebase set
+  apart from the `handle` line's new indentation under the extra route
+  layer, and both docs are additive against `main` (36 and 122 lines,
+  zero deletions).
+- **Author review:** web 125/125 (vitest — this branch's cases and
+  #185's notification suite together), `tsc -b`, eslint and
+  `vite build` clean; prettier clean on the touched files (the one
+  warning, `src/features/user/jwt.ts`, is pre-existing on `main` and
+  untouched here). The diff is reviewed via the PR.
