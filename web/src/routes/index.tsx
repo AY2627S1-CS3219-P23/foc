@@ -11,15 +11,23 @@
 // 2026-10-07, Claude Code (Opus 5), issue #112: /admin's AdminRoute
 // wrapper restored — this branch had flattened it while adding /profile,
 // which silently dropped the role gate main added in issue #147.
+// 2026-10-16, Claude Code (Sonnet 5.5): order-service pages added inside
+// ProtectedRoute — /my-requests, /my-requests/new, /requests,
+// /deliveries/:id, /history.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import { createBrowserRouter, type RouteObject } from 'react-router'
 
 import { AppShell } from '@/shared/shell/AppShell'
 import { NotFound } from '@/shared/shell/NotFound'
+import { ActiveDelivery } from './active-delivery'
 import { Admin } from './admin'
+import { CreateRequest } from './create-request'
 import { Home } from './home'
+import { MyRequests } from './my-requests'
+import { OpenRequests } from './open-requests'
 import { Profile } from './profile'
+import { RequestHistory } from './request-history'
 import { Suppliers } from './suppliers'
 import { AdminRoute } from '../features/user/AdminRoute'
 import { ProtectedRoute } from '../features/user/ProtectedRoute'
@@ -44,6 +52,11 @@ export const routes: RouteObject[] = [
             children: [
               { path: 'suppliers', element: <Suppliers /> },
               { path: 'profile', element: <Profile /> },
+              { path: 'my-requests', element: <MyRequests /> },
+              { path: 'my-requests/new', element: <CreateRequest /> },
+              { path: 'requests', element: <OpenRequests /> },
+              { path: 'deliveries/:id', element: <ActiveDelivery /> },
+              { path: 'history', element: <RequestHistory /> },
               {
                 Component: AdminRoute,
                 children: [{ path: 'admin', element: <Admin /> }],
