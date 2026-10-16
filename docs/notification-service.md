@@ -26,6 +26,10 @@
   2026-10-14, Claude Code (Fable 5), PR #185 review (@Sinnez1): D23
   extended to the per-user reset cutoff (G11) and its CONNECT-only
   timing recorded as an accepted limit.
+  2026-10-16, Claude Code (Fable 5), PR #185 re-review (@Sinnez1):
+  Session mechanics updated for the interceptor's frame policing (STOMP
+  frame authenticated like CONNECT, SEND rejected, SUBSCRIBE limited to
+  the one destination) and the ERROR-frame wording softened.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -357,7 +361,17 @@ Why the push channel is centralized here rather than per service:
   on. The interceptor also rejects **revoked** tokens via the D23
   denylist lookups — the token's own key and the account's password-
   reset cutoff. Invalid, revoked or missing tokens reject the CONNECT
-  with a STOMP ERROR frame and the session closes.
+  with a STOMP ERROR frame and the session closes. STOMP 1.2's
+  `STOMP` frame is an alias for `CONNECT` and passes the same checks
+  (PR #185 review — it used to slip past them).
+- **Frame policing** (PR #185 review): clients never SEND on this
+  channel, and the interceptor enforces it — without an application
+  destination prefix, a SEND to `/user/{id}/queue/notifications` would
+  have been resolved and delivered to that user, a spoofed badge bump.
+  Every SEND is refused, and SUBSCRIBE is allowed only to
+  `/user/queue/notifications` (a direct subscription to another
+  session's broker queue is refused the same way). A refused frame
+  gets an ERROR frame and the session closes.
 - **Destination:** clients subscribe to `/user/queue/notifications`;
   the push listener sends each stored notification there after the
   processor's transaction commits (`AFTER_COMMIT`) — well inside the
@@ -379,9 +393,11 @@ Why the push channel is centralized here rather than per service:
   endpoint's raw-WebSocket transport (`/ws/websocket`) — auto-reconnect
   with exponential backoff 1 s doubling to a 30 s cap, resubscribe on
   reconnect (subscription made in `onConnect`). A STOMP ERROR frame
-  stops the client (the server only sends one for CONNECT auth
-  failures, which retrying cannot fix); recovery is a re-login. UI is
-  badge-only until the Notification Center (issue #66).
+  stops the client: the server sends one for any frame-handling
+  failure, and with this client's traffic (CONNECT plus one fixed
+  subscribe) that is in practice a CONNECT auth failure, which
+  retrying cannot fix; recovery is a re-login. UI is badge-only until
+  the Notification Center (issue #66).
 
 > ✍️ Historical note: the earlier backlog's committed requester–courier
 > chat implied a second real-time channel. The latest backlog moved

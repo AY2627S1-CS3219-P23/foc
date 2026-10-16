@@ -55,11 +55,12 @@ spring:
     publisher-confirm-type: simple
   data:
     redis:
-      # Platform Redis holding the token denylist (D23): read once per
-      # STOMP CONNECT; the adapter fails open on errors. Finite
-      # timeouts so an outage costs a CONNECT at most ~2 s on the STOMP
-      # inbound channel, not Lettuce's default 60 s (same rationale as
-      # user-service's logout write).
+      # Platform Redis holding the token denylist (D23): two lookups
+      # per STOMP CONNECT (the jti key, then the user cutoff stamp);
+      # the adapter fails open on errors. Finite timeouts so an outage
+      # costs a CONNECT at most ~4 s on the STOMP inbound channel —
+      # each lookup waits out its own ~2 s — not Lettuce's default 60 s
+      # (same rationale as user-service's logout write).
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       connect-timeout: 2s

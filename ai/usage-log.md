@@ -3904,3 +3904,30 @@ Entry template:
   iat-less accepted) — notification-service 53 run, the 2 pre-existing
   Java-26 AMQP context-restart errors unchanged.
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-16 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** review fixes (PR #185 re-review by @Sinnez1)
+- **Prompt(s):** Asked to resolve the PR #185 re-review comments —
+  two blocking STOMP auth gaps the reviewer demonstrated and six
+  non-blocking items.
+- **Scope:** (1) `JwtChannelInterceptor` — STOMP 1.2's `STOMP` frame
+  is authenticated like `CONNECT` (it used to open an unauthenticated
+  session), every client SEND is refused (a SEND to
+  `/user/{id}/queue/notifications` was delivered to that user), and
+  SUBSCRIBE is allowed only to `/user/queue/notifications`. Both gaps
+  predate this PR but combined allowed tokenless spoofed
+  notifications, so they were fixed where the PR already works.
+  (2) Non-blocking: `RedisTokenDenylist` fails open on any
+  `RuntimeException` (the port's contract), the Redis-outage cost
+  comment corrected to ~4 s (two lookups, each with its own 2 s
+  timeout), the no-jti gateway-parity comment reworded (this check is
+  marginally stricter than `auth.lua`), the ERROR-frame comment
+  softened in `NotificationProvider.tsx` and
+  `docs/notification-service.md`, the unused `NotificationDto` export
+  dropped until issue #66 reads the body, and the redundant
+  `mockito-core` dependency removed. (3) Docs: Session mechanics
+  gained a Frame policing bullet. Tests: raw-frame STOMP cases (with
+  and without token), spoofed-SEND and stray-SUBSCRIBE rejection, two
+  untranslated-exception fail-open adapter cases.
+- **Author review:** Pending author review of the diff via the PR.

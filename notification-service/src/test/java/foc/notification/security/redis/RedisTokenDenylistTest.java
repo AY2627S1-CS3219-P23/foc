@@ -4,6 +4,8 @@
  * Scope: unit tests for issue #67's D23 denylist adapter — revoked /
  * not-revoked lookups and the fail-open path on a Redis failure.
  * 2026-10-14, PR #185 review (@Sinnez1): per-user cutoff cases added.
+ * 2026-10-16, PR #185 re-review (@Sinnez1): untranslated-exception
+ * fail-open cases added — the contract says any store failure.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.security.redis;
@@ -60,6 +62,17 @@ class RedisTokenDenylistTest {
 	}
 
 	@Test
+	void failsOpenOnAnUntranslatedClientError() {
+		// Not a DataAccessException: e.g. Lettuce while the connection
+		// factory is shutting down or reconnecting. The TokenDenylist
+		// contract says any store failure answers false.
+		when(redis.hasKey("denylist:jti-1"))
+				.thenThrow(new IllegalStateException("connection factory shutting down"));
+
+		assertThat(denylist.isRevoked("jti-1")).isFalse();
+	}
+
+	@Test
 	void userRevokedWhenTheResetStampIsNewerThanTheToken() {
 		// G11: a password reset stamps the subject's cutoff instead of
 		// each outstanding jti.
@@ -90,6 +103,14 @@ class RedisTokenDenylistTest {
 	void userCutoffFailsOpenWhenRedisIsUnreachable() {
 		when(values.get("denylist:user:42"))
 				.thenThrow(new RedisConnectionFailureException("down"));
+
+		assertThat(denylist.isUserRevokedSince("42", ISSUED_AT)).isFalse();
+	}
+
+	@Test
+	void userCutoffFailsOpenOnAnUntranslatedClientError() {
+		when(values.get("denylist:user:42"))
+				.thenThrow(new IllegalStateException("connection factory shutting down"));
 
 		assertThat(denylist.isUserRevokedSince("42", ISSUED_AT)).isFalse();
 	}

@@ -13,6 +13,10 @@
  * 2026-10-14, Claude Code (Fable 5), PR #185 review (@Sinnez1): the
  * per-user cutoff a password reset stamps (G11, PR #179) is checked
  * too — the jti lookup alone let a pre-reset token open a session.
+ * 2026-10-16, Claude Code (Fable 5), PR #185 re-review (@Sinnez1):
+ * STOMP 1.2's STOMP frame authenticated like CONNECT (it opened an
+ * unauthenticated session), client SEND frames rejected, SUBSCRIBE
+ * restricted to the notifications destination.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.stomp;
@@ -30,14 +34,22 @@ import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
 
 /**
- * Authenticates STOMP sessions at CONNECT: verifies the bearer JWT,
- * rejects revoked tokens — logged out or outlawed by their account's
- * reset cutoff (D23 — the CONNECT-frame token is the one bearer the
- * gateway's denylist check can never see), and attaches a
+ * Authenticates STOMP sessions at connect time — the {@code CONNECT}
+ * frame or STOMP 1.2's equivalent {@code STOMP} frame: verifies the
+ * bearer JWT, rejects revoked tokens — logged out or outlawed by their
+ * account's reset cutoff (D23 — the CONNECT-frame token is the one
+ * bearer the gateway's denylist check can never see), and attaches a
  * {@link StompPrincipal} named by the token's {@code sub} to the
- * session, which later frames and user-destination routing inherit. A
- * throw here makes the sub-protocol handler send a STOMP ERROR frame
- * (with this exception's message) and close the session — so the
+ * session, which later frames and user-destination routing inherit.
+ *
+ * <p>Later frames are policed too (PR #185 review): clients never SEND
+ * here — with no application destination prefix a SEND to
+ * {@code /user/{id}/queue/notifications} would be delivered verbatim
+ * to that user — and may SUBSCRIBE only to the one per-user
+ * notifications destination.
+ *
+ * <p>A throw here makes the sub-protocol handler send a STOMP ERROR
+ * frame (with this exception's message) and close the session — so the
  * messages stay generic, leaking no token detail.
  */
 @Component
@@ -45,6 +57,8 @@ class JwtChannelInterceptor implements ChannelInterceptor {
 
 	private static final String AUTHORIZATION_HEADER = "Authorization";
 	private static final String BEARER_PREFIX = "Bearer ";
+	/** The one destination clients subscribe to ("Session mechanics"). */
+	private static final String NOTIFICATIONS_DESTINATION = "/user/queue/notifications";
 
 	private final JwtVerifier jwtVerifier;
 	private final TokenDenylist tokenDenylist;
@@ -60,9 +74,23 @@ class JwtChannelInterceptor implements ChannelInterceptor {
 		// setUser sticks (the immutable copy is made after interception).
 		StompHeaderAccessor accessor =
 				MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
-		if (accessor == null || !StompCommand.CONNECT.equals(accessor.getCommand())) {
+		if (accessor == null) {
 			return message;
 		}
+		StompCommand command = accessor.getCommand();
+		// command is null for non-frame messages (e.g. heartbeats): pass.
+		if (StompCommand.CONNECT.equals(command) || StompCommand.STOMP.equals(command)) {
+			authenticate(accessor);
+		} else if (StompCommand.SEND.equals(command)) {
+			throw new MessagingException("sending not allowed");
+		} else if (StompCommand.SUBSCRIBE.equals(command)
+				&& !NOTIFICATIONS_DESTINATION.equals(accessor.getDestination())) {
+			throw new MessagingException("subscription not allowed");
+		}
+		return message;
+	}
+
+	private void authenticate(StompHeaderAccessor accessor) {
 		String header = accessor.getFirstNativeHeader(AUTHORIZATION_HEADER);
 		if (header == null || !header.startsWith(BEARER_PREFIX)) {
 			throw new MessagingException("missing bearer token");
@@ -79,14 +107,15 @@ class JwtChannelInterceptor implements ChannelInterceptor {
 			throw new MessagingException("token revoked");
 		}
 		accessor.setUser(new StompPrincipal(verified.subject()));
-		return message;
 	}
 
 	/**
 	 * Both of the gateway's revocation lookups, in its order (auth.lua):
 	 * the token's own denylist key, then the account's reset cutoff. A
 	 * token missing the claim a lookup needs skips that lookup rather
-	 * than being refused — same stance as the gateway.
+	 * than being refused. Marginally stricter than the gateway, which
+	 * skips the cutoff lookup too when there is no jti — unreachable
+	 * either way, since user-service sets a jti on every token.
 	 */
 	private boolean isRevoked(JwtVerifier.VerifiedToken verified) {
 		if (verified.jti() != null && tokenDenylist.isRevoked(verified.jti())) {

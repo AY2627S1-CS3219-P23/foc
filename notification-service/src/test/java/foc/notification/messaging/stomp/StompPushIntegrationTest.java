@@ -14,6 +14,10 @@
  * test; this context stays Docker- and Redis-free).
  * 2026-10-14, PR #185 review (@Sinnez1): per-user reset-cutoff CONNECT
  * cases added (G11), driven through the same fake.
+ * 2026-10-16, PR #185 re-review (@Sinnez1): raw-frame cases added for
+ * the two auth gaps the reviewer demonstrated — a STOMP 1.2 STOMP
+ * frame must be authenticated like CONNECT, client SEND frames must
+ * be rejected, and SUBSCRIBE is limited to the one destination.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.messaging.stomp;
@@ -56,7 +60,10 @@ import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 import org.springframework.messaging.simp.user.SimpUserRegistry;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 import org.springframework.web.socket.sockjs.client.RestTemplateXhrTransport;
 import org.springframework.web.socket.sockjs.client.SockJsClient;
@@ -366,6 +373,95 @@ class StompPushIntegrationTest {
 				"Bearer " + token("usr-cut-3", "live-jti", null));
 
 		assertThat(session.isConnected()).isTrue();
+	}
+
+	/**
+	 * Opens a bare WebSocket (no STOMP client) to {@code /ws/websocket},
+	 * sends one raw frame and returns the first text the server replies
+	 * with — for the frames Spring's StompSession cannot be made to send.
+	 */
+	private String sendRawFrame(String frame) throws Exception {
+		BlockingQueue<String> replies = new LinkedBlockingQueue<>();
+		WebSocketSession wsSession = new StandardWebSocketClient()
+				.execute(new TextWebSocketHandler() {
+					@Override
+					protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+						replies.add(message.getPayload());
+					}
+				}, "ws://localhost:" + port + "/ws/websocket")
+				.get(5, TimeUnit.SECONDS);
+		try {
+			wsSession.sendMessage(new TextMessage(frame));
+			String reply = replies.poll(5, TimeUnit.SECONDS);
+			assertThat(reply).isNotNull();
+			return reply;
+		} finally {
+			wsSession.close();
+		}
+	}
+
+	@Test
+	void rejectsStompFrameWithoutToken() throws Exception {
+		// STOMP 1.2 lets a client open the session with a STOMP frame
+		// instead of CONNECT; Spring treats it as a connect, so it must
+		// pass the same checks (PR #185 review — this got CONNECTED).
+		String reply = sendRawFrame("STOMP\naccept-version:1.2\nhost:localhost\n\n\0");
+
+		assertThat(reply).startsWith("ERROR");
+	}
+
+	@Test
+	void authenticatesStompFrameLikeConnect() throws Exception {
+		String reply = sendRawFrame("STOMP\naccept-version:1.2\nhost:localhost\n"
+				+ "Authorization:Bearer " + token("usr-stomp-frame-1") + "\n\n\0");
+
+		assertThat(reply).startsWith("CONNECTED");
+	}
+
+	@Test
+	void rejectsClientSendToAnotherUsersQueue() throws Exception {
+		// PR #185 review: with no application destination prefix, a SEND
+		// to /user/{id}/queue/notifications was resolved and delivered to
+		// that user — a tokenless spoofed badge bump. Clients never SEND
+		// here, so every SEND is refused.
+		BlockingQueue<NotificationDto> victim = subscribeAsUser("usr-spoof-victim");
+		StompSession attacker = connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket",
+				"Bearer " + token("usr-spoof-attacker"));
+
+		attacker.send("/user/usr-spoof-victim/queue/notifications",
+				Map.of("eventType", "request.accepted"));
+
+		// The refusal is an ERROR frame, which closes the sender's session.
+		await().atMost(Duration.ofSeconds(5)).until(() -> !attacker.isConnected());
+
+		// Sentinel: a real push still arrives, and arrives alone — the
+		// spoofed frame would have been queued ahead of it.
+		eventProcessor.process(accepted("spoof-e1", "ord-spoof-1", List.of("usr-spoof-victim")));
+		NotificationDto sentinel = victim.poll(5, TimeUnit.SECONDS);
+		assertThat(sentinel).isNotNull();
+		assertThat(sentinel.eventType()).isEqualTo("request.accepted");
+		assertThat(victim).isEmpty();
+	}
+
+	@Test
+	void rejectsSubscriptionOutsideTheNotificationsDestination() throws Exception {
+		StompSession session = connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket", "Bearer " + token("usr-sub-stray"));
+
+		// Straight at the broker, bypassing user-destination resolution.
+		session.subscribe("/queue/notifications-userstolen", new StompFrameHandler() {
+			@Override
+			public Type getPayloadType(StompHeaders headers) {
+				return NotificationDto.class;
+			}
+
+			@Override
+			public void handleFrame(StompHeaders headers, Object payload) {
+			}
+		});
+
+		await().atMost(Duration.ofSeconds(5)).until(() -> !session.isConnected());
 	}
 
 	@Test
