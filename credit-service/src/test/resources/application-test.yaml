@@ -6,6 +6,7 @@
 # 2026-10-11, PR #175 review (Leong Wei Zhi): the sign-up amount and
 # the earned-credit lifetime pinned.
 # 2026-10-12, issue #170: the outbox publisher off.
+# 2026-10-16, issue #173: the expiry and redistribution scheduler off.
 # Author review: Ryan Ang, pending pull request review.
 
 credit:
@@ -25,6 +26,11 @@ credit:
       # no broker in the tests: the publisher does not poll. The tests
       # that need it turn it on against a Testcontainers broker
       enabled: false
+  scheduler:
+    # a test context neither catches up a redistribution at startup nor
+    # fires on the clock; the tests call the expiry and redistribution
+    # services with their own instants and periods
+    enabled: false
 
 spring:
   rabbitmq:

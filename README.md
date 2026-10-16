@@ -94,6 +94,8 @@
   (issue #172) by Claude Code (Opus 5.5).
   2026-10-14: the #172 clause extended for the PR #189 review
   follow-ups, by Claude Code (Opus 5.5).
+  2026-10-16: AI Use Summary extended for the credit expiry and
+  redistribution scheduler (issue #173) by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -508,7 +510,13 @@ the balance and history routes, the history filters as a JPA
 Specification, the 400 problem+json mapping, and their tests),
 transcribed from the "Read API contract" the team wrote in
 `docs/credit-service.md`, with its PR #189 review follow-ups made as
-the reviewer suggested.
+the reviewer suggested; and the expiry and redistribution scheduler
+(issue #173: the daily expiry into the common pool and the monthly
+redistribution, their locking queries, and their unit and Postgres
+tests), written to D2, D4 and D12 of `docs/credit-service.md`, with the
+run times and zone, the per-account expiry transaction, the empty
+month recorded and the startup catch-up decided by the team and
+recorded there.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their

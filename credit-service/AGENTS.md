@@ -25,6 +25,9 @@
   the CreditControllerTest invariant names its two committing cases,
   per the reviewer's comment; the package map and status rebuilt on
   main's after a bad merge resolution.
+  2026-10-16, Claude Code (Opus 5.5), issue #173: the package map,
+  status and invariants updated for the expiry and redistribution
+  scheduler.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -46,11 +49,10 @@ IDs (D1–D12) when touching related code.
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
 | `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
-| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, and `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API |
+| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API, and `ExpiryAndRedistributionScheduler` with `LotExpiryService` and `RedistributionService` (D12) |
 | `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), and `DomainEventMessageConverter`, a copy of notification-service's |
 
-No listener or expiry and redistribution scheduler yet
-(the outbox publisher is the only scheduled job). The handler already calls
+No listener yet. The handler already calls
 `CreditOperations` and `ReplyOutbox`, but nothing calls the handler
 until the listener exists.
 
@@ -119,6 +121,24 @@ until the listener exists.
 - **Broker types stay in `messaging/rabbitmq/`.** `service/` imports
   none; the handler returns an outcome and the listener settles the
   delivery.
+- **The expiry and redistribution runs keep the D2 lock order.** Expiry
+  is one transaction per account: the owner's account, then their lots
+  read again under that lock, then the pool. Redistribution locks every
+  account with `CreditAccountRepository.findAllForUpdate`, then the
+  pool. That query orders by `user_id collate "C"` so it matches the
+  Java `String.compareTo` order the transfer locks two accounts in;
+  do not drop the collation.
+- **A month is redistributed once.** `RedistributionService` checks
+  `redistribution_run` before and after taking its locks, and inserts
+  the row (`RedistributionRunRepository.insert`, never `save`), so the
+  primary key stops a run that overlaps. An empty pool is still
+  recorded (team decision).
+- **The scheduler is off in the `test` profile**
+  (`credit.scheduler.enabled: false`), so a test context does not run
+  the startup catch-up; tests call the two services with their own
+  instants and periods. `ExpiryAndRedistributionTest` commits and its
+  redistributions share the pool out to every account in the test
+  database, so its assertions are about changes, not totals.
 - **What each operation answers is specified** in the design doc ("What
   each operation answers"); the handler depends on it.
 - **The REST API only reads, and only the caller's own data.** The user
