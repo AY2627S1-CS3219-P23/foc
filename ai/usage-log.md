@@ -6,6 +6,9 @@
   change they describe, following the template below; each entry names
   its own tool, author, and review.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-10-17, Codex (GPT-6): recorded PR #180 review work and the
+  missing main-sync entry from its PR description and file headers.
+  Author review: Leong Wei Zhi to review via PR #180.
 -->
 
 # AI Usage Log
@@ -4151,3 +4154,52 @@ Entry template:
   `vite build` clean; prettier clean on the touched files (the one
   warning, `src/features/user/jwt.ts`, is pre-existing on `main` and
   untouched here). The diff is reviewed via the PR.
+
+## 2026-10-16 — Leong Wei Zhi (PR #180 main sync; recorded 2026-10-17)
+- **Tool:** Claude Code (Opus 5); entry transcribed by Codex (GPT-6).
+- **Mode:** repository maintenance + debugging (issue #94, PR #180).
+- **Prompt(s):** Retrospective entry from PR #180's description and
+  commit `0ba4212` file headers: sync the frontend half of #94 with
+  main, including the merged #182 session handling and #185 provider.
+  The original prompt text is not available in this session.
+- **Scope:** Reconciled the route table so /forgot-password stays
+  inside AppShell and /account-recovery stays inside ProtectedRoute's
+  requiresSession branch under NotificationProvider. Preserved both
+  sides of header conflicts in AuthProvider, login, and http. Both
+  reset calls now pass auth: false; a successful reset clears the
+  local session with endSession(), without calling the logout endpoint.
+  Added password-reset regression tests and HTTP cases for empty/body
+  202 responses and the auth opt-out. The original #94 screen generation
+  is covered by the 2026-10-11 entries above (Claude Code, Fable 5).
+- **Author review:** PR #180 reports 145 web tests, lint, TypeScript,
+  build, touched-file formatting and browser reset/recovery walkthroughs
+  passing at that commit. These historical results are transcribed,
+  not newly executed by Codex. This retrospective disclosure is pending
+  Leong Wei Zhi's review via PR #180.
+
+## 2026-10-17 — Leong Wei Zhi (PR #180 review)
+- **Tool:** Codex (GPT-6).
+- **Mode:** debug + refactor + documentation (issue #94).
+- **Prompt(s):** "Address pr comments on
+  https://github.com/AY2627S1-CS3219-P23/foc/pull/180".
+- **Scope:** Applied @Sinnez1's recovery hold to all routes through the
+  shared AuthProvider; ProtectedRoute keeps the sign-in gate. Parsed
+  202 response text so only an empty body resolves undefined and
+  malformed JSON rejects. Moved the recovery request to profileApi
+  and removed its duplicate imperative home navigation. Reused the
+  existing CodeInput/emptyCode for six-digit reset entry and required
+  the email field. Added public-route and Home-link recovery regression
+  cases, malformed-202 cases using real Responses, and code-entry
+  integration coverage; updated existing response mocks and code-box
+  selectors. Added the retrospective main-sync entry above and the
+  README summary for PR #180. The reset API supplies no timing data,
+  so no cooldown/expiry values were invented or API changes made.
+  Unconditional local sign-out after reset retains the existing PR
+  behavior; the reviewer left changing it optional.
+- **Author review:** 157/157 frontend tests pass; lint, TypeScript and
+  production build pass. Prettier is clean on every touched source/test
+  file, and git diff --check passes. The nine new public-route/Home-link
+  and malformed-202 regression cases fail against the previous source
+  implementation. Recovery tests were rerun after correcting a test
+  query option caught by TypeScript. No live browser walkthrough was
+  performed in this review round. Leong Wei Zhi to review via PR #180.

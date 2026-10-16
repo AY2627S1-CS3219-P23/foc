@@ -136,6 +136,9 @@
   moving this branch's `handle: { requiresSession: true }` onto the
   nested ProtectedRoute it gates, by Claude Code (Opus 5).
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-10-17, Codex (GPT-6), PR #180 review: added the web #94
+  disclosure and the missing 2026-10-16 main-sync coverage.
+  Author review: Leong Wei Zhi to review via PR #180.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -669,6 +672,19 @@ Wei Zhi via neutral options Q&A (2026-10-14): on a page that needs no
 session the dead token is now dropped in place, with no redirect and
 no notice, and the redirect for a session-gated page is
 ProtectedRoute's own bounce.
+
+The web half of issue #94 (PR #180), generated with Claude Code
+(Fable 5; main sync with Opus 5), adds the forgot-password and explicit
+account-recovery screens, login link and arrival notice, recovery session
+flag handling, and support for bodyless 202 reset responses. The
+2026-10-16 sync reconciled the routes with #182/#185, opted both reset
+calls out of bearer authentication, and added local session clearing on
+successful reset with regression coverage. The PR #180 review fixes
+(Codex, GPT-6, 2026-10-17) extend the recovery hold to public routes,
+reject malformed nonempty 202 bodies, move the recovery request into
+profileApi, remove the duplicate home redirect, reuse the six-box
+CodeInput, and require the reset email field. The reset API returns no
+cooldown or expiry timings; the screen does not display those values.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

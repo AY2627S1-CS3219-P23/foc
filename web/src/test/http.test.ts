@@ -9,6 +9,10 @@
 // 202 and the `auth: false` opt-out get cases here too — issue #94 added
 // the first to apiFetch, and #182 the second, in the same two releases.
 // Author review: Leong Wei Zhi; Ryan Ang to re-review via PR #182.
+// 2026-10-17, Codex (GPT-6), PR #180 review, issue #94:
+// AI-generated (edited by Codex; Leong Wei Zhi review pending).
+// Real 202 Responses verify empty/valid bodies and reject malformed JSON.
+// Author review: Leong Wei Zhi to review via PR #180.
 
 import {
   ApiError,
@@ -119,24 +123,23 @@ describe('apiFetch: a failing unauthorized handler', () => {
   })
 })
 
-// issue #94: POST /auth/password-reset answers an empty 202 on purpose
-// (anything it said would reveal whether the address has an account),
-// while sign-up's 202 carries its timings — so 202 cannot share 204's
-// skip-the-parse branch, and a parse failure there is an absent body
-// rather than an error
+// Empty reset responses and JSON sign-up responses both use 202.
 describe('apiFetch: a 202', () => {
   function accepted(body: unknown) {
-    return {
-      ok: true,
+    return new Response(body === undefined ? null : JSON.stringify(body), {
       status: 202,
-      headers: new Headers(),
-      json: async () =>
-        body === undefined
-          ? // what fetch does for a bodyless response
-            Promise.reject(new SyntaxError('Unexpected end of JSON input'))
-          : body,
-    }
+    })
   }
+
+  test.each(['{"expiresInSeconds":', '<html>Proxy error</html>', ' '])(
+    'rejects a nonempty malformed JSON body: %s',
+    async (body) => {
+      fetchMock.mockResolvedValue(new Response(body, { status: 202 }))
+      await expect(
+        apiFetch('user', '/auth/signup', { method: 'POST' }),
+      ).rejects.toBeInstanceOf(SyntaxError)
+    },
+  )
 
   test('with no body resolves undefined instead of throwing', async () => {
     fetchMock.mockResolvedValue(accepted(undefined))

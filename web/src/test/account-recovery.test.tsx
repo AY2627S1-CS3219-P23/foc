@@ -9,6 +9,10 @@
 // reloaded flagged session is held on the recovery screen wherever it
 // tries to go; an active session that wanders here is sent home.
 // Author review: Leong Wei Zhi to review via the PR.
+// 2026-10-17, Codex (GPT-6), PR #180 review, issue #94:
+// AI-generated (edited by Codex; Leong Wei Zhi review pending).
+// Regression coverage for recovery holds on public routes and shell navigation.
+// Author review: Leong Wei Zhi to review via PR #180.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -163,17 +167,44 @@ test('Keep Deleted logs out: best-effort server logout, session cleared', async 
   })
 })
 
-test('a reloaded flagged session is held on the recovery screen, not /profile', async () => {
-  localStorage.setItem('user', JSON.stringify(deletedSession))
+test.each([
+  '/',
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/missing-page',
+  '/profile',
+  '/suppliers',
+  '/admin',
+])(
+  'a reloaded flagged session is held on recovery when visiting %s',
+  async (path) => {
+    localStorage.setItem('user', JSON.stringify(deletedSession))
+    const memoryRouter = renderAt(path)
 
-  renderAt('/profile')
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: 'Account Scheduled for Deletion' }),
+      ).toBeInTheDocument(),
+    )
+    expect(memoryRouter.state.location.pathname).toBe('/account-recovery')
+    expect(sentRequests()).toEqual([])
+  },
+)
+
+test('the shell Home link cannot let a deleted session leave recovery', async () => {
+  localStorage.setItem('user', JSON.stringify(deletedSession))
+  const user = userEvent.setup()
+  const memoryRouter = renderAt('/account-recovery')
+
+  await user.click(screen.getAllByRole('link', { name: 'Home' })[0])
 
   await waitFor(() =>
-    expect(
-      screen.getByRole('heading', { name: 'Account Scheduled for Deletion' }),
-    ).toBeInTheDocument(),
+    expect(memoryRouter.state.location.pathname).toBe('/account-recovery'),
   )
-  // no data call went out for the page it was bounced from
+  expect(
+    screen.getByRole('heading', { name: 'Account Scheduled for Deletion' }),
+  ).toBeInTheDocument()
   expect(sentRequests()).toEqual([])
 })
 

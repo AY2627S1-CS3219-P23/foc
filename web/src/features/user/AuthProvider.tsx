@@ -67,9 +67,19 @@
 // /login actually signed out, instead of holding a token whose next
 // 401 would stack a second notice on the reset one.
 // Author review: Leong Wei Zhi; Ryan Ang to re-review via PR #182.
+// 2026-10-17, Codex (GPT-6), PR #180 review, issue #94:
+// AI-generated (edited by Codex; Leong Wei Zhi review pending).
+// Apply the recovery hold before rendering any public or protected page.
+// Author review: Leong Wei Zhi to review via PR #180.
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
-import { useLocation, useMatches, useNavigate, Outlet } from 'react-router'
+import {
+  useLocation,
+  useMatches,
+  useNavigate,
+  Navigate,
+  Outlet,
+} from 'react-router'
 import { AuthContext } from './useAuth'
 import { readStoredValue, useLocalStorage } from './useLocalStorage'
 import {
@@ -248,7 +258,11 @@ export const AuthProvider = () => {
 
   return (
     <AuthContext.Provider value={value}>
-      <Outlet />
+      {token?.deletionScheduledFor && pathname !== '/account-recovery' ? (
+        <Navigate to="/account-recovery" replace />
+      ) : (
+        <Outlet />
+      )}
     </AuthContext.Provider>
   )
 }

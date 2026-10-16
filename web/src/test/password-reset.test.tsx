@@ -21,8 +21,12 @@
 // initFor() finds a call by path because a seeded session adds a
 // GET /users/me on mount that would shift the positional indices.
 // Author review: Leong Wei Zhi to review via the PR.
+// 2026-10-17, Codex (GPT-6), PR #180 review, issue #94:
+// AI-generated (edited by Codex; Leong Wei Zhi review pending).
+// Exercise reset through the shared CodeInput and expose 202 response text.
+// Author review: Leong Wei Zhi to review via PR #180.
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
@@ -51,6 +55,7 @@ function reply(
     ok: status < 400,
     status,
     headers: new Headers(headers),
+    text: async () => (body === undefined ? '' : JSON.stringify(body)),
     json: async () =>
       // the real 202 carries no body at all; json() rejects on it
       body === undefined ? Promise.reject(new SyntaxError('no body')) : body,
@@ -109,7 +114,12 @@ async function fillCodeStep(
   password = 'NewPassword456',
   confirm = 'NewPassword456',
 ) {
-  await user.type(screen.getByLabelText('Reset Code'), code)
+  await user.click(
+    within(screen.getByRole('group', { name: 'Reset Code' })).getAllByRole(
+      'textbox',
+    )[0],
+  )
+  await user.paste(code)
   await user.type(screen.getByLabelText('New Password'), password)
   await user.type(screen.getByLabelText('Confirm New Password'), confirm)
   await user.click(screen.getByRole('button', { name: 'Reset Password' }))
@@ -126,7 +136,9 @@ describe('request step', () => {
         'If an account exists for that email, a reset code is on its way.',
       ),
     )
-    expect(screen.getByLabelText('Reset Code')).toBeInTheDocument()
+    expect(
+      screen.getByRole('group', { name: 'Reset Code' }),
+    ).toBeInTheDocument()
     expect(requestAt(0)).toEqual({
       url: 'http://user.test/auth/password-reset',
       method: 'POST',
@@ -146,7 +158,9 @@ describe('request step', () => {
         'If an account exists for that email, a reset code is on its way.',
       ),
     )
-    expect(screen.getByLabelText('Reset Code')).toBeInTheDocument()
+    expect(
+      screen.getByRole('group', { name: 'Reset Code' }),
+    ).toBeInTheDocument()
   })
 
   test('shows the format 400 as sent and stays on the email step', async () => {
@@ -164,11 +178,33 @@ describe('request step', () => {
         'Email must be a valid @u.nus.edu address.',
       ),
     )
-    expect(screen.queryByLabelText('Reset Code')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('group', { name: 'Reset Code' }),
+    ).not.toBeInTheDocument()
   })
 })
 
 describe('code step', () => {
+  test('uses six digit boxes, filters pasted text, and refuses an incomplete code', async () => {
+    fetchMock.mockResolvedValueOnce(reply(202, undefined))
+    const user = await requestCode('e1234567@u.nus.edu')
+    const boxes = within(
+      screen.getByRole('group', { name: 'Reset Code' }),
+    ).getAllByRole('textbox')
+    expect(boxes).toHaveLength(6)
+    const submit = screen.getByRole('button', { name: 'Reset Password' })
+    expect(submit).toBeDisabled()
+    await user.click(boxes[0])
+    await user.paste('a01b23c4567')
+    expect(boxes.map((box) => (box as HTMLInputElement).value).join('')).toBe(
+      '012345',
+    )
+    expect(submit).toBeEnabled()
+    await user.clear(boxes[2])
+    expect(submit).toBeDisabled()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   test('posts email, code and double entry, then hands off to /login with the notice', async () => {
     const navigate = vi.spyOn(router, 'navigate').mockResolvedValue()
     fetchMock
@@ -229,7 +265,9 @@ describe('code step', () => {
         'That code is invalid or has expired. Check it, or resend a new one.',
       ),
     )
-    expect(screen.getByLabelText('Reset Code')).toBeInTheDocument()
+    expect(
+      screen.getByRole('group', { name: 'Reset Code' }),
+    ).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Resend code' }),
     ).toBeInTheDocument()
@@ -270,7 +308,9 @@ describe('code step', () => {
       body: { email: 'e1234567@u.nus.edu' },
     })
     // still on the code step
-    expect(screen.getByLabelText('Reset Code')).toBeInTheDocument()
+    expect(
+      screen.getByRole('group', { name: 'Reset Code' }),
+    ).toBeInTheDocument()
   })
 })
 

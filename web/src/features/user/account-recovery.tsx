@@ -10,16 +10,19 @@
 // server call needed. ProtectedRoute holds a flagged session on this
 // page, and an unflagged visitor is sent home.
 // Author review: Leong Wei Zhi to review via the PR.
+// 2026-10-17, Codex (GPT-6), PR #180 review, issue #94:
+// AI-generated (edited by Codex; Leong Wei Zhi review pending).
+// Use profileApi for recovery and let the cleared flag redirect home once.
+// Author review: Leong Wei Zhi to review via PR #180.
 
 import { useState } from 'react'
-import { Navigate, useNavigate } from 'react-router'
-import { apiFetch, errorMessage } from '@/lib/api/http'
+import { Navigate } from 'react-router'
+import { errorMessage } from '@/lib/api/http'
 import { useAuth } from './useAuth'
-import type { AdminUser } from './types'
+import { profileApi } from './profileApi'
 
 export function AccountRecovery() {
   const { token, restored, logout } = useAuth()
-  const navigate = useNavigate()
   const [error, setError] = useState('')
   const [restoring, setRestoring] = useState(false)
 
@@ -36,11 +39,8 @@ export function AccountRecovery() {
   const restore = async () => {
     setRestoring(true)
     try {
-      const user = await apiFetch<AdminUser>('user', '/users/me/recover', {
-        method: 'POST',
-      })
+      const user = await profileApi.recoverAccount()
       restored(user)
-      navigate('/', { replace: true })
     } catch (error: unknown) {
       // e.g. the window lapsed between login and this click (404)
       setError(errorMessage(error, 'Could not restore the account. Try again.'))

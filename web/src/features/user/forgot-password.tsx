@@ -24,18 +24,24 @@
 // also ends the local session via endSession(): the server evicted the
 // account's sessions (G11), and this page is reachable while signed in.
 // Author review: Leong Wei Zhi to review via the PR.
+// 2026-10-17, Codex (GPT-6), PR #180 review, issue #94:
+// AI-generated (edited by Codex; Leong Wei Zhi review pending).
+// Reuse CodeInput and its six-digit entry; require an email before requesting.
+// Author review: Leong Wei Zhi to review via PR #180.
 
 import React, { useState } from 'react'
 import { apiFetch, errorMessage } from '@/lib/api/http'
 import { router } from '../../routes/index'
 import { useAuth } from './useAuth'
 import { PasswordChecklist } from './PasswordChecklist'
+import { CodeInput } from './components/CodeInput'
+import { emptyCode } from './otp'
 import { RESET_CODE_INVALID, problemType } from './problemTypes'
 
 export function ForgotPassword() {
   const { endSession } = useAuth()
   const [email, setEmail] = useState('')
-  const [code, setCode] = useState('')
+  const [code, setCode] = useState<string[]>(emptyCode)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
@@ -77,6 +83,7 @@ export function ForgotPassword() {
 
   const confirmReset = async (event: React.SyntheticEvent) => {
     event.preventDefault()
+    if (code.some((digit) => digit === '')) return
     if (newPassword !== confirmPassword) {
       setError('Password entries do not match.')
       return
@@ -87,7 +94,7 @@ export function ForgotPassword() {
         method: 'POST',
         body: JSON.stringify({
           email: sentTo,
-          code,
+          code: code.join(''),
           newPassword,
           confirmPassword,
         }),
@@ -146,6 +153,7 @@ export function ForgotPassword() {
             NUS Email
             <input
               type="email"
+              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="e.g. e0123456@u.nus.edu"
@@ -162,18 +170,16 @@ export function ForgotPassword() {
         </form>
       ) : (
         <form onSubmit={confirmReset} className="mt-4 space-y-4">
-          <label className="block text-sm font-medium text-gray-700">
-            Reset Code
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-gray-700">Reset Code</p>
+            <CodeInput
+              label="Reset Code"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="6-digit code"
-              className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 font-normal tracking-widest placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
+              onChange={setCode}
+              disabled={submitting}
+              autoFocus
             />
-          </label>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">
               New Password
@@ -197,7 +203,7 @@ export function ForgotPassword() {
           </label>
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || code.some((digit) => digit === '')}
             className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
             {submitting ? 'Resetting...' : 'Reset Password'}
@@ -218,7 +224,7 @@ export function ForgotPassword() {
               disabled={submitting}
               onClick={() => {
                 setSentTo(null)
-                setCode('')
+                setCode(emptyCode())
                 // the typed passwords must not silently carry over to
                 // whatever address is entered next (PR #179 review)
                 setNewPassword('')

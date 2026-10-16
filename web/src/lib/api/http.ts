@@ -36,6 +36,10 @@
 // above predates #182's block below it — both stand, the 202 branch
 // sits after 204's and the reset calls now pass `auth: false`.
 // Author review: Leong Wei Zhi to review via the PR.
+// 2026-10-17, Codex (GPT-6), PR #180 review, issue #94:
+// AI-generated (edited by Codex; Leong Wei Zhi review pending).
+// Only an empty 202 body resolves undefined; malformed JSON still rejects.
+// Author review: Leong Wei Zhi to review via PR #180.
 
 import { serviceBaseUrls, type ServiceName } from './config'
 
@@ -185,7 +189,8 @@ export async function apiFetch<T>(
   if (res.status === 202) {
     // some 202s carry a body (sign-up's timings), some none at all
     // (password reset, which answers every caller identically)
-    return (await res.json().catch(() => undefined)) as T
+    const body = await res.text()
+    return (body === '' ? undefined : JSON.parse(body)) as T
   }
   return (await res.json()) as T
 }

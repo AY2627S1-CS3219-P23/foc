@@ -10,25 +10,21 @@
 // answer 404 for a deleted account, so a reloaded deleted session must
 // not wander into them.
 // Reviewed by: Ryan Ang
+// 2026-10-17, Codex (GPT-6), PR #180 review, issue #94:
+// AI-generated (edited by Codex; Leong Wei Zhi review pending).
+// Recovery hold now lives in AuthProvider so it also covers public pages.
+// Author review: Leong Wei Zhi to review via PR #180.
 
-import { Navigate, Outlet, useLocation } from 'react-router'
+import { Navigate, Outlet } from 'react-router'
 import { useAuth } from './useAuth'
 
 // Only blocks on client side, still need server side protection for API calls
 export const ProtectedRoute = () => {
   const data = useAuth()
-  const location = useLocation()
 
   if (!data?.token) {
     // user is not authenticated
     return <Navigate to="/login" replace />
-  }
-  if (
-    data.token.deletionScheduledFor &&
-    location.pathname !== '/account-recovery'
-  ) {
-    // deleted-but-logged-in (issue #94): restore or keep deleted first
-    return <Navigate to="/account-recovery" replace />
   }
   return <Outlet />
 }
