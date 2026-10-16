@@ -69,6 +69,12 @@
   send restores the pre-renewal OTP row, and the stale old-JWT
   sentence (pre-G11) was corrected to the Redis-failure and
   same-second exceptions. Decisions by Leong Wei Zhi via options Q&A.
+  2026-10-16, Claude Code (Opus 5), issue #178: the admin-endpoint and
+  token sections record the per-user stamp a role change or removal
+  writes (G12), and the follow-up's "keeps ADMIN until its exp"
+  sentence is corrected — the removal now revokes that token, with the
+  demotion left as the Redis-failure fallback. Mechanism and scope
+  decided by Leong Wei Zhi via options Q&A (2026-10-12).
 -->
 
 # User Service
@@ -92,7 +98,9 @@ below), and the admin endpoints
 `GET /users` (list, search, role filter, sort, 20/50/100 page sizes,
 `includeDeleted=true` to list removed accounts with their `deletedAt`),
 `PATCH /users/{id}` (promote/demote) and `DELETE /users/{id}` (soft
-delete) for ADMIN/OWNER callers (#96), backed by Postgres via
+delete) for ADMIN/OWNER callers (#96) — both evict the target's
+outstanding sessions (#178), so a demoted admin loses the admin API at
+once rather than at their token's `exp` — backed by Postgres via
 Spring Data JPA, with the schema managed by Flyway (see below). The root `compose.yaml` runs it with its own `user-db`; since the
 gateway cutover (#151) the service has no published host port — it is
 reached through the gateway at
@@ -219,6 +227,12 @@ sign-up never reserves an email or username.
   denylists the caller's `jti` in Redis (`denylist:<jti>`, expiring with
   the token) via `TokenDenylist`, best-effort: a failed Redis write is
   logged, and the response is 204 either way.
+- Three more routes write the other `TokenDenylist` key, the per-user
+  cutoff stamp `denylist:user:<id>` that outlaws every token the account
+  was issued before it: a password reset (#94, G11 — see below), and an
+  admin role change or removal (#178, G12 — `PATCH /users/{id}` when the
+  role actually changes, and `DELETE /users/{id}`). All best-effort like
+  logout, and all enforced by the gateway, not here.
 - No sessions: each request stands on its own token. This service does
   **not** check the denylist — the API gateway rejects revoked tokens
   platform-wide before they reach any service (team decision:
@@ -466,8 +480,13 @@ restored the same accounts. Removal does demote the target to USER
 (owner decision, PR #179 approval follow-up: a removed admin could
 otherwise keep using the admin endpoints while deleted — they trust
 the token's role — and restore itself as an admin), so later logins
-and a self-restored account carry no admin powers until re-promoted;
-a token minted before the removal keeps ADMIN until its ≤ 1 h `exp`. A daily scheduler
+and a self-restored account carry no admin powers until re-promoted.
+A token the target already held does not outlive the removal either
+(#178): removal writes the same `denylist:user:<id>` stamp the password
+reset does, so the gateway answers that token 401 "Token has been
+revoked" on its next request instead of honouring it until its ≤ 1 h
+`exp` — the demotion is what still holds if that best-effort write
+fails (G9) against a gateway failing open (G6). A daily scheduler
 (`AccountPurgeScheduler`, default 03:00) hard-deletes accounts whose
 `deleted_at` is older than the retention window, together with their
 `password_reset_otps` rows — that purge is what frees the identifiers. The
