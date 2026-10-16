@@ -235,7 +235,15 @@ export const AuthProvider = () => {
       setMeCheck({ token: recovered, me: { status: 'ready', user } })
     }
 
-    return { token, role, me, login, logout, updateMe, restored }
+    // logout()'s local half, with no server call and no navigation
+    // (PR #180 main sync): the password-reset page calls this once a
+    // reset lands. The server has already evicted every session the
+    // account held (G11), so POST /auth/logout would be a guaranteed
+    // 401 — and the caller is navigating to /login itself, so there is
+    // nothing here to navigate to.
+    const endSession = () => setToken(null)
+
+    return { token, role, me, login, logout, updateMe, restored, endSession }
   }, [token, role, me, navigate, setToken])
 
   return (

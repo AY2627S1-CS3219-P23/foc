@@ -15,6 +15,11 @@
 // PR #179 Copilot review: a case pins that "Change email" clears the
 // typed passwords instead of silently carrying them to the next
 // address.
+// 2026-10-16, Claude Code (Opus 5), PR #180 main sync: two cases for a
+// stale stored session, which #182 made consequential — neither reset
+// call may carry the token, and a landed reset drops the stored session.
+// initFor() finds a call by path because a seeded session adds a
+// GET /users/me on mount that would shift the positional indices.
 // Author review: Leong Wei Zhi to review via the PR.
 
 import { render, screen, waitFor } from '@testing-library/react'
@@ -54,6 +59,17 @@ function reply(
 
 function problem(status: number, detail: string, type?: string) {
   return reply(status, { status, detail, ...(type && { type }) })
+}
+
+// the init of the (single) request sent to a path, found by URL rather
+// than position: a seeded session makes AuthProvider fetch GET /users/me
+// on mount, which would shift requestAt()'s indices
+function initFor(path: string) {
+  const call = fetchMock.mock.calls.find(([url]) =>
+    String(url).endsWith(path),
+  ) as [string, RequestInit] | undefined
+  if (!call) throw new Error(`no request to ${path}`)
+  return call[1]
 }
 
 // the method, URL and parsed body of the n-th request sent
@@ -258,6 +274,86 @@ describe('code step', () => {
   })
 })
 
+describe('a signed-in visitor', () => {
+  // this page is public and reachable with a live session. #182 made a
+  // token-bearing 401 force a sign-out, and these are credential
+  // endpoints, so the token must stay off them (PR #180 main sync):
+  // otherwise a refusal of the *reset* reads as a revoked session and
+  // signs the user out mid-flow with nothing shown, because a public
+  // page raises no notice and no redirect.
+  const account = {
+    id: 1,
+    username: 'tester',
+    email: 'e1234567@u.nus.edu',
+    role: 'USER',
+  }
+
+  // a live session: GET /users/me answers, so the token source stays
+  // loaded and would be injected into anything that does not opt out
+  function signedIn(confirmReply: ReturnType<typeof reply>) {
+    localStorage.setItem('user', JSON.stringify({ accessToken: 'live-jwt' }))
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(
+        String(url).endsWith('/users/me')
+          ? reply(200, account)
+          : String(url).endsWith('/confirm')
+            ? confirmReply
+            : reply(202, undefined),
+      ),
+    )
+  }
+
+  test('sends neither reset call with the bearer token', async () => {
+    signedIn(reply(204, undefined))
+    vi.spyOn(router, 'navigate').mockResolvedValue()
+
+    const user = await requestCode('e1234567@u.nus.edu')
+    await fillCodeStep(user, '042042')
+
+    await waitFor(() => expect(initFor('/password-reset/confirm')).toBeTruthy())
+    // the session really was live: the mount fetch carried the token
+    expect(new Headers(initFor('/users/me').headers).get('Authorization')).toBe(
+      'Bearer live-jwt',
+    )
+    for (const path of ['/auth/password-reset', '/password-reset/confirm']) {
+      expect(new Headers(initFor(path).headers).has('Authorization')).toBe(
+        false,
+      )
+    }
+  })
+
+  // the reset evicted every session the account held (G11), so the
+  // stored token is dead by the time this page leaves
+  test('is signed out once the reset lands', async () => {
+    signedIn(reply(204, undefined))
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue()
+
+    const user = await requestCode('e1234567@u.nus.edu')
+    await fillCodeStep(user, '042042')
+
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith('/login', {
+        state: { passwordReset: true },
+      }),
+    )
+    expect(localStorage.getItem('user')).toBe('null')
+  })
+
+  // only a landed reset ends it — a refused code leaves the user both
+  // on the code step and signed in
+  test('keeps the session when the reset is refused', async () => {
+    signedIn(problem(400, 'That code is invalid.', RESET_CODE_INVALID))
+
+    const user = await requestCode('e1234567@u.nus.edu')
+    await fillCodeStep(user, '000000')
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+    expect(localStorage.getItem('user')).toBe(
+      JSON.stringify({ accessToken: 'live-jwt' }),
+    )
+  })
+})
+
 describe('login page arrival notice', () => {
   test('shows the password-reset notice the code step hands over', () => {
     render(
@@ -273,5 +369,8 @@ describe('login page arrival notice', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'Password reset. Log in with your new password.',
     )
+    // and it is the only notice: the reset ended the session itself, so
+    // #178's "session ended" box has no flag to raise here
+    expect(screen.getAllByRole('status')).toHaveLength(1)
   })
 })

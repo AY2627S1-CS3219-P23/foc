@@ -17,15 +17,23 @@
 // step-2 escape hatches are disabled while a request is in flight (a
 // resend landing after a step switch yanked the user back to the old
 // address's code step).
+// 2026-10-16, Claude Code (Opus 5), PR #180 main sync: both calls now
+// pass apiFetch's `auth: false` (added by #182 after this page was
+// written) — these are credential endpoints, and a stale token riding
+// along would make their 401 read as a revoked session. A landed reset
+// also ends the local session via endSession(): the server evicted the
+// account's sessions (G11), and this page is reachable while signed in.
 // Author review: Leong Wei Zhi to review via the PR.
 
 import React, { useState } from 'react'
 import { apiFetch, errorMessage } from '@/lib/api/http'
 import { router } from '../../routes/index'
+import { useAuth } from './useAuth'
 import { PasswordChecklist } from './PasswordChecklist'
 import { RESET_CODE_INVALID, problemType } from './problemTypes'
 
 export function ForgotPassword() {
+  const { endSession } = useAuth()
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -45,6 +53,11 @@ export function ForgotPassword() {
       await apiFetch<void>('user', '/auth/password-reset', {
         method: 'POST',
         body: JSON.stringify({ email }),
+        // public credential endpoint: a stale stored session must not
+        // ride along, or its 401 would read as a revoked session and
+        // wipe the session mid-flow with no notice (issue #178 — this
+        // page is public, so nothing redirects or explains)
+        auth: false,
       })
       setError('')
       setSentTo(email)
@@ -78,7 +91,15 @@ export function ForgotPassword() {
           newPassword,
           confirmPassword,
         }),
+        // as above: the reset stands on the emailed code, never on a
+        // bearer token
+        auth: false,
       })
+      // the reset evicted every session the account held (G11), so any
+      // token still in localStorage is dead. Drop it before leaving, or
+      // the user arrives at the login form still "signed in" and the
+      // next 401 raises #178's notice on top of this page's.
+      endSession()
       // the login page shows a "password reset" notice (login.tsx)
       router.navigate('/login', { state: { passwordReset: true } })
     } catch (error: unknown) {
