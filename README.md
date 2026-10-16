@@ -114,6 +114,13 @@
   (@Sinnez1) by Claude Code (Opus 5) — the STOMP frame policing round
   the 2026-10-14 line claims but never wrote into the clause, and the
   client's ERROR-frame policy.
+  2026-10-16: PR #185 rebased onto main twice the same day (PRs #187
+  and #190 landed) — the conflicts this header, the AI Use Summary,
+  `.env.example` and `compose.yaml` carried resolved by keeping both
+  sides with nothing reworded or removed; in the second pass the two
+  order-service lines main had meanwhile moved into date order were
+  left to main's copy rather than re-added here, and this branch's #67
+  lines take their own date positions, by Claude Code (Opus 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 

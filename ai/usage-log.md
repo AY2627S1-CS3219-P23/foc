@@ -3974,3 +3974,39 @@ Entry template:
   `TokenDenylist` javadoc resolved by keeping both sides, in date order
   where the file keeps one).
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-16 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** repository maintenance (PR #185 main sync)
+- **Prompt(s):** Asked to fix PR #185's merge conflict. GitHub reported
+  the PR as conflicting after PR #187 (order-service scaffold) landed
+  on `main`; no review comment was open and no decision was put to the
+  author.
+- **Scope:** No source change. The branch was rebased onto `main`
+  (PR #187 landed) and the seven #67 commits replayed. Conflicts in
+  `README.md` (the header disclosure log and the AI Use Summary),
+  `.env.example` and `compose.yaml` (both disclosure headers) were
+  resolved by keeping both sides — `main`'s order-service block in the
+  position `main` appends it, then this branch's #67 entry — with no
+  clause reworded and nothing removed; the AI Use Summary's paragraph
+  break that the conflict seam swallowed was restored.
+  `ai/usage-log.md` merged without a conflict. The replayed diff was
+  diffed line-for-line against the pre-rebase diff to confirm it is
+  unchanged, and `main`'s own lines in the four files confirmed intact.
+  `main` since the old base changes no code outside `order-service/`,
+  so nothing the branch changes overlaps it; the rest of its diff is
+  the shared docs and compose/`.env` wiring resolved above. PR #190 (credit request event
+  listener) merged while this was in flight, so the branch was rebased
+  a second time the same day for a fresh `README.md` conflict: `main`'s
+  #171/#190 header lines kept, the two order-service header lines left
+  to `main`'s copy (its #190 merge had relocated them into date order,
+  so re-adding this branch's copy would have duplicated them), and this
+  branch's two #67 lines placed in their date positions, which is now
+  how the upstream header reads. The replayed diff was again confirmed
+  line-for-line identical to the pre-rebase diff.
+- **Author review:** web 111/111 (vitest), `tsc -b`, eslint, and
+  prettier clean on the touched files; notification-service
+  `./mvnw test` 59 tests with the two known Java 26 AMQP
+  context-restart errors that also fail on `main` locally
+  (`IdempotentEventProcessorTest`, `RetentionPurgeSchedulerTest`).
+  Author review of the resolution pending via the PR.
