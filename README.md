@@ -72,6 +72,11 @@
   by Claude Code (Opus 5).
   2026-10-10: AI Use Summary extended for the PR #168 review fixes by
   Claude Code (Opus 5.5).
+  2026-10-10: AI Use Summary extended for the order-service Spring Boot
+  scaffold and its compose.yaml/AGENTS.md/.env.example wiring by
+  Claude Code (Opus 5.5).
+  2026-10-11: AI Use Summary extended for the order-service Requests
+  entity/repository skeleton by Claude Code (Opus 5.5).
   2026-10-11: AI Use Summary extended for the credit operations (issue
   #169) by Claude Code (Opus 5.5); the conflict markers the PR #168
   merge left in this header were removed, keeping both sides. Same day:
@@ -94,6 +99,11 @@
   (issue #172) by Claude Code (Opus 5.5).
   2026-10-14: the #172 clause extended for the PR #189 review
   follow-ups, by Claude Code (Opus 5.5).
+  2026-10-14: AI Use Summary extended for the credit request event
+  listener (issue #171) by Claude Code (Opus 5.5).
+  2026-10-16: the #171 clause extended for the PR #190 review round
+  (Leong Wei Zhi), by Claude Code (Opus 5.5); same day, again for its
+  re-review.
   2026-10-16: AI Use Summary extended for the credit expiry and
   redistribution scheduler (issue #173) by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
@@ -505,12 +515,26 @@ that PR's review fixes (#188: a returned reply waits 30 s before its
 next attempt, on a new `next_attempt_at` column, so that unroutable
 replies cannot fill every batch; the reply row inserted, not saved; no
 returns callback on the shared template; a second scheduler thread),
-the approach to each decided by the team; and the read API (issue #172:
+the approach to each decided by the team; the read API (issue #172:
 the balance and history routes, the history filters as a JPA
 Specification, the 400 problem+json mapping, and their tests),
 transcribed from the "Read API contract" the team wrote in
 `docs/credit-service.md`, with its PR #189 review follow-ups made as
-the reviewer suggested; and the expiry and redistribution scheduler
+the reviewer suggested; and the request event
+listener (issue #171: manual acknowledgement after the handler's
+commit, a conflicting event dead-lettered, failures retried through
+the retry queue up to the attempt cap, and its unit and broker
+integration tests), written to D11 of `docs/credit-service.md` and
+following notification-service's listener, with the team's review
+decisions (a retry copy the broker refuses requeues the original;
+dead-letters logged at ERROR) recorded in that doc's failure table,
+and its PR #190 review fixes (a returned retry copy dead-letters the
+original, a nacked or unconfirmed one requeues it after a 5 s pause,
+and a timed-out confirm documented as possibly running the event
+twice), the approach to each decided by the team, and its re-review
+follow-ups (the confirm timeout's environment variable, an
+unresolvable broker host in the test profile, and doc wording);
+and the expiry and redistribution scheduler
 (issue #173: the daily expiry into the common pool and the monthly
 redistribution, their locking queries, and their unit and Postgres
 tests), written to D2, D4 and D12 of `docs/credit-service.md`, with the
@@ -556,6 +580,19 @@ same day (admin removal demoting to USER, a failed renewal send
 restoring the pre-renewal OTP row — both chosen by Leong Wei Zhi via
 neutral options Q&A — plus the reviewer-flagged documentation and
 test-isolation corrections).
+
+The order-service Spring Boot
+scaffold — pom, application config, Dockerfile, and application/test
+classes mirroring the supplier-service and notification-service
+pattern (including the broker connection settings and the
+`foc-contracts` dependency, with no publisher code), plus the
+compose.yaml order-db/order-service wiring, `.env.example` section,
+and `AGENTS.md` port-table entry that went with it, with the database
+engine and image version, host ports, and broker-wiring scope chosen
+by the author via neutral-options Q&A and recorded in
+`ai/usage-log.md`; and the order-service `Requests` entity and
+repository (table name and columns given by the author as an ER
+diagram, which the tool transcribed into the entity unchanged).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

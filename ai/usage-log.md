@@ -81,6 +81,129 @@ Entry template:
   string order.
   Pending pull request review.
 
+## 2026-10-16 — Ryan Ang (PR #190 re-review: credit request event listener)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** docs + config
+- **Scope:** the four items in Leong Wei Zhi's approving re-review,
+  applied as the reviewer suggested:
+  - `credit.rabbitmq.retry.confirm-timeout-ms` takes
+    `CREDIT_RETRY_CONFIRM_TIMEOUT_MS` (default 5000), passed through
+    `compose.yaml` and listed in `.env.example`, whose stale "attempts
+    are not read yet" note is dropped.
+  - The test profile's broker host is `broker.invalid`, so a reused
+    test context cannot reach a developer's own broker on 5672.
+  - `credit-service/AGENTS.md`'s "never dropped" narrowed to a missing
+    dead-letter queue, and the design doc's returned-copy row notes it.
+  - The `credit-service/README.md` listener paragraph reflowed, and the
+    2026-10-14 entry's superseded "left unacked" clause replaced with
+    the reviewer's wording.
+- **Prompt(s):** Asked to explain and apply the reviewer's re-review suggestions.
+- **Author review:** The changes are the reviewer's suggestions, taken
+  as written by team decision. Pending pull request review.
+
+## 2026-10-16 — Ryan Ang (PR #190 review: credit request event listener)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + docs
+- **Scope:** `credit-service/` and `docs/credit-service.md`.
+  - `RequestEventsListener`: a retry copy returned as unroutable now
+    dead-letters the original; a nacked, unconfirmed or unsendable copy
+    requeues it after a pause of the confirm timeout, which moved from
+    a constant to `credit.rabbitmq.retry.confirm-timeout-ms` (5000).
+    The catch around the republish widened from `AmqpException` to
+    `RuntimeException`, so a `CancellationException` also settles the
+    delivery. The event's own failure is logged and attached as a
+    suppressed exception on the requeue and returned paths. The outcome
+    `switch` became a switch expression, so a new `Outcome` no longer
+    compiles unsettled.
+  - `RequestEventsListenerTest`: the returned-copy test now expects a
+    dead-letter; the nacked, unconfirmed and unsendable tests expect the
+    requeue after the (mocked) pause; new tests for a cancelled confirm
+    and an interrupted pause. The confirm timeout is passed in (50 ms),
+    so no test waits 5 s.
+  - `RequestEventsListenerIntegrationTest`: a new test deletes the
+    retry queue on the real broker and checks that a failed event is
+    dead-lettered on its first delivery, then redeclares the topology.
+  - Design doc failure table: the refused-copy row split into a
+    returned row and a nacked/timeout row (noting a timeout waits up to
+    10 s in total: the confirm wait, then the pause), and a row for a
+    timed-out confirm leaving two copies. Service README, AGENTS.md and
+    `application.yaml` updated to match.
+- **Prompt(s):** Review the
+  review comments on PR #190, then to implement the team's decisions
+  on the two that needed one, with the fixes for the rest.
+- **Author review:** Team decisions, transcribed: a returned copy
+  dead-letters immediately; a nack or timeout requeues after a 5 s
+  pause; a timed-out confirm keeps the requeue and is documented as
+  possibly running the event twice. The tool's triage of the Copilot
+  comments (the README environment variable name and the message
+  mutation found not to be bugs) was checked against the code.
+  Pending pull request review.
+
+## 2026-10-14 — Ryan Ang (credit-service: request event listener, issue #171)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Scope:** `credit-service/`.
+  - `messaging/rabbitmq/RequestEventsListener`: consumes
+    `credit-service.request-events` with manual acknowledgement and
+    hands each event to `RequestEventHandler`. `HANDLED` is acked after
+    the handler's transaction commits; `INVALID_STATE` is nacked
+    without requeue, so it is dead-lettered at once; any exception
+    (including `ReservationNotFoundException`) is republished to the
+    retry queue until `credit.rabbitmq.retry.max-attempts`, then
+    dead-lettered. Each settled delivery logs its event type, event
+    ID, request and outcome.
+  - Tests: `RequestEventsListenerTest` (mocked: each outcome, the
+    attempt header, the cap, and how a retry copy the broker does not
+    accept settles the original; see the 2026-10-16 entry for the
+    final behaviour) and
+    `RequestEventsListenerIntegrationTest` (Testcontainers RabbitMQ and
+    Postgres: a reservation with its reply in the outbox, a duplicate
+    delivery changing nothing, a completion that overtook its
+    reservation transferred on a retry, a completion with no
+    reservation retried then dead-lettered, a conflict dead-lettered
+    without a retry, and a fractional reward dead-lettered on first
+    delivery).
+  - The service's README and AGENTS.md, and the README's AI Use
+    Summary updated.
+- **Prompt(s):** The scope of issue #171, on
+  `feat/credit-event-listener`.
+- **Author review:** The settlement rules, the retry delay and the
+  attempt cap are the team's, from `docs/credit-service.md` D11 and
+  issue #171; the design doc is unchanged. Choices the tool made for
+  the author to review, following notification-service's
+  `DomainEventsListener`: attempts counted in an `x-retry-attempts`
+  header the listener stamps, since RabbitMQ 4 resets `x-death` on a
+  client republish; the original acked only after the retry copy is
+  confirmed; what the listener does when the copy is nacked, returned
+  or not confirmed is the 2026-10-16 entry's answer, not this one's.
+  One difference from notification-service: the
+  retry copy is confirmed through a `CorrelationData` future, because
+  this service uses correlated publisher confirms (PR #188) and
+  notification-service's `waitForConfirmsOrDie` needs simple ones. The
+  listener container keeps Boot's defaults (one consumer). A retry copy
+  the broker does not accept requeues the original at once (it was
+  left unacknowledged, so stuck until the channel closed), recorded as
+  a row in the design doc's failure table, and that the two
+  dead-letters the listener decides are logged at ERROR. The cap is
+  now asserted as total attempts, and a `request.submitted` with no
+  requester is shown to be dead-lettered on first delivery by the
+  converter. Four unit tests now cover the requeue (a nacked, returned,
+  unconfirmed or unsendable retry copy).
+  Pending pull request review.
+
+## 2026-10-15 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** docs
+- **Scope:** PR #187 review items 4 and 5 (Leong Wei Zhi):
+  `order-service/mvnw` committed executable (`100755`);
+  `docs/architecture.md` "Database engine for the Order Service" bullet
+  struck from the open decisions and the Order DB node in
+  `docs/architecture.mmd` labelled PostgreSQL.
+- **Prompt(s):** "You can address 4 and 5". The engine (PostgreSQL 17)
+  was the author's choice when order-db was wired into compose.yaml
+  (2026-10-10); the tool only recorded it.
+- **Author review:** Reviewed via pull request.
+
 ## 2026-10-14 — Ryan Ang (PR #189 review follow-ups)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor, docs
@@ -274,6 +397,57 @@ Entry template:
   logging its own warning for every returned reply, so the publisher
   now registers a returns callback that does nothing. `./mvnw test`:
   147 tests, 0 failures, with Docker. Pending pull request review.
+
+## 2026-10-11 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, debug
+- **Scope:** order-service JPA skeleton — `foc.order.model.Requests`
+  (table `requests`) and
+  `foc.order.repository.RequestsRepository`; order-service README
+  status paragraph; README AI Use Summary. Also diagnosed a failing
+  `docker compose up` build (no file changes).
+- **Prompt(s):** "Can you add basic jpa skeleton for order? In
+  particular I would like a table named requests". The tool mirrored
+  the supplier-service `Suppliers` / `SuppliersRepository` pattern,
+  including its auto-increment `Long` id. Then "I would like to add
+  these columns:" with the author's ER diagram of the `requests`
+  table — the tool transcribed those columns, types and nullability
+  into the entity (bigint -> `Long`, text -> `String`, int ->
+  `Integer`, timestamptz -> `Instant`, version -> `@Version`) and
+  added or changed none.
+  Earlier in the session: "I am getting this error when running docker
+  compose up" — traced to antivirus HTTPS scanning replacing Maven
+  Central's certificate inside the build container.
+- **Author review:** Table name and schema given by the author.
+  `./mvnw test` and the image build were not run by the
+  tool (no JDK on the machine; Maven Central unreachable from
+  containers), so both remain for the author to run. To be reviewed
+  via pull request.
+
+## 2026-10-10 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service Spring Boot scaffold — `pom.xml`,
+  `OrderServiceApplication`, context-load test, main/test
+  `application.yaml`, `Dockerfile` (replacing the earlier placeholder),
+  Maven wrapper and `.gitignore`/`.gitattributes` copied from
+  supplier-service, service README; `compose.yaml`
+  order-service/order-db wiring; `.env.example` Order Service section
+  and `VITE_ORDER_SERVICE_URL`; `AGENTS.md` port-table row; README AI
+  Use Summary.
+- **Prompt(s):** "Help me scaffold order service". The tool mirrored
+  the supplier-service / notification-service skeletons. Open points
+  were decided by the author via neutral options Q&A: PostgreSQL 17 for
+  the order DB (`docs/architecture.md` listed the engine as undecided);
+  host ports 8088 (service) / 5436 (DB); scope = skeleton plus broker
+  wiring (`spring-boot-starter-amqp`, the `foc-contracts` dependency
+  and Dockerfile stage, RabbitMQ env/depends_on in compose) with no
+  entities, endpoints or publisher code.
+- **Author review:** All decisions made by the author during the
+  options Q&A; `docker compose config` validated by the tool. The
+  image build and `./mvnw test` were not run by the tool (no JDK on the
+  machine, and Maven Central was unreachable from containers), so both
+  remain for the author to run. To be reviewed via pull request.
 
 ## 2026-10-11 — Ryan Ang (PR #175 review)
 - **Tool:** Claude Code (Opus 5.5)

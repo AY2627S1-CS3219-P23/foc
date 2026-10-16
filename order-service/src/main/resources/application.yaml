@@ -1,0 +1,31 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-10-10.
+# Scope: service configuration scaffolded following the
+# supplier-service / notification-service pattern — application name,
+# datasource bound to the service-owned order-db, JPA
+# schema-from-entities, spring.rabbitmq connection settings (team
+# decision D1), and the actuator health endpoint.
+# Reviewed by: Ko-Khan (via pull request).
+
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: jdbc:postgresql://${ORDER_DB_HOST:localhost}:${ORDER_DB_PORT:5432}/${ORDER_DB_NAME:order}
+    username: ${ORDER_DB_USER:order}
+    password: ${ORDER_DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:foc}
+    password: ${RABBITMQ_PASSWORD:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
