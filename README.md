@@ -97,16 +97,22 @@
   (web STOMP client + CONNECT-time denylist, D23) by Claude Code
   (Fable 5), on PR #185 Copilot review (the summary had missed the
   change).
+  2026-10-12: AI Use Summary extended for the web revoked-session
+  sign-out (issue #178, PR #182) by Claude Code (Fable 5).
   2026-10-13: the #170 clause extended for the PR #188 review round
   (Leong Wei Zhi), by Claude Code (Opus 5.5).
   2026-10-13: AI Use Summary extended for the credit read API
   (issue #172) by Claude Code (Opus 5.5).
+  2026-10-13: the #178 clause extended for the PR #182 human-review
+  round (@Sinnez1), by Claude Code (Opus 5).
   2026-10-14: the #172 clause extended for the PR #189 review
   follow-ups, by Claude Code (Opus 5.5).
   2026-10-14: AI Use Summary extended for the credit request event
   listener (issue #171) by Claude Code (Opus 5.5).
   2026-10-14: the #67 clause extended for the PR #185 human-review
   round (@Sinnez1), by Claude Code (Fable 5).
+  2026-10-14: that #178 clause extended again for the PR #182 second
+  review round, by Claude Code (Opus 5).
   2026-10-16: the #171 clause extended for the PR #190 review round
   (Leong Wei Zhi), by Claude Code (Opus 5.5); same day, again for its
   re-review.
@@ -121,6 +127,14 @@
   order-service lines main had meanwhile moved into date order were
   left to main's copy rather than re-added here, and this branch's #67
   lines take their own date positions, by Claude Code (Opus 5).
+  2026-10-16: PR #182 rebased onto main twice the same day (first with
+  PRs #187/#188/#189 landed, then with #190/#185) — the conflicts this
+  header, the AI Use Summary and `ai/usage-log.md` carried resolved by
+  keeping both sides in date order, no clause reworded; in the second
+  pass `web/src/routes/index.tsx` also conflicted with #185's
+  NotificationProvider layout route, resolved by keeping that route and
+  moving this branch's `handle: { requiresSession: true }` onto the
+  nested ProtectedRoute it gates, by Claude Code (Opus 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -629,6 +643,32 @@ retries 30 s apart, then a stop the bell reports as paused updates
 rather than a frozen count. That policy was chosen by Leong Wei Zhi
 from four options via neutral options Q&A; the rest were mechanical
 fixes to reviewer-identified gaps.
+
+The web revoked-session sign-out (issue #178, PR #182): the shared
+fetch wrapper's unauthorized handler (a 401 on a token-bearing request
+forces a sign-out to /login with a one-time notice; the login call
+itself opts out of the token injection so its wrong-credentials 401
+stays an inline error) and its tests. The mechanism (any token-bearing
+401, no detail matching), the sign-out UX and the scope were decided
+by Leong Wei Zhi via neutral options Q&A, recorded in
+`ai/usage-log.md`. The PR #182 human-review round (@Sinnez1) added two
+defect fixes with no new design decisions: the handler is given the
+token the refused request carried, so a 401 answering a replaced token
+no longer ends the session the user has just started; and the notice
+is published to the login page rather than read at mount only, so a
+401 arriving while that page is open shows it there instead of saving
+it for a later visit. The second review round (@Sinnez1) added four
+more defect fixes — the refused token is compared with what
+localStorage holds rather than with the last rendered session (so
+neither another tab's newer session nor one stored a render ago is
+cleared), the handler and token source are unregistered when the
+provider unmounts, a failing handler no longer replaces the ApiError
+callers match on, and the bearer scheme is matched case-insensitively
+as the gateway matches it — plus one behaviour question put to Leong
+Wei Zhi via neutral options Q&A (2026-10-14): on a page that needs no
+session the dead token is now dropped in place, with no redirect and
+no notice, and the redirect for a session-gated page is
+ProtectedRoute's own bounce.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

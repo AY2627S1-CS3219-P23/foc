@@ -20,13 +20,31 @@
 // once read, so the notice doesn't come back when /login is reloaded.
 // 2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei Zhi):
 // clearing the state keeps the URL's query and hash.
-// Reviewed by: Ryan Ang
+// Reviewed by: Ryan Ang (everything above).
+// 2026-10-12, Claude Code (Fable 5), issue #178: "session ended" notice,
+// shown when AuthProvider forces a sign-out after a 401 on a
+// token-bearing request (owner decision via options Q&A). Carried by
+// sessionNotice's one-shot flag, read once into state and cleared on
+// mount — navigation state loses a race here, see sessionNotice.ts.
+// PR #182 Copilot review: the login call opts out of apiFetch's token
+// injection (auth: false) — a stale stored session must not ride along,
+// or its wrong-credentials 401 would read as a revoked session.
+// 2026-10-13, Claude Code (Opus 5), PR #182 review (@Sinnez1): the page
+// also subscribes to the flag, so a 401 arriving while it is already
+// open shows the notice then — rather than being skipped and surfacing
+// on the next visit, after a manual logout.
+// Reviewed by: Ryan Ang (@Sinnez1), PR #182 review rounds.
 
 import React, { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { apiFetch, errorMessage } from '@/lib/api/http'
 import { router } from '../../routes/index'
 import { useAuth } from './useAuth'
+import {
+  clearSessionEnded,
+  sessionEndedFlag,
+  subscribeSessionEnded,
+} from './sessionNotice'
 import type { LoginResponse } from './types'
 
 export function Login() {
@@ -42,6 +60,23 @@ export function Login() {
     true
   // kept here because the navigation state is cleared below
   const [accountCreated] = useState(cameFromSignup)
+  // set by AuthProvider when a 401 forced a sign-out (issue #178): read
+  // on arrival, and subscribed to for the 401 that lands while this page
+  // is already open. Either way the flag is consumed, so it can't show
+  // up on a later visit — after a plain manual logout, say.
+  // Read and clear are deliberately separate: StrictMode invokes a
+  // useState initializer twice, so a read-and-clear in there would spend
+  // the flag on a call whose result React may discard. The effect below
+  // clears what the first render read.
+  const [sessionEnded, setSessionEnded] = useState(sessionEndedFlag)
+  useEffect(() => {
+    // takes the flag the first render above already read
+    clearSessionEnded()
+    return subscribeSessionEnded(() => {
+      setSessionEnded(true)
+      clearSessionEnded()
+    })
+  }, [])
 
   // the browser keeps navigation state across a reload, so drop it once
   // read: the notice shows on arrival only
@@ -71,6 +106,9 @@ export function Login() {
       const response = await apiFetch<LoginResponse>('user', '/auth/login', {
         method: 'POST',
         body: JSON.stringify({ usernameOrEmail: username, password }),
+        // no bearer token: a stale stored session would make a
+        // wrong-credentials 401 read as a revoked session (issue #178)
+        auth: false,
       })
 
       setError('')
@@ -89,6 +127,14 @@ export function Login() {
       <p className="mt-1 text-sm text-gray-500">
         Access your student errand portal.
       </p>
+      {sessionEnded && !error && (
+        <p
+          role="status"
+          className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700"
+        >
+          Your session has ended. Please sign in again.
+        </p>
+      )}
       {accountCreated && !error && (
         <p
           role="status"

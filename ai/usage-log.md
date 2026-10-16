@@ -3831,6 +3831,37 @@ Entry template:
 
 ## 2026-10-12 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (issue #178, web half — PR #182), then refactor
+  (PR #182 Copilot review)
+- **Prompt(s):** Asked to plan and resolve issue #178 (a demoted admin
+  keeps ADMIN until their token expires); the revocation mechanism
+  (option A, per-user epoch stamp), the scope (the issue's two paths
+  only), the web reaction (force sign-out on any token-bearing 401)
+  and the sign-out UX (/login with a notice) were decided by the
+  author via neutral options Q&A. Then asked to address the PR's
+  review comments.
+- **Scope:** `web/src/lib/api/http.ts` — a swappable unauthorized
+  handler, invoked before the throw when a 401 answers a request that
+  carried the bearer token; review round: `auth: false` opts a call
+  out of the token injection. `web/src/features/user/AuthProvider.tsx`
+  — registers the handler: clears the stored session and navigates to
+  /login; guarded on a live session so logout's own best-effort 401
+  doesn't re-navigate. `web/src/features/user/sessionNotice.ts` (new)
+  — one-shot flag carrying the "session ended" notice to the login
+  page; chosen over router navigation state because ProtectedRoute's
+  stateless bounce races the handler's startTransition-deferred
+  navigation and can wipe the state before the login page mounts (the
+  test caught this; the file documents it).
+  `web/src/features/user/login.tsx` — renders the notice; review
+  round: the login call sends no bearer token, so a stale stored
+  session can't make a wrong-credentials 401 read as a revoked
+  session. `web/src/test/auth.test.tsx` — revoked-session cases, plus
+  the review round's stale-session login regression.
+- **Author review:** web 102/102 (vitest), eslint, tsc, prettier; the
+  diff reviewed via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
 - **Mode:** implementation + documentation (issue #67, remaining scope)
 - **Prompt(s):** Asked to plan and resolve issue #67. Exploration found
   the server half already merged (PR #74); the remaining scope was
@@ -3875,6 +3906,74 @@ Entry template:
   Summary extended for the #67 remaining scope, which the PR had missed
   (policy: the summary stays current).
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-13 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debugging assistance, refactoring (PR #182 review by
+  @Sinnez1)
+- **Prompt(s):** Asked to address the PR #182 review comments — the
+  blocking session-identity finding and the lower-priority notice-timing
+  one. Both were defects with a stated fix direction, so no new design
+  decisions were put to the author.
+- **Scope:** (1) A late 401 for an old token was signing out a new
+  session: `apiFetch` now hands the unauthorized handler the bearer
+  token the refused request actually carried (read back off the request
+  headers, so a caller-supplied Authorization counts the same), and
+  `AuthProvider`'s guard compares it against the live session's token
+  instead of merely checking that some session exists — a reply
+  outlived by a fresh login is ignored. (2) The "session ended" notice
+  could show at the wrong time: `sessionNotice` publishes the flag to
+  listeners as well as holding it, and the login page subscribes, so a
+  401 landing while the page is already open shows the notice then and
+  consumes the flag — it can no longer surface on a later visit, e.g.
+  after a plain manual logout. (3) `web/src/test/auth.test.tsx` — a case
+  per finding (both verified to fail without the fix), and the flag is
+  reset between tests since it is module state. Also merged `main`
+  (PR #179), resolving the README and usage-log conflicts by keeping
+  both sides in date order.
+- **Author review:** web 104/104 (vitest), `tsc -b`, eslint, prettier
+  clean on the touched files; the diff reviewed via the PR.
+
+## 2026-10-14 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debugging assistance, refactoring (PR #182 second review
+  round by @Sinnez1)
+- **Prompt(s):** Asked to resolve the PR #182 review comments. Eight of
+  the nine findings were defects with a stated fix direction, so no
+  decision was put to the author. The ninth asked a behaviour question
+  — whether a forced sign-out should redirect a visitor off a public
+  page, and whether to return them to the page afterwards — which was
+  put to Leong Wei Zhi as neutral options and answered: clear the
+  session in place on public pages (no redirect, no notice), and leave
+  return-to-location alone, as no flow in the app has it today.
+- **Scope:** (1) `AuthProvider` compares the refused token with what
+  `localStorage` holds at call time instead of the token of the last
+  committed render: the rendered value lags `login()`'s `setToken` by a
+  render, and another tab can have stored a newer session under the
+  shared key — the handler was clearing both. (2) The notice and the
+  redirect are limited to the case where the user ends up at the login
+  form (a route behind `ProtectedRoute`, which carries a new
+  `handle.requiresSession` in `src/routes/index.tsx`, or `/login`
+  itself); the handler no longer navigates at all, since clearing the
+  token makes `ProtectedRoute` bounce a gated page on its own. (3) The
+  layout effect unregisters the handler and the token source on
+  unmount. (4) `web/src/lib/api/http.ts` — a handler that throws is
+  logged rather than raised in place of the `ApiError` callers match
+  on, and the bearer scheme is matched case-insensitively, as the
+  gateway matches it. (5) `web/src/features/user/useLocalStorage.tsx` —
+  `readStoredValue` added for (1); the hook is unchanged.
+  (6) `web/src/test/auth.test.tsx` — a case per blocking finding, each
+  verified to fail without its fix, and the double-wrapped `me` fixture
+  the reviewer spotted is unwrapped; `web/src/test/http.test.ts` (new)
+  — the two apiFetch contracts above. (7) File-header review notes
+  split per entry, as the reviewer asked.
+- **Not changed:** the login page still reads the notice flag in a
+  `useState` initializer and clears it in an effect rather than in one
+  read-and-clear call — StrictMode invokes an initializer twice, which
+  would spend the flag on a call whose result React may discard. The
+  reviewer left this one optional.
+- **Author review:** web 113/113 (vitest), `tsc -b`, eslint, prettier
+  clean on the touched files; the diff reviewed via the PR.
 
 ## 2026-10-14 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
@@ -4010,3 +4109,45 @@ Entry template:
   context-restart errors that also fail on `main` locally
   (`IdempotentEventProcessorTest`, `RetentionPurgeSchedulerTest`).
   Author review of the resolution pending via the PR.
+
+## 2026-10-16 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** repository maintenance (PR #182 main sync)
+- **Prompt(s):** Asked to address the PR #182 review comments and to
+  rebase onto `origin/main` before pushing. The three open review
+  rounds were checked against the branch first: every finding already
+  has a fix in the code and a reply on the thread, so no code change
+  was needed and no decision was put to the author.
+- **Scope:** No source change. The branch was rebased onto `main`
+  (PRs #187/#188/#189 landed), which dropped the earlier
+  `main`-into-branch merge commit and replayed the four #178 commits.
+  Conflicts in `README.md` (the header disclosure log and the AI Use
+  Summary) and in `ai/usage-log.md` were resolved by keeping both
+  sides in date order — `main`'s entries first, then this branch's —
+  with no clause reworded and nothing removed; the two paragraph
+  breaks the conflict seams swallowed were restored. The README header
+  also gained the 2026-10-14 line the second review round had left out.
+  Later the same day PRs #190 and #185 landed and the branch was
+  rebased again, this time with a code conflict: `web/src/routes/index.tsx`
+  — #185 had added a `NotificationProvider` layout route between
+  `AuthProvider` and the shell, while this branch adds the
+  `RouteHandle` type and the `handle` on the session-gated branch. The
+  seam paired the wrong layers (main's `element: <AppShell />` against
+  this branch's `Component: ProtectedRoute`), so it was resolved by
+  hand: #185's layout route and import kept, `RouteHandle` kept, and
+  `handle: { requiresSession: true } satisfies RouteHandle` placed on
+  the nested `ProtectedRoute` that actually gates
+  /suppliers, /profile and /admin. The `README.md` and
+  `ai/usage-log.md` conflicts were resolved by keeping both sides in
+  date order, with the order-service header lines left to `main`'s copy
+  (its #190 merge had moved them into date order, so re-adding this
+  branch's copy would have duplicated them). Checked afterwards: the
+  branch's added and removed lines are identical to the pre-rebase set
+  apart from the `handle` line's new indentation under the extra route
+  layer, and both docs are additive against `main` (36 and 122 lines,
+  zero deletions).
+- **Author review:** web 125/125 (vitest — this branch's cases and
+  #185's notification suite together), `tsc -b`, eslint and
+  `vite build` clean; prettier clean on the touched files (the one
+  warning, `src/features/user/jwt.ts`, is pre-existing on `main` and
+  untouched here). The diff is reviewed via the PR.
