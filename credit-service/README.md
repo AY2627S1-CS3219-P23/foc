@@ -17,6 +17,8 @@
   V2, the 30 s wait of a returned reply and the scheduler threads.
   2026-10-14, Claude Code (Opus 5.5), issue #171: status and contents
   updated for the request event listener.
+  2026-10-16, Claude Code (Opus 5.5), PR #190 review (Leong Wei Zhi):
+  the listener's handling of a refused retry copy (team decisions).
   Author review: Ryan Ang, pending pull request review.
   2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the run
   section's service URL updated for the gateway cutover (#151) — the
@@ -91,7 +93,10 @@ What is here:
   after its transaction commits; one that conflicts with its request's
   record is dead-lettered at once; any failure goes to the retry queue
   and is dead-lettered after `CREDIT_RETRY_MAX_ATTEMPTS` (default 5)
-  attempts. A message that cannot be read, such as a fractional reward,
+  attempts. If the broker returns the retry copy (no retry queue) the
+  event is dead-lettered; if it nacks it or does not confirm it within
+  `credit.rabbitmq.retry.confirm-timeout-ms` (5 s), the event is
+  requeued after a pause of the same length. A message that cannot be read, such as a fractional reward,
   is dead-lettered on its first delivery. Each settled delivery logs its
   event type, event ID, request and outcome.
 - **Request event handler** (`service/RequestEventHandler`): applies

@@ -11,6 +11,9 @@
  * delivery.
  * Same day, on review: the cap asserted as total attempts, and a
  * submission with no requester dead-lettered on first delivery.
+ * 2026-10-16, PR #190 review: with the retry queue deleted, a failed
+ * event's returned retry copy dead-letters the original at once (team
+ * decision), checked against the real broker.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
@@ -84,6 +87,9 @@ class RequestEventsListenerIntegrationTest extends PostgresTestContainer {
 
 	@Autowired
 	private OutboxEventRepository outboxEvents;
+
+	@Autowired
+	private RabbitMqTopologyInitializer topology;
 
 	@BeforeEach
 	void emptyDeadLetterQueue() {
@@ -173,6 +179,30 @@ class RequestEventsListenerIntegrationTest extends PostgresTestContainer {
 				.doesNotContainKey(RequestEventsListener.RETRY_ATTEMPTS_HEADER);
 		assertThat(reservations.findById(request)).get()
 				.extracting(Reserved::getStatus).isEqualTo(ReservationStatus.RELEASED);
+		awaitDrained();
+	}
+
+	@Test
+	void anEventWhoseRetryCopyIsReturnedIsDeadLetteredAtOnce() {
+		String request = request();
+		// no retry queue: the copy is returned as unroutable (NO_ROUTE)
+		rabbitTemplate.execute(channel -> channel.queueDelete(RabbitMqTopology.REQUEST_EVENTS_RETRY_QUEUE));
+		try {
+			// no reservation, so the handler throws and the listener tries to retry
+			publish(completed(request, user(), user()));
+
+			await().atMost(TIMEOUT).until(() -> deadLettered() == 1);
+			GetResponse deadLetter = takeDeadLetter();
+			assertThat(new String(deadLetter.getBody(), StandardCharsets.UTF_8))
+					.contains("request.completed").contains(request);
+			// the original, on its first delivery: never requeued, never stamped
+			assertThat(deadLetter.getProps().getHeaders())
+					.doesNotContainKey(RequestEventsListener.RETRY_ATTEMPTS_HEADER);
+			assertThat(messageCount(RabbitMqTopology.REQUEST_EVENTS_QUEUE)).isZero();
+		} finally {
+			// put the retry queue back for the other tests
+			topology.run(null);
+		}
 		awaitDrained();
 	}
 

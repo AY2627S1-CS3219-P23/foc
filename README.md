@@ -92,6 +92,8 @@
   (Leong Wei Zhi), by Claude Code (Opus 5.5).
   2026-10-14: AI Use Summary extended for the credit request event
   listener (issue #171) by Claude Code (Opus 5.5).
+  2026-10-16: the #171 clause extended for the PR #190 review round
+  (Leong Wei Zhi), by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -508,7 +510,11 @@ the retry queue up to the attempt cap, and its unit and broker
 integration tests), written to D11 of `docs/credit-service.md` and
 following notification-service's listener, with the team's review
 decisions (a retry copy the broker refuses requeues the original;
-dead-letters logged at ERROR) recorded in that doc's failure table.
+dead-letters logged at ERROR) recorded in that doc's failure table,
+and its PR #190 review fixes (a returned retry copy dead-letters the
+original, a nacked or unconfirmed one requeues it after a 5 s pause,
+and a timed-out confirm documented as possibly running the event
+twice), the approach to each decided by the team.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their

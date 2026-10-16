@@ -26,6 +26,44 @@ Entry template:
 ```
 
 ---
+## 2026-10-16 — Ryan Ang (PR #190 review: credit request event listener)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + docs
+- **Scope:** `credit-service/` and `docs/credit-service.md`.
+  - `RequestEventsListener`: a retry copy returned as unroutable now
+    dead-letters the original; a nacked, unconfirmed or unsendable copy
+    requeues it after a pause of the confirm timeout, which moved from
+    a constant to `credit.rabbitmq.retry.confirm-timeout-ms` (5000).
+    The catch around the republish widened from `AmqpException` to
+    `RuntimeException`, so a `CancellationException` also settles the
+    delivery. The event's own failure is logged and attached as a
+    suppressed exception on the requeue and returned paths. The outcome
+    `switch` became a switch expression, so a new `Outcome` no longer
+    compiles unsettled.
+  - `RequestEventsListenerTest`: the returned-copy test now expects a
+    dead-letter; the nacked, unconfirmed and unsendable tests expect the
+    requeue after the (mocked) pause; new tests for a cancelled confirm
+    and an interrupted pause. The confirm timeout is passed in (50 ms),
+    so no test waits 5 s.
+  - `RequestEventsListenerIntegrationTest`: a new test deletes the
+    retry queue on the real broker and checks that a failed event is
+    dead-lettered on its first delivery, then redeclares the topology.
+  - Design doc failure table: the refused-copy row split into a
+    returned row and a nacked/timeout row (noting a timeout waits up to
+    10 s in total: the confirm wait, then the pause), and a row for a
+    timed-out confirm leaving two copies. Service README, AGENTS.md and
+    `application.yaml` updated to match.
+- **Prompt(s):** Review the
+  review comments on PR #190, then to implement the team's decisions
+  on the two that needed one, with the fixes for the rest.
+- **Author review:** Team decisions, transcribed: a returned copy
+  dead-letters immediately; a nack or timeout requeues after a 5 s
+  pause; a timed-out confirm keeps the requeue and is documented as
+  possibly running the event twice. The tool's triage of the Copilot
+  comments (the README environment variable name and the message
+  mutation found not to be bugs) was checked against the code.
+  Pending pull request review.
+
 ## 2026-10-14 — Ryan Ang (credit-service: request event listener, issue #171)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (code + tests + docs)
@@ -40,8 +78,9 @@ Entry template:
     dead-lettered. Each settled delivery logs its event type, event
     ID, request and outcome.
   - Tests: `RequestEventsListenerTest` (mocked: each outcome, the
-    attempt header, the cap, and a nacked, returned or unconfirmed
-    retry copy leaving the original unsettled) and
+    attempt header, the cap, and how a retry copy the broker does not
+    accept settles the original; see the 2026-10-16 entry for the
+    final behaviour) and
     `RequestEventsListenerIntegrationTest` (Testcontainers RabbitMQ and
     Postgres: a reservation with its reply in the outbox, a duplicate
     delivery changing nothing, a completion that overtook its

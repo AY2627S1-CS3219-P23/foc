@@ -21,6 +21,9 @@
   missing (Copilot review).
   2026-10-14, Claude Code (Opus 5.5), issue #171: the package map,
   status and invariants updated for the request event listener.
+  2026-10-16, Claude Code (Opus 5.5), PR #190 review (Leong Wei Zhi):
+  the listener invariant updated for the team's decisions on a refused
+  retry copy, and the exhaustive outcome switch.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -120,9 +123,13 @@ publisher is the only scheduled job).
   are counted in the listener's `x-retry-attempts` header, never
   `x-death`, which RabbitMQ 4 resets on every client republish. The
   original is acked only once the retry copy is confirmed and not
-  returned; otherwise it is requeued at once (design doc failure
-  table), never dropped and never left unacked. The two dead-letters
-  the listener decides are logged at ERROR.
+  returned. A returned copy (no retry queue) dead-letters the original;
+  any other failure to publish the copy requeues it after a pause of
+  `credit.rabbitmq.retry.confirm-timeout-ms` (design doc failure
+  table). Never dropped, never left unacked, never requeued in a tight
+  loop. The three dead-letters the listener decides are logged at
+  ERROR. The outcome `switch` is an expression so that a new `Outcome`
+  does not compile until it is settled: keep it one.
 - **What each operation answers is specified** in the design doc ("What
   each operation answers"); the handler depends on it.
 - **Amounts are integers** (Credit F1.2); balances never go negative
