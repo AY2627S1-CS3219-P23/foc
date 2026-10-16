@@ -32,12 +32,17 @@
 // password → edit direction, which #167's two cases missed, in both
 // shapes that left Save sending an empty code: a code requested from the
 // other card, and one requested here and then cancelled.
+// 2026-10-16, Claude Code (Opus 5.5), issue #174: the balance the
+// credit poll reads is faked too, so no case reaches a real gateway (a
+// running one refuses the test token with a 401, which signs the session
+// out), and the details case checks the live Credit Status.
 // Author review: Leong Wei Zhi (via PR #149).
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
+import { creditApi } from '@/features/credit/api'
 import { adminUserApi } from '@/features/user/adminApi'
 import { EmailChangeModal } from '@/features/user/components/EmailChangeModal'
 import { profileApi } from '@/features/user/profileApi'
@@ -87,6 +92,12 @@ beforeEach(() => {
   vi.spyOn(adminUserApi, 'getCurrentUser').mockImplementation(async () => ({
     ...me,
   }))
+  // the shell's credit poll (CreditBalanceProvider)
+  vi.spyOn(creditApi, 'getBalance').mockResolvedValue({
+    available: 5,
+    reserved: 2,
+    total: 7,
+  })
   vi.spyOn(profileApi, 'requestOtp').mockResolvedValue({
     expiresInSeconds: 600,
     resendInSeconds: 60,
@@ -173,12 +184,14 @@ describe('profile page', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows the profile details with placeholder credits', async () => {
+  it('shows the profile details with the live credit balance', async () => {
     renderProfile()
     expect(await screen.findByText('nus_courier_99')).toBeInTheDocument()
     expect(screen.getByText('e1000101@u.nus.edu')).toBeInTheDocument()
     expect(screen.getByText('Requester / Courier')).toBeInTheDocument()
-    expect(screen.getByText('Available: — | Reserved: —')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Available: 5 | Reserved: 2'),
+    ).toBeInTheDocument()
   })
 
   it('shows an error when the profile fails to load', async () => {

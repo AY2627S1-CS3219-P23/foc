@@ -64,6 +64,9 @@
   timeout may leave the event as two copies (new failure-table row).
   Same day, re-review: the returned-copy row notes that a missing
   dead-letter queue discards the event.
+  2026-10-17, issue #174, team decisions transcribed: the admin routes
+  in the Read API contract (a pool summary with a share preview and the
+  next run, and the paged runs), for ADMIN and OWNER.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -324,9 +327,12 @@ Same notation as [`architecture.md`](architecture.md):
 
 ## Read API contract
 
-Both routes return the caller's own data, identified by the JWT; there
-is no route for another user's. Either one creates the caller's account
-on first use (D6), so a balance always exists and neither answers 404.
+The two `/credits/me` routes return the caller's own data, identified
+by the JWT; there is no route for another user's. Either one creates
+the caller's account on first use (D6), so a balance always exists and
+neither answers 404. The admin routes ("Admin routes" below) read only
+the common pool and its redistributions, never a user's data, and only
+for `ADMIN` and `OWNER`.
 
 ### `GET /credits/me`
 
@@ -395,12 +401,52 @@ For the web page:
   offset must be encoded as `%2B08:00` in the query string, or the `+`
   arrives as a space and the request is a 400.
 
+### Admin routes
+
+For the admin dashboard; the token's `role` must be `ADMIN` or `OWNER`.
+Neither route writes anything.
+
+#### `GET /credits/admin/pool`
+
+```json
+{
+  "poolBalance": 37, "accounts": 10, "share": 3, "remainder": 7,
+  "lastRun": { "period": "2026-10", "distributed": 12, "remainder": 2, "ranAt": "2026-09-30T16:00:00Z" },
+  "nextRunAt": "2026-10-31T16:00:00Z"
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `poolBalance` | The common pool's balance |
+| `accounts` | Every credit account, which is who a redistribution shares the pool among. A user has one from their first credit read or event, so it can be fewer than the registered users |
+| `share`, `remainder` | A preview of a redistribution now (F6.1.1, F6.1.2): `share` = `floor(poolBalance / accounts)` each, and 1 more to `remainder` accounts chosen at random. Both 0 when there are no accounts. The run itself counts again under its locks |
+| `lastRun` | The latest recorded month, as in the route below; null before the first |
+| `nextRunAt` | When the scheduler next redistributes (D12): the 1st of next month at 00:00 Asia/Singapore once this Singapore month is recorded, otherwise the next 00:00, when the daily routine finds it missing |
+
+#### `GET /credits/admin/redistributions`
+
+A page of recorded months, newest `period` first, in the `PageResponse`
+shape, with `page` (from 0) and `size` (1 to 100, default 20) as on the
+history route. No other parameters.
+
+```json
+{
+  "content": [ { "period": "2026-10", "distributed": 12, "remainder": 2, "ranAt": "2026-09-30T16:00:00Z" } ],
+  "page": 0, "size": 20, "totalElements": 1, "totalPages": 1
+}
+```
+
+`distributed` counts every credit taken from the pool, the remainder
+included.
+
 ### Errors
 
 | Status | When |
 | --- | --- |
 | 400 problem+json | An amount that is not an integer or is below 1; `minAmount` above `maxAmount`; `from` or `to` not a full instant with an offset; `from` not before `to`; `page` below 0; `size` outside 1 to 100 |
 | 401 problem+json | A missing or invalid token |
+| 403 problem+json | An admin route called with a role other than `ADMIN` or `OWNER` |
 
 No history is an empty page, not an error, and so is a `page` past the
 last one: 200 with empty `content`.

@@ -21,6 +21,10 @@
 // can tell a session-gated page from a public one when a 401 forces a
 // sign-out (owner decision: clear the session in place on public pages,
 // no redirect). Declared here because this is where the gating lives.
+// 2026-10-16, Claude Code (Opus 5.5), issue #174: CreditBalanceProvider
+// layout route below NotificationProvider (the shared balance poll needs
+// the session, and the shell's badge reads it), and /credits behind
+// ProtectedRoute.
 // Author review: Leong Wei Zhi to review via the PR.
 
 import { createBrowserRouter, type RouteObject } from 'react-router'
@@ -28,6 +32,7 @@ import { createBrowserRouter, type RouteObject } from 'react-router'
 import { AppShell } from '@/shared/shell/AppShell'
 import { NotFound } from '@/shared/shell/NotFound'
 import { Admin } from './admin'
+import { Credits } from './credits'
 import { Home } from './home'
 import { Profile } from './profile'
 import { Suppliers } from './suppliers'
@@ -37,6 +42,7 @@ import { Login } from '../features/user/login'
 import { Register } from '../features/user/register'
 import { AuthProvider } from '../features/user/AuthProvider'
 import { NotificationProvider } from '../features/notifications/NotificationProvider'
+import { CreditBalanceProvider } from '../features/credit/CreditBalanceProvider'
 
 // RouteObject.handle for the session-gated branch, read via useMatches
 // (AuthProvider). ProtectedRoute is what enforces it; this only lets
@@ -56,27 +62,33 @@ export const routes: RouteObject[] = [
         Component: NotificationProvider,
         children: [
           {
-            element: <AppShell />,
+            Component: CreditBalanceProvider,
             children: [
-              { index: true, element: <Home /> },
-              { path: 'login', element: <Login /> },
-              { path: 'register', element: <Register /> },
               {
-                Component: ProtectedRoute,
-                handle: { requiresSession: true } satisfies RouteHandle,
+                element: <AppShell />,
                 children: [
-                  { path: 'suppliers', element: <Suppliers /> },
-                  { path: 'profile', element: <Profile /> },
+                  { index: true, element: <Home /> },
+                  { path: 'login', element: <Login /> },
+                  { path: 'register', element: <Register /> },
                   {
-                    Component: AdminRoute,
-                    children: [{ path: 'admin', element: <Admin /> }],
+                    Component: ProtectedRoute,
+                    handle: { requiresSession: true } satisfies RouteHandle,
+                    children: [
+                      { path: 'suppliers', element: <Suppliers /> },
+                      { path: 'profile', element: <Profile /> },
+                      { path: 'credits', element: <Credits /> },
+                      {
+                        Component: AdminRoute,
+                        children: [{ path: 'admin', element: <Admin /> }],
+                      },
+                    ],
                   },
+                  // Renders inside the shell, so the nav stays visible on
+                  // unknown paths (including nav destinations not built
+                  // yet). Outside ProtectedRoute: a 404 needs no login.
+                  { path: '*', element: <NotFound /> },
                 ],
               },
-              // Renders inside the shell, so the nav stays visible on
-              // unknown paths (including nav destinations not built yet).
-              // Outside ProtectedRoute: a 404 needs no login.
-              { path: '*', element: <NotFound /> },
             ],
           },
         ],
