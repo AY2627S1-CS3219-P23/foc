@@ -26,6 +26,38 @@ Entry template:
 ```
 
 ---
+## 2026-10-16 — Leong Wei Zhi (CI pipeline + Claude PR review)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `.github/workflows/ci.yml` and
+  `.github/workflows/claude-review.yml` (first CI setup — the repo had
+  no `.github/` directory).
+  - `ci.yml`: one always-running workflow; `dorny/paths-filter` picks
+    the changed Maven modules (contracts-dependent services also rebuild
+    on `foc-contracts/**`), a web job (lint, format, vitest, build), a
+    path-filtered Docker build check for all seven images (no push), and
+    a `ci-ok` gate job intended as the sole required check so skipped
+    path-filtered jobs can't block merges.
+  - `claude-review.yml`: `anthropics/claude-code-action@v1` reviews
+    non-draft PRs on open/ready/push, posting inline comments plus a
+    summary; authenticated by the `CLAUDE_CODE_OAUTH_TOKEN` secret
+    (subscription OAuth) running claude-sonnet-5-5; docs-only changes
+    are skipped and superseded runs cancelled.
+  - Two pre-existing issues the first CI run surfaced, fixed on the same
+    PR: `supplier-service/mvnw` was committed non-executable (mode
+    100644; exit 126 on a fresh checkout), and 10 `web/src` files had
+    drifted from Prettier style — reformatted mechanically with
+    `prettier --write` (lint and all 125 vitest tests pass unchanged).
+- **Prompt(s):** Asked to plan and implement a CI/CD GitHub pipeline
+  with a cost-efficient Claude Code review in CI; chose Docker
+  build-check-only CD, subscription OAuth auth, auto-trigger on
+  opened/ready/synchronize, and the Sonnet 5.5 model in follow-ups.
+- **Author review:** Workflow YAML checked against the
+  claude-code-action docs ("Automatic PR Code Review" recipe) and
+  validated locally; path filtering and the review to be exercised on
+  this PR and follow-up test PRs before marking `ci-ok` required.
+  Pending pull request review.
+
 ## 2026-10-16 — Ryan Ang (PR #190 re-review: credit request event listener)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** docs + config

@@ -124,7 +124,10 @@ import { SupplierCard } from '@/features/supplier/components/SupplierCard'
 import { SupplierDetailPanel } from '@/features/supplier/components/SupplierDetailPanel'
 import { SupplierFilterBar } from '@/features/supplier/components/SupplierFilterBar'
 import { SupplierFormModal } from '@/features/supplier/components/SupplierFormModal'
-import { formatDistance, haversineDistanceMeters } from '@/features/supplier/distance'
+import {
+  formatDistance,
+  haversineDistanceMeters,
+} from '@/features/supplier/distance'
 import type { Supplier, SupplierInput } from '@/features/supplier/types'
 import { errorMessage } from '@/lib/api/http'
 import { Pagination } from '@/shared/components/Pagination'
@@ -172,7 +175,11 @@ export function Suppliers() {
   // recommended pattern for "adjust state when a prop changes") rather
   // than in an effect, which would cause an extra render pass.
   const [prevFilters, setPrevFilters] = useState({ query, category, sort })
-  if (query !== prevFilters.query || category !== prevFilters.category || sort !== prevFilters.sort) {
+  if (
+    query !== prevFilters.query ||
+    category !== prevFilters.category ||
+    sort !== prevFilters.sort
+  ) {
     setPrevFilters({ query, category, sort })
     setPage(0)
   }
@@ -192,7 +199,9 @@ export function Suppliers() {
   // every time the user picks "Nearest to Me", not just the first.
   function handleSortChange(value: string) {
     if (value === DISTANCE_SORT && !navigator.geolocation) {
-      setLocationNotice('Location is not supported by this browser — showing suppliers sorted by name instead.')
+      setLocationNotice(
+        'Location is not supported by this browser — showing suppliers sorted by name instead.',
+      )
       return
     }
     setSort(value)
@@ -225,7 +234,9 @@ export function Suppliers() {
       // else (e.g. incognito mode blocking location entirely, or the
       // OS's own location toggle being off) rather than the user
       // having denied anything.
-      setLocationNotice("Couldn't get your location — showing suppliers sorted by name instead.")
+      setLocationNotice(
+        "Couldn't get your location — showing suppliers sorted by name instead.",
+      )
       setSort('name,asc')
     }
 
@@ -233,7 +244,10 @@ export function Suppliers() {
       (position) => {
         if (settled) return
         settled = true
-        setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude })
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        })
         setLocationNotice(null)
       },
       handleFailure,
@@ -332,7 +346,9 @@ export function Suppliers() {
         // If the selected filter's category vanished (e.g. its last
         // supplier was deleted), clear it — otherwise the dropdown shows
         // "All" while the list stays filtered by a value it can't show.
-        setCategory((current) => (current && !result.includes(current) ? '' : current))
+        setCategory((current) =>
+          current && !result.includes(current) ? '' : current,
+        )
       })
       .catch(() => {
         // Non-fatal: the filter dropdown just falls back to "All" only.
@@ -397,7 +413,9 @@ export function Suppliers() {
       if (selectedId === pendingDelete.id) setSelectedId(null)
       setPendingDelete(null)
       setError(null)
-      setSuccessMessage(`Successfully deleted Supplier "${pendingDelete.name}".`)
+      setSuccessMessage(
+        `Successfully deleted Supplier "${pendingDelete.name}".`,
+      )
       // Deleting the last item on the last page would otherwise leave
       // `page` pointing past the new totalPages — step back a page
       // first when that happens. `page` is already one of
@@ -420,7 +438,9 @@ export function Suppliers() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold text-gray-900">Active Campus Suppliers</h1>
+        <h1 className="text-xl font-semibold text-gray-900">
+          Active Campus Suppliers
+        </h1>
         {isAdmin && (
           <button
             type="button"
@@ -455,11 +475,15 @@ export function Suppliers() {
         </p>
       )}
 
-      <div className={`grid gap-6 ${selected ? 'lg:grid-cols-[1fr_20rem]' : ''}`}>
+      <div
+        className={`grid gap-6 ${selected ? 'lg:grid-cols-[1fr_20rem]' : ''}`}
+      >
         <div>
           {loading || waitingForLocation ? (
             <p className="text-sm text-gray-500">
-              {waitingForLocation ? 'Waiting for your location…' : 'Loading suppliers...'}
+              {waitingForLocation
+                ? 'Waiting for your location…'
+                : 'Loading suppliers...'}
             </p>
           ) : suppliers.length === 0 ? (
             <div className="rounded-lg border border-gray-200 bg-white py-10 text-center">
@@ -478,7 +502,9 @@ export function Suppliers() {
                     supplier={supplier}
                     selected={supplier.id === selectedId}
                     onSelect={() =>
-                      setSelectedId(supplier.id === selectedId ? null : supplier.id)
+                      setSelectedId(
+                        supplier.id === selectedId ? null : supplier.id,
+                      )
                     }
                     distanceLabel={
                       sort === DISTANCE_SORT && userLocation
