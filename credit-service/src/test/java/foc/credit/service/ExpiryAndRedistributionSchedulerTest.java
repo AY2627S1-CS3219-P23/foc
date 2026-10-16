@@ -6,6 +6,10 @@
  * redistribution counts as taken in Singapore time, and the startup
  * catch-up running only once the month's redistribution time has
  * passed, after an expiry run (team decision), without throwing.
+ * PR #193 review (Leong Wei Zhi), same day: rewritten for the single
+ * routine (team decision): the daily and the startup run both sweep and
+ * then redistribute, a month already recorded is left alone, and a
+ * failed redistribution is completed by the next day's run.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -15,7 +19,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
@@ -39,8 +42,9 @@ class ExpiryAndRedistributionSchedulerTest {
         Instant now = Instant.parse("2026-10-15T16:00:00Z");
         when(expiry.ownersWithExpiredLots(now)).thenReturn(List.of("u-1", "u-2", "u-3"));
         when(expiry.expireLotsOf("u-2", now)).thenThrow(new IllegalStateException("lock timeout"));
+        alreadyRan();
 
-        schedulerAt(now).expireLots();
+        schedulerAt(now).runDaily();
 
         verify(expiry).expireLotsOf("u-1", now);
         verify(expiry).expireLotsOf("u-2", now);
@@ -48,72 +52,103 @@ class ExpiryAndRedistributionSchedulerTest {
     }
 
     @Test
-    void theScheduledRunCountsAsTheSingaporeMonth() {
-        // 00:10 on 1 November in Singapore is still 31 October in UTC
-        Instant now = Instant.parse("2026-10-31T16:10:00Z");
-        ranFine();
-
-        schedulerAt(now).redistributePool();
-
-        verify(redistribution).redistribute(YearMonth.of(2026, 11), now);
-    }
-
-    @Test
-    void aMissedMonthIsCaughtUpAtStartupAfterAnExpiryRun() {
-        // 1 November, 00:30 in Singapore: this month's run time has passed
-        Instant now = Instant.parse("2026-10-31T16:30:00Z");
+    void theRunOnTheFirstSweepsThenRedistributesTheSingaporeMonth() {
+        // 00:00 on 1 November in Singapore is still 31 October in UTC
+        Instant now = Instant.parse("2026-10-31T16:00:00Z");
         when(expiry.ownersWithExpiredLots(now)).thenReturn(List.of("u-1"));
         ranFine();
 
-        schedulerAt(now).catchUpMissedRedistribution();
+        schedulerAt(now).runDaily();
 
-        // the order of a normal night: what expired meanwhile is shared out too
+        // what expired that night is in the pool before it is shared out
         InOrder order = inOrder(expiry, redistribution);
         order.verify(expiry).expireLotsOf("u-1", now);
         order.verify(redistribution).redistribute(YearMonth.of(2026, 11), now);
     }
 
     @Test
-    void laterInTheMonthTheCatchUpStillRuns() {
-        Instant now = Instant.parse("2026-11-20T04:00:00Z");
-        ranFine();
+    void anOrdinaryDayStillSweepsAndLeavesARecordedMonthAlone() {
+        Instant now = Instant.parse("2026-11-20T16:00:00Z");
+        when(expiry.ownersWithExpiredLots(now)).thenReturn(List.of("u-1"));
+        alreadyRan();
 
-        schedulerAt(now).catchUpMissedRedistribution();
+        schedulerAt(now).runDaily();
 
+        // the service answers ALREADY_RAN for a recorded month; the scheduler asks every day
+        verify(expiry).expireLotsOf("u-1", now);
         verify(redistribution).redistribute(YearMonth.of(2026, 11), now);
     }
 
     @Test
-    void noCatchUpBeforeTheMonthsRunTime() {
-        // 1 November, 00:05 in Singapore: the scheduled run at 00:10 is still to come
-        schedulerAt(Instant.parse("2026-10-31T16:05:00Z")).catchUpMissedRedistribution();
+    void startupSweepsThenRedistributesAMissedMonth() {
+        // 20 November in Singapore: the service was down on the 1st
+        Instant now = Instant.parse("2026-11-20T04:00:00Z");
+        when(expiry.ownersWithExpiredLots(now)).thenReturn(List.of("u-1"));
+        ranFine();
 
-        verifyNoInteractions(expiry, redistribution);
+        schedulerAt(now).runAtStartup();
+
+        InOrder order = inOrder(expiry, redistribution);
+        order.verify(expiry).expireLotsOf("u-1", now);
+        order.verify(redistribution).redistribute(YearMonth.of(2026, 11), now);
     }
 
     @Test
-    void aFailedExpiryBeforeTheCatchUpStillLetsTheRedistributionRun() {
+    void startupStillSweepsWhenTheMonthIsAlreadyRecorded() {
+        Instant now = Instant.parse("2026-11-20T04:00:00Z");
+        when(expiry.ownersWithExpiredLots(now)).thenReturn(List.of("u-1"));
+        alreadyRan();
+
+        schedulerAt(now).runAtStartup();
+
+        verify(expiry).expireLotsOf("u-1", now);
+        verify(redistribution).redistribute(YearMonth.of(2026, 11), now);
+    }
+
+    @Test
+    void aRedistributionThatFailsOnTheFirstIsCompletedTheNextDay() {
+        Instant first = Instant.parse("2026-10-31T16:00:00Z");
+        Instant second = Instant.parse("2026-11-01T16:00:00Z");
+        when(redistribution.redistribute(YearMonth.of(2026, 11), first))
+            .thenThrow(new IllegalStateException("database down"));
+        when(redistribution.redistribute(YearMonth.of(2026, 11), second))
+            .thenReturn(new RedistributionOutcome("2026-11", false, 2, 4, 2, 0));
+
+        assertThatCode(() -> schedulerAt(first).runDaily()).doesNotThrowAnyException();
+        schedulerAt(second).runDaily();
+
+        // the failed run recorded nothing, so the 2nd's run asks for November again
+        verify(redistribution).redistribute(YearMonth.of(2026, 11), first);
+        verify(redistribution).redistribute(YearMonth.of(2026, 11), second);
+    }
+
+    @Test
+    void aFailedSweepAtStartupStillLetsTheRedistributionRun() {
         Instant now = Instant.parse("2026-11-20T04:00:00Z");
         when(expiry.ownersWithExpiredLots(now)).thenThrow(new IllegalStateException("database down"));
         ranFine();
 
         // a ready-event listener that throws would fail the application's startup
-        assertThatCode(() -> schedulerAt(now).catchUpMissedRedistribution()).doesNotThrowAnyException();
+        assertThatCode(() -> schedulerAt(now).runAtStartup()).doesNotThrowAnyException();
 
         verify(redistribution).redistribute(YearMonth.of(2026, 11), now);
     }
 
     @Test
-    void aFailedRedistributionIsLoggedNotThrown() {
+    void aFailedRedistributionAtStartupIsLoggedNotThrown() {
         when(redistribution.redistribute(any(), any())).thenThrow(new IllegalStateException("database down"));
 
-        assertThatCode(() -> schedulerAt(Instant.parse("2026-11-20T04:00:00Z")).catchUpMissedRedistribution())
+        assertThatCode(() -> schedulerAt(Instant.parse("2026-11-20T04:00:00Z")).runAtStartup())
             .doesNotThrowAnyException();
     }
 
     private void ranFine() {
         when(redistribution.redistribute(any(), any()))
             .thenReturn(new RedistributionOutcome("2026-11", false, 2, 0, 0, 0));
+    }
+
+    private void alreadyRan() {
+        when(redistribution.redistribute(any(), any())).thenReturn(RedistributionOutcome.alreadyRan("2026-11"));
     }
 
     private ExpiryAndRedistributionScheduler schedulerAt(Instant now) {

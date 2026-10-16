@@ -105,7 +105,8 @@
   (Leong Wei Zhi), by Claude Code (Opus 5.5); same day, again for its
   re-review.
   2026-10-16: AI Use Summary extended for the credit expiry and
-  redistribution scheduler (issue #173) by Claude Code (Opus 5.5).
+  redistribution scheduler (issue #173) by Claude Code (Opus 5.5);
+  same day, extended for the PR #193 review fixes.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -540,7 +541,11 @@ redistribution, their locking queries, and their unit and Postgres
 tests), written to D2, D4 and D12 of `docs/credit-service.md`, with the
 run times and zone, the per-account expiry transaction, the empty
 month recorded and the startup catch-up decided by the team and
-recorded there.
+recorded there, and its PR #193 review fixes (one routine, daily and
+at startup, that sweeps then redistributes a missing month, so a
+failed run is retried the next day; the earned-credit expiry shared;
+a test made independent of test order), the approach decided by the
+team.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their

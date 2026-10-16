@@ -70,6 +70,10 @@
   expiry is one transaction per account; a month with an empty pool is
   still recorded; a redistribution missed while the service was down
   runs at startup, after an expiry run, the order of a normal night.
+  2026-10-16, PR #193 review (Leong Wei Zhi), team decision transcribed:
+  one routine, daily at 00:00 and at startup, sweeps then redistributes
+  a month with no recorded run; the 00:10 job is dropped, so a failed
+  redistribution is retried the next day (D12, failure-table rows).
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -95,7 +99,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D9 | Transfer and release | Saga endings. `request.completed` transfers the held credits. `request.cancelled` and `request.expired` release them, with release being the compensation for a reservation. | F2.1.1, F3.1, NFR1.1 |
 | D10 | Reply publishing | **Transactional outbox.** The reply is written to an outbox table in the same transaction as the balance change, and a publisher sends it to the broker with publisher confirms and the mandatory flag: a reply is marked sent only when the broker confirmed it and did not return it as unroutable. The publisher polls every 1 s, as a fixed delay so that one poll never overlaps the next, publishes at most 100 replies in a poll and waits up to 5 s for each confirm. A reply returned as unroutable is not due again for 30 s, and a poll reads only the unsent replies that are due, so replies no queue takes cannot fill every batch and hold back the ones behind them. | NFR2.1 |
 | D11 | Event failure handling | Transient failures go to a retry queue and are redelivered after a short delay, up to a fixed number of attempts, then to a dead-letter queue. Events that conflict with the recorded state go straight to the dead-letter queue. A `request.completed` with no record is not such a conflict: its reservation may not have been applied yet, so it is retried like a transient failure. The queue layout is the Notification Service's (a work, a retry and a dead-letter queue), with two differences: the four consumed routing keys are bound one by one instead of `request.#`, and the retry delay is 2 s with up to 5 attempts (`CREDIT_RETRY_TTL_MS`, `CREDIT_RETRY_MAX_ATTEMPTS`). The service declares both the `request-events` and `credit-events` exchanges, so it starts without the Order Service. | F5.1.1, NFR2.1 |
-| D12 | Scheduler | Done by a **cron job** through use of `@Scheduled`. The expiry run is daily at 00:00; redistribution is monthly, on the 1st at 00:10, after that day's expiry. Both run in Asia/Singapore time, and a redistribution counts as the Singapore month it runs in. The expiry is one transaction per account. A month is recorded in `redistribution_run` even when the pool is empty. A redistribution missed while the service was down runs at startup, once that month's time has passed, after an expiry run: the order of a normal night, so credits that expired meanwhile are shared out that month. | F6.1.1, F6.1.2 |
+| D12 | Scheduler | Done by a **cron job** through use of `@Scheduled`. One routine runs daily at 00:00 Asia/Singapore time and once at startup: the expiry sweep, then, if the current Singapore month has no `redistribution_run` row, that month's redistribution. The order inside the routine puts what expired into the pool before it is shared out, so the redistribution happens at 00:00 on the 1st, straight after that night's sweep. A month that is missed (the service down) or whose run fails is completed by the next run, at startup or the next day. The expiry is one transaction per account. A month is recorded in `redistribution_run` even when the pool is empty. | F6.1.1, F6.1.2 |
 
 ## The saga
  
@@ -609,7 +613,10 @@ tests.
 | A retry copy's confirm times out | The original is requeued, so the event may run as two copies, each with its own attempt count. Balances are unaffected (idempotent handler); the dead-letter queue may hold the same event twice |
 | A user's lot expires while its credits are held | Nothing happens to the held credits. If the request is released later, the slice returns to its lot, which is past its expiry, and the next expiry run moves it to the pool. |
 | Scheduler runs twice for one month (restart, overlap, or more than one instance) | The unique `period` key lets only one run commit |
-| The service is down at 00:10 on the 1st | At startup, once that time has passed and the month has no `redistribution_run` row, an expiry run moves what expired meanwhile into the pool, then the month's redistribution runs. Repeating the expiry is safe: with nothing past expiry it moves nothing |
+| The startup run and the 00:00 run overlap (the service starts at midnight) | Both sweep, but each account's lots are read again under its lock, so a lot is moved once; the redistribution checks the month's row again after its locks, and the key stops a second insert |
+| The service is down at 00:00 on the 1st | The routine runs at startup: the sweep moves what expired meanwhile into the pool, then the month, which has no `redistribution_run` row, is redistributed. The sweep runs at every startup; with nothing past expiry it reads one query and locks nothing |
+| The redistribution fails while the service is up (the database briefly unavailable, a lock timeout) | It rolls back, so the month has no `redistribution_run` row and the next day's run redistributes it. The failure is logged at ERROR on each day it repeats |
+| The redistribution fails every day until the month ends | That month is never recorded. No credits are lost: they stay in the pool and are shared out with the next month's redistribution |
 | One account's expiry fails (a lock timeout, the database briefly unavailable) | Only that account's transaction rolls back; the others commit. Its lots are still past their expiry, so the next day's run moves them |
 
 ## Closed-economy

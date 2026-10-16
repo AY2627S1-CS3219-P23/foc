@@ -21,12 +21,14 @@
  * PR #189 review (Leong Wei Zhi), 2026-10-14: getOrCreate reads an
  * existing account before attempting the insert, per the reviewer's
  * comment.
+ * PR #193 review (Leong Wei Zhi), 2026-10-16: the earned-credit expiry
+ * moved to EarnedCreditLifetime, shared with the redistribution, per the
+ * reviewer's comment.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
 
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -77,20 +79,16 @@ public class CreditOperationsService implements CreditOperations {
     private final CreditLotRepository lots;
     private final CreditHistoryEntryRepository history;
     private final int signUpCredits;
-    private final int earnedCreditLifetimeMonths;
+    private final EarnedCreditLifetime earnedCreditLifetime;
 
     public CreditOperationsService(CreditAccountRepository accounts, ReservedRepository reservations,
             CreditReservationSliceRepository slices, CreditLotRepository lots,
             CreditHistoryEntryRepository history,
             @Value("${credit.sign-up-credits}") int signUpCredits,
-            @Value("${credit.earned-credit-lifetime-months}") int earnedCreditLifetimeMonths) {
-        // a history row's amount is at least 1, and a lot must outlive the moment it is earned
+            EarnedCreditLifetime earnedCreditLifetime) {
+        // a history row's amount is at least 1
         if (signUpCredits < 1) {
             throw new IllegalArgumentException("credit.sign-up-credits must be at least 1, was " + signUpCredits);
-        }
-        if (earnedCreditLifetimeMonths < 1) {
-            throw new IllegalArgumentException(
-                "credit.earned-credit-lifetime-months must be at least 1, was " + earnedCreditLifetimeMonths);
         }
         this.accounts = accounts;
         this.reservations = reservations;
@@ -98,7 +96,7 @@ public class CreditOperationsService implements CreditOperations {
         this.lots = lots;
         this.history = history;
         this.signUpCredits = signUpCredits;
-        this.earnedCreditLifetimeMonths = earnedCreditLifetimeMonths;
+        this.earnedCreditLifetime = earnedCreditLifetime;
     }
 
     @Override
@@ -204,7 +202,7 @@ public class CreditOperationsService implements CreditOperations {
 
         requester.setReserved(requester.getReserved() - amount);
         courier.setAvailable(courier.getAvailable() + amount);
-        lots.save(new CreditLot(courierId, amount, now, expiryOfCreditsEarnedAt(now)));
+        lots.save(new CreditLot(courierId, amount, now, earnedCreditLifetime.expiryOfCreditsEarnedAt(now)));
         record(requesterId, CreditHistoryType.TRANSFER_OUT, amount, requestRef, now);
         record(courierId, CreditHistoryType.TRANSFER_IN, amount, requestRef, now);
         reservation.setStatus(ReservationStatus.TRANSFERRED);
@@ -299,10 +297,6 @@ public class CreditOperationsService implements CreditOperations {
 
     private void record(String userId, CreditHistoryType type, int amount, String requestRef, Instant now) {
         history.save(new CreditHistoryEntry(userId, type, amount, requestRef, now));
-    }
-
-    private Instant expiryOfCreditsEarnedAt(Instant earnedAt) {
-        return earnedAt.atOffset(ZoneOffset.UTC).plusMonths(earnedCreditLifetimeMonths).toInstant();
     }
 
     private static boolean isMissing(String userId) {

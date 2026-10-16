@@ -5,19 +5,20 @@
  * docs/credit-service.md (D2, D4, F6.1.1, F6.1.2, the redistribution_run
  * table). A month with an empty pool still being recorded is the team's
  * decision; the tool wrote the code to it.
+ * PR #193 review (Leong Wei Zhi), same day: a share's expiry from
+ * EarnedCreditLifetime, shared with the transfer, per the reviewer's
+ * comment.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
 
 import java.time.Instant;
 import java.time.YearMonth;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,18 +53,18 @@ public class RedistributionService {
     private final CommonPoolRepository pool;
     private final CreditHistoryEntryRepository history;
     private final RedistributionRunRepository runs;
-    private final int earnedCreditLifetimeMonths;
+    private final EarnedCreditLifetime earnedCreditLifetime;
     private final Random random = new Random();
 
     public RedistributionService(CreditAccountRepository accounts, CreditLotRepository lots,
             CommonPoolRepository pool, CreditHistoryEntryRepository history, RedistributionRunRepository runs,
-            @Value("${credit.earned-credit-lifetime-months}") int earnedCreditLifetimeMonths) {
+            EarnedCreditLifetime earnedCreditLifetime) {
         this.accounts = accounts;
         this.lots = lots;
         this.pool = pool;
         this.history = history;
         this.runs = runs;
-        this.earnedCreditLifetimeMonths = earnedCreditLifetimeMonths;
+        this.earnedCreditLifetime = earnedCreditLifetime;
     }
 
     @Transactional
@@ -92,7 +93,7 @@ public class RedistributionService {
             getsOneMore[order.get(i)] = true;
         }
 
-        Instant expiresAt = now.atOffset(ZoneOffset.UTC).plusMonths(earnedCreditLifetimeMonths).toInstant();
+        Instant expiresAt = earnedCreditLifetime.expiryOfCreditsEarnedAt(now);
         for (int i = 0; i < count; i++) {
             int amount = share + (getsOneMore[i] ? 1 : 0);
             if (amount == 0) {

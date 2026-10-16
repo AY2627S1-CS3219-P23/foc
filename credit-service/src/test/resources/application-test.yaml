@@ -9,6 +9,7 @@
 # 2026-10-16, PR #190 re-review (Leong Wei Zhi): the broker host made
 # unresolvable, the reviewer's suggestion.
 # 2026-10-16, issue #173: the expiry and redistribution scheduler off.
+# Same day, PR #193 review: its comment reworded for the startup routine.
 # Author review: Ryan Ang, pending pull request review.
 
 credit:
@@ -29,8 +30,8 @@ credit:
       # that need it turn it on against a Testcontainers broker
       enabled: false
   scheduler:
-    # a test context neither catches up a redistribution at startup nor
-    # fires on the clock; the tests call the expiry and redistribution
+    # a test context neither runs the routine at startup nor fires on
+    # the clock; the tests call the expiry and redistribution
     # services with their own instants and periods
     enabled: false
 

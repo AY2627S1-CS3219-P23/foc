@@ -8,16 +8,18 @@
  * redistribution at startup, after an expiry run so the order matches a
  * normal night, are the team's decisions; the tool wrote the code to
  * them.
+ * PR #193 review (Leong Wei Zhi), 2026-10-16, team decision: one
+ * routine, run daily at 00:00 and at startup, sweeps then redistributes
+ * the month if its run is missing; the 00:10 job is gone. The tool
+ * rewrote the class to it.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -32,28 +34,26 @@ import org.springframework.stereotype.Component;
 import foc.credit.service.RedistributionService.RedistributionOutcome;
 
 /**
- * Runs the expiry daily at 00:00 and the redistribution on the 1st of
- * each month at 00:10, after that day's expiry, both in Singapore time
- * (D12). The month a redistribution is recorded under is the Singapore
- * month it runs in.
+ * Runs one routine daily at 00:00 Singapore time and once at startup
+ * (D12): the expiry sweep, then the redistribution of the current
+ * Singapore month if that month has no recorded run. The order inside
+ * the routine puts what expired into the pool before it is shared out.
  *
- * <p>The expiry run is one transaction per account, so one account
- * that fails is logged and the others still commit; it is visited again
- * the next day. If the service was down at a month's redistribution
- * time, it runs at startup instead, once that time has passed and the
- * month has no recorded run, after an expiry run, as on a normal night.
+ * <p>A run that fails is not retried in place: the next day's routine
+ * finds the month still missing and runs it then. One account that fails
+ * to expire is logged and the others still commit; it is visited again
+ * the next day. Repeating the routine is safe: the sweep touches only
+ * lots past expiry that still hold credits, and a month with a recorded
+ * run is not redistributed again.
  *
  * <p>Off in tests via {@code credit.scheduler.enabled=false}, so a test
- * context neither runs a catch-up nor fires on the clock.
+ * context neither runs at startup nor fires on the clock.
  */
 @Component
 @ConditionalOnProperty(name = "credit.scheduler.enabled", havingValue = "true", matchIfMissing = true)
 public class ExpiryAndRedistributionScheduler {
 
     static final String ZONE = "Asia/Singapore";
-
-    /** On the 1st of the month, after the expiry run at 00:00. */
-    static final LocalTime REDISTRIBUTION_TIME = LocalTime.of(0, 10);
 
     private static final Logger log = LoggerFactory.getLogger(ExpiryAndRedistributionScheduler.class);
 
@@ -73,8 +73,32 @@ public class ExpiryAndRedistributionScheduler {
     }
 
     @Scheduled(cron = "0 0 0 * * *", zone = ZONE)
-    public void expireLots() {
+    public void runDaily() {
+        run();
+    }
+
+    // also a month whose run was missed while the service was down
+    @EventListener(ApplicationReadyEvent.class)
+    public void runAtStartup() {
+        run();
+    }
+
+    /**
+     * The sweep, then the month's redistribution if it is missing.
+     * Neither step throws: an exception from the ready-event listener
+     * fails the application's startup.
+     */
+    void run() {
         Instant now = clock.instant();
+        try {
+            expireLots(now);
+        } catch (RuntimeException ex) {
+            log.error("expiry run outcome=FAILED", ex);
+        }
+        redistribute(YearMonth.now(clock), now);
+    }
+
+    private void expireLots(Instant now) {
         List<String> owners = expiry.ownersWithExpiredLots(now);
         int expiredAccounts = 0;
         int moved = 0;
@@ -96,36 +120,9 @@ public class ExpiryAndRedistributionScheduler {
         log.info("expiry run accounts={} amount={} failed={}", expiredAccounts, moved, failed);
     }
 
-    @Scheduled(cron = "0 10 0 1 * *", zone = ZONE)
-    public void redistributePool() {
-        redistribute(YearMonth.now(clock));
-    }
-
-    // a month whose run was missed while the service was down
-    @EventListener(ApplicationReadyEvent.class)
-    public void catchUpMissedRedistribution() {
-        ZonedDateTime now = ZonedDateTime.now(clock);
-        ZonedDateTime due = now.withDayOfMonth(1).with(REDISTRIBUTION_TIME);
-        if (now.isBefore(due)) {
-            // this month's scheduled run is still to come
-            return;
-        }
-        // The same order as a normal night, so credits that expired while
-        // the service was down are in the pool before it is shared out.
-        // Repeating the expiry is safe: with nothing past expiry it moves
-        // nothing. Neither may throw: an exception from a ready-event
-        // listener fails the application's startup.
+    private void redistribute(YearMonth period, Instant now) {
         try {
-            expireLots();
-        } catch (RuntimeException ex) {
-            log.error("expiry run before the redistribution catch-up outcome=FAILED", ex);
-        }
-        redistribute(YearMonth.from(now));
-    }
-
-    private void redistribute(YearMonth period) {
-        try {
-            RedistributionOutcome outcome = redistribution.redistribute(period, clock.instant());
+            RedistributionOutcome outcome = redistribution.redistribute(period, now);
             if (outcome.alreadyRan()) {
                 log.info("redistribution period={} outcome=ALREADY_RAN", period);
             } else {
@@ -133,6 +130,7 @@ public class ExpiryAndRedistributionScheduler {
                     period, outcome.accounts(), outcome.distributed(), outcome.share(), outcome.remainder());
             }
         } catch (RuntimeException ex) {
+            // rolled back, so the month stays unrecorded and the next day's run tries again
             log.error("redistribution period={} outcome=FAILED", period, ex);
         }
     }

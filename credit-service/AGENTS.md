@@ -34,6 +34,8 @@
   2026-10-16, Claude Code (Opus 5.5), issue #173: the package map,
   status and invariants updated for the expiry and redistribution
   scheduler.
+  2026-10-16, Claude Code (Opus 5.5), PR #193 review (Leong Wei Zhi):
+  the single-routine invariant and EarnedCreditLifetime in the map.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -55,7 +57,7 @@ IDs (D1–D12) when touching related code.
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
 | `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
-| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API, and `ExpiryAndRedistributionScheduler` with `LotExpiryService` and `RedistributionService` (D12) |
+| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API, and `ExpiryAndRedistributionScheduler` with `LotExpiryService` and `RedistributionService` (D12), and `EarnedCreditLifetime`, the earned-credit expiry both the transfer and the redistribution use (D4) |
 | `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), `RequestEventsListener` (settles each request event on the handler's outcome: ack, dead-letter, or a confirmed republish to the retry queue), and `DomainEventMessageConverter`, a copy of notification-service's |
 
 ## Invariants — do not break
@@ -152,9 +154,14 @@ IDs (D1–D12) when touching related code.
   the row (`RedistributionRunRepository.insert`, never `save`), so the
   primary key stops a run that overlaps. An empty pool is still
   recorded (team decision).
+- **One routine runs both jobs** (`ExpiryAndRedistributionScheduler.run`,
+  D12): daily at 00:00 and at startup, the sweep, then the month's
+  redistribution if it is missing. It is also the retry for a failed
+  run, so do not add a second schedule for either job, and keep it from
+  throwing: an exception at startup stops the service starting.
 - **The scheduler is off in the `test` profile**
   (`credit.scheduler.enabled: false`), so a test context does not run
-  the startup catch-up; tests call the two services with their own
+  the startup routine; tests call the two services with their own
   instants and periods. `ExpiryAndRedistributionTest` commits and its
   redistributions share the pool out to every account in the test
   database, so its assertions are about changes, not totals.

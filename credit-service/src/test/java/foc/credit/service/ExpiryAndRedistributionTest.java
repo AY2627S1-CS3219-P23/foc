@@ -9,6 +9,8 @@
  * nothing (repeated and concurrent), and after each test the checks of
  * docs/credit-service.md "How their consistency is maintained", copied
  * from CreditOperationsServiceTest.
+ * PR #193 review (Leong Wei Zhi), same day: the small-pool test makes
+ * its own accounts instead of relying on what earlier tests left.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -209,9 +211,13 @@ class ExpiryAndRedistributionTest extends PostgresTestContainer {
 
     @Test
     void aPoolSmallerThanTheAccountsGivesOneEachAndSkipsTheRest() {
-        // drains whatever earlier tests left, then 3 credits for many more accounts
+        // drains whatever earlier tests left, then 3 credits for many more accounts;
+        // fillPool makes 2 accounts, and these 4 more hold whatever the test order is
         redistribution.redistribute(newPeriod(), now.minusSeconds(1));
         fillPool();
+        for (int i = 0; i < 4; i++) {
+            operations.getOrCreate("u-small-" + UUID.randomUUID());
+        }
         Map<String, Integer> before = availableByUser();
         assertThat(poolBalance()).isEqualTo(3);
         assertThat(before.size()).as("accounts").isGreaterThan(3);
