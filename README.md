@@ -93,6 +93,10 @@
   round (@Sinnez1), by Claude Code (Fable 5).
   2026-10-12: AI Use Summary extended for the credit reply outbox and
   outbox publisher (issue #170) by Claude Code (Opus 5.5).
+  2026-10-12: AI Use Summary extended for the issue #67 remaining scope
+  (web STOMP client + CONNECT-time denylist, D23) by Claude Code
+  (Fable 5), on PR #185 Copilot review (the summary had missed the
+  change).
   2026-10-13: the #170 clause extended for the PR #188 review round
   (Leong Wei Zhi), by Claude Code (Opus 5.5).
   2026-10-13: AI Use Summary extended for the credit read API
@@ -101,9 +105,22 @@
   follow-ups, by Claude Code (Opus 5.5).
   2026-10-14: AI Use Summary extended for the credit request event
   listener (issue #171) by Claude Code (Opus 5.5).
+  2026-10-14: the #67 clause extended for the PR #185 human-review
+  round (@Sinnez1), by Claude Code (Fable 5).
   2026-10-16: the #171 clause extended for the PR #190 review round
   (Leong Wei Zhi), by Claude Code (Opus 5.5); same day, again for its
   re-review.
+  2026-10-16: the #67 clause extended for the PR #185 re-review rounds
+  (@Sinnez1) by Claude Code (Opus 5) — the STOMP frame policing round
+  the 2026-10-14 line claims but never wrote into the clause, and the
+  client's ERROR-frame policy.
+  2026-10-16: PR #185 rebased onto main twice the same day (PRs #187
+  and #190 landed) — the conflicts this header, the AI Use Summary,
+  `.env.example` and `compose.yaml` carried resolved by keeping both
+  sides with nothing reworded or removed; in the second pass the two
+  order-service lines main had meanwhile moved into date order were
+  left to main's copy rather than re-added here, and this branch's #67
+  lines take their own date positions, by Claude Code (Opus 5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -584,6 +601,34 @@ by the author via neutral-options Q&A and recorded in
 `ai/usage-log.md`; and the order-service `Requests` entity and
 repository (table name and columns given by the author as an ER
 diagram, which the tool transcribed into the entity unchanged).
+
+The issue #67 remaining scope (the server-side STOMP push gateway had
+merged earlier in PR #74): the web notification client
+(`web/src/features/notifications/` — the app's single STOMP client with
+reconnect/backoff, and the bell's unread badge), the notification-service
+JWT verifier's missing-expiry fix, and the D23 CONNECT-time Redis
+denylist read (port + adapter, interceptor check, ArchUnit rule,
+compose/.env wiring) with the matching doc updates
+(`docs/notification-service.md` D23, `docs/gateway.md` known-limit
+retirement).
+The scope decisions (badge-only UI, native WebSocket without
+sockjs-client, folding the expiry fix in, service-side denylist read as
+a narrow G4 exception) were made by Leong Wei Zhi via neutral options
+Q&A, recorded in `docs/notification-service.md` and `ai/usage-log.md`.
+The PR #185 review round (@Sinnez1) extended that denylist read to the
+G11 per-user reset cutoff (the jti lookup alone let a pre-reset token
+still open a socket), recorded the CONNECT-only timing as an accepted
+limit in both design docs, and switched off the Redis starter's
+repository scan; the Copilot round before it fixed the bell's
+accessible name. The re-review rounds that followed added the
+interceptor's frame policing (a STOMP-command session authenticated
+like CONNECT, every client SEND refused, SUBSCRIBE confined to the one
+destination — together they had let an untokened client push a spoofed
+notification to any user ID) and the client's ERROR-frame policy: three
+retries 30 s apart, then a stop the bell reports as paused updates
+rather than a frozen count. That policy was chosen by Leong Wei Zhi
+from four options via neutral options Q&A; the rest were mechanical
+fixes to reviewer-identified gaps.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

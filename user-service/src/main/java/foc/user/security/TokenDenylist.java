@@ -6,6 +6,8 @@ Scope: Redis denylist writer for POST /auth/logout (issue #151), per the
        Q&A): Redis-only store with TTL keys the API gateway checks, and
        best-effort semantics — a failed write is logged, never surfaced,
        mirroring the gateway's fail-open stance.
+       2026-10-12, Claude Code (Fable 5), issue #67: javadoc updated for
+       notification-service's D23 read at STOMP CONNECT.
 Author review: Leong Wei Zhi to review via the PR.
 2026-10-12 (Claude Code, Fable 5), PR #179 review (@Sinnez1):
 revokeUserSessions added — a password reset stamps denylist:user:<id>
@@ -38,7 +40,9 @@ import org.springframework.stereotype.Component;
  * password reset ends the old password's sessions). The API gateway
  * rejects a bearer token whose jti has a live key here or whose iat
  * predates its subject's stamp; no backend service reads the denylist
- * (team decision: gateway-only enforcement).
+ * (team decision: gateway-only enforcement), except
+ * notification-service at STOMP CONNECT (D23, issue #67) — the
+ * CONNECT-frame token is the one bearer the gateway can never see.
  */
 @Component
 public class TokenDenylist {

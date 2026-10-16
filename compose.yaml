@@ -87,6 +87,11 @@
 # rebasing onto the gateway cutover (issue #151, PR review): like the
 # other backends it has no published port and is reached only through
 # the gateway's /api/order/** prefix (docs/gateway.md).
+# 2026-10-12, Claude Code (Fable 5), issue #67: REDIS_HOST/PORT passed to
+# the notification service for the D23 denylist read at STOMP CONNECT
+# (author decision via options Q&A). Deliberately no depends_on redis —
+# the check fails open (G6/D23), so gating startup on Redis would block
+# valid traffic exactly when the design says to serve it.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -174,6 +179,10 @@ services:
       NOTIF_PURGE_CRON: "${NOTIF_PURGE_CRON:-0 0 3 * * *}"
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       NOTIFICATION_WS_ALLOWED_ORIGINS: ${NOTIFICATION_WS_ALLOWED_ORIGINS:-http://localhost:*}
+      # Platform Redis: denylist read at STOMP CONNECT (D23). No
+      # depends_on redis on purpose — the check fails open (G6).
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     depends_on:
       notification-db:
         condition: service_healthy

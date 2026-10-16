@@ -16,6 +16,13 @@
 # 2026-09-20, issue #68: retention properties repeated here for the
 # same shadowing reason; tests call the purge method directly rather
 # than waiting on the cron trigger, so the cron value itself is inert.
+# 2026-10-12, issue #67: near-zero Redis timeouts so any test that does
+# reach the real D23 denylist adapter fails open instantly instead of
+# waiting out the main yaml's 2 s (integration tests replace the port
+# with a fake, so no Redis is needed).
+# 2026-10-14, PR #185 review (@Sinnez1): Redis repository scanning off,
+# repeated from the main yaml (shadowed) — it logs a store-assignment
+# warning per JPA repository.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 notification:
@@ -45,6 +52,14 @@ spring:
     # Repeated from the main yaml (shadowed): the listener's retry
     # republish calls waitForConfirmsOrDie, which needs confirm mode.
     publisher-confirm-type: simple
+  data:
+    redis:
+      # No Redis runs in tests; keep any accidental lookup's fail-open
+      # path near-instant.
+      connect-timeout: 100ms
+      timeout: 100ms
+      repositories:
+        enabled: false
   datasource:
     url: jdbc:h2:mem:notification;DB_CLOSE_DELAY=-1
     username: sa
