@@ -15,6 +15,10 @@
   updated for the reply outbox and the outbox publisher.
   2026-10-13, Claude Code (Opus 5.5), PR #188 review (Leong Wei Zhi):
   V2, the 30 s wait of a returned reply and the scheduler threads.
+  2026-10-13, Claude Code (Opus 5.5), issue #172: status and contents
+  updated for the read API, with how to call it.
+  2026-10-14, Claude Code (Opus 5.5), PR #189 review (Leong Wei Zhi):
+  merge resolution redone so the #170 and PR #188 text is kept.
   2026-10-14, Claude Code (Opus 5.5), issue #171: status and contents
   updated for the request event listener.
   2026-10-16, Claude Code (Opus 5.5), PR #190 review (Leong Wei Zhi):
@@ -31,14 +35,14 @@
 Credit balances, reservation, transfer and history for FoC — the
 design is [`docs/credit-service.md`](../docs/credit-service.md).
 
-**Status: the credit operations, the event listener and handler, the
-reply outbox with its publisher, and the broker topology.** The service
-starts, applies the schema, declares its queues and verifies login
-tokens. A request event published to `request-events` now reserves,
+**Status: the credit operations, the read API, the event listener and
+handler, the reply outbox with its publisher, and the broker
+topology.** The service starts, applies the schema, declares its queues
+and verifies login tokens. A signed-in user can read their balance and
+history. A request event published to `request-events` now reserves,
 transfers or releases credits, and a reservation's reply is published
 to `credit-events`. Nothing publishes those events until the Order
-Service does. There are no endpoints yet, and no expiry and
-redistribution scheduler.
+Service does. The expiry and redistribution scheduler is not built yet.
 
 What is here:
 
@@ -60,6 +64,18 @@ What is here:
   (`CREDIT_SIGN_UP_CREDITS`, default 5) and the months before earned
   credits expire (`CREDIT_EARNED_CREDIT_LIFETIME_MONTHS`, default 3) are
   configuration.
+- **Read API** (`controller/`, `service/CreditQueryService`): the two
+  routes of the design doc's "Read API contract", for the token's user
+  only.
+  - `GET /credits/me`: `available`, `reserved` and their `total`.
+  - `GET /credits/me/history`: a page of history rows, newest first,
+    with the optional filters `minAmount`, `maxAmount`, `from` and `to`
+    and the paging parameters `page` (from 0) and `size` (1 to 100,
+    default 20).
+
+  Either one creates the caller's account with its sign-up credits on
+  first use, so neither answers 404. An invalid parameter is a 400
+  problem+json whose `detail` names it.
 - **Reply outbox** (`service/ReplyOutbox`, `ReplyOutboxService`):
   enqueue writes the reply as an `outbox_event` row inside the
   caller's transaction, so it commits with the balance change or not at
@@ -133,6 +149,19 @@ port — it is reached through the gateway at
 `http://localhost:${GATEWAY_PORT:-8090}/api/credit/**`
 (`docs/gateway.md`). Its database stays on
 `127.0.0.1:${CREDIT_DB_HOST_PORT:-5436}` for local tooling.
+
+To call the read API, log in through the gateway and pass the access
+token:
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8090/api/credit/credits/me
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8090/api/credit/credits/me/history?minAmount=2&from=2026-10-01T00:00:00Z&size=10"
+```
+
+`from` and `to` are full instants with an offset. Send UTC (`Z`); a
+`+08:00` offset must be written `%2B08:00` in the query string.
 
 **If the service fails to start with a Flyway checksum mismatch for
 version 1:** your `credit-db` volume was created before V1 was amended

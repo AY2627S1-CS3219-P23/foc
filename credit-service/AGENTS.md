@@ -19,6 +19,12 @@
   invariants updated for V2, the due-replies poll, the outbox insert
   and the returns callback; "scheduler" narrowed to the one still
   missing (Copilot review).
+  2026-10-13, Claude Code (Opus 5.5), issue #172: the package map and
+  invariants updated for the read API.
+  2026-10-14, Claude Code (Opus 5.5), PR #189 review (Leong Wei Zhi):
+  the CreditControllerTest invariant names its two committing cases,
+  per the reviewer's comment; the package map and status rebuilt on
+  main's after a bad merge resolution.
   2026-10-14, Claude Code (Opus 5.5), issue #171: the package map,
   status and invariants updated for the request event listener.
   2026-10-16, Claude Code (Opus 5.5), PR #190 review (Leong Wei Zhi):
@@ -40,14 +46,16 @@ IDs (D1–D12) when touching related code.
 | Package | Contents |
 | --- | --- |
 | `config/` | `SecurityConfig`: CORS, health open, everything else needs a valid JWT |
+| `controller/` | `CreditController` (the two read routes and the checks behind the contract's 400s), `ApiExceptionHandler` (400 problem+json), `InvalidQueryParameterException` |
+| `dto/` | The read API's bodies: `BalanceResponse`, `HistoryEntryResponse`, and `PageResponse`, a copy of supplier-service's shape |
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
 | `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
-| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, and `RequestEventHandler`, which owns the transaction for one request event |
+| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, and `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API |
 | `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), `RequestEventsListener` (settles each request event on the handler's outcome: ack, dead-letter, or a confirmed republish to the retry queue), and `DomainEventMessageConverter`, a copy of notification-service's |
 
-No controllers or expiry and redistribution scheduler yet (the outbox
-publisher is the only scheduled job).
+No expiry and redistribution scheduler yet (the outbox publisher is
+the only scheduled job).
 
 ## Invariants — do not break
 
@@ -132,6 +140,26 @@ publisher is the only scheduled job).
   does not compile until it is settled: keep it one.
 - **What each operation answers is specified** in the design doc ("What
   each operation answers"); the handler depends on it.
+- **The REST API only reads, and only the caller's own data.** The user
+  is the token's subject (`Authentication.getName()`); no route takes a
+  user ID. The one write a read causes is get-or-create (D6). Every
+  balance change arrives as an event.
+- **The read API is specified** in the design doc's "Read API
+  contract": routes, fields, order, bounds and each 400. A change to
+  any of them is a design change, so update the doc with it.
+  `CreditControllerTest` follows the contract row by row.
+- **`page` and `size` are plain integers, never Spring's `Pageable`**,
+  which turns a negative page into 0, caps an oversized size silently
+  and admits a `sort` parameter: the contract's 400s would never
+  happen. `from` and `to` bind as `OffsetDateTime`, so a date alone or
+  an instant with no offset is refused.
+- **`CreditControllerTest` commits nothing but a provisioned account.**
+  It is `@Transactional`: its history rows are made up for the filters
+  and do not add up to a balance, so committed they would fail the
+  whole-database checks below. The two first-read cases marked
+  `Propagation.NOT_SUPPORTED` are the exception: they commit, as a real
+  first request does, and what they commit keeps every invariant. A new
+  `NOT_SUPPORTED` case must write nothing else.
 - **Amounts are integers** (Credit F1.2); balances never go negative
   (`CHECK` constraints back this up).
 

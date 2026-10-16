@@ -90,6 +90,10 @@
   outbox publisher (issue #170) by Claude Code (Opus 5.5).
   2026-10-13: the #170 clause extended for the PR #188 review round
   (Leong Wei Zhi), by Claude Code (Opus 5.5).
+  2026-10-13: AI Use Summary extended for the credit read API
+  (issue #172) by Claude Code (Opus 5.5).
+  2026-10-14: the #172 clause extended for the PR #189 review
+  follow-ups, by Claude Code (Opus 5.5).
   2026-10-14: AI Use Summary extended for the credit request event
   listener (issue #171) by Claude Code (Opus 5.5).
   2026-10-16: the #171 clause extended for the PR #190 review round
@@ -503,7 +507,12 @@ that PR's review fixes (#188: a returned reply waits 30 s before its
 next attempt, on a new `next_attempt_at` column, so that unroutable
 replies cannot fill every batch; the reply row inserted, not saved; no
 returns callback on the shared template; a second scheduler thread),
-the approach to each decided by the team; and the request event
+the approach to each decided by the team; the read API (issue #172:
+the balance and history routes, the history filters as a JPA
+Specification, the 400 problem+json mapping, and their tests),
+transcribed from the "Read API contract" the team wrote in
+`docs/credit-service.md`, with its PR #189 review follow-ups made as
+the reviewer suggested; and the request event
 listener (issue #171: manual acknowledgement after the handler's
 commit, a conflicting event dead-lettered, failures retried through
 the retry queue up to the attempt cap, and its unit and broker
