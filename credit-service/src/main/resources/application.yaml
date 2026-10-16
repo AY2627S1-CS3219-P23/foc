@@ -16,7 +16,8 @@
 # reply is due again (the team's value), and a second scheduler thread.
 # 2026-10-16, PR #190 review (Leong Wei Zhi): the retry copy's confirm
 # timeout, also the pause before a requeue (the team's value); the
-# max-attempts comment updated now that the listener reads it.
+# max-attempts comment updated now that the listener reads it. Re-review:
+# the confirm timeout takes CREDIT_RETRY_CONFIRM_TIMEOUT_MS.
 # Author review: Ryan Ang, pending pull request review.
 
 spring:
@@ -83,7 +84,7 @@ credit:
       # Longest wait for the broker to confirm a failed event's retry
       # copy. A nacked or unconfirmed copy requeues the original after a
       # pause of the same length (PR #190, team decision).
-      confirm-timeout-ms: 5000
+      confirm-timeout-ms: ${CREDIT_RETRY_CONFIRM_TIMEOUT_MS:5000}
   outbox:
     publisher:
       # Delay between the end of one outbox poll and the start of the

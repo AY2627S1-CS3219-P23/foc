@@ -23,6 +23,8 @@
   updated for the request event listener.
   2026-10-16, Claude Code (Opus 5.5), PR #190 review (Leong Wei Zhi):
   the listener's handling of a refused retry copy (team decisions).
+  Same day, re-review: the confirm timeout's environment variable, and
+  the listener paragraph reflowed.
   Author review: Ryan Ang, pending pull request review.
   2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the run
   section's service URL updated for the gateway cutover (#151) — the
@@ -111,9 +113,10 @@ What is here:
   and is dead-lettered after `CREDIT_RETRY_MAX_ATTEMPTS` (default 5)
   attempts. If the broker returns the retry copy (no retry queue) the
   event is dead-lettered; if it nacks it or does not confirm it within
-  `credit.rabbitmq.retry.confirm-timeout-ms` (5 s), the event is
-  requeued after a pause of the same length. A message that cannot be read, such as a fractional reward,
-  is dead-lettered on its first delivery. Each settled delivery logs its
+  `CREDIT_RETRY_CONFIRM_TIMEOUT_MS` (default 5000), the event is
+  requeued after a pause of the same length. A message that cannot be
+  read, such as a fractional reward, is dead-lettered on its first
+  delivery. Each settled delivery logs its
   event type, event ID, request and outcome.
 - **Request event handler** (`service/RequestEventHandler`): applies
   one request event in one transaction, calling `CreditOperations` and,

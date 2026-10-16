@@ -29,7 +29,8 @@
   status and invariants updated for the request event listener.
   2026-10-16, Claude Code (Opus 5.5), PR #190 review (Leong Wei Zhi):
   the listener invariant updated for the team's decisions on a refused
-  retry copy, and the exhaustive outcome switch.
+  retry copy, and the exhaustive outcome switch. Re-review: "never
+  dropped" narrowed to a missing dead-letter queue.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -134,8 +135,9 @@ the only scheduled job).
   returned. A returned copy (no retry queue) dead-letters the original;
   any other failure to publish the copy requeues it after a pause of
   `credit.rabbitmq.retry.confirm-timeout-ms` (design doc failure
-  table). Never dropped, never left unacked, never requeued in a tight
-  loop. The three dead-letters the listener decides are logged at
+  table). Never left unacked, never requeued in a tight loop, and
+  dropped only if the dead-letter queue itself is missing (the broker
+  discards a dead-letter it cannot route). The three dead-letters the listener decides are logged at
   ERROR. The outcome `switch` is an expression so that a new `Outcome`
   does not compile until it is settled: keep it one.
 - **What each operation answers is specified** in the design doc ("What

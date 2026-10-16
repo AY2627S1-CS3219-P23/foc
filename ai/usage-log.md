@@ -26,6 +26,26 @@ Entry template:
 ```
 
 ---
+## 2026-10-16 — Ryan Ang (PR #190 re-review: credit request event listener)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** docs + config
+- **Scope:** the four items in Leong Wei Zhi's approving re-review,
+  applied as the reviewer suggested:
+  - `credit.rabbitmq.retry.confirm-timeout-ms` takes
+    `CREDIT_RETRY_CONFIRM_TIMEOUT_MS` (default 5000), passed through
+    `compose.yaml` and listed in `.env.example`, whose stale "attempts
+    are not read yet" note is dropped.
+  - The test profile's broker host is `broker.invalid`, so a reused
+    test context cannot reach a developer's own broker on 5672.
+  - `credit-service/AGENTS.md`'s "never dropped" narrowed to a missing
+    dead-letter queue, and the design doc's returned-copy row notes it.
+  - The `credit-service/README.md` listener paragraph reflowed, and the
+    2026-10-14 entry's superseded "left unacked" clause replaced with
+    the reviewer's wording.
+- **Prompt(s):** Asked to explain and apply the reviewer's re-review suggestions.
+- **Author review:** The changes are the reviewer's suggestions, taken
+  as written by team decision. Pending pull request review.
+
 ## 2026-10-16 — Ryan Ang (PR #190 review: credit request event listener)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor + docs
@@ -99,8 +119,9 @@ Entry template:
   `DomainEventsListener`: attempts counted in an `x-retry-attempts`
   header the listener stamps, since RabbitMQ 4 resets `x-death` on a
   client republish; the original acked only after the retry copy is
-  confirmed, and left unacked if the copy is nacked, returned or not
-  confirmed within 5 s. One difference from notification-service: the
+  confirmed; what the listener does when the copy is nacked, returned
+  or not confirmed is the 2026-10-16 entry's answer, not this one's.
+  One difference from notification-service: the
   retry copy is confirmed through a `CorrelationData` future, because
   this service uses correlated publisher confirms (PR #188) and
   notification-service's `waitForConfirmsOrDie` needs simple ones. The
@@ -114,6 +135,7 @@ Entry template:
   converter. Four unit tests now cover the requeue (a nacked, returned,
   unconfirmed or unsendable retry copy).
   Pending pull request review.
+
 ## 2026-10-15 — Aung Ko Khant
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** docs
