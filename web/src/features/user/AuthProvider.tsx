@@ -24,17 +24,53 @@
 // 2026-10-11, Claude Code (Fable 5), issue #151: logout() now also calls
 // POST /auth/logout (best-effort, team decision) so the server denylists
 // the token; the local session is cleared either way.
-// Reviewed by: Ryan Ang
+// Reviewed by: Ryan Ang (everything above).
+// 2026-10-12, Claude Code (Fable 5), issue #178: registers apiFetch's
+// unauthorized handler — a 401 on a token-bearing request (admin demoted
+// or removed the account, password reset elsewhere, token expired) clears
+// the session and lands on /login with a notice (owner decision via
+// options Q&A). The notice travels via sessionNotice's one-shot flag,
+// not navigation state — see sessionNotice.ts for the race that rules
+// state out. Guarded on a live session so a late 401, e.g. from logout's
+// own best-effort call, doesn't re-navigate after sign-out.
+// PR #182 review (@Sinnez1): that guard now compares the refused token
+// with the live one, not merely that some session exists — a 401
+// answering a previous token (a slow request outlived by a fresh login)
+// was ending the new session.
+// Reviewed by: Ryan Ang (@Sinnez1), PR #182 review rounds.
+// 2026-10-14, Claude Code (Opus 5), PR #182 re-review (@Sinnez1): three
+// fixes to that forced sign-out. The refused token is compared with what
+// localStorage holds now, not with the token of the last committed
+// render — the rendered value lags login()'s setToken by a render, and
+// another tab can have stored a newer session under the same key, which
+// this handler was then wiping. The notice and the redirect are limited
+// to session-gated pages (and /login itself): on a public page the dead
+// token is dropped in place, no navigation (owner decision via options
+// Q&A, 2026-10-14) — and the redirect is now ProtectedRoute's own
+// bounce, so this handler does not navigate at all. The effect also
+// unregisters the handler and the token source on unmount, so an
+// unmounted provider cannot act on a late 401.
+// Author review: Leong Wei Zhi; Ryan Ang to re-review via PR #182.
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
-import { useNavigate, Outlet } from 'react-router'
+import { useLocation, useMatches, useNavigate, Outlet } from 'react-router'
 import { AuthContext } from './useAuth'
-import { useLocalStorage } from './useLocalStorage'
-import { apiFetch, errorMessage, setTokenSource } from '@/lib/api/http'
+import { readStoredValue, useLocalStorage } from './useLocalStorage'
+import {
+  apiFetch,
+  errorMessage,
+  setTokenSource,
+  setUnauthorizedHandler,
+} from '@/lib/api/http'
 import { adminUserApi } from './adminApi'
 import { decodeJwtRole } from './jwt'
+import { flagSessionEnded } from './sessionNotice'
 import type { AdminUser, LoginResponse } from './types'
 import type { CurrentUser } from './useAuth'
+import type { RouteHandle } from '@/routes'
+
+// localStorage key the session lives under, shared with every other tab
+const SESSION_KEY = 'user'
 
 // one shared object, so the context value stays stable while loading
 const LOADING: CurrentUser = { status: 'loading' }
@@ -46,8 +82,22 @@ interface MeCheck {
 }
 
 export const AuthProvider = () => {
-  const [token, setToken] = useLocalStorage<LoginResponse>('user')
+  const [token, setToken] = useLocalStorage<LoginResponse>(SESSION_KEY)
   const navigate = useNavigate()
+
+  // does a forced sign-out here leave the user in front of the login
+  // form? Either this page is behind ProtectedRoute, which bounces to
+  // /login the moment the token goes, or /login is already open. Public
+  // pages (/, /register, the 404) need no session, so a dead token is
+  // dropped there in place — no notice to strand unread, no redirect
+  // away from a page the user did ask for (owner decision).
+  const matches = useMatches()
+  const { pathname } = useLocation()
+  const landsOnLogin =
+    pathname === '/login' ||
+    matches.some(
+      (match) => (match.handle as RouteHandle | undefined)?.requiresSession,
+    )
 
   // apiFetch's swappable token source; refreshed whenever the session
   // changes so requests carry the current token (or none after logout).
@@ -56,7 +106,36 @@ export const AuthProvider = () => {
   // effect set the source; layout effects all run before any of them.
   useLayoutEffect(() => {
     setTokenSource(() => token?.accessToken ?? null)
-  }, [token])
+    // a 401 on a token-bearing request: the session is no longer
+    // honoured (issue #178 — revoked, expired, or invalid), so drop it
+    // and ask the user to sign in again. Only when the refused token is
+    // the one stored right now: a reply arriving late for an earlier
+    // token — logout's best-effort POST, or a slow call from a session
+    // the user has already replaced by signing in again — says nothing
+    // about the current session, and acting on it would sign out a user
+    // who was never refused.
+    //
+    // Storage, not `token`: setToken writes it synchronously, so this
+    // sees a session login() stored a moment ago whose render has yet to
+    // commit, and the newer session another tab stored under the shared
+    // key. Clearing on either would throw away a token the server never
+    // refused.
+    setUnauthorizedHandler((refusedToken) => {
+      const stored = readStoredValue<LoginResponse>(SESSION_KEY)
+      if (refusedToken !== stored?.accessToken) return
+      // the notice is only for a user who ends up at the login form;
+      // ProtectedRoute does the navigating, as it does for any tokenless
+      // visit to a gated page (see sessionNotice.ts)
+      if (landsOnLogin) flagSessionEnded()
+      setToken(null)
+    })
+    return () => {
+      // an unmounted provider owns neither the session nor the token it
+      // handed apiFetch: a late 401 must not act on its last closure
+      setTokenSource(() => null)
+      setUnauthorizedHandler(() => {})
+    }
+  }, [token, landsOnLogin, setToken])
 
   const [meCheck, setMeCheck] = useState<MeCheck | null>(null)
   useEffect(() => {

@@ -30,9 +30,25 @@
 // 2026-10-11, Claude Code (Fable 5), issue #151: logout cases — the nav
 // Logout button POSTs the bearer token to /auth/logout, and the local
 // sign-out survives the call failing (best-effort, team decision).
+// 2026-10-12, Claude Code (Fable 5), issue #178: revoked-session cases —
+// a 401 on a token-bearing request signs the user out to /login with the
+// "session ended" notice, and logout's own best-effort 401 does not.
+// PR #182 Copilot review: a wrong-credentials login with a stale stored
+// session keeps its inline error — the login call carries no token.
+// 2026-10-13, Claude Code (Opus 5), PR #182 review (@Sinnez1): a 401
+// answering a token the user has already replaced leaves the new session
+// alone, and a 401 landing while the login page is open shows the notice
+// there instead of saving it for a later visit.
 // Author review: Ryan to review via the PR.
 
-import { render, screen, waitFor, within } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
@@ -40,6 +56,7 @@ import {
   OTP_ATTEMPTS_EXCEEDED,
   OTP_EXPIRED,
 } from '@/features/user/problemTypes'
+import { clearSessionEnded } from '@/features/user/sessionNotice'
 import { router, routes } from '../routes'
 
 // user-service's URL is empty in tests; give apiFetch one to call
@@ -110,6 +127,8 @@ function renderAt(path: string, state?: unknown) {
 
 beforeEach(() => {
   localStorage.clear()
+  // the "session ended" flag is module state, so it outlives a test
+  clearSessionEnded()
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -624,7 +643,12 @@ describe('logout', () => {
       .mockResolvedValueOnce(reply(200, session))
       // GET /users/me, asked once the session is stored
       .mockResolvedValue(
-        reply(200, { id: 1, username: 'alex', email: 'e@u.nus.edu', role: 'USER' }),
+        reply(200, {
+          id: 1,
+          username: 'alex',
+          email: 'e@u.nus.edu',
+          role: 'USER',
+        }),
       )
     await logIn('alex', 'ValidPassword123')
     return await screen.findByRole('button', { name: 'Logout' })
@@ -668,5 +692,301 @@ describe('logout', () => {
     expect(
       screen.queryByRole('button', { name: 'Logout' }),
     ).not.toBeInTheDocument()
+  })
+})
+
+// issue #178: a 401 on a request that carried the bearer token means the
+// session was revoked server-side (admin demotion/removal, a password
+// reset elsewhere, or plain expiry) — the app signs out instead of
+// leaving the user on a page whose every call fails
+describe('revoked session', () => {
+  const SESSION_ENDED = 'Your session has ended. Please sign in again.'
+  // the GET /users/me a live session answers with
+  const me = reply(200, {
+    id: 1,
+    username: 'alex',
+    email: 'e@u.nus.edu',
+    role: 'USER',
+  })
+
+  test('a 401 on a token-bearing request signs out to the login page with a notice', async () => {
+    localStorage.setItem('user', JSON.stringify(session))
+    // GET /users/me, asked on mount with the stored token
+    fetchMock.mockResolvedValue(problem(401, 'Token has been revoked'))
+
+    renderAt('/profile')
+
+    expect(await screen.findByRole('status')).toHaveTextContent(SESSION_ENDED)
+    expect(screen.getByRole('heading', { name: 'Log In' })).toBeInTheDocument()
+    expect(localStorage.getItem('user')).toBe('null')
+  })
+
+  test("logout's own best-effort 401 does not bounce the signed-out user to the login page", async () => {
+    const user = userEvent.setup()
+    // reuse the logged-in shell from the logout cases
+    fetchMock.mockResolvedValueOnce(reply(200, session)).mockResolvedValue(
+      reply(200, {
+        id: 1,
+        username: 'alex',
+        email: 'e@u.nus.edu',
+        role: 'USER',
+      }),
+    )
+    await logIn('alex', 'ValidPassword123')
+    const logoutButton = await screen.findByRole('button', { name: 'Logout' })
+    fetchMock.mockClear()
+    // the token was already revoked server-side; the sign-out had begun
+    // locally, so the late 401 must not re-navigate (guard in AuthProvider)
+    fetchMock.mockResolvedValue(problem(401, 'Token has been revoked'))
+
+    await user.click(logoutButton)
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(localStorage.getItem('user')).toBe('null')
+    // landed on the home page per the manual logout, not on /login
+    expect(screen.queryByText(SESSION_ENDED)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Log In' }),
+    ).not.toBeInTheDocument()
+  })
+
+  // PR #182 Copilot review: with a stale session stored, the login form's
+  // own 401 must stay the form's inline error — the login call opts out
+  // of the token injection, so the handler never sees it
+  test('a wrong-credentials login with a stale stored session keeps its inline error', async () => {
+    localStorage.setItem('user', JSON.stringify(session))
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(
+        String(url).endsWith('/auth/login')
+          ? problem(401, 'Incorrect username/email or password')
+          : // GET /users/me from the stored session's mount fetch
+            reply(200, {
+              id: 1,
+              username: 'alex',
+              email: 'e@u.nus.edu',
+              role: 'USER',
+            }),
+      ),
+    )
+
+    renderAt('/login')
+    await user.type(screen.getByLabelText('Username or Email'), 'alex')
+    await user.type(screen.getByLabelText('Password'), 'WrongPassword1')
+    await user.click(submitButton('Log In'))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Incorrect username/email or password',
+    )
+    // the login request carried no bearer token (auth: false)
+    const loginCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith('/auth/login'),
+    ) as [string, RequestInit]
+    expect(new Headers(loginCall[1].headers).get('Authorization')).toBeNull()
+    // not treated as a revoked session: no forced sign-out, no notice
+    expect(JSON.parse(localStorage.getItem('user') ?? 'null')).toEqual(session)
+    expect(screen.queryByText(SESSION_ENDED)).not.toBeInTheDocument()
+  })
+
+  // PR #182 review (@Sinnez1): the sign-out used to need only that some
+  // session was live, so a 401 crawling in for a token the user had
+  // already replaced ended the session they had just started
+  test('a 401 answering a replaced token leaves the new session alone', async () => {
+    const user = userEvent.setup()
+    // a stale session is stored, so the mount asks GET /users/me with it
+    localStorage.setItem('user', JSON.stringify(session))
+    const newSession = { ...session, accessToken: 'jwt2' }
+    let answerStaleMe: (value: unknown) => void = () => {}
+    fetchMock.mockImplementation((url: string, init: RequestInit) => {
+      if (String(url).endsWith('/auth/login')) {
+        return Promise.resolve(reply(200, newSession))
+      }
+      // the stale token's account check hangs; the new one's answers
+      return new Headers(init.headers).get('Authorization') === 'Bearer jwt'
+        ? new Promise((resolve) => {
+            answerStaleMe = resolve
+          })
+        : Promise.resolve(me)
+    })
+
+    renderAt('/login')
+    await user.type(screen.getByLabelText('Username or Email'), 'alex')
+    await user.type(screen.getByLabelText('Password'), 'ValidPassword123')
+    await user.click(submitButton('Log In'))
+
+    // signed in again, on a token of its own
+    await screen.findByRole('button', { name: 'Logout' })
+    expect(JSON.parse(localStorage.getItem('user') ?? 'null')).toEqual(
+      newSession,
+    )
+
+    // only now does the old token's request come back refused
+    await act(async () => {
+      answerStaleMe(problem(401, 'Token has been revoked'))
+    })
+
+    // it says nothing about the session live now, which stands
+    expect(JSON.parse(localStorage.getItem('user') ?? 'null')).toEqual(
+      newSession,
+    )
+    expect(screen.queryByText(SESSION_ENDED)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Log In' }),
+    ).not.toBeInTheDocument()
+  })
+
+  // PR #182 review (@Sinnez1): the notice was read at mount only, so a
+  // 401 arriving with the page already open was skipped — and the unspent
+  // flag then surfaced on the next visit, after a plain manual logout
+  test('a 401 while the login page is open shows the notice there, not on a later visit', async () => {
+    // the stored token is dead, and the user is sitting on /login
+    localStorage.setItem('user', JSON.stringify(session))
+    let answerMe: (value: unknown) => void = () => {}
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerMe = resolve
+        }),
+    )
+
+    renderAt('/login')
+    expect(screen.queryByText(SESSION_ENDED)).not.toBeInTheDocument()
+
+    // the mount's GET /users/me is refused while the page is still up
+    await act(async () => {
+      answerMe(problem(401, 'Token has been revoked'))
+    })
+
+    expect(screen.getByRole('status')).toHaveTextContent(SESSION_ENDED)
+    expect(localStorage.getItem('user')).toBe('null')
+
+    // the notice was spent on that showing: coming back to the page
+    // (after a manual logout, say) is clean
+    cleanup()
+    renderAt('/login')
+    expect(screen.queryByText(SESSION_ENDED)).not.toBeInTheDocument()
+  })
+  // PR #182 re-review (@Sinnez1): the session lives under one
+  // localStorage key every tab shares, so a 401 for this tab's token must
+  // leave a newer session another tab stored where it is
+  test("a 401 for this tab's token leaves the session another tab stored alone", async () => {
+    localStorage.setItem('user', JSON.stringify(session))
+    const otherTab = { ...session, accessToken: 'jwt2' }
+    let answerMe: (value: unknown) => void = () => {}
+    // the mount's GET /users/me, left hanging
+    fetchMock.mockResolvedValue(me).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerMe = resolve
+        }),
+    )
+
+    renderAt('/profile')
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    // the other tab signs out and back in: storage holds its session now
+    localStorage.setItem('user', JSON.stringify(otherTab))
+
+    // only this tab's older token was refused
+    await act(async () => {
+      answerMe(problem(401, 'Token has been revoked'))
+    })
+
+    expect(JSON.parse(localStorage.getItem('user') ?? 'null')).toEqual(otherTab)
+    expect(screen.queryByText(SESSION_ENDED)).not.toBeInTheDocument()
+  })
+
+  // PR #182 re-review (@Sinnez1): login()'s setToken writes storage at
+  // once but shows up in the rendered token only after React commits, so
+  // a 401 for the old token landing in that one-render window used to
+  // pass the guard and clear the session just stored
+  test('a 401 for the old token during login leaves the new session alone', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('user', JSON.stringify(session))
+    const newSession = { ...session, accessToken: 'jwt2' }
+    let answerStaleMe: (value: unknown) => void = () => {}
+    fetchMock.mockImplementation((url: string, init: RequestInit) => {
+      if (String(url).endsWith('/auth/login')) {
+        // the refusal is timed off the login body being read, as the
+        // review's repro does: it lands after login() has stored the new
+        // session and before the render that would show it
+        return Promise.resolve({
+          ...reply(200, newSession),
+          json: async () => {
+            answerStaleMe(problem(401, 'Token has been revoked'))
+            return newSession
+          },
+        })
+      }
+      // the stale token's account check hangs; the new one's answers
+      return new Headers(init.headers).get('Authorization') === 'Bearer jwt'
+        ? new Promise((resolve) => {
+            answerStaleMe = resolve
+          })
+        : Promise.resolve(me)
+    })
+
+    renderAt('/login')
+    await user.type(screen.getByLabelText('Username or Email'), 'alex')
+    await user.type(screen.getByLabelText('Password'), 'ValidPassword123')
+    await user.click(submitButton('Log In'))
+
+    await screen.findByRole('button', { name: 'Logout' })
+    expect(JSON.parse(localStorage.getItem('user') ?? 'null')).toEqual(
+      newSession,
+    )
+    expect(screen.queryByText(SESSION_ENDED)).not.toBeInTheDocument()
+  })
+
+  // owner decision via options Q&A (2026-10-14) on PR #182 re-review
+  // (@Sinnez1): a stored token that has expired is dropped wherever the
+  // visitor is, but a page that needs no session is not left behind —
+  // ProtectedRoute is what takes a gated page to /login
+  test.each([
+    ['/', 'Welcome!'],
+    ['/register', 'Create Account'],
+  ])(
+    'a dead stored token is dropped in place on %s, with no redirect and no notice',
+    async (path, heading) => {
+      localStorage.setItem('user', JSON.stringify(session))
+      fetchMock.mockResolvedValue(problem(401, 'Token has expired'))
+
+      renderAt(path)
+
+      await waitFor(() => expect(localStorage.getItem('user')).toBe('null'))
+      expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument()
+      expect(screen.queryByText(SESSION_ENDED)).not.toBeInTheDocument()
+      // nor is a notice saved up for the next visit to the login page
+      cleanup()
+      renderAt('/login')
+      expect(screen.queryByText(SESSION_ENDED)).not.toBeInTheDocument()
+    },
+  )
+
+  // PR #182 re-review (@Sinnez1): the provider's last closure stayed
+  // registered after it unmounted, so a late 401 acted on a session it
+  // no longer owned — across tests too, which reuse this token
+  test('an unmounted provider ignores a late 401', async () => {
+    localStorage.setItem('user', JSON.stringify(session))
+    let answerMe: (value: unknown) => void = () => {}
+    fetchMock.mockResolvedValue(me).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerMe = resolve
+        }),
+    )
+
+    renderAt('/profile')
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    cleanup()
+
+    // the same token is still stored, so only the unregistering stands
+    // between that reply and this session
+    await act(async () => {
+      answerMe(problem(401, 'Token has been revoked'))
+    })
+
+    expect(JSON.parse(localStorage.getItem('user') ?? 'null')).toEqual(session)
+    renderAt('/login')
+    expect(screen.queryByText(SESSION_ENDED)).not.toBeInTheDocument()
   })
 })

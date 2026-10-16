@@ -3918,3 +3918,326 @@ Entry template:
   clear password_reset_otps in @AfterEach (AccountUpdateControllerTest's
   rule) so a leftover row cannot break other classes' deleteAll setup.
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (issue #178, web half — PR #182), then refactor
+  (PR #182 Copilot review)
+- **Prompt(s):** Asked to plan and resolve issue #178 (a demoted admin
+  keeps ADMIN until their token expires); the revocation mechanism
+  (option A, per-user epoch stamp), the scope (the issue's two paths
+  only), the web reaction (force sign-out on any token-bearing 401)
+  and the sign-out UX (/login with a notice) were decided by the
+  author via neutral options Q&A. Then asked to address the PR's
+  review comments.
+- **Scope:** `web/src/lib/api/http.ts` — a swappable unauthorized
+  handler, invoked before the throw when a 401 answers a request that
+  carried the bearer token; review round: `auth: false` opts a call
+  out of the token injection. `web/src/features/user/AuthProvider.tsx`
+  — registers the handler: clears the stored session and navigates to
+  /login; guarded on a live session so logout's own best-effort 401
+  doesn't re-navigate. `web/src/features/user/sessionNotice.ts` (new)
+  — one-shot flag carrying the "session ended" notice to the login
+  page; chosen over router navigation state because ProtectedRoute's
+  stateless bounce races the handler's startTransition-deferred
+  navigation and can wipe the state before the login page mounts (the
+  test caught this; the file documents it).
+  `web/src/features/user/login.tsx` — renders the notice; review
+  round: the login call sends no bearer token, so a stale stored
+  session can't make a wrong-credentials 401 read as a revoked
+  session. `web/src/test/auth.test.tsx` — revoked-session cases, plus
+  the review round's stale-session login regression.
+- **Author review:** web 102/102 (vitest), eslint, tsc, prettier; the
+  diff reviewed via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** implementation + documentation (issue #67, remaining scope)
+- **Prompt(s):** Asked to plan and resolve issue #67. Exploration found
+  the server half already merged (PR #74); the remaining scope was
+  decided by the author via neutral options Q&A: badge-only UI (no
+  dropdown/toasts — issue #66 owns the Notification Center), native
+  WebSocket only (no sockjs-client), the verifier's missing-exp fix
+  folded in, and D23 — notification-service reads the Redis denylist at
+  STOMP CONNECT itself, fail-open, as a narrow exception to gateway
+  decision G4 (the CONNECT-frame token never reaches the gateway).
+- **Scope:** `notification-service` — `JwtVerifier.verify()` now
+  requires `exp` and exposes `jti` (parity with the other services);
+  new `TokenDenylist` port + `security.redis.RedisTokenDenylist`
+  adapter (`EXISTS denylist:<jti>`, fails open on `DataAccessException`,
+  finite 2 s client timeouts); `JwtChannelInterceptor` rejects revoked
+  jtis at CONNECT; ArchUnit rule confining Redis types; yaml/compose/
+  .env.example/README wiring (no `depends_on: redis`, mirroring the
+  gateway's stance). Tests: no-expiry/jti verifier cases, adapter unit
+  tests, revoked/not-revoked/jti-less CONNECT cases against a fake
+  denylist (the STOMP integration test stays Docker- and Redis-free).
+  `web` — `@stomp/stompjs` added; `features/notifications/`
+  (`NotificationProvider` layout route owning the app's single STOMP
+  client: gateway `/ws/websocket` URL, bearer CONNECT header,
+  exponential 1 s→30 s reconnect, resubscribe in onConnect, stop on
+  STOMP ERROR; `useNotifications`; `stompUrl`); `NotificationBell`
+  badge wired to the session count; test suite for URL derivation,
+  connect config, badge counting, logout teardown and ERROR handling.
+  Docs: D23 recorded in `docs/notification-service.md` (plus the stale
+  "no API gateway" wording fixed and the client policy marked
+  implemented); `docs/gateway.md` known limit retired + G4 exception
+  noted; user-service `TokenDenylist` javadoc updated.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** review fixes (PR #185 Copilot review)
+- **Prompt(s):** Asked to check and address the Copilot review's two
+  findings.
+- **Scope:** `web/src/shared/shell/NotificationBell.tsx` — the unread
+  count joins the button's accessible name (`Notifications (N unread)`)
+  since `aria-label` overrides the badge's descendant text for screen
+  readers; the test suite asserts the name. `README.md` — the AI Use
+  Summary extended for the #67 remaining scope, which the PR had missed
+  (policy: the summary stays current).
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-13 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debugging assistance, refactoring (PR #182 review by
+  @Sinnez1)
+- **Prompt(s):** Asked to address the PR #182 review comments — the
+  blocking session-identity finding and the lower-priority notice-timing
+  one. Both were defects with a stated fix direction, so no new design
+  decisions were put to the author.
+- **Scope:** (1) A late 401 for an old token was signing out a new
+  session: `apiFetch` now hands the unauthorized handler the bearer
+  token the refused request actually carried (read back off the request
+  headers, so a caller-supplied Authorization counts the same), and
+  `AuthProvider`'s guard compares it against the live session's token
+  instead of merely checking that some session exists — a reply
+  outlived by a fresh login is ignored. (2) The "session ended" notice
+  could show at the wrong time: `sessionNotice` publishes the flag to
+  listeners as well as holding it, and the login page subscribes, so a
+  401 landing while the page is already open shows the notice then and
+  consumes the flag — it can no longer surface on a later visit, e.g.
+  after a plain manual logout. (3) `web/src/test/auth.test.tsx` — a case
+  per finding (both verified to fail without the fix), and the flag is
+  reset between tests since it is module state. Also merged `main`
+  (PR #179), resolving the README and usage-log conflicts by keeping
+  both sides in date order.
+- **Author review:** web 104/104 (vitest), `tsc -b`, eslint, prettier
+  clean on the touched files; the diff reviewed via the PR.
+
+## 2026-10-14 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debugging assistance, refactoring (PR #182 second review
+  round by @Sinnez1)
+- **Prompt(s):** Asked to resolve the PR #182 review comments. Eight of
+  the nine findings were defects with a stated fix direction, so no
+  decision was put to the author. The ninth asked a behaviour question
+  — whether a forced sign-out should redirect a visitor off a public
+  page, and whether to return them to the page afterwards — which was
+  put to Leong Wei Zhi as neutral options and answered: clear the
+  session in place on public pages (no redirect, no notice), and leave
+  return-to-location alone, as no flow in the app has it today.
+- **Scope:** (1) `AuthProvider` compares the refused token with what
+  `localStorage` holds at call time instead of the token of the last
+  committed render: the rendered value lags `login()`'s `setToken` by a
+  render, and another tab can have stored a newer session under the
+  shared key — the handler was clearing both. (2) The notice and the
+  redirect are limited to the case where the user ends up at the login
+  form (a route behind `ProtectedRoute`, which carries a new
+  `handle.requiresSession` in `src/routes/index.tsx`, or `/login`
+  itself); the handler no longer navigates at all, since clearing the
+  token makes `ProtectedRoute` bounce a gated page on its own. (3) The
+  layout effect unregisters the handler and the token source on
+  unmount. (4) `web/src/lib/api/http.ts` — a handler that throws is
+  logged rather than raised in place of the `ApiError` callers match
+  on, and the bearer scheme is matched case-insensitively, as the
+  gateway matches it. (5) `web/src/features/user/useLocalStorage.tsx` —
+  `readStoredValue` added for (1); the hook is unchanged.
+  (6) `web/src/test/auth.test.tsx` — a case per blocking finding, each
+  verified to fail without its fix, and the double-wrapped `me` fixture
+  the reviewer spotted is unwrapped; `web/src/test/http.test.ts` (new)
+  — the two apiFetch contracts above. (7) File-header review notes
+  split per entry, as the reviewer asked.
+- **Not changed:** the login page still reads the notice flag in a
+  `useState` initializer and clears it in an effect rather than in one
+  read-and-clear call — StrictMode invokes an initializer twice, which
+  would spend the flag on a call whose result React may discard. The
+  reviewer left this one optional.
+- **Author review:** web 113/113 (vitest), `tsc -b`, eslint, prettier
+  clean on the touched files; the diff reviewed via the PR.
+
+## 2026-10-14 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** review fixes + documentation (PR #185 review by @Sinnez1)
+- **Prompt(s):** Asked to resolve the PR #185 review comments. The
+  blocking finding offered two routes (implement the check or correct
+  the docs); the review's own wording asked for the check, which is
+  what the gateway already does for REST — implemented rather than put
+  back to the author as a new decision, since G11 was already the
+  author's.
+- **Scope:** `origin/main` merged into the branch first (the branch's
+  `docs/gateway.md` edits predated #179, so the merge keeps main's G11
+  rows and request-flow note). (1) Reset cutoff at CONNECT —
+  `JwtVerifier.VerifiedToken` exposes `iat`; `TokenDenylist` gains
+  `isUserRevokedSince`; `RedisTokenDenylist` reads
+  `denylist:user:<id>` and compares strictly, like `auth.lua`
+  (unparseable stamp and Redis error both fail open);
+  `JwtChannelInterceptor` runs both lookups in the gateway's order.
+  (2) Docs: D23 extended to both key shapes, and the CONNECT-only
+  timing recorded as an accepted limit in `docs/notification-service.md`
+  (Session mechanics) with the matching entry in `docs/gateway.md`'s
+  known limits — the reviewer's second finding. (3)
+  `spring.data.redis.repositories.enabled: false` in both yamls, which
+  stops the starter scanning the JPA repositories for a Redis store
+  (the reviewer's startup-log nit). Tests: 5 adapter cases, 2 verifier
+  cases, 3 CONNECT cases (pre-cutoff rejected, post-cutoff and
+  iat-less accepted) — notification-service 53 run, the 2 pre-existing
+  Java-26 AMQP context-restart errors unchanged.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-16 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** review fixes (PR #185 re-review by @Sinnez1)
+- **Prompt(s):** Asked to resolve the PR #185 re-review comments —
+  two blocking STOMP auth gaps the reviewer demonstrated and six
+  non-blocking items.
+- **Scope:** (1) `JwtChannelInterceptor` — STOMP 1.2's `STOMP` frame
+  is authenticated like `CONNECT` (it used to open an unauthenticated
+  session), every client SEND is refused (a SEND to
+  `/user/{id}/queue/notifications` was delivered to that user), and
+  SUBSCRIBE is allowed only to `/user/queue/notifications`. Both gaps
+  predate this PR but combined allowed tokenless spoofed
+  notifications, so they were fixed where the PR already works.
+  (2) Non-blocking: `RedisTokenDenylist` fails open on any
+  `RuntimeException` (the port's contract), the Redis-outage cost
+  comment corrected to ~4 s (two lookups, each with its own 2 s
+  timeout), the no-jti gateway-parity comment reworded (this check is
+  marginally stricter than `auth.lua`), the ERROR-frame comment
+  softened in `NotificationProvider.tsx` and
+  `docs/notification-service.md`, the unused `NotificationDto` export
+  dropped until issue #66 reads the body, and the redundant
+  `mockito-core` dependency removed. (3) Docs: Session mechanics
+  gained a Frame policing bullet. Tests: raw-frame STOMP cases (with
+  and without token), spoofed-SEND and stray-SUBSCRIBE rejection, two
+  untranslated-exception fail-open adapter cases.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-16 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** review response with options Q&A (PR #185 re-review)
+- **Prompt(s):** Asked to rebase the branch onto `origin/main` and then
+  address the PR #185 comments. The one open thread was @Sinnez1's
+  blocking note that `onStompError` permanently deactivates the app's
+  only STOMP client: with no token refresh in the SPA, a session that
+  outlives the 1 h token TTL and then loses its socket reconnects with
+  a dead token, gets an ERROR frame, and push stops silently behind a
+  frozen badge. Exploration established that neither direction the
+  reviewer suggested exists on this branch — notification-service has
+  no REST controllers, so there is no unread count to re-fetch (issue
+  #66 owns it), and `apiFetch` has no 401/expired-session path to route
+  the ERROR frame through (PR #182 is adding one for #178). The author
+  was given four options — sign out via `useAuth().logout()`, report it
+  in the bell only, both, or bounded retry then report — with the
+  trade-offs stated factually, and chose **bounded retry, then
+  reported stop**.
+- **Scope:** web — `NotificationProvider` retries a rejected CONNECT
+  three times 30 s apart (the reconnect cap, so a dead token is not
+  re-sent every second), resets the budget on a successful CONNECT, and
+  then marks the session stopped instead of dying quietly; the stop is
+  derived per token, so a re-login starts live, and an unset
+  `VITE_NOTIFICATION_SERVICE_URL` derives the same state without a
+  setState in the effect. `useNotifications` exposes `pushStopped`;
+  `NotificationBell` greys the badge and appends "updates paused, sign
+  in again" to its accessible name, keeping the count visible (those
+  notifications did arrive) without presenting it as current. Tests:
+  retry-then-reactivate, budget exhaustion with the bell's paused name,
+  a reconnect earning a fresh budget, and the unset-URL case (web 111
+  green; `tsc -b` and eslint clean — eslint's
+  `react-hooks/set-state-in-effect` is what pushed the unset-URL case
+  to a derived value). Docs: an ERROR-frame policy bullet in
+  `docs/notification-service.md` Session mechanics, and the root README
+  AI Use Summary extended for this round plus the frame-policing round
+  its 2026-10-14 disclosure line claimed but never wrote into the
+  clause. Also in this session: the branch rebased onto `origin/main`
+  (the flattened merge put the pre-#179 commits against post-#189 main;
+  `README.md`, `ai/usage-log.md`, `docs/gateway.md` and user-service's
+  `TokenDenylist` javadoc resolved by keeping both sides, in date order
+  where the file keeps one).
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-16 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** repository maintenance (PR #185 main sync)
+- **Prompt(s):** Asked to fix PR #185's merge conflict. GitHub reported
+  the PR as conflicting after PR #187 (order-service scaffold) landed
+  on `main`; no review comment was open and no decision was put to the
+  author.
+- **Scope:** No source change. The branch was rebased onto `main`
+  (PR #187 landed) and the seven #67 commits replayed. Conflicts in
+  `README.md` (the header disclosure log and the AI Use Summary),
+  `.env.example` and `compose.yaml` (both disclosure headers) were
+  resolved by keeping both sides — `main`'s order-service block in the
+  position `main` appends it, then this branch's #67 entry — with no
+  clause reworded and nothing removed; the AI Use Summary's paragraph
+  break that the conflict seam swallowed was restored.
+  `ai/usage-log.md` merged without a conflict. The replayed diff was
+  diffed line-for-line against the pre-rebase diff to confirm it is
+  unchanged, and `main`'s own lines in the four files confirmed intact.
+  `main` since the old base changes no code outside `order-service/`,
+  so nothing the branch changes overlaps it; the rest of its diff is
+  the shared docs and compose/`.env` wiring resolved above. PR #190 (credit request event
+  listener) merged while this was in flight, so the branch was rebased
+  a second time the same day for a fresh `README.md` conflict: `main`'s
+  #171/#190 header lines kept, the two order-service header lines left
+  to `main`'s copy (its #190 merge had relocated them into date order,
+  so re-adding this branch's copy would have duplicated them), and this
+  branch's two #67 lines placed in their date positions, which is now
+  how the upstream header reads. The replayed diff was again confirmed
+  line-for-line identical to the pre-rebase diff.
+- **Author review:** web 111/111 (vitest), `tsc -b`, eslint, and
+  prettier clean on the touched files; notification-service
+  `./mvnw test` 59 tests with the two known Java 26 AMQP
+  context-restart errors that also fail on `main` locally
+  (`IdempotentEventProcessorTest`, `RetentionPurgeSchedulerTest`).
+  Author review of the resolution pending via the PR.
+
+## 2026-10-16 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** repository maintenance (PR #182 main sync)
+- **Prompt(s):** Asked to address the PR #182 review comments and to
+  rebase onto `origin/main` before pushing. The three open review
+  rounds were checked against the branch first: every finding already
+  has a fix in the code and a reply on the thread, so no code change
+  was needed and no decision was put to the author.
+- **Scope:** No source change. The branch was rebased onto `main`
+  (PRs #187/#188/#189 landed), which dropped the earlier
+  `main`-into-branch merge commit and replayed the four #178 commits.
+  Conflicts in `README.md` (the header disclosure log and the AI Use
+  Summary) and in `ai/usage-log.md` were resolved by keeping both
+  sides in date order — `main`'s entries first, then this branch's —
+  with no clause reworded and nothing removed; the two paragraph
+  breaks the conflict seams swallowed were restored. The README header
+  also gained the 2026-10-14 line the second review round had left out.
+  Later the same day PRs #190 and #185 landed and the branch was
+  rebased again, this time with a code conflict: `web/src/routes/index.tsx`
+  — #185 had added a `NotificationProvider` layout route between
+  `AuthProvider` and the shell, while this branch adds the
+  `RouteHandle` type and the `handle` on the session-gated branch. The
+  seam paired the wrong layers (main's `element: <AppShell />` against
+  this branch's `Component: ProtectedRoute`), so it was resolved by
+  hand: #185's layout route and import kept, `RouteHandle` kept, and
+  `handle: { requiresSession: true } satisfies RouteHandle` placed on
+  the nested `ProtectedRoute` that actually gates
+  /suppliers, /profile and /admin. The `README.md` and
+  `ai/usage-log.md` conflicts were resolved by keeping both sides in
+  date order, with the order-service header lines left to `main`'s copy
+  (its #190 merge had moved them into date order, so re-adding this
+  branch's copy would have duplicated them). Checked afterwards: the
+  branch's added and removed lines are identical to the pre-rebase set
+  apart from the `handle` line's new indentation under the extra route
+  layer, and both docs are additive against `main` (36 and 122 lines,
+  zero deletions).
+- **Author review:** web 125/125 (vitest — this branch's cases and
+  #185's notification suite together), `tsc -b`, eslint and
+  `vite build` clean; prettier clean on the touched files (the one
+  warning, `src/features/user/jwt.ts`, is pre-existing on `main` and
+  untouched here). The diff is reviewed via the PR.

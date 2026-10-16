@@ -93,17 +93,48 @@
   round (@Sinnez1), by Claude Code (Fable 5).
   2026-10-12: AI Use Summary extended for the credit reply outbox and
   outbox publisher (issue #170) by Claude Code (Opus 5.5).
+  2026-10-12: AI Use Summary extended for the issue #67 remaining scope
+  (web STOMP client + CONNECT-time denylist, D23) by Claude Code
+  (Fable 5), on PR #185 Copilot review (the summary had missed the
+  change).
+  2026-10-12: AI Use Summary extended for the web revoked-session
+  sign-out (issue #178, PR #182) by Claude Code (Fable 5).
   2026-10-13: the #170 clause extended for the PR #188 review round
   (Leong Wei Zhi), by Claude Code (Opus 5.5).
   2026-10-13: AI Use Summary extended for the credit read API
   (issue #172) by Claude Code (Opus 5.5).
+  2026-10-13: the #178 clause extended for the PR #182 human-review
+  round (@Sinnez1), by Claude Code (Opus 5).
   2026-10-14: the #172 clause extended for the PR #189 review
   follow-ups, by Claude Code (Opus 5.5).
   2026-10-14: AI Use Summary extended for the credit request event
   listener (issue #171) by Claude Code (Opus 5.5).
+  2026-10-14: the #67 clause extended for the PR #185 human-review
+  round (@Sinnez1), by Claude Code (Fable 5).
+  2026-10-14: that #178 clause extended again for the PR #182 second
+  review round, by Claude Code (Opus 5).
   2026-10-16: the #171 clause extended for the PR #190 review round
   (Leong Wei Zhi), by Claude Code (Opus 5.5); same day, again for its
   re-review.
+  2026-10-16: the #67 clause extended for the PR #185 re-review rounds
+  (@Sinnez1) by Claude Code (Opus 5) — the STOMP frame policing round
+  the 2026-10-14 line claims but never wrote into the clause, and the
+  client's ERROR-frame policy.
+  2026-10-16: PR #185 rebased onto main twice the same day (PRs #187
+  and #190 landed) — the conflicts this header, the AI Use Summary,
+  `.env.example` and `compose.yaml` carried resolved by keeping both
+  sides with nothing reworded or removed; in the second pass the two
+  order-service lines main had meanwhile moved into date order were
+  left to main's copy rather than re-added here, and this branch's #67
+  lines take their own date positions, by Claude Code (Opus 5).
+  2026-10-16: PR #182 rebased onto main twice the same day (first with
+  PRs #187/#188/#189 landed, then with #190/#185) — the conflicts this
+  header, the AI Use Summary and `ai/usage-log.md` carried resolved by
+  keeping both sides in date order, no clause reworded; in the second
+  pass `web/src/routes/index.tsx` also conflicted with #185's
+  NotificationProvider layout route, resolved by keeping that route and
+  moving this branch's `handle: { requiresSession: true }` onto the
+  nested ProtectedRoute it gates, by Claude Code (Opus 5).
   2026-10-16: AI Use Summary extended for the credit expiry and
   redistribution scheduler (issue #173) by Claude Code (Opus 5.5);
   same day, extended for the PR #193 review fixes.
@@ -598,6 +629,60 @@ by the author via neutral-options Q&A and recorded in
 `ai/usage-log.md`; and the order-service `Requests` entity and
 repository (table name and columns given by the author as an ER
 diagram, which the tool transcribed into the entity unchanged).
+
+The issue #67 remaining scope (the server-side STOMP push gateway had
+merged earlier in PR #74): the web notification client
+(`web/src/features/notifications/` — the app's single STOMP client with
+reconnect/backoff, and the bell's unread badge), the notification-service
+JWT verifier's missing-expiry fix, and the D23 CONNECT-time Redis
+denylist read (port + adapter, interceptor check, ArchUnit rule,
+compose/.env wiring) with the matching doc updates
+(`docs/notification-service.md` D23, `docs/gateway.md` known-limit
+retirement).
+The scope decisions (badge-only UI, native WebSocket without
+sockjs-client, folding the expiry fix in, service-side denylist read as
+a narrow G4 exception) were made by Leong Wei Zhi via neutral options
+Q&A, recorded in `docs/notification-service.md` and `ai/usage-log.md`.
+The PR #185 review round (@Sinnez1) extended that denylist read to the
+G11 per-user reset cutoff (the jti lookup alone let a pre-reset token
+still open a socket), recorded the CONNECT-only timing as an accepted
+limit in both design docs, and switched off the Redis starter's
+repository scan; the Copilot round before it fixed the bell's
+accessible name. The re-review rounds that followed added the
+interceptor's frame policing (a STOMP-command session authenticated
+like CONNECT, every client SEND refused, SUBSCRIBE confined to the one
+destination — together they had let an untokened client push a spoofed
+notification to any user ID) and the client's ERROR-frame policy: three
+retries 30 s apart, then a stop the bell reports as paused updates
+rather than a frozen count. That policy was chosen by Leong Wei Zhi
+from four options via neutral options Q&A; the rest were mechanical
+fixes to reviewer-identified gaps.
+
+The web revoked-session sign-out (issue #178, PR #182): the shared
+fetch wrapper's unauthorized handler (a 401 on a token-bearing request
+forces a sign-out to /login with a one-time notice; the login call
+itself opts out of the token injection so its wrong-credentials 401
+stays an inline error) and its tests. The mechanism (any token-bearing
+401, no detail matching), the sign-out UX and the scope were decided
+by Leong Wei Zhi via neutral options Q&A, recorded in
+`ai/usage-log.md`. The PR #182 human-review round (@Sinnez1) added two
+defect fixes with no new design decisions: the handler is given the
+token the refused request carried, so a 401 answering a replaced token
+no longer ends the session the user has just started; and the notice
+is published to the login page rather than read at mount only, so a
+401 arriving while that page is open shows it there instead of saving
+it for a later visit. The second review round (@Sinnez1) added four
+more defect fixes — the refused token is compared with what
+localStorage holds rather than with the last rendered session (so
+neither another tab's newer session nor one stored a render ago is
+cleared), the handler and token source are unregistered when the
+provider unmounts, a failing handler no longer replaces the ApiError
+callers match on, and the bearer scheme is matched case-insensitively
+as the gateway matches it — plus one behaviour question put to Leong
+Wei Zhi via neutral options Q&A (2026-10-14): on a page that needs no
+session the dead token is now dropped in place, with no redirect and
+no notice, and the redirect for a session-gated page is
+ProtectedRoute's own bounce.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
