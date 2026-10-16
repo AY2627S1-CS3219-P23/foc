@@ -43,6 +43,11 @@ Entry template:
     summary; authenticated by the `CLAUDE_CODE_OAUTH_TOKEN` secret
     (subscription OAuth) running claude-sonnet-5-5; docs-only changes
     are skipped and superseded runs cancelled.
+  - Two pre-existing issues the first CI run surfaced, fixed on the same
+    PR: `supplier-service/mvnw` was committed non-executable (mode
+    100644; exit 126 on a fresh checkout), and 10 `web/src` files had
+    drifted from Prettier style — reformatted mechanically with
+    `prettier --write` (lint and all 125 vitest tests pass unchanged).
 - **Prompt(s):** Asked to plan and implement a CI/CD GitHub pipeline
   with a cost-efficient Claude Code review in CI; chose Docker
   build-check-only CD, subscription OAuth auth, auto-trigger on
