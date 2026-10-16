@@ -3897,6 +3897,31 @@ Entry template:
 
 ## 2026-10-12 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (issue #178, server half — PR #183)
+- **Prompt(s):** Same issue #178 session as the web half above, for the
+  server side: which revocation mechanism (the author chose option A of
+  the issue's table — a per-user epoch stamp in Redis, enforced at the
+  gateway — via neutral options Q&A, accepting its documented trade-off
+  that one demotion signs the target out on every device) and how wide
+  to scope it (issue scope only: the two paths the issue names, no
+  further stamp points).
+- **Scope:** `user-service` — `AdminService` takes `TokenDenylist` and
+  calls `revokeUserSessions(targetId)` after the save in `changeRole`
+  (any actual change, promotion and self-demotion included; the
+  same-role early return and every refusal path stamp nothing) and in
+  `removeUser`, best-effort at the same call-site pattern as
+  `PasswordResetService.confirmReset`. `AdminServiceTest` pins the
+  eviction on each success path and its absence on the no-op and the
+  refusals; `AdminControllerTest` pins it end-to-end with
+  `TokenDenylist` as a `@MockitoBean` (no Redis in that test stack,
+  like `LogoutTest`). `docs/gateway.md` — decision G12 and its
+  request-flow note; **no gateway code changed**, since G11's
+  `iat`-versus-stamp check already covers the new stamp writer.
+- **Author review:** user-service suite via Testcontainers, and the
+  diff reviewed via PR #183.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
 - **Mode:** implementation + documentation (issue #67, remaining scope)
 - **Prompt(s):** Asked to plan and resolve issue #67. Exploration found
   the server half already merged (PR #74); the remaining scope was

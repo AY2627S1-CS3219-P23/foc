@@ -135,6 +135,9 @@
   NotificationProvider layout route, resolved by keeping that route and
   moving this branch's `handle: { requiresSession: true }` onto the
   nested ProtectedRoute it gates, by Claude Code (Opus 5).
+  2026-10-16: AI Use Summary extended for the server half of issue #178
+  (PR #183) by Claude Code (Opus 5) — the summary covered the web half
+  only.
   Reviewed by: Leong Wei Zhi (via pull request).
   2026-10-17, Codex (GPT-6), PR #180 review: added the web #94
   disclosure and the missing 2026-10-16 main-sync coverage.
@@ -672,6 +675,21 @@ Wei Zhi via neutral options Q&A (2026-10-14): on a page that needs no
 session the dead token is now dropped in place, with no redirect and
 no notice, and the redirect for a session-gated page is
 ProtectedRoute's own bounce.
+
+The server half of the same issue (#178, PR #183): `AdminService`
+writes the per-user revocation stamp after an admin role change (any
+actual change) or an admin removal, so the target's outstanding tokens
+are refused at the gateway on their next request instead of lasting to
+their `exp`; its service and controller tests; and decision G12 in
+`docs/gateway.md`, which needed no gateway code because PR #179's G11
+check already enforces the stamp. The mechanism (option A of the
+issue's options table, a Redis epoch stamp over a per-request role
+lookup or refresh tokens) and the scope (those two paths only) were
+decided by Leong Wei Zhi via neutral options Q&A, recorded in
+`ai/usage-log.md`. Rebasing that branch onto the merged #179 also
+corrected a sentence #179's own follow-up had added — that a token
+minted before a removal keeps ADMIN until it expires — in
+`user-service/README.md` and the `AdminService` comment.
 
 The web half of issue #94 (PR #180), generated with Claude Code
 (Fable 5; main sync with Opus 5), adds the forgot-password and explicit
