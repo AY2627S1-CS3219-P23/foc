@@ -31,10 +31,17 @@ still untouched) instead of the old fail-closed 403.
 @MockitoBean (like LogoutTest — no Redis in the test stack) and the
 endpoint cases pin the session eviction: PATCH role change and DELETE
 stamp the target, the no-op PATCH and a USER caller's 403 don't.
+2026-10-17 (Claude Code, Opus 5), PR #183 review (@Sinnez1): two cases
+pin the stamp as landing after the commit, read over a second
+connection — the ordering the reviewer found inverted.
 */
 
 package foc.user.controller;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -43,6 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -65,6 +73,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.jayway.jsonpath.JsonPath;
 
+import javax.sql.DataSource;
+
 import foc.user.PostgresTestContainer;
 import foc.user.entity.Role;
 import foc.user.entity.User;
@@ -80,6 +90,11 @@ class AdminControllerTest extends PostgresTestContainer {
 
     @Autowired
     private UserRepository userRepository;
+
+    // reads the row outside every transaction the request opens, so it
+    // answers with committed state only (PR #183 review)
+    @Autowired
+    private DataSource dataSource;
 
     // mocked like LogoutTest's: the test stack runs no Redis, and the
     // mock lets the eviction calls be asserted (issue #178)
@@ -111,6 +126,31 @@ class AdminControllerTest extends PostgresTestContainer {
 
     private static String roleBody(String role) {
         return "{\"role\":\"" + role + "\"}";
+    }
+
+    // one column of a user's row, over a connection of its own: an
+    // uncommitted change is invisible to it (PR #183 review)
+    private String committed(Long id, String column) {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement =
+                    connection.prepareStatement("SELECT " + column + " FROM users WHERE id = ?")) {
+            statement.setLong(1, id);
+            try (ResultSet row = statement.executeQuery()) {
+                return row.next() ? row.getString(1) : null;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    // what that connection sees the moment the eviction is stamped
+    private String[] committedWhenStamped(Long targetId, String column) {
+        String[] seen = new String[1];
+        doAnswer(invocation -> {
+            seen[0] = committed(targetId, column);
+            return null;
+        }).when(tokenDenylist).revokeUserSessions(targetId);
+        return seen;
     }
 
     // access
@@ -488,6 +528,24 @@ class AdminControllerTest extends PostgresTestContainer {
     }
 
     @Test
+    @DisplayName("PATCH /users/{id} should stamp the eviction only once the demotion has committed")
+    void changeRole_stampsAfterCommit() throws Exception {
+        String[] roleWhenStamped = committedWhenStamped(otherAdmin.getId(), "role");
+
+        mockMvc.perform(patch("/users/{id}", otherAdmin.getId()).with(as(admin))
+                .contentType(MediaType.APPLICATION_JSON).content(roleBody("USER")))
+            .andExpect(status().isOk());
+
+        verify(tokenDenylist).revokeUserSessions(otherAdmin.getId());
+        // PR #183 review (@Sinnez1): stamped from inside the transaction,
+        // the cutoff preceded the demotion becoming visible, so a login in
+        // that gap could still read ADMIN and mint a token with an iat the
+        // cutoff accepts. Committed first, that gap cannot open.
+        assertThat(roleWhenStamped[0]).as("the demotion was committed before the stamp")
+            .isEqualTo("USER");
+    }
+
+    @Test
     @DisplayName("PATCH /users/{id} should return 200 unchanged when the role is already held")
     void changeRole_noOp() throws Exception {
         mockMvc.perform(patch("/users/{id}", alex.getId()).with(as(admin))
@@ -579,6 +637,20 @@ class AdminControllerTest extends PostgresTestContainer {
         assertThat(userRepository.findById(alex.getId()).orElseThrow().getDeletedAt()).isNotNull();
         // issue #178: removal evicts the account's outstanding sessions
         verify(tokenDenylist).revokeUserSessions(alex.getId());
+    }
+
+    @Test
+    @DisplayName("DELETE /users/{id} should stamp the eviction only once the removal has committed")
+    void remove_stampsAfterCommit() throws Exception {
+        String[] deletedAtWhenStamped = committedWhenStamped(alex.getId(), "deleted_at");
+
+        mockMvc.perform(delete("/users/{id}", alex.getId()).with(as(admin)))
+            .andExpect(status().isNoContent());
+
+        verify(tokenDenylist).revokeUserSessions(alex.getId());
+        // same ordering as the role change (PR #183 review)
+        assertThat(deletedAtWhenStamped[0]).as("the soft delete was committed before the stamp")
+            .isNotNull();
     }
 
     @Test

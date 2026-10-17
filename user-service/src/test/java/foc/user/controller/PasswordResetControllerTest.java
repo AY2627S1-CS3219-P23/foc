@@ -17,10 +17,18 @@ Author review: Leong Wei Zhi to review via the PR.
 exhaustion case now also proves a repeat request buys no fresh budget
 while the spent row lives, and the round trip pins the session
 eviction (TokenDenylist mocked like LogoutTest's).
+2026-10-17 (Claude Code, Opus 5), PR #183 review (@Sinnez1): the round
+trip also pins that eviction as landing after the commit, read over a
+second connection — the reviewer found the pre-commit stamp in
+AdminService and the owner chose to fix this call site with it.
 */
 
 package foc.user.controller;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
@@ -36,6 +44,7 @@ import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -64,6 +73,8 @@ import foc.user.service.OtpEmailSender;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
+import javax.sql.DataSource;
+
 @SpringBootTest
 @AutoConfigureMockMvc
 class PasswordResetControllerTest extends PostgresTestContainer {
@@ -82,6 +93,11 @@ class PasswordResetControllerTest extends PostgresTestContainer {
 
     @Autowired
     private PasswordResetOtpRepository resetOtpRepository;
+
+    // reads the row over a connection of its own, so it answers with
+    // committed state only (PR #183 review)
+    @Autowired
+    private DataSource dataSource;
 
     // captures the plain code instead of speaking SMTP; reset per test
     @MockitoBean
@@ -138,12 +154,33 @@ class PasswordResetControllerTest extends PostgresTestContainer {
         return code.getValue();
     }
 
+    // the password hash the database holds for alex, as a connection
+    // outside the request's transaction sees it
+    private String committedHash() {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement = connection.prepareStatement(
+                    "SELECT password_hash FROM users WHERE id = ?")) {
+            statement.setLong(1, alex.getId());
+            try (ResultSet row = statement.executeQuery()) {
+                return row.next() ? row.getString(1) : null;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     @Test
     @DisplayName("Request answers an empty 202 and mails a code that confirms")
     void resetRoundTrip() throws Exception {
         requestReset(EMAIL)
             .andExpect(status().isAccepted())
             .andExpect(content().string(""));
+
+        String[] hashWhenStamped = new String[1];
+        doAnswer(invocation -> {
+            hashWhenStamped[0] = committedHash();
+            return null;
+        }).when(tokenDenylist).revokeUserSessions(alex.getId());
 
         confirmReset(EMAIL, emailedCode(), NEW_PASSWORD, NEW_PASSWORD)
             .andExpect(status().isNoContent());
@@ -161,6 +198,12 @@ class PasswordResetControllerTest extends PostgresTestContainer {
         // and the old password's sessions were evicted (PR #179 review):
         // the gateway refuses this account's pre-reset tokens
         verify(tokenDenylist).revokeUserSessions(alex.getId());
+        // after the commit (PR #183 review, @Sinnez1): stamped from inside
+        // the transaction, the cutoff preceded the new hash becoming
+        // visible, so an old-password login in that gap minted a token the
+        // cutoff accepts
+        assertThat(encoder.matches(NEW_PASSWORD, hashWhenStamped[0]))
+            .as("the new password was committed before the stamp").isTrue();
     }
 
     @Test

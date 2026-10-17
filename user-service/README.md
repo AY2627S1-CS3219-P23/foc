@@ -75,6 +75,10 @@
   sentence is corrected — the removal now revokes that token, with the
   demotion left as the Redis-failure fallback. Mechanism and scope
   decided by Leong Wei Zhi via options Q&A (2026-10-12).
+  2026-10-17, Claude Code (Opus 5), PR #183 review (@Sinnez1): the
+  token section records that all three stamps are written after their
+  transaction commits — the reviewer showed the pre-commit write
+  leaving a gap a login could pass through.
 -->
 
 # User Service
@@ -232,7 +236,12 @@ sign-up never reserves an email or username.
   was issued before it: a password reset (#94, G11 — see below), and an
   admin role change or removal (#178, G12 — `PATCH /users/{id}` when the
   role actually changes, and `DELETE /users/{id}`). All best-effort like
-  logout, and all enforced by the gateway, not here.
+  logout, and all enforced by the gateway, not here. All three are
+  written once their transaction has committed (`AfterCommit`, PR #183
+  review): a cutoff stamped before the commit outlaws the tokens issued
+  before a change that is not yet visible, so a login in that gap would
+  mint one carrying the old role or password and an `iat` the stamp
+  accepts.
 - No sessions: each request stands on its own token. This service does
   **not** check the denylist — the API gateway rejects revoked tokens
   platform-wide before they reach any service (team decision:
