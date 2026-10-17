@@ -135,6 +135,9 @@
   NotificationProvider layout route, resolved by keeping that route and
   moving this branch's `handle: { requiresSession: true }` onto the
   nested ProtectedRoute it gates, by Claude Code (Opus 5).
+  2026-10-16: AI Use Summary extended for the credit expiry and
+  redistribution scheduler (issue #173) by Claude Code (Opus 5.5);
+  same day, extended for the PR #193 review fixes.
   2026-10-16: AI Use Summary extended for the server half of issue #178
   (PR #183) by Claude Code (Opus 5) — the summary covered the web half
   only.
@@ -144,6 +147,9 @@
   the one claim #179's approval follow-up left stale (a removed admin's
   token keeping ADMIN until its exp) corrected, by Claude Code
   (Opus 5).
+  2026-10-17: AI Use Summary extended for the web credit balance and
+  history (issue #174) by Claude Code (Opus 5.5); same day, extended
+  for the admin dashboard's Common Pool box.
   Reviewed by: Leong Wei Zhi (via pull request).
   2026-10-17: the #178 clause extended for the PR #183 human-review
   round (@Sinnez1) and the branch rebased again for #180's merge, by
@@ -581,7 +587,18 @@ original, a nacked or unconfirmed one requeues it after a 5 s pause,
 and a timed-out confirm documented as possibly running the event
 twice), the approach to each decided by the team, and its re-review
 follow-ups (the confirm timeout's environment variable, an
-unresolvable broker host in the test profile, and doc wording).
+unresolvable broker host in the test profile, and doc wording);
+and the expiry and redistribution scheduler
+(issue #173: the daily expiry into the common pool and the monthly
+redistribution, their locking queries, and their unit and Postgres
+tests), written to D2, D4 and D12 of `docs/credit-service.md`, with the
+run times and zone, the per-account expiry transaction, the empty
+month recorded and the startup catch-up decided by the team and
+recorded there, and its PR #193 review fixes (one routine, daily and
+at startup, that sweeps then redistributes a missing month, so a
+failed run is retried the next day; the earned-credit expiry shared;
+a test made independent of test order), the approach decided by the
+team.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their
@@ -733,6 +750,25 @@ retain their existing shared container when Docker is available. The
 service README documents both modes and their coverage. The PR #197 review
 follow-up adds a CI check that rejects skipped user-service tests and
 missing test reports, enforcing the full suite on the runner.
+
+The web credit balance and history (issue #174): the credit feature
+folder (`web/src/features/credit/`: the read API calls, a
+`CreditBalanceProvider` layout route that polls the balance for the
+whole app, the `/credits` page with its balance cards, amount and
+date-range filters and paged transaction list), the live top-bar badge
+and the profile card's Credit Status, and their tests. Written to the
+"Read API contract" in `docs/credit-service.md` and the
+`credit-history.png` wireframe; the deviations from the wireframe (no
+lifetime-earned card or running-balance column, which the API does not
+provide, and min/max amount fields in place of the amount dropdown),
+the page's route and how it is reached, and the 30 s poll that pauses
+in a hidden tab were decided by the team via options Q&A, recorded in
+`web/AGENTS.md` and `ai/usage-log.md`. On the same branch, the admin
+dashboard's Common Pool box and the credit service's two admin routes
+behind it (`/credits/admin/pool` and `/credits/admin/redistributions`,
+`ADMIN` and `OWNER` only) with their tests, added to the design doc's
+Read API contract; the routes' shape, access, the share preview and
+the branch were decided by the team via options Q&A.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
