@@ -12,6 +12,12 @@
   2026-10-17, Codex (GPT-6.1 Sol): recorded implementation and verification
   of the Docker-unavailable test skips for issue #98.
   PR #197 review: recorded the CI skipped-test check and its verification.
+  2026-10-17, Claude Code (Opus 5): appended the issue #203 entry below.
+  PR #209 main merge: this file was the only conflict — both sides had
+  appended fresh entries under the same `---`, so both were kept (the
+  #203 entry first, then main's three order-service ones) and the stray
+  second `---` the #203 entry had introduced was dropped; nothing
+  reworded or removed.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -101,6 +107,37 @@ Entry template:
   the `web` suite with `tsc -b` and eslint. Pending pull request
   review.
 
+## 2026-10-17 — Leong Wei Zhi (self-deletion keeps the admin role, issue #203)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** docs (+ one test)
+- **Scope:** `user-service/README.md`, `docs/gateway.md`,
+  `user-service/src/main/java/foc/user/service/ProfileService.java`
+  (comment only) and
+  `user-service/src/test/java/foc/user/security/JwtAuthenticationTest.java`.
+  - The asymmetry #203 reported: `DELETE /users/{id}` demotes the
+    target to USER and stamps `denylist:user:<id>` (#179, #178);
+    `DELETE /users/me` does neither, so a self-deleting ADMIN keeps the
+    role for the 30-day window — the admin routes authorize on the
+    token's claim alone — and restores as ADMIN.
+  - `README.md`'s login section claimed "no admin powers ride along"
+    for every deleted account; it was true only of admin removal. Now
+    both paths are stated there and in the soft-delete section;
+    `docs/gateway.md`'s G12 note says self-deletion writes no stamp.
+  - `JwtAuthenticationTest.selfDeletedAdminKeepsAdminRoutes`: an ADMIN
+    self-deletes, logs in inside the window (200 with
+    `deletionScheduledFor`), the fresh token carries ADMIN, `GET /users`
+    answers 200 and `GET /users/me` 404 — the acceptance in #203.
+  - No behaviour changed.
+- **Prompt(s):** "resolve #203" — the tool read the cited files, then
+  put the issue's three options (A demote on self-delete, B active-
+  caller check on the admin routes, C accept and document) as a neutral
+  question.
+- **Author review:** Decision by Leong Wei Zhi: **option C** — the
+  state is self-inflicted and nobody but the account's owner can open
+  or close it, so the window is accepted and only the docs were wrong.
+  Verified by `./mvnw clean test` in `user-service` (367/367 green,
+  one more than before).
+
 ## 2026-10-17 — Aung Ko Khant (order-service: createdAt default, pushed first)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** debug
@@ -161,6 +198,7 @@ Entry template:
 - **Author review:** Transition table pinned by unit tests (every
   permitted transition, every other state/event pair rejected);
   `mvn test` passes (11 tests). Reviewed via pull request.
+
 ## 2026-10-17 — Ryan Ang (admin dashboard: common pool box, issue #174 branch)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (code + tests + docs)

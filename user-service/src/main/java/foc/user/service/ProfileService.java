@@ -16,6 +16,10 @@ UserRepository.getActiveUser.
 explicit restore that replaced login's silent recovery (owner decision
 via options Q&A). The one lookup here that deliberately reaches a
 soft-deleted account.
+2026-10-17 (Claude Code, Opus 5), issue #203: comment only —
+deleteOwnAccount's asymmetry with AdminService.removeUser (no
+demotion, no denylist stamp) recorded; owner chose option C (accept,
+document) via options Q&A.
 */
 
 package foc.user.service;
@@ -59,7 +63,16 @@ public class ProfileService {
 
     // self-deletion: stamps deleted_at, keeping the row (and its email/
     // username reservation) for the 30-day recovery window (#94);
-    // AccountPurgeScheduler hard-deletes it on day 31
+    // AccountPurgeScheduler hard-deletes it on day 31.
+    // Deliberately asymmetric with AdminService.removeUser (issue #203,
+    // owner decision, option C): no demotion to USER and no
+    // denylist:user:<id> stamp, so a self-deleting ADMIN keeps the role
+    // — reaching the admin routes on every fresh login in the window,
+    // since they authorize on the token's claim alone — and restores as
+    // ADMIN. Accepted because nobody but this caller can open that
+    // state and the same caller closes it with POST /users/me/recover;
+    // removal needs both because it is done to someone else.
+    // Pinned by JwtAuthenticationTest.selfDeletedAdminKeepsAdminRoutes.
     public void deleteOwnAccount(Long userId) {
         User user = userRepository.getActiveUser(userId);
         user.softDelete(Instant.now());
