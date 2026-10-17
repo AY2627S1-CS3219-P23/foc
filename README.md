@@ -107,6 +107,14 @@
   round (@Sinnez1), by Claude Code (Opus 5).
   2026-10-14: the #172 clause extended for the PR #189 review
   follow-ups, by Claude Code (Opus 5.5).
+  2026-10-10: AI Use Summary extended for the order-service Spring Boot
+  scaffold and its compose.yaml/AGENTS.md/.env.example wiring by
+  Claude Code (Opus 5.5).
+  2026-10-11: AI Use Summary extended for the order-service Requests
+  entity/repository skeleton by Claude Code (Opus 5.5).
+  2026-10-17: AI Use Summary extended for the order-service request
+  state machine by Claude Code (Opus 5.5), then for the Requests
+  createdAt default (PR review fix).
   2026-10-14: AI Use Summary extended for the credit request event
   listener (issue #171) by Claude Code (Opus 5.5).
   2026-10-14: the #67 clause extended for the PR #185 human-review
@@ -662,7 +670,13 @@ engine and image version, host ports, and broker-wiring scope chosen
 by the author via neutral-options Q&A and recorded in
 `ai/usage-log.md`; and the order-service `Requests` entity and
 repository (table name and columns given by the author as an ER
-diagram, which the tool transcribed into the entity unchanged).
+diagram, which the tool transcribed into the entity unchanged); and
+the order-service request state machine (a plain-Java transition table
+and its unit tests over the author's own state and event enums, with
+the DROP target, the no-library form, the PENDING/REJECTED saga
+transitions' names and the ARRIVED step chosen by the author via
+neutral-options Q&A and recorded in `ai/usage-log.md`), and a
+`createdAt` default on the `Requests` entity (PR review fix).
 
 The issue #67 remaining scope (the server-side STOMP push gateway had
 merged earlier in PR #74): the web notification client
