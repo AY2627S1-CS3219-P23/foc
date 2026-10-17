@@ -401,12 +401,13 @@ describe('upcoming expiries', () => {
   const DAY_MS = 86_400_000
   const inDays = (days: number) =>
     new Date(Date.now() + days * DAY_MS).toISOString()
-  // how the page writes a date: "12 Jan", in Singapore
+  // how the page writes a date: "12 Jan 2027", in Singapore
   const sgtDate = (iso: string) =>
     new Intl.DateTimeFormat('en-SG', {
       timeZone: 'Asia/Singapore',
       day: 'numeric',
       month: 'short',
+      year: 'numeric',
     }).format(new Date(iso))
 
   it('is nothing when no credits will expire', () => {
@@ -423,7 +424,7 @@ describe('upcoming expiries', () => {
       ],
       NOW,
     )
-    expect(next).toEqual({ amount: 3, date: '12 Jan', soon: false })
+    expect(next).toEqual({ amount: 3, date: '12 Jan 2027', soon: false })
   })
 
   it('counts anything due today or already past as tonight', () => {

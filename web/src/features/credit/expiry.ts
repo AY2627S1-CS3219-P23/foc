@@ -23,11 +23,12 @@ const sgtDay = new Intl.DateTimeFormat('en-CA', {
   day: '2-digit',
 })
 
-// "12 Jan"; the lifetime is three months, so the year is never in doubt
+// "12 Jan 2027"
 const sgtShortDate = new Intl.DateTimeFormat('en-SG', {
   timeZone: 'Asia/Singapore',
   day: 'numeric',
   month: 'short',
+  year: 'numeric',
 })
 
 const dayKey = (instant: Date) => sgtDay.format(instant)
@@ -39,7 +40,7 @@ function daysBetween(from: string, to: string): number {
 
 export interface NextExpiry {
   amount: number
-  // the Singapore date, as "12 Jan"; null when it is tonight
+  // the Singapore date, as "12 Jan 2027"; null when it is tonight
   date: string | null
   // within EXPIRY_NOTICE_DAYS of today, tonight included
   soon: boolean
@@ -76,7 +77,7 @@ export function nextExpiry(
   }
 }
 
-// "5 credits expire by 12 Jan", or "… tonight" for the coming sweep
+// "5 credits expire by 12 Jan 2027", or "… tonight" for the coming sweep
 export function expiryLine(next: NextExpiry): string {
   const verb = next.amount === 1 ? 'expires' : 'expire'
   return `${credits(next.amount)} ${verb} ${next.date ? `by ${next.date}` : 'tonight'}`
