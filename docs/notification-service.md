@@ -46,6 +46,14 @@
   with a zero-trust internal credential to user-service. D29 removed
   (superseded-decision convention, like D5/D14), the catalog and F1.1
   note updated, "Display-name enrichment" section added.
+  2026-10-17, Claude Code (Fable 5), issue #137: D9/D4 rows, the
+  retention-scheduler component row, the F3.4 trace and the
+  configuration notes updated for the processed_events sweep (author
+  decisions via neutral options Q&A: same 30-day window, processed_at
+  indexed).
+  2026-10-17, Claude Code (Fable 5), PR #201 Codex review: the D4
+  trade-off note names the unacked work-queue redelivery path alongside
+  DLQ replay (same accepted ≥30-day-outage class; no design change).
 -->
 
 # FoC Notification Service — Architecture Design
@@ -76,11 +84,11 @@ favor of D30) have been removed; gaps in the numbering are intentional.
 | D1 | Message broker | **RabbitMQ** | M6; Notif F1.1, NFR1 |
 | D2 | Client push transport | **WebSocket with STOMP** (Spring simple broker, per-user destinations) | Notif F1.2; Order NFR1.1–1.2 |
 | D3 | Notification DB engine | **PostgreSQL**, accessed via Spring Data JPA | Notif F2.1, F3 |
-| D4 | Duplicate detection | **Unique event ID** recorded in the DB, in the *same transaction* as the notification insert | Notif F2.1 |
+| D4 | Duplicate detection | **Unique event ID** recorded in the DB, in the *same transaction* as the notification insert. *2026-10-17 note (issue #137):* dedupe rows past the D9 retention window are purged, reopening the dedupe window for those event IDs — accepted: retries are 10 s TTL × 3 then DLQ, so re-processing needs a delivery resurfacing ≥ 30 days later (a manual DLQ replay, or a post-commit delivery left unacked on the work queue across an outage that long), and it would recreate notifications the purge already deleted | Notif F2.1 |
 | D6 | Retry policy | **Broker redelivery with TTL retry queue**: 3 total attempts, 10 s backoff, env-overridable — see [Failure handling](#failure-handling-d6d7-d20d21) | Notif F2.2 |
 | D7 | Dead-letter handling | **Durable dead-letter queue**; unknown event types dead-letter (replayable after a consumer upgrade) rather than being dropped | Notif F2.3 |
 | D8 | Broker persistence | **Durable exchanges/queues + persistent messages** (durability is opt-in in RabbitMQ) | Notif NFR1.2 |
-| D9 | Retention window | `NOTIF_RETENTION_DAYS` env var, **default 30 days**; scheduled purge job | Notif F3.4 |
+| D9 | Retention window | `NOTIF_RETENTION_DAYS` env var, **default 30 days**; scheduled purge job. *2026-10-17 (issue #137):* the same run and window also sweep the `processed_events` dedupe table | Notif F3.4 |
 | D10 | Redis / scale-out | **No Redis** in the single-instance design (see Open items). *2026-10-11 note:* a platform Redis now exists for the **logout token denylist** ([`gateway.md`](gateway.md), issue #151) — unrelated to this service's scale-out question, which stays open. *2026-10-12 note:* this service now **reads** that denylist at STOMP CONNECT (D23); the scale-out question is still open | — |
 | D11 | Broker isolation | **Ports and adapters**: all RabbitMQ code confined to one adapter package — see [Broker decoupling](#broker-decoupling-d11) | broker swap surface |
 | D12 | Topology provisioning | **App-declared at startup** via Spring AMQP beans (no broker definitions file) | topology lives beside its owner |
@@ -124,7 +132,7 @@ favor of D30) have been removed; gaps in the numbering are intentional.
 | **Idempotent event processor** (Spring Boot) | Core logic: rejects already-seen event IDs (F2.1), creates one notification row per party (F1.2) from the typed event alone — never querying another service (F1.1). Works against the `DomainEvent` interface, so every cataloged event type flows through generically. |
 | **Notification REST API** (Spring Boot) | Lets the Web App list the caller's notifications (paged, newest first, optional unread filter), read the unread count, and mark rows read/unread (F3.1, F3.2) — JWT-authenticated, every route scoped to the token's user (D24–D28, issue #66). |
 | **STOMP push gateway** (Spring Boot) | WebSocket endpoint with Spring's STOMP simple broker; pushes each stored notification to the affected users' `/user/...` destinations within the 5-second budget (F1.2; Order NFR1.1–1.2). |
-| **Retention purge scheduler** (Spring Boot) | Scheduled job deleting notifications older than the configured window (F3.4). |
+| **Retention purge scheduler** (Spring Boot) | Scheduled job deleting notifications older than the configured window (F3.4), and `processed_events` dedupe rows past the same window (issue #137). |
 | **Notification DB** (PostgreSQL) | Owned exclusively by this service: notification rows with read/unread state plus processed event IDs — one schema so dedupe and notification insert commit atomically. |
 
 ## Event contracts (D17/D18)
@@ -288,7 +296,7 @@ not drawn on the diagram — the traceability table below maps them.
 | Notif F2.3 — record events that exhaust retries | durable DLQ for inspection/re-publish (D7/D20); unconvertible messages arrive on first rejection (D21) |
 | Notif F3.1 — view recent notifications in-app | REST list over the stored rows: `GET /notifications/me`, paged newest-first (D24/D25/D27) |
 | Notif F3.2 — mark read/unread | `PATCH /notifications/me/{id}` flips the row's flag both ways; `POST /read-all` in bulk (D24/D26) |
-| Notif F3.4 — retention window | purge scheduler, `NOTIF_RETENTION_DAYS` (default 30) |
+| Notif F3.4 — retention window | purge scheduler, `NOTIF_RETENTION_DAYS` (default 30); same run sweeps `processed_events` (issue #137) |
 | Notif NFR1.1 — at-least-once delivery | durable queue + manual ack after transaction commit |
 | Notif NFR1.2 — persist undelivered events across restarts | durable exchanges/queues + persistent messages (D8) |
 | Order F0.2 — event on every request state transition | Order Service publishes all six state-transition events to the exchange |
@@ -301,7 +309,9 @@ not drawn on the diagram — the traceability table below maps them.
 
 ## Configuration notes
 
-- `NOTIF_RETENTION_DAYS` — retention window, default **30** (D9).
+- `NOTIF_RETENTION_DAYS` — retention window, default **30** (D9);
+  covers both `notifications` and the `processed_events` dedupe table
+  (issue #137, no separate knob).
 - `NOTIF_PURGE_CRON` — purge schedule, default daily at 03:00.
 - `NOTIFICATION_RETRY_TTL_MS` / `NOTIFICATION_RETRY_MAX_ATTEMPTS` —
   retry backoff and attempt cap (D6), defaults **10 s / 3**.

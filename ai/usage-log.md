@@ -39,6 +39,59 @@ Entry template:
 ```
 
 ---
+## 2026-10-17 — Leong Wei Zhi (issue #137: purge processed_events past retention)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** notification-service — `ProcessedEventRepository`
+  (`deleteByProcessedAtBefore`, bulk `@Modifying @Query` mirroring the
+  PR #81 notification purge pattern), `ProcessedEvent`
+  (`idx_processed_events_processed_at`), `RetentionPurgeScheduler`
+  (same run/cutoff also sweeps the dedupe table, one combined log
+  line), tests (`ProcessedEventRepositoryTest` new,
+  `RetentionPurgeSchedulerTest` extended), and the doc set
+  (design doc D4/D9/components/trace/config, service README, AGENTS.md).
+- **Prompt(s):** Asked to plan and resolve issue #137. Two
+  implementation details were author-decided via neutral options Q&A:
+  purge cutoff reuses the 30-day `NOTIF_RETENTION_DAYS` window (vs 2×
+  retention or a separate property), and `processed_at` gets an index
+  (vs matching the unindexed notifications purge).
+- **Author review:** `./mvnw clean test` — the new tests pass; the two
+  `ApplicationContext` restart errors (AMQP listener bean under local
+  Java 26) reproduce identically on unmodified main. Pending pull
+  request review.
+- **PR #201 review round (Codex, 2026-10-17):** two findings assessed,
+  no code change. The queued-redelivery dedupe gap is the same accepted
+  ≥30-day-outage class as the issue's DLQ-replay path — now named
+  explicitly in the scheduler javadoc and the design doc's D4 note. The
+  run-off-the-heartbeat-scheduler suggestion was rejected as
+  pre-existing #68 design (documented in `WebSocketStompConfig`), with
+  the indexed daily delete far below the 10 s heartbeat interval at
+  this scale.
+- **main merge (2026-10-17):** merged `origin/main` (through PR #195)
+  into the branch to clear the PR #201 conflict. Three docs conflicted,
+  all against #66's notification work: `ai/usage-log.md` (both sides
+  appended at the top — kept every entry), the design doc and the
+  service README (disclosure headers kept both lines; the F3.4 trace
+  row and the Status line take #66's newer REST wording with the
+  `processed_events` sweep folded in). No code conflict. `./mvnw clean
+  test`: 94 run, 1 error — the `RetentionPurgeSchedulerTest`
+  `ApplicationContext` AMQP failure, which unmodified main reproduces
+  identically (92 run, same error); both purge tests pass 2/2 in
+  isolation.
+- **main merge, round 2 (2026-10-17):** merged `origin/main` (now
+  through PR #199, #209 and #210) to clear the PR #201 conflict again.
+  One conflict this time, `ai/usage-log.md` — both sides had appended
+  at the top of the entry list, so the resolution keeps every entry
+  from each side with this branch's entry first, matching the earlier
+  merge. Verified by heading count: 144 on the branch + 151 on main
+  with 143 shared gives the 152 the merged file has, and no heading
+  from either parent is missing. No code conflict and no doc conflict:
+  the design doc and the service README now carry only this branch's
+  own edits over main. `./mvnw clean test`: 94 run, 1 error — the same
+  `RetentionPurgeSchedulerTest` `ApplicationContext` AMQP failure that
+  unmodified main reproduces under local Java 26; the four purge tests
+  pass 4/4 in isolation.
+
 ## 2026-10-17 — Ryan Ang (PR #210 review: upcoming credit expiries)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor + tests + docs

@@ -4,6 +4,8 @@
   Scope: wrote this agent guide from the existing code and design doc
   (docs/notification-service.md); it records team-made decisions and
   invariants, and makes no design decisions of its own.
+  2026-10-17, issue #137: scheduler line, D4 invariant and test list
+  updated for the processed_events retention sweep.
   Reviewed by: Leong Wei Zhi (via pull request).
   2026-10-17, Claude Code (Fable 5), issue #66: package map, invariants
   and test list updated for the REST API (controller/config/dto
@@ -28,7 +30,7 @@ the decision ID when touching related code.
 | --- | --- |
 | `entity/` | `Notification` (one row per recipient, read/unread flag), `ProcessedEvent` (dedupe inbox) |
 | `repository/` | Spring Data JPA repositories for both entities |
-| `service/` | `EventProcessor` (port), `IdempotentEventProcessor` (dedupe + insert + publishes `NotificationStoredEvent`), `NotificationDto`, `RetentionPurgeScheduler` |
+| `service/` | `EventProcessor` (port), `IdempotentEventProcessor` (dedupe + insert + publishes `NotificationStoredEvent`), `NotificationDto`, `RetentionPurgeScheduler` (purges `notifications` + `processed_events` past the retention window, #137) |
 | `messaging/rabbitmq/` | The only package allowed to touch broker types: `DomainEventsListener` (manual ack, retry republish), `DomainEventMessageConverter` (dispatch on body `eventType` via `EventTypeRegistry`), `RabbitMqTopology` + `RabbitMqTopologyInitializer` (startup declaration), `RabbitMqMessageConverterConfig` |
 | `messaging/stomp/` | `WebSocketStompConfig` (`/ws`, SockJS, heartbeats — also owns the app's sole `TaskScheduler`), `JwtChannelInterceptor` (CONNECT auth), `NotificationPushListener` (`AFTER_COMMIT` push), `StompPrincipal` |
 | `security/` | `JwtVerifier` (HS256, jjwt; fails startup on missing/short secret), `JwtAuthenticationFilter` (REST bearer → security context, empty authorities per D28; built inline by `SecurityConfig`, not a bean), `RestAuthEntryPoint`/`RestAccessDeniedHandler` (401/403 problem+json), `redis/RedisTokenDenylist` (D23 — STOMP CONNECT only, never the REST path, G4) |
@@ -42,7 +44,10 @@ the decision ID when touching related code.
   the processor's transaction commits; a retry republish must be
   broker-confirmed before the original delivery is acked.
 - **Idempotency by event ID** (D4/F2.1): processed-event insert and
-  notification insert commit in one transaction.
+  notification insert commit in one transaction. The dedupe window is
+  bounded by the retention purge (#137): rows older than
+  `NOTIF_RETENTION_DAYS` are swept — an accepted trade-off, since
+  redelivery ends at the DLQ within seconds.
 - **Broker isolation** (D11): only `messaging.rabbitmq` may import
   `org.springframework.amqp` / `com.rabbitmq`. `ArchitectureTest`
   (ArchUnit) fails the build otherwise.
@@ -74,6 +79,7 @@ the decision ID when touching related code.
 ```
 
 Tests: `IdempotentEventProcessorTest`, `NotificationRepositoryTest`,
+`ProcessedEventRepositoryTest`,
 `RetentionPurgeSchedulerTest` (H2), `DomainEventContractTest` (fixture
 tolerant-reader lock-in), `DomainEventMessageConverterTest`,
 `JwtVerifierTest`, `SecurityConfigTest` (REST chain 401s + the

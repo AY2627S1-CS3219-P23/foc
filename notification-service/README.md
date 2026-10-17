@@ -18,6 +18,9 @@
   2026-10-17, Claude Code (Fable 5), issue #66: REST API section added,
   WEB_ALLOWED_ORIGIN row added, JWT_SECRET row widened to the REST
   routes, Status brought current.
+  2026-10-17, Claude Code (Fable 5), issue #137: the retention rows and
+  Status line note the processed_events sweep (author decision via
+  options Q&A: same window, no new env var).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -65,7 +68,7 @@ stays `notification-service:8080`.
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / 6379 | Platform Redis for the denylist reads at STOMP `CONNECT` (D23) — a revoked jti, or a token issued before the account's password-reset cutoff, rejects the CONNECT; unreachable Redis fails open |
 | `NOTIFICATION_RETRY_TTL_MS` | 10 000 | Retry backoff (baked into the retry queue at declaration) |
 | `NOTIFICATION_RETRY_MAX_ATTEMPTS` | 3 | Total delivery attempts before dead-lettering |
-| `NOTIF_RETENTION_DAYS` | 30 | Notification retention window |
+| `NOTIF_RETENTION_DAYS` | 30 | Retention window for notifications and the `processed_events` dedupe table (#137) |
 | `NOTIF_PURGE_CRON` | daily 03:00 | Purge job schedule |
 
 Failed events land in the dead-letter queue — inspect and re-publish
@@ -108,7 +111,7 @@ are stranded).
 ## Status
 
 Event pipeline, retry/dead-lettering, STOMP push gateway, retention
-purge job, and the REST API
+purge job (notifications + `processed_events`, #137), and the REST API
 ([issue #66](https://github.com/AY2627S1-CS3219-P23/foc/issues/66)) are
 live. The SPA's Notification Center (the web half of #66) consumes the
 REST API; the frontend STOMP client shipped with #67.
