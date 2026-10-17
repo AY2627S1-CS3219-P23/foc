@@ -151,6 +151,10 @@
   2026-10-17, Codex (GPT-6), PR #180 review: added the web #94
   disclosure and the missing 2026-10-16 main-sync coverage.
   Author review: Leong Wei Zhi to review via PR #180.
+  2026-10-17, Codex (GPT-6.1 Sol), issue #98: disclosed the user-service
+  Docker-unavailable test skips and verification documentation.
+  PR #197 review: disclosed CI's rejection of skipped user-service tests.
+  Author review: Leong Wei Zhi to review via pull request.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -721,6 +725,14 @@ reject malformed nonempty 202 bodies, move the recovery request into
 profileApi, remove the duplicate home redirect, reuse the six-box
 CodeInput, and require the reset email field. The reset API returns no
 cooldown or expiry timings; the screen does not display those values.
+
+Issue #98's user-service test fix (Codex, GPT-6.1 Sol, 2026-10-17) adds
+inherited automatic skips when Docker is unavailable and guards shared PostgreSQL
+container startup. Unit tests still run without Docker; integration tests
+retain their existing shared container when Docker is available. The
+service README documents both modes and their coverage. The PR #197 review
+follow-up adds a CI check that rejects skipped user-service tests and
+missing test reports, enforcing the full suite on the runner.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

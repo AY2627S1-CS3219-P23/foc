@@ -9,6 +9,10 @@
   2026-10-17, Codex (GPT-6): recorded PR #180 review work and the
   missing main-sync entry from its PR description and file headers.
   Author review: Leong Wei Zhi to review via PR #180.
+  2026-10-17, Codex (GPT-6.1 Sol): recorded implementation and verification
+  of the Docker-unavailable test skips for issue #98.
+  PR #197 review: recorded the CI skipped-test check and its verification.
+  Author review: Leong Wei Zhi to review via pull request.
 -->
 
 # AI Usage Log
@@ -4376,3 +4380,61 @@ Entry template:
   user-service suite is unchanged at 362/362 from the previous entry.
   Both Codex threads answered on the PR. Leong Wei Zhi to review via
   PR #183.
+
+## 2026-10-17T11:17:00+08:00 — Leong Wei Zhi (issue #98)
+- **Tool:** Codex (GPT-6.1 Sol).
+- **Mode:** debugging + implementation + documentation.
+- **Prompt(s):** "can i close https://github.com/AY2627S1-CS3219-P23/foc/issues/98";
+  "what is meant by auto-skip docker?"; "create a plan to resolve this issue";
+  "Implement the plan."; "create the pr";
+  "wait are you sure you are opus 5? you are gpt 6.1 sol".
+- **Scope:** Implemented the approved automatic Docker-unavailable skip plan
+  in the shared user-service PostgreSQL test base: inherited
+  `@Testcontainers(disabledWithoutDocker = true)` and a Docker availability
+  guard around static startup. Preserved the singleton container and
+  `@ServiceConnection`, without adding `@Container` or catching startup
+  failures. Updated the service test instructions and consolidated README
+  AI Use Summary. No production code, API, schema, dependency, or CI changes.
+- **Verification:** Full user-service suite with Docker: 360 tests, zero
+  failures/errors/skips, one PostgreSQL container start. With Docker socket
+  access denied by the sandbox: 360 tests discovered, 157 unit tests executed,
+  203 integration tests skipped, zero failures/errors. Surefire reports
+  confirmed that exactly the 17 PostgreSQL test subclasses were skipped.
+  The unmodified base failed in the same Docker-inaccessible environment
+  with `ExceptionInInitializerError` from unconditional container startup.
+  Both successful runs used `./mvnw -o test` with Mockito's existing 5.23.0
+  jar passed as `-javaagent` through `-DargLine` to avoid this machine's
+  Java 26 self-attachment restriction; no build configuration was changed.
+  `git diff --check` passed.
+- **Attribution correction:** Model label refined from GPT-6 to GPT-6.1 Sol
+  using the model identification supplied by Leong Wei Zhi. Historical
+  Claude/Opus attributions from earlier work remain unchanged.
+- **Author review:** Leong Wei Zhi to review via pull request.
+
+## 2026-10-17T11:33:22+08:00 — Leong Wei Zhi (PR #197 review, issue #98)
+- **Tool:** Codex (GPT-6.1 Sol).
+- **Mode:** debugging + implementation + documentation.
+- **Prompt(s):** "address latest pr comments".
+- **Scope:** Addressed both inline reviews about CI succeeding when Docker
+  is unavailable. Added a user-service-only CI step after Maven verify to
+  reject any skipped Surefire suites and missing reports. Local automatic
+  skipping remains unchanged. Updated service instructions, workflow file
+  attribution, and the consolidated AI Use Summary.
+- **Verification:** Parsed the workflow YAML and executed its extracted
+  shell step against actual Surefire reports. The previous Docker-available
+  full run's reports (360 passed, zero skipped) passed the new check. A
+  fresh sandboxed Docker-unavailable run passed locally (157 tests executed,
+  203 skipped), then failed the new CI check with all 17 skipped integration
+  classes named in the error. Missing reports also failed the check.
+  The Maven rerun used the same existing Mockito jar as a Java agent for
+  this machine's Java 26 restriction. No Java code changed in this review
+  round; the Docker-available suite was not rerun. `git diff --check` passed.
+- **Author review:** Leong Wei Zhi to review via PR #197.
+
+## 2026-10-17 — Leong Wei Zhi (PR #197 comment cleanup)
+- **Tool:** Codex (GPT-6.1 Sol).
+- **Prompt(s):** "remove // AI-generated (edited by Codex; human review pending)."
+- **Scope:** Removed the specified inline Java comment at the user's
+  explicit request. File-header attribution remains accurate.
+- **Verification:** Comment-only change; `git diff --check` passed.
+- **Author review:** Leong Wei Zhi to review via PR #197.

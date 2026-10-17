@@ -4,6 +4,9 @@
 # Docker build check (no registry push; local compose stays the deploy
 # story per docs/architecture.md N5).
 # Reviewed by: Leong Wei Zhi (via pull request).
+# 2026-10-17, Codex (GPT-6.1 Sol), issue #98 / PR #197 review:
+# reject skipped user-service tests after Maven succeeds in CI.
+# Author review: Leong Wei Zhi to review via pull request.
 
 # One always-running workflow with dorny/paths-filter inside, instead of
 # per-workflow `on.paths`: a required check from a paths-filtered workflow
@@ -136,6 +139,31 @@ jobs:
       - name: Build and test
         run: ./mvnw -B -ntp verify
         working-directory: ${{ matrix.module }}
+      - name: Require user-service tests to run
+        if: matrix.module == 'user-service'
+        working-directory: user-service
+        run: |
+          # AI-generated (edited by Codex; human review pending).
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          reports = list(Path("target/surefire-reports").glob("TEST-*.xml"))
+          if not reports:
+              raise SystemExit("No user-service test reports found")
+
+          skipped = []
+          for report in reports:
+              suite = ET.parse(report).getroot()
+              if int(suite.get("skipped", "0")):
+                  skipped.append(suite.get("name", report.name))
+          if skipped:
+              raise SystemExit(
+                  "CI requires all user-service tests to run; skipped suites: "
+                  + ", ".join(skipped)
+              )
+          print("All user-service test suites ran without skips")
+          PY
 
   web:
     needs: changes
