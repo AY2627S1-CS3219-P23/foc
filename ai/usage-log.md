@@ -93,6 +93,82 @@ Entry template:
 - **Author review:** Transition table pinned by unit tests (every
   permitted transition, every other state/event pair rejected);
   `mvn test` passes (11 tests). Reviewed via pull request.
+## 2026-10-17 — Ryan Ang (admin dashboard: common pool box, issue #174 branch)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Scope:** `credit-service/`, `web/` and `docs/credit-service.md`.
+  - Credit service: `GET /credits/admin/pool` (pool balance, the
+    accounts a redistribution shares among, a preview of each share,
+    the last run and when the next is due) and
+    `GET /credits/admin/redistributions` (recorded months, newest
+    first, paged), in `AdminCreditController` and `PoolQueryService`,
+    with two response records; `SecurityConfig` gates
+    `/credits/admin/**` to `ADMIN` and `OWNER`. Tests:
+    `PoolQueryServiceTest` (6) and `AdminCreditControllerTest` (10).
+  - Design doc: an "Admin routes" part of the Read API contract and a
+    403 row. The service's README and AGENTS.md (package map, and the
+    "only the caller's own data" invariant's one exception).
+  - Web: `CommonPoolCard` on the admin dashboard above the Users
+    section, two `creditApi` calls and their types; times shown in
+    Singapore time. Tests in `credits.test.tsx` (3); `admin.test.tsx`
+    fakes the new call and expects the second section.
+- **Prompt(s):** Asked for a box on the admin dashboard showing the
+  common pool, how many users it would be shared among, and the last
+  and next distribution.
+- **Author review:** Team decisions, via options Q&A: a summary route
+  plus a paged run history (the server computing the next run and the
+  share preview); ADMIN and OWNER only; the account count with a share
+  preview; built on the #174 branch. Choices the tool made for the
+  author to review: the route paths and field names; the next run
+  following PR #193's routine (the 1st at 00:00 Singapore time once the
+  month is recorded, otherwise the next midnight), although this branch
+  does not have #193's scheduler yet; the box loading once when the
+  dashboard opens. Checked through the gateway as an ADMIN (summary)
+  and a USER (403), and in the browser. Then, at the author's request:
+  the dashboard subtitle removed, and a past-distributions table under
+  the figures (`PastDistributions`, 12 months a page, its "Run at"
+  column right-aligned) on the runs route, with the formatting shared
+  in `poolFormat.ts`; 3 more tests in `credits.test.tsx`.
+  Pending pull request review.
+
+## 2026-10-17 — Ryan Ang (web: credit balance and history, issue #174)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Scope:** `web/`.
+  - `src/features/credit/`: `api.ts` (`GET /credits/me` and
+    `/credits/me/history` through `apiFetch`), `types.ts`,
+    `history.ts` (each history type's label, sign and description; the
+    filter inputs turned into the query, local days to UTC instants
+    with the end exclusive, and the range checks),
+    `CreditBalanceProvider` + `useCreditBalance` (one balance poll for
+    the app), `CreditHistoryPage` and its `BalanceCards`,
+    `HistoryFilters` and `HistoryList` (a table on desktop, cards on
+    mobile).
+  - `routes/credits.tsx` and `/credits` behind `ProtectedRoute`; the
+    provider as a layout route below `NotificationProvider`.
+  - `shared/shell/CreditsBadge.tsx` shows the live available balance as
+    a link to `/credits`; `ProfileDetailsCard`'s Credit Status shows the
+    live balance with a link (a user-domain file, flagged in the PR).
+  - Tests: `credits.test.tsx` (19); `profile.test.tsx` fakes the
+    balance call, since a running gateway answers the test token with a
+    401 that signs the session out; `app.test.tsx` checks the new badge.
+  - `web/AGENTS.md`'s wireframe row and the README's AI Use Summary.
+- **Prompt(s):** Review and scaffold issue #174 on the current branch.
+- **Author review:** Team decisions, via options Q&A: the lifetime-earned
+  card replaced by Total and no running-balance column (the API has
+  neither); `/credits` as its own page reached from the badge and the
+  profile card, with no nav item; minimum and maximum amount fields;
+  and polling the balance every 30 s while the tab is visible, paused
+  while it is hidden and refetched when it is shown. Choices the tool
+  made for the author to review: the type labels and descriptions; a
+  row's sign follows its change to the available balance, with
+  `TRANSFER_OUT` shown as a loss; a failed poll keeps the last balance;
+  the page reloads its rows when a poll finds the balance changed; the
+  badge shows a dash while logged out. Checked in the browser against
+  the running stack at 1280 and 390 px wide, including a date filter
+  the server accepted. Then, at the author's request, a loss's amount
+  shown in red, as a gain's is in green. Pending pull request review.
+
 ## 2026-10-17 — Leong Wei Zhi (issue #66: D29 reversed — ingest-time name enrichment, D30/D31)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor + generate

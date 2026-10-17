@@ -36,6 +36,8 @@
   scheduler.
   2026-10-16, Claude Code (Opus 5.5), PR #193 review (Leong Wei Zhi):
   the single-routine invariant and EarnedCreditLifetime in the map.
+  2026-10-17, Claude Code (Opus 5.5), issue #174: the admin routes in
+  the package map and the read-only invariant.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -51,13 +53,13 @@ IDs (D1–D12) when touching related code.
 
 | Package | Contents |
 | --- | --- |
-| `config/` | `SecurityConfig`: CORS, health open, everything else needs a valid JWT |
-| `controller/` | `CreditController` (the two read routes and the checks behind the contract's 400s), `ApiExceptionHandler` (400 problem+json), `InvalidQueryParameterException` |
-| `dto/` | The read API's bodies: `BalanceResponse`, `HistoryEntryResponse`, and `PageResponse`, a copy of supplier-service's shape |
+| `config/` | `SecurityConfig`: CORS, health open, `/credits/admin/**` for `ADMIN` and `OWNER`, everything else needs a valid JWT |
+| `controller/` | `CreditController` (the two read routes and the checks behind the contract's 400s), `ApiExceptionHandler` (400 problem+json), `InvalidQueryParameterException`, and `AdminCreditController` (the pool summary and the redistribution runs) |
+| `dto/` | The read API's bodies: `BalanceResponse`, `HistoryEntryResponse`, `PoolSummaryResponse`, `RedistributionRunResponse`, and `PageResponse`, a copy of supplier-service's shape |
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
 | `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
-| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API, and `ExpiryAndRedistributionScheduler` with `LotExpiryService` and `RedistributionService` (D12), and `EarnedCreditLifetime`, the earned-credit expiry both the transfer and the redistribution use (D4) |
+| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API, `PoolQueryService`, the admin routes' reads, and `ExpiryAndRedistributionScheduler` with `LotExpiryService` and `RedistributionService` (D12), and `EarnedCreditLifetime`, the earned-credit expiry both the transfer and the redistribution use (D4) |
 | `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), `RequestEventsListener` (settles each request event on the handler's outcome: ack, dead-letter, or a confirmed republish to the retry queue), and `DomainEventMessageConverter`, a copy of notification-service's |
 
 ## Invariants — do not break
@@ -170,7 +172,10 @@ IDs (D1–D12) when touching related code.
 - **The REST API only reads, and only the caller's own data.** The user
   is the token's subject (`Authentication.getName()`); no route takes a
   user ID. The one write a read causes is get-or-create (D6). Every
-  balance change arrives as an event.
+  balance change arrives as an event. The one exception to "own data"
+  is `/credits/admin/**`, gated to `ADMIN` and `OWNER` in
+  `SecurityConfig`: it reads the common pool and the redistribution
+  runs, never a user's rows, and writes nothing.
 - **The read API is specified** in the design doc's "Read API
   contract": routes, fields, order, bounds and each 400. A change to
   any of them is a design change, so update the doc with it.

@@ -29,6 +29,7 @@
   the scheduler paragraph for the single daily and startup routine.
   2026-10-16, Claude Code (Opus 5.5), issue #173: status and contents
   updated for the expiry and redistribution scheduler.
+  2026-10-17, Claude Code (Opus 5.5), issue #174: the admin API.
   Author review: Ryan Ang, pending pull request review.
   2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the run
   section's service URL updated for the gateway cutover (#151) — the
@@ -84,6 +85,14 @@ What is here:
   Either one creates the caller's account with its sign-up credits on
   first use, so neither answers 404. An invalid parameter is a 400
   problem+json whose `detail` names it.
+- **Admin API** (`controller/AdminCreditController`,
+  `service/PoolQueryService`), for `ADMIN` and `OWNER` only (403
+  otherwise):
+  - `GET /credits/admin/pool`: the common pool's balance, the number
+    of accounts it is shared among, a preview of each one's share, the
+    last redistribution and when the next is due.
+  - `GET /credits/admin/redistributions`: the recorded months, newest
+    first, with `page` and `size` as above.
 - **Reply outbox** (`service/ReplyOutbox`, `ReplyOutboxService`):
   enqueue writes the reply as an `outbox_event` row inside the
   caller's transaction, so it commits with the balance change or not at

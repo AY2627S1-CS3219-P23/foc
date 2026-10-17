@@ -33,6 +33,10 @@
 // sit where their #94 note says: the reset page public inside the
 // shell, the recovery screen inside the requiresSession branch, so a
 // 401 there signs out through ProtectedRoute's own bounce.
+// 2026-10-16, Claude Code (Opus 5.5), issue #174: CreditBalanceProvider
+// layout route below NotificationProvider (the shared balance poll needs
+// the session, and the shell's badge reads it), and /credits behind
+// ProtectedRoute.
 // Author review: Leong Wei Zhi to review via the PR.
 
 import { createBrowserRouter, type RouteObject } from 'react-router'
@@ -40,6 +44,7 @@ import { createBrowserRouter, type RouteObject } from 'react-router'
 import { AppShell } from '@/shared/shell/AppShell'
 import { NotFound } from '@/shared/shell/NotFound'
 import { Admin } from './admin'
+import { Credits } from './credits'
 import { Home } from './home'
 import { Profile } from './profile'
 import { Suppliers } from './suppliers'
@@ -51,6 +56,7 @@ import { Login } from '../features/user/login'
 import { Register } from '../features/user/register'
 import { AuthProvider } from '../features/user/AuthProvider'
 import { NotificationProvider } from '../features/notifications/NotificationProvider'
+import { CreditBalanceProvider } from '../features/credit/CreditBalanceProvider'
 
 // RouteObject.handle for the session-gated branch, read via useMatches
 // (AuthProvider). ProtectedRoute is what enforces it; this only lets
@@ -70,29 +76,38 @@ export const routes: RouteObject[] = [
         Component: NotificationProvider,
         children: [
           {
-            element: <AppShell />,
+            Component: CreditBalanceProvider,
             children: [
-              { index: true, element: <Home /> },
-              { path: 'login', element: <Login /> },
-              { path: 'register', element: <Register /> },
-              { path: 'forgot-password', element: <ForgotPassword /> },
               {
-                Component: ProtectedRoute,
-                handle: { requiresSession: true } satisfies RouteHandle,
+                element: <AppShell />,
                 children: [
-                  { path: 'suppliers', element: <Suppliers /> },
-                  { path: 'profile', element: <Profile /> },
-                  { path: 'account-recovery', element: <AccountRecovery /> },
+                  { index: true, element: <Home /> },
+                  { path: 'login', element: <Login /> },
+                  { path: 'register', element: <Register /> },
+                  { path: 'forgot-password', element: <ForgotPassword /> },
                   {
-                    Component: AdminRoute,
-                    children: [{ path: 'admin', element: <Admin /> }],
+                    Component: ProtectedRoute,
+                    handle: { requiresSession: true } satisfies RouteHandle,
+                    children: [
+                      { path: 'suppliers', element: <Suppliers /> },
+                      { path: 'profile', element: <Profile /> },
+                      {
+                        path: 'account-recovery',
+                        element: <AccountRecovery />,
+                      },
+                      { path: 'credits', element: <Credits /> },
+                      {
+                        Component: AdminRoute,
+                        children: [{ path: 'admin', element: <Admin /> }],
+                      },
+                    ],
                   },
+                  // Renders inside the shell, so the nav stays visible on
+                  // unknown paths (including nav destinations not built
+                  // yet). Outside ProtectedRoute: a 404 needs no login.
+                  { path: '*', element: <NotFound /> },
                 ],
               },
-              // Renders inside the shell, so the nav stays visible on
-              // unknown paths (including nav destinations not built yet).
-              // Outside ProtectedRoute: a 404 needs no login.
-              { path: '*', element: <NotFound /> },
             ],
           },
         ],
