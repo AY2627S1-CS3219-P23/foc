@@ -74,6 +74,10 @@
   one routine, daily at 00:00 and at startup, sweeps then redistributes
   a month with no recorded run; the 00:10 job is dropped, so a failed
   redistribution is retried the next day (D12, failure-table rows).
+  2026-10-17, issue #196, team decisions transcribed: GET
+  /credits/me/expiries in the Read API contract (its route, response
+  shape, order, which credits count, and how often the web app reads
+  it), and the REST API component row.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -132,7 +136,7 @@ Web App; every balance change arrives as a request event. Its state lives only i
 
 | Component | Responsibility |
 | --- | --- |
-| **Credit account REST API** (Spring Boot) | For the Web App, authenticated by the user's JWT: returns the caller's available and reserved balance (F4.1) and their transaction history with amount and date-range filters (F4.1.2, F4.1.3). The routes and shapes are in "Read API contract". |
+| **Credit account REST API** (Spring Boot) | For the Web App, authenticated by the user's JWT: returns the caller's available and reserved balance (F4.1) and their transaction history with amount and date-range filters (F4.1.2, F4.1.3), and the caller's credits that will expire, with their dates (F6.1, issue #196). The routes and shapes are in "Read API contract". |
 | **Request event listener** (Spring AMQP) | Consumes `request.submitted`, `request.completed`, `request.cancelled` and `request.expired` from the Credit Service's own queue, hands each to the request event handler, and settles the delivery on its answer: acknowledge after the commit, dead-letter an event that conflicts with the request's record, and send any failure to the retry queue (D11). |
 | **Request event handler** (Spring Boot, `@Transactional`) | Owns the transaction for one event. Turns it into a reserve (F2.1), transfer (F3.1) or release (F2.1.1) operation and, for a reservation, writes the reply to the outbox in the same transaction (D10). Imports no broker types. |
 | **Error mapping** (Spring Boot, `@RestControllerAdvice`) | Maps invalid query parameters on the read API (for example the history's amount and date-range filters) to HTTP error responses. Event-path failures never reach it: they are refused with a reply or dead-lettered (see "How each event is handled"). |
@@ -334,9 +338,10 @@ Same notation as [`architecture.md`](architecture.md):
 
 ## Read API contract
 
-Both routes return the caller's own data, identified by the JWT; there
-is no route for another user's. Either one creates the caller's account
-on first use (D6), so a balance always exists and neither answers 404.
+Every route returns the caller's own data, identified by the JWT;
+there is no route for another user's. Each one creates the caller's
+account on first use (D6), so a balance always exists and none answers
+404.
 
 ### `GET /credits/me`
 
@@ -405,11 +410,54 @@ For the web page:
   offset must be encoded as `%2B08:00` in the query string, or the `+`
   arrives as a space and the request is a 400.
 
+### `GET /credits/me/expiries`
+
+The caller's credits that will expire, one item per lot still holding
+some, soonest first (F6.1, D4). The web app reads it when the credits
+page opens and when the balance changes, not on the balance poll:
+expiry dates only change when credits are earned, spent, released or
+moved by the expiry run.
+
+```json
+{
+  "items": [
+    { "amount": 3, "expiresAt": "2027-01-12T07:41:09.123456Z" },
+    { "amount": 2, "expiresAt": "2027-01-20T02:05:44Z" }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `items` | One item per lot still holding credits that will expire |
+| `items[].amount` | The credits left in that lot; at least 1 |
+| `items[].expiresAt` | When they expire: the lot's `expires_at` as stored, in the format of `occurredAt` |
+
+- **Order:** `expiresAt` ascending, then the lot's ID, so the order is
+  stable. Lot IDs are not returned; two items with the same `expiresAt`
+  are expected, and the web app groups items by Singapore date.
+- **Left out:** the sign-up credits, which never expire; drained lots;
+  and credits held by a reservation, which are in no lot's `remaining`
+  until released and cannot expire while held.
+- **No window:** every lot still holding credits is listed. A user has
+  at most one lot per transfer or redistribution share in the last
+  three months. The web app chooses what to highlight (the next 7
+  days); a window, if ever needed, would be a query parameter.
+- **Past dates:** an item's `expiresAt` may already have passed while
+  its lot waits for that night's expiry run, for example after a
+  release returned credits to it. The web app shows it as "expires
+  tonight".
+- **The list is an object**, so fields such as a total can be added
+  without breaking clients.
+
+Nothing expiring is 200 with `"items": []`. The route takes no
+parameters, so its only error is the 401 below.
+
 ### Errors
 
 | Status | When |
 | --- | --- |
-| 400 problem+json | An amount that is not an integer or is below 1; `minAmount` above `maxAmount`; `from` or `to` not a full instant with an offset; `from` not before `to`; `page` below 0; `size` outside 1 to 100 |
+| 400 problem+json | History only: an amount that is not an integer or is below 1; `minAmount` above `maxAmount`; `from` or `to` not a full instant with an offset; `from` not before `to`; `page` below 0; `size` outside 1 to 100 |
 | 401 problem+json | A missing or invalid token |
 
 No history is an empty page, not an error, and so is a `page` past the

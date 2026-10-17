@@ -33,6 +33,27 @@ Entry template:
 ```
 
 ---
+## 2026-10-17 — Ryan Ang (credit-service: upcoming expiries route, issue #196)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate + tests + docs
+- **Scope:** `credit-service/` (`GET /credits/me/expiries` in
+  `CreditController`, `CreditQueryService.upcomingExpiries`,
+  `ExpiriesResponse`, and the route's cases in `CreditControllerTest`),
+  the route in `docs/credit-service.md`'s Read API contract and REST API
+  component row, and the service's README and AGENTS.md.
+- **Prompt(s):** Asked to implement the backend half of #196 to the
+  team's decisions, given in full: a new route
+  `GET /credits/me/expiries` returning `{"items": [{amount,
+  expiresAt}]}`, one item per lot still holding credits, ordered by
+  `expiresAt` then lot ID, with no lot IDs, no window, sign-up, drained
+  and reserved credits left out, past dates kept until the expiry run,
+  an empty list rather than 404, get-or-create first, and the web app
+  reading it on page load and balance changes rather than on the poll.
+  The tool's own choice: reusing the spend-order query, whose order is
+  the contract's with the sign-up lot last, and dropping that lot.
+- **Author review:** `./mvnw test` in `credit-service` with Docker.
+  Pending pull request review.
+
 ## 2026-10-17 — Leong Wei Zhi (issue #66: D29 reversed — ingest-time name enrichment, D30/D31)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor + generate

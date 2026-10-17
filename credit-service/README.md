@@ -29,6 +29,8 @@
   the scheduler paragraph for the single daily and startup routine.
   2026-10-16, Claude Code (Opus 5.5), issue #173: status and contents
   updated for the expiry and redistribution scheduler.
+  2026-10-17, Claude Code (Opus 5.5), issue #196: the expiries route in
+  the read API and how to call it.
   Author review: Ryan Ang, pending pull request review.
   2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the run
   section's service URL updated for the gateway cutover (#151) — the
@@ -72,7 +74,7 @@ What is here:
   (`CREDIT_SIGN_UP_CREDITS`, default 5) and the months before earned
   credits expire (`CREDIT_EARNED_CREDIT_LIFETIME_MONTHS`, default 3) are
   configuration.
-- **Read API** (`controller/`, `service/CreditQueryService`): the two
+- **Read API** (`controller/`, `service/CreditQueryService`): the three
   routes of the design doc's "Read API contract", for the token's user
   only.
   - `GET /credits/me`: `available`, `reserved` and their `total`.
@@ -80,9 +82,12 @@ What is here:
     with the optional filters `minAmount`, `maxAmount`, `from` and `to`
     and the paging parameters `page` (from 0) and `size` (1 to 100,
     default 20).
+  - `GET /credits/me/expiries`: the caller's credits that will expire,
+    one `{amount, expiresAt}` item per lot, soonest first. Sign-up and
+    reserved credits are left out.
 
-  Either one creates the caller's account with its sign-up credits on
-  first use, so neither answers 404. An invalid parameter is a 400
+  Each one creates the caller's account with its sign-up credits on
+  first use, so none answers 404. An invalid parameter is a 400
   problem+json whose `detail` names it.
 - **Reply outbox** (`service/ReplyOutbox`, `ReplyOutboxService`):
   enqueue writes the reply as an `outbox_event` row inside the
@@ -184,6 +189,7 @@ curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8090/api/credit/credits/me
 curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8090/api/credit/credits/me/history?minAmount=2&from=2026-10-01T00:00:00Z&size=10"
+curl -H "Authorization: Bearer $TOKEN"   http://localhost:8090/api/credit/credits/me/expiries
 ```
 
 `from` and `to` are full instants with an offset. Send UTC (`Z`); a

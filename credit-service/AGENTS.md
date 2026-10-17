@@ -36,6 +36,8 @@
   scheduler.
   2026-10-16, Claude Code (Opus 5.5), PR #193 review (Leong Wei Zhi):
   the single-routine invariant and EarnedCreditLifetime in the map.
+  2026-10-17, Claude Code (Opus 5.5), issue #196: the expiries route in
+  the package map.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -52,8 +54,8 @@ IDs (D1–D12) when touching related code.
 | Package | Contents |
 | --- | --- |
 | `config/` | `SecurityConfig`: CORS, health open, everything else needs a valid JWT |
-| `controller/` | `CreditController` (the two read routes and the checks behind the contract's 400s), `ApiExceptionHandler` (400 problem+json), `InvalidQueryParameterException` |
-| `dto/` | The read API's bodies: `BalanceResponse`, `HistoryEntryResponse`, and `PageResponse`, a copy of supplier-service's shape |
+| `controller/` | `CreditController` (the three read routes and the checks behind the contract's 400s), `ApiExceptionHandler` (400 problem+json), `InvalidQueryParameterException` |
+| `dto/` | The read API's bodies: `BalanceResponse`, `HistoryEntryResponse`, `ExpiriesResponse`, and `PageResponse`, a copy of supplier-service's shape |
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
 | `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
