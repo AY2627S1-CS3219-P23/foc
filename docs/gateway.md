@@ -30,6 +30,10 @@
   limit's wording corrected — the CONNECT check now covers the G11
   cutoff too, and what it still does not cover (an already-open
   session) is stated.
+  2026-10-17, Claude Code (Opus 5), issue #203: G12's note now says
+  self-deletion writes no stamp, so the paragraph's scope (the
+  admin-initiated paths) is explicit. Accepted as-is (option C) by
+  Leong Wei Zhi via options Q&A. No gateway code changed.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -121,7 +125,10 @@ tokens issued before the stamp.
 Privilege revoke: `PATCH /api/user/users/<id>` (role actually changed)
 and `DELETE /api/user/users/<id>` write the same stamp for the target
 (G12) — a demoted admin's next request answers 401 "Token has been
-revoked" rather than keeping the admin API until `exp`.
+revoked" rather than keeping the admin API until `exp`. Self-deletion
+(`DELETE /api/user/users/me`) deliberately writes no stamp and no
+demotion (#203, option C), so a self-deleted admin's tokens — and the
+fresh ones its logins keep minting for 30 days — stay valid.
 
 ## Routing table
 
