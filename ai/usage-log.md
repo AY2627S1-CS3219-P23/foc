@@ -39,6 +39,74 @@ Entry template:
 ```
 
 ---
+## 2026-10-17 — Ryan Ang (PR #210 review: upcoming credit expiries)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + tests + docs
+- **Scope:** Leong Wei Zhi's review of PR #210 (issue #196), and a merge
+  of `main` (#202's order-service code) whose only conflict, this log,
+  was resolved by keeping both sides.
+  - `web/src/features/credit/CreditHistoryPage.tsx` and `api.ts`: the
+    expiries are read on page load and on every balance poll, keyed on
+    the poll's `version` instead of `available`/`reserved`. The test
+    that pinned the old trigger is replaced by one with the reviewer's
+    case: the same balance, a different lot set, and the line and
+    notice update on the next poll.
+  - `CreditControllerTest`: a first expiries read that commits outside
+    the test transaction (`NOT_SUPPORTED`), like the balance and
+    history routes; "two first-read cases" made three there and in
+    `credit-service/AGENTS.md`.
+  - `docs/credit-service.md`: the contract's cadence sentence for
+    `GET /credits/me/expiries`, and the "No window" bullet's upper
+    bound (hundreds of lots for a busy courier, about 450 at five
+    errands a day) in place of the earlier understatement.
+- **Prompt(s):** Asked to go through the review's three findings. For
+  the blocker (the expiry line going stale when two balance changes
+  cancel out between polls), the tool laid out four options neutrally
+  (re-read daily, on a new history row, on every poll, or a marker on
+  the balance route), and the team chose re-reading on every poll,
+  reversing its earlier "not on every poll" decision. The two
+  non-blocking items were applied as the reviewer described: add the
+  first-read test, and correct the doc's stated list size rather than
+  add a limit.
+- **Author review:** `./mvnw test` in `credit-service` with Docker
+  (259/259) and the `web` suite (199/199) with `tsc -b`, eslint and
+  Prettier; the new web test fails against the old trigger. Pending
+  pull request review.
+
+## 2026-10-17 — Ryan Ang (upcoming credit expiries: route and credits page, issue #196)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate + tests + docs
+- **Scope:** `credit-service/` (`GET /credits/me/expiries` in
+  `CreditController`, `CreditQueryService.upcomingExpiries`,
+  `ExpiriesResponse`, and the route's cases in `CreditControllerTest`),
+  the route in `docs/credit-service.md`'s Read API contract and REST API
+  component row, and the service's README and AGENTS.md. Then `web/`:
+  `getExpiries()`, `expiry.ts` (items grouped by Singapore date), the
+  Available card's line, `ExpiryNotice`, and their tests in
+  `credits.test.tsx`.
+- **Prompt(s):** Asked to implement #196, backend then web, to the
+  team's decisions, given in full: a new route
+  `GET /credits/me/expiries` returning `{"items": [{amount,
+  expiresAt}]}`, one item per lot still holding credits, ordered by
+  `expiresAt` then lot ID, with no lot IDs, no window, sign-up, drained
+  and reserved credits left out, past dates kept until the expiry run,
+  an empty list rather than 404, get-or-create first, and the web app
+  reading it on page load and balance changes rather than on the poll.
+  The web half to the same decisions: the soonest credits on the
+  Available card ("5 credits expire by 12 Jan"), a notice above the
+  transactions only when they expire within 7 days ("3 credits expire
+  on 12 Jan. Use them on a request before then."), dates in Singapore,
+  no "never expire" line, and nothing on the badge or profile card.
+  The tool's own choices: reusing the spend-order query, whose order is
+  the contract's with the sign-up lot last, and dropping that lot;
+  counting anything dated today or earlier in Singapore as "tonight",
+  since tonight's 00:00 run moves it; the soonest Singapore date's
+  items added up for the card and the notice; and an expiries read
+  that fails showing nothing rather than an error.
+- **Author review:** `./mvnw test` in `credit-service` with Docker, and
+  the `web` suite with `tsc -b` and eslint. Pending pull request
+  review.
+
 ## 2026-10-17 — Leong Wei Zhi (self-deletion keeps the admin role, issue #203)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** docs (+ one test)

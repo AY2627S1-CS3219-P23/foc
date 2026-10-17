@@ -7,6 +7,10 @@
 // result is stamped with the query it answers
 // (derive-by-key, as NotificationProvider does with its token), so a
 // stale response never lands on a newer query.
+// 2026-10-17, issue #196: GET /credits/me/expiries, for the balance
+// card's line and the notice when credits expire within 7 days. PR #210
+// review: read on load and on every balance poll (team decision), since
+// a balance-change trigger missed changes that cancel out.
 // Author review: Ryan Ang, pending pull request review.
 
 import { useEffect, useState } from 'react'
@@ -15,10 +19,12 @@ import { Pagination } from '@/shared/components/Pagination'
 import { errorMessage } from '@/lib/api/http'
 import { creditApi } from './api'
 import { BalanceCards } from './components/BalanceCards'
+import { ExpiryNotice } from './components/ExpiryNotice'
+import { nextExpiry } from './expiry'
 import { HistoryFilters } from './components/HistoryFilters'
 import { HistoryList } from './components/HistoryList'
 import { NO_FILTERS, parseFilters, type HistoryFilterInputs } from './history'
-import type { CreditHistoryEntry, CreditPage } from './types'
+import type { CreditExpiry, CreditHistoryEntry, CreditPage } from './types'
 import { useCreditBalance } from './useCreditBalance'
 
 // typing in a filter field applies once it pauses, as the admin user
@@ -42,6 +48,29 @@ export function CreditHistoryPage() {
   const [applied, setApplied] = useState<HistoryFilterInputs>(NO_FILTERS)
   const [page, setPage] = useState(0)
   const [result, setResult] = useState<HistoryResult | null>(null)
+  // null until the first answer, and kept when a later read fails: the
+  // expiry line is a hint, so a failure shows nothing rather than an error
+  const [expiries, setExpiries] = useState<CreditExpiry[] | null>(null)
+
+  // read on load and again on every poll (version goes up with each).
+  // Keying on the balance missed changes that cancel out between polls,
+  // such as the midnight sweep followed by a same-sized redistribution
+  // share (PR #210 review, team decision).
+  const expiriesKey = state?.status === 'ready' ? version : null
+
+  useEffect(() => {
+    if (expiriesKey === null) return
+    let cancelled = false
+    creditApi.getExpiries().then(
+      (data) => {
+        if (!cancelled) setExpiries(data.items)
+      },
+      () => {},
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [expiriesKey])
 
   useEffect(() => {
     if (filters === applied) return
@@ -100,6 +129,8 @@ export function CreditHistoryPage() {
     }
   }
 
+  const next = expiries ? nextExpiry(expiries) : null
+
   const loading = valid && result?.key !== key
   // the last rows stay up while the next page or filter loads
   const shown = result?.page
@@ -116,7 +147,9 @@ export function CreditHistoryPage() {
         </p>
       </header>
 
-      <BalanceCards state={state ?? { status: 'loading' }} />
+      <BalanceCards state={state ?? { status: 'loading' }} next={next} />
+
+      {next?.soon && <ExpiryNotice next={next} />}
 
       <HistoryFilters
         value={filters}
