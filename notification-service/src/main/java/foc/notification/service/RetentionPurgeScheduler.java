@@ -12,6 +12,9 @@
  * {@code deleteBy...} method), so its return type is {@code int}.
  * 2026-10-17, issue #137: the run also sweeps processed_events (author
  * decision via neutral options: same 30-day window, no new config).
+ * 2026-10-17, PR #201 Codex review: the trade-off note below names the
+ * unacked work-queue redelivery path alongside DLQ replay (no code
+ * change — same accepted ≥30-day-outage class).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.service;
@@ -32,9 +35,10 @@ import org.springframework.stereotype.Component;
  * processed_events dedupe table past the same window (issue #137).
  * Purging a dedupe row reopens the duplicate-detection window for that
  * event ID — accepted trade-off: retries are 10 s TTL × 3 then DLQ, so
- * only a manual DLQ replay ≥ the retention window later could
- * re-process an event, and it would recreate notifications this purge
- * already deleted. Plain business logic with zero broker imports
+ * re-processing needs a delivery that resurfaces ≥ the retention
+ * window later (a manual DLQ replay, or a post-commit delivery left
+ * unacked on the durable work queue across an outage that long), and
+ * it would recreate notifications this purge already deleted. Plain business logic with zero broker imports
  * (D11): the scheduler only depends on repositories, so a broker swap
  * never touches it.
  *

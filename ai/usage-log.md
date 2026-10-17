@@ -53,6 +53,14 @@ Entry template:
   `ApplicationContext` restart errors (AMQP listener bean under local
   Java 26) reproduce identically on unmodified main. Pending pull
   request review.
+- **PR #201 review round (Codex, 2026-10-17):** two findings assessed,
+  no code change. The queued-redelivery dedupe gap is the same accepted
+  ≥30-day-outage class as the issue's DLQ-replay path — now named
+  explicitly in the scheduler javadoc and the design doc's D4 note. The
+  run-off-the-heartbeat-scheduler suggestion was rejected as
+  pre-existing #68 design (documented in `WebSocketStompConfig`), with
+  the indexed daily delete far below the 10 s heartbeat interval at
+  this scale.
 
 ## 2026-10-16 — Leong Wei Zhi (CI pipeline + Claude PR review)
 - **Tool:** Claude Code (Fable 5)

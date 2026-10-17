@@ -39,6 +39,9 @@
   configuration notes updated for the processed_events sweep (author
   decisions via neutral options Q&A: same 30-day window, processed_at
   indexed).
+  2026-10-17, Claude Code (Fable 5), PR #201 Codex review: the D4
+  trade-off note names the unacked work-queue redelivery path alongside
+  DLQ replay (same accepted ≥30-day-outage class; no design change).
 -->
 
 # FoC Notification Service — Architecture Design
@@ -68,7 +71,7 @@ the team's finalized design for this service. Superseded decisions
 | D1 | Message broker | **RabbitMQ** | M6; Notif F1.1, NFR1 |
 | D2 | Client push transport | **WebSocket with STOMP** (Spring simple broker, per-user destinations) | Notif F1.2; Order NFR1.1–1.2 |
 | D3 | Notification DB engine | **PostgreSQL**, accessed via Spring Data JPA | Notif F2.1, F3 |
-| D4 | Duplicate detection | **Unique event ID** recorded in the DB, in the *same transaction* as the notification insert. *2026-10-17 note (issue #137):* dedupe rows past the D9 retention window are purged, reopening the dedupe window for those event IDs — accepted: retries are 10 s TTL × 3 then DLQ, so only a manual DLQ replay ≥ 30 days later could re-process | Notif F2.1 |
+| D4 | Duplicate detection | **Unique event ID** recorded in the DB, in the *same transaction* as the notification insert. *2026-10-17 note (issue #137):* dedupe rows past the D9 retention window are purged, reopening the dedupe window for those event IDs — accepted: retries are 10 s TTL × 3 then DLQ, so re-processing needs a delivery resurfacing ≥ 30 days later (a manual DLQ replay, or a post-commit delivery left unacked on the work queue across an outage that long), and it would recreate notifications the purge already deleted | Notif F2.1 |
 | D6 | Retry policy | **Broker redelivery with TTL retry queue**: 3 total attempts, 10 s backoff, env-overridable — see [Failure handling](#failure-handling-d6d7-d20d21) | Notif F2.2 |
 | D7 | Dead-letter handling | **Durable dead-letter queue**; unknown event types dead-letter (replayable after a consumer upgrade) rather than being dropped | Notif F2.3 |
 | D8 | Broker persistence | **Durable exchanges/queues + persistent messages** (durability is opt-in in RabbitMQ) | Notif NFR1.2 |
