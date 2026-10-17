@@ -11,10 +11,12 @@
 // stopped push channel is reported instead of leaving the last count
 // looking live — the badge greys out and the accessible name says
 // updates are paused.
+// 2026-10-17, Claude Code (Fable 5), issue #66: the bell is now a Link
+// to the Notification Center at /notifications (entry stays via the
+// bell only, per the wireframe — no nav/tab entry added).
 // Reviewed by: Leong Wei Zhi (via pull request).
 
-// TODO(notification-service owner): link the bell to the Notification
-// Center (issue #66).
+import { Link } from 'react-router'
 import { useNotifications } from '@/features/notifications/useNotifications'
 
 export function NotificationBell() {
@@ -30,8 +32,8 @@ export function NotificationBell() {
     unreadCount > 0 ? `Notifications (${capped} unread)` : 'Notifications'
 
   return (
-    <button
-      type="button"
+    <Link
+      to="/notifications"
       className="relative rounded-md p-2 hover:bg-gray-100"
       // aria-label overrides descendant text, so the badge must be part
       // of the name for assistive technologies (PR #185 Copilot review)
@@ -64,6 +66,6 @@ export function NotificationBell() {
           {capped}
         </span>
       )}
-    </button>
+    </Link>
   )
 }

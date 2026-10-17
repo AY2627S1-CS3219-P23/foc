@@ -5,6 +5,8 @@
  * contract": the two routes, their parameters and the checks behind the
  * contract's 400s. The routes, shapes, bounds and errors are the team's
  * design; this transcribes them.
+ * 2026-10-17, Claude Code (Opus 5.5), issue #196: GET /credits/me/expiries,
+ * the route and its shape as the team decided.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.controller;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import foc.credit.dto.BalanceResponse;
+import foc.credit.dto.ExpiriesResponse;
 import foc.credit.dto.HistoryEntryResponse;
 import foc.credit.dto.PageResponse;
 import foc.credit.service.CreditQueryService;
@@ -81,6 +84,13 @@ public class CreditController {
 
         HistoryFilter filter = new HistoryFilter(minAmount, maxAmount, fromInstant, toInstant);
         return PageResponse.of(credits.history(caller.getName(), filter, page, size), HistoryEntryResponse::of);
+    }
+
+    // no parameters, so no 400s: fetched when the credits page opens and
+    // when the balance changes, not on the 30 s balance poll
+    @GetMapping("/expiries")
+    public ExpiriesResponse expiries(Authentication caller) {
+        return ExpiriesResponse.of(credits.upcomingExpiries(caller.getName()));
     }
 
     // history amounts are always positive, so a bound below 1 is a mistake
