@@ -107,6 +107,14 @@
   round (@Sinnez1), by Claude Code (Opus 5).
   2026-10-14: the #172 clause extended for the PR #189 review
   follow-ups, by Claude Code (Opus 5.5).
+  2026-10-10: AI Use Summary extended for the order-service Spring Boot
+  scaffold and its compose.yaml/AGENTS.md/.env.example wiring by
+  Claude Code (Opus 5.5).
+  2026-10-11: AI Use Summary extended for the order-service Requests
+  entity/repository skeleton by Claude Code (Opus 5.5).
+  2026-10-17: AI Use Summary extended for the order-service request
+  state machine by Claude Code (Opus 5.5), then for the Requests
+  createdAt default (PR review fix).
   2026-10-14: AI Use Summary extended for the credit request event
   listener (issue #171) by Claude Code (Opus 5.5).
   2026-10-14: the #67 clause extended for the PR #185 human-review
@@ -160,7 +168,14 @@
   2026-10-17, Codex (GPT-6.1 Sol), issue #98: disclosed the user-service
   Docker-unavailable test skips and verification documentation.
   PR #197 review: disclosed CI's rejection of skipped user-service tests.
+  2026-10-17, Claude Code (Opus 5), PR #199 review: AI Use Summary
+  extended for the web half of issue #66 (the Notification Center) and
+  that PR's review round — the summary had the backend half only.
   Author review: Leong Wei Zhi to review via pull request.
+  2026-10-17: AI Use Summary extended for the upcoming credit expiries
+  (issue #196: the route and the credits page) by Claude Code
+  (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -598,7 +613,15 @@ recorded there, and its PR #193 review fixes (one routine, daily and
 at startup, that sweeps then redistributes a missing month, so a
 failed run is retried the next day; the earned-credit expiry shared;
 a test made independent of test order), the approach decided by the
-team.
+team; and the upcoming-expiry route (issue #196:
+`GET /credits/me/expiries`, read from the lots in spend order, and its
+controller tests), written to the design doc's Read API contract, with
+the route, the response shape, the order, which credits count, no
+window and how often the web app reads it decided by the team and
+recorded there, and its web half (the Available card's line for the
+soonest credits to expire and a notice when they expire within 7
+days, in Singapore dates, with their tests), where they are shown and
+the wording also decided by the team.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their
@@ -650,7 +673,13 @@ engine and image version, host ports, and broker-wiring scope chosen
 by the author via neutral-options Q&A and recorded in
 `ai/usage-log.md`; and the order-service `Requests` entity and
 repository (table name and columns given by the author as an ER
-diagram, which the tool transcribed into the entity unchanged).
+diagram, which the tool transcribed into the entity unchanged); and
+the order-service request state machine (a plain-Java transition table
+and its unit tests over the author's own state and event enums, with
+the DROP target, the no-library form, the PENDING/REJECTED saga
+transitions' names and the ARRIVED step chosen by the author via
+neutral-options Q&A and recorded in `ai/usage-log.md`), and a
+`createdAt` default on the `Requests` entity (PR review fix).
 
 The issue #67 remaining scope (the server-side STOMP push gateway had
 merged earlier in PR #74): the web notification client
@@ -769,6 +798,22 @@ behind it (`/credits/admin/pool` and `/credits/admin/redistributions`,
 `ADMIN` and `OWNER` only) with their tests, added to the design doc's
 Read API contract; the routes' shape, access, the share preview and
 the branch were decided by the team via options Q&A.
+
+Claude Code (Fable 5 and Opus 5) wrote the web half of issue #66, the
+Notification Center: the `/notifications` page and its feature folder
+(`web/src/features/notifications/`: the REST calls, one display
+template per cataloged request event, the paged list with its All and
+Unread filters, click-to-mark-read and "Mark all as read"), the bell
+badge seeded and re-synced from `GET /notifications/me/unread-count`,
+and frames pushed over STOMP joining the open list live, with their
+tests. Written to the `notification-center.png` wireframe and the REST
+contract in `docs/notification-service.md`; the interactions the
+wireframe does not draw (the filter toggle, the "Load more" pager, a
+click marking a row read, and — after the PR #199 review — a read row
+leaving the Unread view) were decided by the author via options Q&A and
+recorded in `web/AGENTS.md` and `ai/usage-log.md`. The same tool
+addressed that review's bot findings, including the paging and
+count-sync races it and a live browser run surfaced.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

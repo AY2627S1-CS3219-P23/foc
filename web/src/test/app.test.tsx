@@ -3,6 +3,8 @@
 // Scope: example shell/router tests for teammates to copy.
 // 2026-09-29, Claude Code (Opus 5.5), issue #147: no Admin Dashboard link
 // when logged out.
+// 2026-10-17, Claude Code (Fable 5), issue #66: the bell is a link to
+// the Notification Center now, so its query asks for a link.
 // Reviewed by: Leong Wei Zhi (via pull request).
 // 2026-10-16, Claude Code (Opus 5.5), issue #174: the credits slot is
 // now the live badge, a link that shows a dash while logged out.
@@ -28,7 +30,7 @@ test('shell renders nav, brand, credits and notification slots on /', () => {
   expect(screen.getByText('FoC (Favours on Campus)')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Credits: —' })).toBeInTheDocument()
   expect(
-    screen.getByRole('button', { name: 'Notifications' }),
+    screen.getByRole('link', { name: 'Notifications' }),
   ).toBeInTheDocument()
 })
 

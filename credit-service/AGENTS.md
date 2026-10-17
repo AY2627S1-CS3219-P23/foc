@@ -38,6 +38,10 @@
   the single-routine invariant and EarnedCreditLifetime in the map.
   2026-10-17, Claude Code (Opus 5.5), issue #174: the admin routes in
   the package map and the read-only invariant.
+  2026-10-17, Claude Code (Opus 5.5), issue #196: the expiries route in
+  the package map.
+  PR #210 review (Leong Wei Zhi): the CreditControllerTest invariant
+  counts three first-read cases.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -54,8 +58,8 @@ IDs (D1–D12) when touching related code.
 | Package | Contents |
 | --- | --- |
 | `config/` | `SecurityConfig`: CORS, health open, `/credits/admin/**` for `ADMIN` and `OWNER`, everything else needs a valid JWT |
-| `controller/` | `CreditController` (the two read routes and the checks behind the contract's 400s), `ApiExceptionHandler` (400 problem+json), `InvalidQueryParameterException`, and `AdminCreditController` (the pool summary and the redistribution runs) |
-| `dto/` | The read API's bodies: `BalanceResponse`, `HistoryEntryResponse`, `PoolSummaryResponse`, `RedistributionRunResponse`, and `PageResponse`, a copy of supplier-service's shape |
+| `controller/` | `CreditController` (the three read routes and the checks behind the contract's 400s), `ApiExceptionHandler` (400 problem+json), `InvalidQueryParameterException`, and `AdminCreditController` (the pool summary and the redistribution runs) |
+| `dto/` | The read API's bodies: `BalanceResponse`, `HistoryEntryResponse`, `ExpiriesResponse`, `PoolSummaryResponse`, `RedistributionRunResponse`, and `PageResponse`, a copy of supplier-service's shape |
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
 | `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
@@ -188,7 +192,7 @@ IDs (D1–D12) when touching related code.
 - **`CreditControllerTest` commits nothing but a provisioned account.**
   It is `@Transactional`: its history rows are made up for the filters
   and do not add up to a balance, so committed they would fail the
-  whole-database checks below. The two first-read cases marked
+  whole-database checks below. The three first-read cases marked
   `Propagation.NOT_SUPPORTED` are the exception: they commit, as a real
   first request does, and what they commit keeps every invariant. A new
   `NOT_SUPPORTED` case must write nothing else.

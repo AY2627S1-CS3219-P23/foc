@@ -11,6 +11,10 @@
 // 2026-10-17: the admin dashboard's Common Pool box — its figures, the
 // times in Singapore time, the empty and preview wording, and an error;
 // its past-distributions table, newest first, paged, and empty.
+// 2026-10-17, issue #196: upcoming expiries — grouping by Singapore
+// date, "tonight" for anything already due, the 7-day notice, the
+// Available card's line, and the list read on load and on every poll
+// (PR #210 review: a balance-change trigger missed offsetting changes).
 // 2026-10-17, issue #207 (PR #195 review nits): loading instead of a
 // stale empty state, and a past-distributions retry shown as loading.
 // PR #211 review: the same loading gate for an empty past-distributions
@@ -23,6 +27,7 @@ import { RouterProvider, createMemoryRouter } from 'react-router'
 
 import { creditApi } from '@/features/credit/api'
 import { BALANCE_POLL_MS } from '@/features/credit/CreditBalanceProvider'
+import { nextExpiry } from '@/features/credit/expiry'
 import { NO_FILTERS, parseFilters } from '@/features/credit/history'
 import type {
   CreditBalance,
@@ -120,6 +125,7 @@ beforeEach(() => {
     ...balance,
   }))
   vi.spyOn(creditApi, 'getHistory').mockResolvedValue(page(ROWS))
+  vi.spyOn(creditApi, 'getExpiries').mockResolvedValue({ items: [] })
 })
 
 afterEach(() => {
@@ -392,6 +398,130 @@ describe('date filters', () => {
         error: 'Dates must be valid calendar dates.',
       })
     }
+  })
+})
+
+describe('upcoming expiries', () => {
+  // 17 Oct 2026, 1 pm in Singapore
+  const NOW = new Date('2026-10-17T05:00:00Z')
+  const DAY_MS = 86_400_000
+  const inDays = (days: number) =>
+    new Date(Date.now() + days * DAY_MS).toISOString()
+  // how the page writes a date: "12 Jan 2027", in Singapore
+  const sgtDate = (iso: string) =>
+    new Intl.DateTimeFormat('en-SG', {
+      timeZone: 'Asia/Singapore',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }).format(new Date(iso))
+
+  it('is nothing when no credits will expire', () => {
+    expect(nextExpiry([], NOW)).toBeNull()
+  })
+
+  it('adds up the soonest Singapore date, wherever it falls in UTC', () => {
+    const next = nextExpiry(
+      [
+        // 12 Jan 00:30 in Singapore, still 11 Jan in UTC
+        { amount: 2, expiresAt: '2027-01-11T16:30:00Z' },
+        { amount: 1, expiresAt: '2027-01-12T10:00:00Z' },
+        { amount: 4, expiresAt: '2027-01-20T02:00:00Z' },
+      ],
+      NOW,
+    )
+    expect(next).toEqual({ amount: 3, date: '12 Jan 2027', soon: false })
+  })
+
+  it('counts anything due today or already past as tonight', () => {
+    const next = nextExpiry(
+      [
+        // waiting for tonight's sweep since yesterday
+        { amount: 2, expiresAt: '2026-10-16T03:00:00Z' },
+        // later today in Singapore
+        { amount: 1, expiresAt: '2026-10-17T12:00:00Z' },
+        { amount: 5, expiresAt: '2026-10-18T03:00:00Z' },
+      ],
+      NOW,
+    )
+    expect(next).toEqual({ amount: 3, date: null, soon: true })
+  })
+
+  it('is soon up to 7 days ahead, and not after', () => {
+    const at = (days: number) =>
+      nextExpiry(
+        [
+          {
+            amount: 1,
+            expiresAt: new Date(NOW.getTime() + days * DAY_MS).toISOString(),
+          },
+        ],
+        NOW,
+      )?.soon
+    expect(at(7)).toBe(true)
+    expect(at(8)).toBe(false)
+  })
+
+  it('shows the soonest on the Available card and warns within 7 days', async () => {
+    const soon = inDays(3)
+    vi.mocked(creditApi.getExpiries).mockResolvedValue({
+      items: [
+        { amount: 3, expiresAt: soon },
+        { amount: 2, expiresAt: inDays(40) },
+      ],
+    })
+    renderAt('/credits')
+
+    expect(
+      await screen.findByText(`3 credits expire by ${sgtDate(soon)}`),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      `3 credits expire on ${sgtDate(soon)}. Use them on a request before then.`,
+    )
+  })
+
+  it('shows the card line but no notice when nothing is within 7 days', async () => {
+    const later = inDays(30)
+    vi.mocked(creditApi.getExpiries).mockResolvedValue({
+      items: [{ amount: 1, expiresAt: later }],
+    })
+    renderAt('/credits')
+
+    expect(
+      await screen.findByText(`1 credit expires by ${sgtDate(later)}`),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('says tonight for credits already past their date', async () => {
+    vi.mocked(creditApi.getExpiries).mockResolvedValue({
+      items: [{ amount: 2, expiresAt: inDays(-1) }],
+    })
+    renderAt('/credits')
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '2 credits expire tonight. Use them on a request before then.',
+    )
+    expect(screen.getByText('2 credits expire tonight')).toBeInTheDocument()
+  })
+
+  it('shows nothing about expiry when none will expire', async () => {
+    renderAt('/credits')
+    await screen.findByRole('table')
+    await waitFor(() => expect(creditApi.getExpiries).toHaveBeenCalled())
+
+    expect(screen.queryByText(/expire/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('keeps the page working when the expiries cannot be read', async () => {
+    vi.mocked(creditApi.getExpiries).mockRejectedValue(new TypeError('offline'))
+    renderAt('/credits')
+
+    await screen.findByRole('table')
+    await waitFor(() => expect(creditApi.getExpiries).toHaveBeenCalled())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(/expire/)).not.toBeInTheDocument()
   })
 })
 
@@ -773,6 +903,29 @@ describe('balance poll', () => {
     balance = { available: 45, reserved: 8, total: 53 }
     await act(async () => vi.advanceTimersByTime(BALANCE_POLL_MS))
     await waitFor(() => expect(creditApi.getHistory).toHaveBeenCalledTimes(3))
+  })
+
+  it('reads the expiries again on every poll, even with the balance unchanged', async () => {
+    // 3 credits due tonight, then swept and handed back as the month's
+    // share between two polls: the same balance, different lots
+    vi.mocked(creditApi.getExpiries).mockResolvedValueOnce({
+      items: [{ amount: 3, expiresAt: new Date().toISOString() }],
+    })
+    renderAt('/credits')
+    expect(
+      await screen.findByText('3 credits expire tonight'),
+    ).toBeInTheDocument()
+
+    vi.mocked(creditApi.getExpiries).mockResolvedValue({ items: [] })
+    await act(async () => vi.advanceTimersByTime(BALANCE_POLL_MS))
+
+    await waitFor(() => expect(creditApi.getExpiries).toHaveBeenCalledTimes(2))
+    await waitFor(() =>
+      expect(
+        screen.queryByText('3 credits expire tonight'),
+      ).not.toBeInTheDocument(),
+    )
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
   it('never lets an older balance answer replace a newer one', async () => {

@@ -12,6 +12,12 @@
   2026-10-17, Codex (GPT-6.1 Sol): recorded implementation and verification
   of the Docker-unavailable test skips for issue #98.
   PR #197 review: recorded the CI skipped-test check and its verification.
+  2026-10-17, Claude Code (Opus 5): appended the issue #203 entry below.
+  PR #209 main merge: this file was the only conflict — both sides had
+  appended fresh entries under the same `---`, so both were kept (the
+  #203 entry first, then main's three order-service ones) and the stray
+  second `---` the #203 entry had introduced was dropped; nothing
+  reworded or removed.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -33,6 +39,166 @@ Entry template:
 ```
 
 ---
+## 2026-10-17 — Ryan Ang (PR #210 review: upcoming credit expiries)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + tests + docs
+- **Scope:** Leong Wei Zhi's review of PR #210 (issue #196), and a merge
+  of `main` (#202's order-service code) whose only conflict, this log,
+  was resolved by keeping both sides.
+  - `web/src/features/credit/CreditHistoryPage.tsx` and `api.ts`: the
+    expiries are read on page load and on every balance poll, keyed on
+    the poll's `version` instead of `available`/`reserved`. The test
+    that pinned the old trigger is replaced by one with the reviewer's
+    case: the same balance, a different lot set, and the line and
+    notice update on the next poll.
+  - `CreditControllerTest`: a first expiries read that commits outside
+    the test transaction (`NOT_SUPPORTED`), like the balance and
+    history routes; "two first-read cases" made three there and in
+    `credit-service/AGENTS.md`.
+  - `docs/credit-service.md`: the contract's cadence sentence for
+    `GET /credits/me/expiries`, and the "No window" bullet's upper
+    bound (hundreds of lots for a busy courier, about 450 at five
+    errands a day) in place of the earlier understatement.
+- **Prompt(s):** Asked to go through the review's three findings. For
+  the blocker (the expiry line going stale when two balance changes
+  cancel out between polls), the tool laid out four options neutrally
+  (re-read daily, on a new history row, on every poll, or a marker on
+  the balance route), and the team chose re-reading on every poll,
+  reversing its earlier "not on every poll" decision. The two
+  non-blocking items were applied as the reviewer described: add the
+  first-read test, and correct the doc's stated list size rather than
+  add a limit.
+- **Author review:** `./mvnw test` in `credit-service` with Docker
+  (259/259) and the `web` suite (199/199) with `tsc -b`, eslint and
+  Prettier; the new web test fails against the old trigger. Pending
+  pull request review.
+
+## 2026-10-17 — Ryan Ang (upcoming credit expiries: route and credits page, issue #196)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate + tests + docs
+- **Scope:** `credit-service/` (`GET /credits/me/expiries` in
+  `CreditController`, `CreditQueryService.upcomingExpiries`,
+  `ExpiriesResponse`, and the route's cases in `CreditControllerTest`),
+  the route in `docs/credit-service.md`'s Read API contract and REST API
+  component row, and the service's README and AGENTS.md. Then `web/`:
+  `getExpiries()`, `expiry.ts` (items grouped by Singapore date), the
+  Available card's line, `ExpiryNotice`, and their tests in
+  `credits.test.tsx`.
+- **Prompt(s):** Asked to implement #196, backend then web, to the
+  team's decisions, given in full: a new route
+  `GET /credits/me/expiries` returning `{"items": [{amount,
+  expiresAt}]}`, one item per lot still holding credits, ordered by
+  `expiresAt` then lot ID, with no lot IDs, no window, sign-up, drained
+  and reserved credits left out, past dates kept until the expiry run,
+  an empty list rather than 404, get-or-create first, and the web app
+  reading it on page load and balance changes rather than on the poll.
+  The web half to the same decisions: the soonest credits on the
+  Available card ("5 credits expire by 12 Jan"), a notice above the
+  transactions only when they expire within 7 days ("3 credits expire
+  on 12 Jan. Use them on a request before then."), dates in Singapore,
+  no "never expire" line, and nothing on the badge or profile card.
+  The tool's own choices: reusing the spend-order query, whose order is
+  the contract's with the sign-up lot last, and dropping that lot;
+  counting anything dated today or earlier in Singapore as "tonight",
+  since tonight's 00:00 run moves it; the soonest Singapore date's
+  items added up for the card and the notice; and an expiries read
+  that fails showing nothing rather than an error.
+- **Author review:** `./mvnw test` in `credit-service` with Docker, and
+  the `web` suite with `tsc -b` and eslint. Pending pull request
+  review.
+
+## 2026-10-17 — Leong Wei Zhi (self-deletion keeps the admin role, issue #203)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** docs (+ one test)
+- **Scope:** `user-service/README.md`, `docs/gateway.md`,
+  `user-service/src/main/java/foc/user/service/ProfileService.java`
+  (comment only) and
+  `user-service/src/test/java/foc/user/security/JwtAuthenticationTest.java`.
+  - The asymmetry #203 reported: `DELETE /users/{id}` demotes the
+    target to USER and stamps `denylist:user:<id>` (#179, #178);
+    `DELETE /users/me` does neither, so a self-deleting ADMIN keeps the
+    role for the 30-day window — the admin routes authorize on the
+    token's claim alone — and restores as ADMIN.
+  - `README.md`'s login section claimed "no admin powers ride along"
+    for every deleted account; it was true only of admin removal. Now
+    both paths are stated there and in the soft-delete section;
+    `docs/gateway.md`'s G12 note says self-deletion writes no stamp.
+  - `JwtAuthenticationTest.selfDeletedAdminKeepsAdminRoutes`: an ADMIN
+    self-deletes, logs in inside the window (200 with
+    `deletionScheduledFor`), the fresh token carries ADMIN, `GET /users`
+    answers 200 and `GET /users/me` 404 — the acceptance in #203.
+  - No behaviour changed.
+- **Prompt(s):** "resolve #203" — the tool read the cited files, then
+  put the issue's three options (A demote on self-delete, B active-
+  caller check on the admin routes, C accept and document) as a neutral
+  question.
+- **Author review:** Decision by Leong Wei Zhi: **option C** — the
+  state is self-inflicted and nobody but the account's owner can open
+  or close it, so the window is accepted and only the docs were wrong.
+  Verified by `./mvnw clean test` in `user-service` (367/367 green,
+  one more than before).
+
+## 2026-10-17 — Aung Ko Khant (order-service: createdAt default, pushed first)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug
+- **Scope:** order-service `Requests.createdAt` defaults to
+  `Instant.now()`, so a `save()` that never calls `setCreatedAt` still
+  passes the not-null check; the column stays NOT NULL.
+- **Prompt(s):** 2026-10-16, pasted PR review comment (blocking:
+  `createdAt` is `nullable = false` but nothing sets it). The reviewer
+  offered a field default (as Notification and User do),
+  `@CreationTimestamp` or `@PrePersist`; the tool applied the field
+  default, compared it with `@CreationTimestamp` when asked, and the
+  author kept the default.
+- **Author review:** a test saving a request without `createdAt` comes
+  with the service code in a later commit; this commit's tests run in a
+  Maven container on a clean checkout. To be reviewed via pull request.
+
+## 2026-10-17 — Aung Ko Khant (order-service: state machine states, pushed first)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `OrderStates` (PENDING and REJECTED added by
+  the tool on 2026-10-15; ARRIVED added by the author on 2026-10-16),
+  `OrderEvents` (RESERVE, REJECT, TIMEOUT on 2026-10-15; ARRIVE on
+  2026-10-16), `OrderStateMachine` (PENDING -RESERVE-> CREATED,
+  -REJECT-> REJECTED, -TIMEOUT-> CANCELLED; COLLECTED -ARRIVE->
+  ARRIVED -COMPLETE-> COMPLETED) and `OrderStateMachineTests`.
+  Committed ahead of the rest of the 2026-10-15 to 10-17 order-service
+  work at the author's request ("Can we push state machine changes
+  first?"); the service, messaging and endpoint code that fires these
+  events follows in later commits with their own entries.
+- **Prompt(s):** 2026-10-15: "I think we need to add 2 additional
+  stages pending and rejected to coordinate with credit service"; the
+  saga is the team's design (`docs/credit-service.md` D7-D8), and the
+  author chose the event names RESERVE / REJECT / TIMEOUT and that only
+  they leave PENDING. 2026-10-16: "I would like to add an arrived state
+  between collected and completed, the point is to inform requester
+  that courier has arrived"; the author chose COMPLETE only from
+  ARRIVED (no direct COLLECTED -> COMPLETED).
+- **Author review:** this commit's tests run in a Maven container on a
+  clean checkout of it: 15 tests, 0 failures. To be reviewed via pull
+  request.
+
+## 2026-10-11 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service request state machine skeleton —
+  `foc.order.OrderStateMachine` (transition table) and
+  `OrderStateMachineTests`; `package foc.order;` line added to the
+  author's `OrderStates` / `OrderEvents` enums; order-service README
+  status paragraph; README AI Use Summary.
+- **Prompt(s):** "Help me implement skeleton of state mchine", with
+  the author's hand-written `OrderStates` and `OrderEvents` enums
+  (including the guard comments on CANCEL, DROP and EXPIRE) as input.
+  The tool asked two neutral-options questions and the author chose:
+  DROP leads ACCEPTED -> CREATED (not CANCELLED), and a plain-Java
+  transition table (not the Spring Statemachine library). The
+  remaining transitions were transcribed from the enums and their
+  comments.
+- **Author review:** Transition table pinned by unit tests (every
+  permitted transition, every other state/event pair rejected);
+  `mvn test` passes (11 tests). Reviewed via pull request.
+
 ## 2026-10-17 — Ryan Ang (admin dashboard: common pool box, issue #174 branch)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (code + tests + docs)
@@ -148,6 +314,110 @@ Entry template:
   @Transactional); duplicates now pay a cache-absorbed lookup. Suite
   re-run green (same 91/92).
 
+## 2026-10-17 — Leong Wei Zhi (Notification Center, web half of issue #66)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `web/src/features/notifications/` (new: types, api module,
+  eventMessage templates + relativeTime, NotificationCenter page;
+  modified: NotificationProvider — badge seeds from
+  GET /notifications/me/unread-count on login/reconnect and re-syncs
+  after writes, pushed frame body exposed for the open Center to
+  prepend; useNotifications context widened), `routes/notifications.tsx`
+  + the route table, the bell (button → Link to /notifications), tests
+  (`notification-center.test.tsx` new; `notifications.test.tsx` and
+  `app.test.tsx` updated for the link bell and a URL-dispatching fetch
+  stub), `web/AGENTS.md` wireframe row.
+- **Prompt(s):** The web half of issue #66's plan. UI decisions were the
+  author's via neutral options Q&A (no recommendations): clicking an
+  unread row marks it read (no mark-unread affordance), an All/Unread
+  filter toggle, a "Load more" append pager, display names rendered
+  from the event payloads (backend D29; superseded the same day by D30 —
+  the names now arrive via ingest-time enrichment, same payload
+  shape, web untouched), pushed frames prepend into the
+  open Center, and the badge re-fetches the server count after writes.
+  Layout follows web/docs/wireframes/notification-center.png; the three
+  controls the wireframe doesn't draw are recorded in web/AGENTS.md.
+- **Author review:** `npm run lint`, `prettier --check`, all 168 vitest
+  tests and `npm run build` pass. To be reviewed via pull request.
+- **PR #199 review (2026-10-17), Claude Code (Opus 5):** eleven inline
+  findings from the two reviewer bots (@claude, @codex) triaged — the
+  two backend ones were already fixed on main by the #205 review and
+  are not in this diff; the rest were valid and are fixed, each with a
+  regression test that fails against the pre-review code. A failed
+  "Load more" is retryable rather than skipping its page (`loaded` /
+  `attempt` split from `page`); a filter switch clears the previous
+  filter's page count; a page-0 answer merges rather than discards
+  frames pushed while it was in flight; "Mark all as read" only touches
+  rows that existed when it started; the empty state hides behind an
+  error banner; the bulk control falls back to the loaded rows when the
+  best-effort badge count is unavailable; a count sync can no longer
+  erase a pushed increment (newest-sync-wins guard, plus a push starting
+  its own sync); pushes queue instead of a single replaceable value, so
+  two frames batched into one render both land; and the relative times
+  tick on a 60 s clock. One finding was a UX fork, not a defect, so the
+  author decided it via neutral options Q&A: under the Unread filter a
+  row marked read now leaves the list (and read-all empties it), while
+  the All filter keeps graying in place. Re-verified: 179 vitest tests,
+  `tsc -b`, eslint and Prettier clean.
+- **Browser run (2026-10-17), Claude Code (Opus 5):** drove the branch
+  against the live compose stack with Playwright (Vite dev server on
+  5173, gateway 8090, 14 then 13 seeded notifications published to the
+  `request-events` exchange as demo_user_001). Confirmed working: the
+  REST-seeded badge, all nine event templates with D30 display names,
+  D25's created_at ordering, "Load more", the Unread filter, a row
+  marked read leaving the Unread list, a live STOMP push prepending and
+  re-syncing the badge, and the ticking relative times. It also found
+  one defect the unit tests had missed: after "Mark all as read"
+  emptied the Unread view, the page count from the last fetch outlived
+  its rows and the dashed empty state rendered with a "Load more"
+  button under it. Fixed (the bulk write clears the Unread page count,
+  and the pager is gated on having rows) with a regression test that
+  fails against the pre-fix code; 180 vitest tests green.
+- **PR #199 review, round 2 (2026-10-17), Claude Code (Opus 5):** after
+  the #195 main sync, two threads were still open. @claude found that
+  "Load more" skips rows under the Unread filter: the list is
+  offset-paged over a set that shrinks as rows are read, so asking for
+  `loaded + 1` steps past the rows that moved up into the slice just
+  vacated. Confirmed against the live API — with 13 unread, marking 3
+  read makes `page=1` return 0 rows while `page=0` returns the 10
+  remaining, 3 of them never seen. Fixed by deriving the next offset
+  from the rows held (`floor(items.length / PAGE_SIZE)`, the held rows
+  being a prefix of the server's current set) and testing "is there
+  more" against `totalElements` rather than a page count computed from
+  an older, larger set; the fetch request became one value carrying its
+  own replace/append mode, so a page number and the merge it implies
+  cannot disagree. The reviewer's secondary claim that a push also
+  loses a row does not hold — a push shifts every offset by exactly one
+  and the one-row overlap is absorbed by the id dedupe. The test stub
+  gained a small mutating server model for the unread set, which is
+  what makes "mark read, then Load more" honest; two paging fixtures
+  that used one-row pages against a `size=10` request were corrected.
+  @codex's standing P1 (the README's consolidated AI Use Summary had
+  the backend half of #66 but not the web half) was valid against
+  AGENTS.md duty 4 and is now addressed. 213 vitest tests, `tsc -b`,
+  eslint and Prettier clean.
+- **PR #199 review, round 3 (2026-10-17), Claude Code (Opus 5):** the
+  approving review (@Sinnez1) left one actionable nit: "Load more" can
+  disappear before everything is loaded, because `totalElements` only
+  moves on a fetch while live pushes add rows to the list — 15 on the
+  server with 10 held, then 5 pushed, and the rows held reach a total
+  those rows postdate, hiding the pager over 5 unreachable rows. Valid
+  and fixed by keeping the two in step: a push raises the total by the
+  rows it actually prepends. The same defect runs the other way under
+  the Unread filter, which the nit did not mention — a row marked read
+  leaves the list but not the total, so one page of unread rows grew a
+  pager that offered a page already on screen — so the read path lowers
+  the total too. Two regression tests, both failing against the
+  pre-review code. The review's second point (credit-service's
+  rejection reasons are lowercase machine strings, so a row reads
+  "…rejected: insufficient available credits") was a copy fork rather
+  than a defect and the reviewer called it fine as it is; put to the
+  author via neutral options Q&A against leaving it, capitalising the
+  reason, and mapping the two known reasons — the author chose to leave
+  the service's wording unchanged, so no code change. 215 vitest tests,
+  `tsc -b`, eslint and Prettier clean.
+
+---
 ## 2026-10-17 — Leong Wei Zhi (notification REST API, backend half of issue #66)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate
@@ -446,6 +716,25 @@ Entry template:
   was the author's choice when order-db was wired into compose.yaml
   (2026-10-10); the tool only recorded it.
 - **Author review:** Reviewed via pull request.
+
+## 2026-10-14 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, docs
+- **Scope:** `order-db` host port default 5436 -> 5437 in
+  `compose.yaml`, `.env.example`, `AGENTS.md` (service DB table) and
+  `order-service/README.md`.
+- **Prompt(s):** "I need to use port 5437 instead as 5436 is used by
+  credit service". Port chosen by the author; the tool only applied it.
+- **Author review:** Reviewed via pull request.
+- **Same day:** rebased `feat/order-service-scaffold` onto main after
+  the gateway cutover (#151) and, per the PR review, removed
+  order-service's `ports:` block and `ORDER_SERVICE_PORT` (compose,
+  `.env.example`, order-service README). Conflicts with the
+  credit-service work resolved by keeping both sides (credit-db on
+  5436, order-db on 5437; main's gateway `VITE_*` URLs kept).
+  Prompt: "Please carry out 1" (rebase and drop the ports block, as
+  the reviewer asked). `docker compose config` validated; the service
+  build and tests were not re-run.
 
 ## 2026-10-14 — Ryan Ang (PR #189 review follow-ups)
 - **Tool:** Claude Code (Opus 5.5)
