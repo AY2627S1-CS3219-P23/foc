@@ -3901,6 +3901,31 @@ Entry template:
 
 ## 2026-10-12 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (issue #178, server half — PR #183)
+- **Prompt(s):** Same issue #178 session as the web half above, for the
+  server side: which revocation mechanism (the author chose option A of
+  the issue's table — a per-user epoch stamp in Redis, enforced at the
+  gateway — via neutral options Q&A, accepting its documented trade-off
+  that one demotion signs the target out on every device) and how wide
+  to scope it (issue scope only: the two paths the issue names, no
+  further stamp points).
+- **Scope:** `user-service` — `AdminService` takes `TokenDenylist` and
+  calls `revokeUserSessions(targetId)` after the save in `changeRole`
+  (any actual change, promotion and self-demotion included; the
+  same-role early return and every refusal path stamp nothing) and in
+  `removeUser`, best-effort at the same call-site pattern as
+  `PasswordResetService.confirmReset`. `AdminServiceTest` pins the
+  eviction on each success path and its absence on the no-op and the
+  refusals; `AdminControllerTest` pins it end-to-end with
+  `TokenDenylist` as a `@MockitoBean` (no Redis in that test stack,
+  like `LogoutTest`). `docs/gateway.md` — decision G12 and its
+  request-flow note; **no gateway code changed**, since G11's
+  `iat`-versus-stamp check already covers the new stamp writer.
+- **Author review:** user-service suite via Testcontainers, and the
+  diff reviewed via PR #183.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
 - **Mode:** implementation + documentation (issue #67, remaining scope)
 - **Prompt(s):** Asked to plan and resolve issue #67. Exploration found
   the server half already merged (PR #74); the remaining scope was
@@ -4213,6 +4238,43 @@ Entry template:
   not newly executed by Codex. This retrospective disclosure is pending
   Leong Wei Zhi's review via PR #180.
 
+## 2026-10-16 — Leong Wei Zhi (PR #183 main sync)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** repository maintenance (PR #183 main sync) + docs
+- **Prompt(s):** Asked to bring PR #183 up to date with the merged
+  PR #179, its base. The scope of that update was put to the author as
+  neutral options: fix the claims #179 left stale and add the owed
+  disclosures (chosen), conflicts only, or conflicts plus claims
+  without the disclosures; likewise retargeting to `main` and marking
+  the PR ready (chosen), and running the full user-service suite
+  (chosen). No design decision was made by AI.
+- **Scope:** The branch was rebased onto `main` (its base branch
+  `feat/account-recovery-password-reset` merged as #179, and #182 and
+  #185 landed since; #180 was still open at that point). Three files
+  conflicted and all three were resolved by keeping both sides:
+  `docs/gateway.md`'s header log (this branch's G12 line placed in date
+  order among #185's two entries), `AdminService`'s header log (#179's
+  approval follow-up entry, then this branch's), and
+  `AdminServiceTest`'s header plus the remove-another-admin case, where
+  #179's demotion assertion and this branch's eviction `verify` now both
+  stand.
+  One semantic change beyond the seams: #179's approval follow-up had
+  written, in `AdminService.removeUser`'s comment and in
+  `user-service/README.md`, that a token minted before a removal keeps
+  ADMIN until its `exp` — true of `main`, false once this branch's
+  stamp lands. Both copies now describe the revocation, with the
+  demotion to USER kept and re-framed as the fallback for a failed
+  best-effort write (G9) against a gateway failing open (G6).
+  `user-service/README.md` also gains the stamp in its admin-endpoint
+  list and in the token section's account of what this service writes
+  to the denylist, and `docs/gateway.md` records the two facts #185's
+  D23 content creates for G12: notification-service's CONNECT lookup
+  reads the same stamp, so a new STOMP session is refused too, while
+  an already-open session still is not (that accepted known limit now
+  names a demote/remove among its triggers).
+- **Author review:** user-service suite via Testcontainers after the
+  rebase; the resolution and the doc corrections reviewed via PR #183.
+
 ## 2026-10-17 — Leong Wei Zhi (PR #180 review)
 - **Tool:** Codex (GPT-6).
 - **Mode:** debug + refactor + documentation (issue #94).
@@ -4239,6 +4301,85 @@ Entry template:
   implementation. Recovery tests were rerun after correcting a test
   query option caught by TypeScript. No live browser walkthrough was
   performed in this review round. Leong Wei Zhi to review via PR #180.
+
+## 2026-10-17 — Leong Wei Zhi (PR #183 review)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debug + docs (issue #178, PR #183)
+- **Prompt(s):** "address mr comments on <PR #183> and rebase from
+  origin/main also before pushing". The review's one code finding names
+  two mechanisms, so both open choices were put to the author as
+  neutral options: the mechanism (chosen: the `afterCommit` sketch
+  credit-service already uses, over a
+  `@TransactionalEventListener(AFTER_COMMIT)` event) and the scope
+  (chosen: fix `PasswordResetService.confirmReset` too, which carries
+  the identical pre-commit write from the merged #179, rather than only
+  the two sites the review names). No design decision was made by AI;
+  the options were factual.
+- **Scope:** @Sinnez1's two non-blocking comments.
+  - The reviewer reproduced the revocation stamp being written inside
+    the caller's `@Transactional`, where the committed role is still
+    `ADMIN`, so a login in the gap between the Redis write and the
+    commit could mint an ADMIN token with an `iat` the stamp accepts.
+    New `foc.user.service.AfterCommit` runs the write on
+    `TransactionSynchronization.afterCommit`, or inline when no
+    transaction is open; `AdminService.changeRole`, `removeUser` and
+    `PasswordResetService.confirmReset` all stamp through it.
+    `TokenDenylist`'s javadoc states the requirement, and
+    `user-service/README.md` records it.
+  - The 2026-10-16 PR #183 main-sync entry claimed #180 had landed; it
+    was still open then, so the entry now says so. (#180 has merged
+    since — this round's rebase is onto `main` at `668b538`, which
+    includes it.)
+  - Also in this round: the branch rebased onto `main` for #180's
+    merge. `README.md` and this log conflicted and were resolved by
+    keeping both sides, with this branch's #178 server-half summary
+    paragraph kept next to the #182 web-half paragraph it refers back
+    to and main's #180 paragraph left after it.
+- **Author review:** user-service **362/362** via Testcontainers (the
+  two new `AdminControllerTest` cases). All three new ordering
+  assertions were confirmed to fail against the pre-fix code: each
+  reads the target's row over a second JDBC connection — committed
+  state only — at the moment the stamp is written, and before the fix
+  saw the old role, a null `deleted_at` and the old password hash. The
+  manual gateway walkthrough the PR description owes is still owed.
+  Leong Wei Zhi to review via PR #183.
+
+## 2026-10-17 — Leong Wei Zhi (PR #183 Codex review)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** docs + analysis (issue #178, PR #183)
+- **Prompt(s):** "address latest pr comments", then — on the second
+  finding — "is this even valid?" and, after the analysis below,
+  "revert changes and reply to codex comments". The author's call on
+  both findings; no design decision was made by AI.
+- **Scope:** Codex's two P1 findings on `fb0f270`.
+  - **Accepted:** `AfterCommit.run` had no `// AI-generated (edited by
+    <name>)` block marker (AGENTS.md disclosure duty 2). Added in the
+    form the repo already uses, matching
+    `CreditOperationsService.afterCommit`, the sketch it follows.
+  - **Declined:** the claim that an older post-commit cutoff can
+    overwrite a newer one. Codex's mechanism does not hold — the cutoff
+    is read from the clock as the first statement of
+    `revokeUserSessions`, not captured at commit time and carried into
+    the callback, so a delayed callback writes a *later* second, never
+    the stale one in Codex's example. The genuine residue is narrower
+    than stated: the writes are indeed no longer ordered by the row
+    lock (confirmed in `AbstractPlatformTransactionManager.processCommit`,
+    spring-tx 7.0.9 — `doCommit` precedes `triggerAfterCommit`), but an
+    out-of-order *value* needs a ≥1 s stall inside the few instructions
+    between the clock read and the Redis command, with the other
+    request completing its whole transaction and stamp in that stall,
+    plus a login in between to mint a token worth resurrecting. A
+    monotonic Lua cutoff was drafted and then reverted on the author's
+    call. Noted for whoever revisits it: the case that would actually
+    bite is **clock skew between user-service replicas** (each stamps
+    from its own `Clock.systemUTC()`), which needs no stall at all —
+    latent today because compose runs one instance, and already a
+    property of G11's `iat`-versus-stamp comparison rather than
+    something this PR introduced.
+- **Author review:** comment-only change to `AfterCommit`; the
+  user-service suite is unchanged at 362/362 from the previous entry.
+  Both Codex threads answered on the PR. Leong Wei Zhi to review via
+  PR #183.
 
 ## 2026-10-17T11:17:00+08:00 — Leong Wei Zhi (issue #98)
 - **Tool:** Codex (GPT-6.1 Sol).
