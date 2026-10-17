@@ -4297,3 +4297,45 @@ Entry template:
   implementation. Recovery tests were rerun after correcting a test
   query option caught by TypeScript. No live browser walkthrough was
   performed in this review round. Leong Wei Zhi to review via PR #180.
+
+## 2026-10-17 — Leong Wei Zhi (PR #183 review)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debug + docs (issue #178, PR #183)
+- **Prompt(s):** "address mr comments on <PR #183> and rebase from
+  origin/main also before pushing". The review's one code finding names
+  two mechanisms, so both open choices were put to the author as
+  neutral options: the mechanism (chosen: the `afterCommit` sketch
+  credit-service already uses, over a
+  `@TransactionalEventListener(AFTER_COMMIT)` event) and the scope
+  (chosen: fix `PasswordResetService.confirmReset` too, which carries
+  the identical pre-commit write from the merged #179, rather than only
+  the two sites the review names). No design decision was made by AI;
+  the options were factual.
+- **Scope:** @Sinnez1's two non-blocking comments.
+  - The reviewer reproduced the revocation stamp being written inside
+    the caller's `@Transactional`, where the committed role is still
+    `ADMIN`, so a login in the gap between the Redis write and the
+    commit could mint an ADMIN token with an `iat` the stamp accepts.
+    New `foc.user.service.AfterCommit` runs the write on
+    `TransactionSynchronization.afterCommit`, or inline when no
+    transaction is open; `AdminService.changeRole`, `removeUser` and
+    `PasswordResetService.confirmReset` all stamp through it.
+    `TokenDenylist`'s javadoc states the requirement, and
+    `user-service/README.md` records it.
+  - The 2026-10-16 PR #183 main-sync entry claimed #180 had landed; it
+    was still open then, so the entry now says so. (#180 has merged
+    since — this round's rebase is onto `main` at `668b538`, which
+    includes it.)
+  - Also in this round: the branch rebased onto `main` for #180's
+    merge. `README.md` and this log conflicted and were resolved by
+    keeping both sides, with this branch's #178 server-half summary
+    paragraph kept next to the #182 web-half paragraph it refers back
+    to and main's #180 paragraph left after it.
+- **Author review:** user-service **362/362** via Testcontainers (the
+  two new `AdminControllerTest` cases). All three new ordering
+  assertions were confirmed to fail against the pre-fix code: each
+  reads the target's row over a second JDBC connection — committed
+  state only — at the moment the stamp is written, and before the fix
+  saw the old role, a null `deleted_at` and the old password hash. The
+  manual gateway walkthrough the PR description owes is still owed.
+  Leong Wei Zhi to review via PR #183.
