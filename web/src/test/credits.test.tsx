@@ -11,6 +11,8 @@
 // 2026-10-17: the admin dashboard's Common Pool box — its figures, the
 // times in Singapore time, the empty and preview wording, and an error;
 // its past-distributions table, newest first, paged, and empty.
+// 2026-10-17, issue #207 (PR #195 review nits): loading instead of a
+// stale empty state, and a past-distributions retry shown as loading.
 // Author review: Ryan Ang, pending pull request review.
 
 import { act, render, screen, waitFor, within } from '@testing-library/react'
@@ -315,7 +317,7 @@ describe('credits page', () => {
     expect(asked).not.toContain(10)
   })
 
-  it('words the empty state for the rows shown, not the inputs', async () => {
+  it('shows loading, not a stale empty state, while the next query runs', async () => {
     const user = userEvent.setup()
     renderAt('/credits')
     await screen.findByRole('table')
@@ -328,13 +330,15 @@ describe('credits page', () => {
     await screen.findByText('No transactions match these filters.')
     await user.click(screen.getByRole('button', { name: 'Clear Filters' }))
 
-    // still the filtered result while the unfiltered page loads
+    // the filtered result's empty message must not stand in for the
+    // unfiltered answer, and neither may "No transactions yet."
     await waitFor(() =>
       expect(creditApi.getHistory).toHaveBeenLastCalledWith({ page: 0 }),
     )
+    expect(screen.getByText('Loading transactions…')).toBeInTheDocument()
     expect(
-      screen.getByText('No transactions match these filters.'),
-    ).toBeInTheDocument()
+      screen.queryByText('No transactions match these filters.'),
+    ).not.toBeInTheDocument()
     expect(screen.queryByText('No transactions yet.')).not.toBeInTheDocument()
   })
 
@@ -607,6 +611,36 @@ describe('admin common pool box', () => {
 
     expect(await past.findByText('October 2025')).toBeInTheDocument()
     expect(past.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('shows a retry as loading until it answers', async () => {
+    vi.spyOn(creditApi, 'getPoolSummary').mockResolvedValue({
+      poolBalance: 0,
+      accounts: 2,
+      share: 0,
+      remainder: 0,
+      lastRun: null,
+      nextRunAt: '2026-10-20T16:00:00Z',
+    })
+    vi.mocked(creditApi.getRedistributions).mockRejectedValue(
+      new ApiError(500, { status: 500, detail: 'Server error' }),
+    )
+    const user = userEvent.setup()
+    renderAt('/admin')
+    const past = await pastRuns()
+    await past.findByRole('alert')
+
+    // the retry never answers, so it stays in flight
+    vi.mocked(creditApi.getRedistributions).mockImplementation(
+      () => new Promise(() => {}),
+    )
+    await user.click(past.getByRole('button', { name: 'Try again' }))
+
+    expect(past.getByText('Loading…')).toBeInTheDocument()
+    expect(past.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('group', { name: 'Past distributions' }),
+    ).toHaveAttribute('aria-busy', 'true')
   })
 
   it('says when nothing has been distributed yet', async () => {
