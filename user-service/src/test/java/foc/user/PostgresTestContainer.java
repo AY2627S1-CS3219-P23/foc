@@ -13,12 +13,17 @@
  * user.retention.purge-cron and owner.setup.token pinned too (the token
  * moved here from application-test.yaml).
  * Author review: Ryan to review via the PR.
+ * 2026-10-17, Codex (GPT-6), issue #98: skip integration tests when
+ * Docker is unavailable, preserving the shared container lifecycle.
+ * Author review: Leong Wei Zhi to review via pull request.
  */
 package foc.user;
 
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
+import org.testcontainers.DockerClientFactory;
+import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 // One Postgres container for the whole test run. Subclasses keep their own
@@ -32,6 +37,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 // assertions, and an empty one (as .env.example ships) is used as-is
 // rather than falling back to the default, which stops the context
 @ActiveProfiles("test")
+@Testcontainers(disabledWithoutDocker = true)
 @TestPropertySource(properties = {
     "user.seed.demo=false",
     "owner.setup.token=test-owner-setup-token",
@@ -51,6 +57,11 @@ public abstract class PostgresTestContainer {
     static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17");
 
     static {
-        postgres.start();
+        // AI-generated (edited by Codex; human review pending).
+        // The extension skips subclasses without Docker; guard initialization too.
+        // Keep this singleton outside @Container's per-class start/stop lifecycle.
+        if (DockerClientFactory.instance().isDockerAvailable()) {
+            postgres.start();
+        }
     }
 }

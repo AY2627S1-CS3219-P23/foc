@@ -9,6 +9,9 @@
   2026-10-17, Codex (GPT-6): recorded PR #180 review work and the
   missing main-sync entry from its PR description and file headers.
   Author review: Leong Wei Zhi to review via PR #180.
+  2026-10-17, Codex (GPT-6): recorded implementation and verification
+  of the Docker-unavailable test skips for issue #98.
+  Author review: Leong Wei Zhi to review via pull request.
 -->
 
 # AI Usage Log
@@ -4235,3 +4238,29 @@ Entry template:
   implementation. Recovery tests were rerun after correcting a test
   query option caught by TypeScript. No live browser walkthrough was
   performed in this review round. Leong Wei Zhi to review via PR #180.
+
+## 2026-10-17T11:17:00+08:00 — Leong Wei Zhi (issue #98)
+- **Tool:** Codex (GPT-6).
+- **Mode:** debugging + implementation + documentation.
+- **Prompt(s):** "can i close https://github.com/AY2627S1-CS3219-P23/foc/issues/98";
+  "what is meant by auto-skip docker?"; "create a plan to resolve this issue";
+  "Implement the plan."; "create the pr".
+- **Scope:** Implemented the approved automatic Docker-unavailable skip plan
+  in the shared user-service PostgreSQL test base: inherited
+  `@Testcontainers(disabledWithoutDocker = true)` and a Docker availability
+  guard around static startup. Preserved the singleton container and
+  `@ServiceConnection`, without adding `@Container` or catching startup
+  failures. Updated the service test instructions and consolidated README
+  AI Use Summary. No production code, API, schema, dependency, or CI changes.
+- **Verification:** Full user-service suite with Docker: 360 tests, zero
+  failures/errors/skips, one PostgreSQL container start. With Docker socket
+  access denied by the sandbox: 360 tests discovered, 157 unit tests executed,
+  203 integration tests skipped, zero failures/errors. Surefire reports
+  confirmed that exactly the 17 PostgreSQL test subclasses were skipped.
+  The unmodified base failed in the same Docker-inaccessible environment
+  with `ExceptionInInitializerError` from unconditional container startup.
+  Both successful runs used `./mvnw -o test` with Mockito's existing 5.23.0
+  jar passed as `-javaagent` through `-DargLine` to avoid this machine's
+  Java 26 self-attachment restriction; no build configuration was changed.
+  `git diff --check` passed.
+- **Author review:** Leong Wei Zhi to review via pull request.

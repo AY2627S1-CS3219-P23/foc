@@ -69,6 +69,9 @@
   send restores the pre-renewal OTP row, and the stale old-JWT
   sentence (pre-G11) was corrected to the Redis-failure and
   same-second exceptions. Decisions by Leong Wei Zhi via options Q&A.
+  2026-10-17, Codex (GPT-6), issue #98: documented automatic skips
+  for Docker-dependent tests and the integration coverage requirement.
+  Author review: Leong Wei Zhi to review via pull request.
 -->
 
 # User Service
@@ -481,7 +484,7 @@ Configure via `USER_RETENTION_DAYS` (default 30) and `USER_PURGE_CRON`
 ## Run
 
 ```sh
-# Tests (need a running Docker daemon: Testcontainers starts Postgres)
+# Tests (unit tests always run; PostgreSQL integration tests need Docker)
 ./mvnw test
 
 # Run locally
@@ -491,3 +494,11 @@ curl localhost:8080/actuator/health
 # Container (from the repo root — build context is the repo root)
 docker build -f user-service/Dockerfile .
 ```
+
+With Docker running, Testcontainers starts one shared PostgreSQL container
+and the full suite runs. When Docker is unavailable, PostgreSQL-dependent
+integration tests are automatically reported as skipped; unit tests still
+run. A successful run without Docker does not verify integration coverage.
+Run the full suite with Docker available before merging. Container startup,
+migration, and application failures with Docker available still fail the
+build.
