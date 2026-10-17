@@ -64,6 +64,13 @@ Entry template:
   known Java-26-local context-restart AMQP error on
   `RetentionPurgeSchedulerTest` (passes alone; exists on main). To be
   reviewed via pull request (PR #198).
+- **PR #205 review (2026-10-17):** both reviewer bots' inline note
+  confirmed valid — the username lookup ran inside the @Transactional
+  ingest, so a user-service stall could hold a pooled DB connection for
+  seconds per event. Fixed as the reviewers suggested: the lookup moved
+  before the transaction (programmatic TransactionTemplate replaces
+  @Transactional); duplicates now pay a cache-absorbed lookup. Suite
+  re-run green (same 91/92).
 
 ## 2026-10-17 — Leong Wei Zhi (notification REST API, backend half of issue #66)
 - **Tool:** Claude Code (Fable 5)

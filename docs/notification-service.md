@@ -212,19 +212,24 @@ changes (D16).
 
 ## Display-name enrichment (D30/D31)
 
-At ingest — after the dedupe check, before the row is stored — the
+At ingest — before the transaction opens (PR #205 review) — the
 processor resolves each party-id payload field (`requesterId` →
 `requesterName`, `courierId` → `courierName`) through the
 `UserDirectory` port and writes any resolved name into the stored
 payload. The push frame and every later REST read serve that same
 payload, so copy is identical everywhere without a read-time lookup.
+Duplicate deliveries resolve names too (the lookup precedes the dedupe
+check), which the cache absorbs.
 
 - **Adapter:** `GET {USER_SERVICE_BASE_URL}/users/{id}` (the
   public-profile route, username only) with the shared
   `X-Internal-Token` secret (D31 — zero trust; `INTERNAL_SERVICE_TOKEN`
   must match on both services). 2 s connect/read ceilings: the call
-  runs on the listener path inside the ingest transaction, so a hung
-  lookup must cost seconds, not Lettuce-style minutes.
+  runs on the listener path, so a hung lookup must cost seconds, not
+  Lettuce-style minutes — and it runs **outside** the ingest
+  transaction (a programmatic `TransactionTemplate` opens after the
+  lookup), so a user-service stall delays the listener thread but
+  never holds a pooled DB connection.
 - **Cache:** per-id TTL (`NOTIF_NAME_CACHE_TTL`, default 10 m) bounds
   lookup volume from a busy queue and how long a rename shows stale;
   misses and errors negative-cache for a fixed 30 s so an outage
