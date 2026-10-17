@@ -11,6 +11,9 @@
 // card's line and the notice when credits expire within 7 days. PR #210
 // review: read on load and on every balance poll (team decision), since
 // a balance-change trigger missed changes that cancel out.
+// 2026-10-17, issue #207 (PR #195 review nit): an empty result gives way
+// to the loading line while the next query is out, so it never looks
+// final.
 // Author review: Ryan Ang, pending pull request review.
 
 import { useEffect, useState } from 'react'
@@ -167,10 +170,12 @@ export function CreditHistoryPage() {
             {error}
           </p>
         )}
-        {!error && !shown && loading && (
+        {/* rows stay up (dimmed) while the next query loads; an empty
+            result does not, or it would read as the new query's answer */}
+        {!error && loading && (!shown || shown.content.length === 0) && (
           <p className="text-sm text-gray-500">Loading transactions…</p>
         )}
-        {!error && shown && shown.content.length === 0 && (
+        {!error && !loading && shown && shown.content.length === 0 && (
           <p className="text-sm text-gray-500">
             {result?.filtered
               ? 'No transactions match these filters.'

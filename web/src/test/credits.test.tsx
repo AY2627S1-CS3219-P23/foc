@@ -15,6 +15,10 @@
 // date, "tonight" for anything already due, the 7-day notice, the
 // Available card's line, and the list read on load and on every poll
 // (PR #210 review: a balance-change trigger missed offsetting changes).
+// 2026-10-17, issue #207 (PR #195 review nits): loading instead of a
+// stale empty state, and a past-distributions retry shown as loading.
+// PR #211 review: the same loading gate for an empty past-distributions
+// page.
 // Author review: Ryan Ang, pending pull request review.
 
 import { act, render, screen, waitFor, within } from '@testing-library/react'
@@ -321,7 +325,7 @@ describe('credits page', () => {
     expect(asked).not.toContain(10)
   })
 
-  it('words the empty state for the rows shown, not the inputs', async () => {
+  it('shows loading, not a stale empty state, while the next query runs', async () => {
     const user = userEvent.setup()
     renderAt('/credits')
     await screen.findByRole('table')
@@ -334,13 +338,15 @@ describe('credits page', () => {
     await screen.findByText('No transactions match these filters.')
     await user.click(screen.getByRole('button', { name: 'Clear Filters' }))
 
-    // still the filtered result while the unfiltered page loads
+    // the filtered result's empty message must not stand in for the
+    // unfiltered answer, and neither may "No transactions yet."
     await waitFor(() =>
       expect(creditApi.getHistory).toHaveBeenLastCalledWith({ page: 0 }),
     )
+    expect(screen.getByText('Loading transactions…')).toBeInTheDocument()
     expect(
-      screen.getByText('No transactions match these filters.'),
-    ).toBeInTheDocument()
+      screen.queryByText('No transactions match these filters.'),
+    ).not.toBeInTheDocument()
     expect(screen.queryByText('No transactions yet.')).not.toBeInTheDocument()
   })
 
@@ -737,6 +743,68 @@ describe('admin common pool box', () => {
 
     expect(await past.findByText('October 2025')).toBeInTheDocument()
     expect(past.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('replaces an empty page with loading while the next one loads', async () => {
+    vi.spyOn(creditApi, 'getPoolSummary').mockResolvedValue({
+      poolBalance: 0,
+      accounts: 2,
+      share: 0,
+      remainder: 0,
+      lastRun: null,
+      nextRunAt: '2026-10-20T16:00:00Z',
+    })
+    // an empty first page that still reports a second one, so the
+    // pager stays up
+    vi.mocked(creditApi.getRedistributions).mockResolvedValue({
+      content: [],
+      page: 0,
+      size: 12,
+      totalElements: 13,
+      totalPages: 2,
+    })
+    const user = userEvent.setup()
+    renderAt('/admin')
+    const past = await pastRuns()
+    await past.findByText('No distributions yet.')
+
+    vi.mocked(creditApi.getRedistributions).mockImplementation(
+      () => new Promise(() => {}),
+    )
+    await user.click(past.getByRole('button', { name: 'Page 2' }))
+
+    expect(past.getByText('Loading…')).toBeInTheDocument()
+    expect(past.queryByText('No distributions yet.')).not.toBeInTheDocument()
+  })
+
+  it('shows a retry as loading until it answers', async () => {
+    vi.spyOn(creditApi, 'getPoolSummary').mockResolvedValue({
+      poolBalance: 0,
+      accounts: 2,
+      share: 0,
+      remainder: 0,
+      lastRun: null,
+      nextRunAt: '2026-10-20T16:00:00Z',
+    })
+    vi.mocked(creditApi.getRedistributions).mockRejectedValue(
+      new ApiError(500, { status: 500, detail: 'Server error' }),
+    )
+    const user = userEvent.setup()
+    renderAt('/admin')
+    const past = await pastRuns()
+    await past.findByRole('alert')
+
+    // the retry never answers, so it stays in flight
+    vi.mocked(creditApi.getRedistributions).mockImplementation(
+      () => new Promise(() => {}),
+    )
+    await user.click(past.getByRole('button', { name: 'Try again' }))
+
+    expect(past.getByText('Loading…')).toBeInTheDocument()
+    expect(past.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('group', { name: 'Past distributions' }),
+    ).toHaveAttribute('aria-busy', 'true')
   })
 
   it('says when nothing has been distributed yet', async () => {

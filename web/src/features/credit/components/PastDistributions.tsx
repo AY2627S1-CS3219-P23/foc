@@ -5,6 +5,10 @@
 // recorded month, newest first, with the shared pager. A result is
 // stamped with the page it answers, as the credits page does, so a slow
 // response never lands on a newer page.
+// 2026-10-17, issue #207 (PR #195 review nit): a result also records the
+// attempt it answers, so a retry of the same page shows as loading.
+// PR #211 review: an empty page gives way to "Loading…" while the next
+// load runs, as on the credits page.
 // Author review: Ryan Ang, pending pull request review.
 
 import { useEffect, useState } from 'react'
@@ -20,6 +24,8 @@ export const PAST_RUNS_PAGE_SIZE = 12
 
 interface Result {
   page: number
+  // which load of `page` this answers; a retry is a new attempt
+  attempt: number
   runs?: CreditPage<RedistributionRun>
   error?: string
 }
@@ -35,13 +41,14 @@ export function PastDistributions() {
     let cancelled = false
     creditApi.getRedistributions({ page, size: PAST_RUNS_PAGE_SIZE }).then(
       (runs) => {
-        if (!cancelled) setResult({ page, runs })
+        if (!cancelled) setResult({ page, attempt, runs })
       },
       (err) => {
         if (!cancelled) {
           // the last good rows, and with them the pager, stay up
           setResult((prev) => ({
             page,
+            attempt,
             runs: prev?.runs,
             error: errorMessage(err, 'Could not load past distributions.'),
           }))
@@ -58,13 +65,15 @@ export function PastDistributions() {
     setAttempt((a) => a + 1)
   }
 
-  const loading = result?.page !== page
+  // a retry of the page already shown is loading too, until it answers
+  const current = result?.page === page && result.attempt === attempt
+  const loading = !current
   // the last rows stay up while the next page loads
   const shown = result?.runs
-  const error = result?.page === page ? result.error : undefined
+  const error = current ? result?.error : undefined
 
   return (
-    <div aria-labelledby="past-runs-heading" role="group">
+    <div aria-labelledby="past-runs-heading" aria-busy={loading} role="group">
       <h3
         id="past-runs-heading"
         className="text-sm font-semibold text-gray-900"
@@ -84,10 +93,12 @@ export function PastDistributions() {
           </button>
         </p>
       )}
-      {!error && !shown && loading && (
+      {/* rows stay up (dimmed) while the next load runs; an empty page
+          does not, or it would read as the new load's answer */}
+      {!error && loading && (!shown || shown.content.length === 0) && (
         <p className="mt-2 text-sm text-gray-500">Loading…</p>
       )}
-      {!error && shown && shown.content.length === 0 && (
+      {!error && !loading && shown && shown.content.length === 0 && (
         <p className="mt-2 text-sm text-gray-500">No distributions yet.</p>
       )}
       {shown && shown.content.length > 0 && (

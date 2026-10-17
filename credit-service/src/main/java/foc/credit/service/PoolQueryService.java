@@ -9,6 +9,8 @@
  * next run follows the scheduler's rule from PR #193 (D12 there): one
  * routine daily at 00:00 Singapore time redistributes a month that has
  * no recorded run.
+ * 2026-10-17, issue #207 (PR #195 review nit): a schedule that never
+ * fires fails with its cause instead of a bare NullPointerException.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -17,6 +19,7 @@ import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.Objects;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -87,7 +90,10 @@ public class PoolQueryService {
         ZonedDateTime after = recorded
             ? month.plusMonths(1).atDay(1).atStartOfDay(ZONE).minusNanos(1)
             : local;
-        return SCHEDULE.next(after).toInstant();
+        // next() is null for a schedule that never fires, which only a
+        // mis-edited DAILY_CRON could be
+        return Objects.requireNonNull(SCHEDULE.next(after),
+            "ExpiryAndRedistributionScheduler.DAILY_CRON never fires").toInstant();
     }
 
     /**
