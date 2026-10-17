@@ -34,7 +34,8 @@ import tools.jackson.databind.json.JsonMapper;
  * {@code /queue} with per-user destinations (D10: single instance, no
  * relay), 10 s heartbeats both ways, and JWT authentication at
  * CONNECT via {@link JwtChannelInterceptor}. Clients never SEND, so
- * no application destination prefix is registered. Frames are
+ * no application destination prefix is registered — and the
+ * interceptor enforces it (PR #185 review). Frames are
  * serialized by Boot's auto-configured Jackson mapper, mirroring the
  * AMQP converter (D15).
  *

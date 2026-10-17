@@ -16,9 +16,13 @@
 # 2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei Zhi):
 # owner.setup.token moved to PostgresTestContainer's pins, because
 # OWNER_SETUP_TOKEN in the environment outranks this file.
+# 2026-10-17, Claude Code (Fable 5), issue #66: fixed internal service
+# token for the D31 service-auth tests (empty main default = disabled).
 # Author review: Ryan to review via the PR.
 
 user:
+  internal:
+    service-token: test-internal-service-token
   jwt:
     # the main yaml's default is empty, which fails startup
     secret: test-jwt-secret-that-is-at-least-32-bytes-long

@@ -55,6 +55,10 @@ evicts the account's outstanding sessions via TokenDenylist (G11).
 (@Sinnez1): a failed send on a renewal restores the pre-renewal row
 instead of deleting it (owner decision via options Q&A) — the delete
 discarded the carried wrong-guess count and killed the delivered code.
+2026-10-17 (Claude Code, Opus 5), PR #183 review (@Sinnez1): the
+session-eviction stamp moved out of confirmReset's transaction to
+AfterCommit — the reviewer found that shape in AdminService and the
+owner chose (options Q&A) to fix this identical call site with it.
 */
 
 package foc.user.service;
@@ -369,8 +373,13 @@ public class PasswordResetService {
         // this instant (PR #179 review, @Sinnez1 — whoever holds the old
         // password must not keep a session through the reset that
         // evicted it). Best-effort like logout (G9): a Redis failure is
-        // logged and the old sessions live out their ≤1 h exp
-        tokenDenylist.revokeUserSessions(user.getId());
+        // logged and the old sessions live out their ≤1 h exp. Written
+        // after the commit (PR #183 review, @Sinnez1, which found the
+        // same shape in AdminService): from inside the transaction the
+        // cutoff preceded the new password hash becoming visible, so an
+        // old-password login in that gap minted a token the stamp no
+        // longer outlaws
+        AfterCommit.run(() -> tokenDenylist.revokeUserSessions(user.getId()));
     }
 
     private boolean pastRetention(User user, Instant now) {

@@ -25,6 +25,16 @@
   D11 broker-isolation ArchUnit test; latest stable release as of this
   writing, compatible with the JUnit Jupiter version foc-contracts
   already pins.
+  2026-10-12, issue #67: spring-boot-starter-data-redis added for the
+  D23 denylist read at STOMP CONNECT (author decision via options Q&A).
+  2026-10-16, PR #185 re-review (@Sinnez1): the mockito-core entry
+  added alongside it removed again — the *-test starters already pull
+  it in via spring-boot-starter-test.
+  2026-10-17, issue #66: spring-boot-starter-security added for the
+  REST API's filter chain (same stack as credit/supplier/user-service).
+  2026-10-17, issue #66: spring-boot-starter-restclient added for the
+  ingest-time username lookups (author decision D30 via options Q&A) —
+  Boot 4 ships RestClient.Builder auto-config in its own starter.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -77,6 +87,18 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-restclient</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
