@@ -26,6 +26,22 @@ Entry template:
 ```
 
 ---
+## 2026-10-17 — Aung Ko Khant (order-service: createdAt default, pushed first)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug
+- **Scope:** order-service `Requests.createdAt` defaults to
+  `Instant.now()`, so a `save()` that never calls `setCreatedAt` still
+  passes the not-null check; the column stays NOT NULL.
+- **Prompt(s):** 2026-10-16, pasted PR review comment (blocking:
+  `createdAt` is `nullable = false` but nothing sets it). The reviewer
+  offered a field default (as Notification and User do),
+  `@CreationTimestamp` or `@PrePersist`; the tool applied the field
+  default, compared it with `@CreationTimestamp` when asked, and the
+  author kept the default.
+- **Author review:** a test saving a request without `createdAt` comes
+  with the service code in a later commit; this commit's tests run in a
+  Maven container on a clean checkout. To be reviewed via pull request.
+
 ## 2026-10-17 — Aung Ko Khant (order-service: state machine states, pushed first)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate

@@ -100,7 +100,8 @@
   2026-10-11: AI Use Summary extended for the order-service Requests
   entity/repository skeleton by Claude Code (Opus 5.5).
   2026-10-17: AI Use Summary extended for the order-service request
-  state machine by Claude Code (Opus 5.5).
+  state machine by Claude Code (Opus 5.5), then for the Requests
+  createdAt default (PR review fix).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -572,7 +573,8 @@ the order-service request state machine (a plain-Java transition table
 and its unit tests over the author's own state and event enums, with
 the DROP target, the no-library form, the PENDING/REJECTED saga
 transitions' names and the ARRIVED step chosen by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`).
+neutral-options Q&A and recorded in `ai/usage-log.md`), and a
+`createdAt` default on the `Requests` entity (PR review fix).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
