@@ -13,6 +13,8 @@
 // its past-distributions table, newest first, paged, and empty.
 // 2026-10-17, issue #207 (PR #195 review nits): loading instead of a
 // stale empty state, and a past-distributions retry shown as loading.
+// PR #211 review: the same loading gate for an empty past-distributions
+// page.
 // Author review: Ryan Ang, pending pull request review.
 
 import { act, render, screen, waitFor, within } from '@testing-library/react'
@@ -611,6 +613,38 @@ describe('admin common pool box', () => {
 
     expect(await past.findByText('October 2025')).toBeInTheDocument()
     expect(past.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('replaces an empty page with loading while the next one loads', async () => {
+    vi.spyOn(creditApi, 'getPoolSummary').mockResolvedValue({
+      poolBalance: 0,
+      accounts: 2,
+      share: 0,
+      remainder: 0,
+      lastRun: null,
+      nextRunAt: '2026-10-20T16:00:00Z',
+    })
+    // an empty first page that still reports a second one, so the
+    // pager stays up
+    vi.mocked(creditApi.getRedistributions).mockResolvedValue({
+      content: [],
+      page: 0,
+      size: 12,
+      totalElements: 13,
+      totalPages: 2,
+    })
+    const user = userEvent.setup()
+    renderAt('/admin')
+    const past = await pastRuns()
+    await past.findByText('No distributions yet.')
+
+    vi.mocked(creditApi.getRedistributions).mockImplementation(
+      () => new Promise(() => {}),
+    )
+    await user.click(past.getByRole('button', { name: 'Page 2' }))
+
+    expect(past.getByText('Loading…')).toBeInTheDocument()
+    expect(past.queryByText('No distributions yet.')).not.toBeInTheDocument()
   })
 
   it('shows a retry as loading until it answers', async () => {

@@ -7,6 +7,8 @@
 // response never lands on a newer page.
 // 2026-10-17, issue #207 (PR #195 review nit): a result also records the
 // attempt it answers, so a retry of the same page shows as loading.
+// PR #211 review: an empty page gives way to "Loading…" while the next
+// load runs, as on the credits page.
 // Author review: Ryan Ang, pending pull request review.
 
 import { useEffect, useState } from 'react'
@@ -91,10 +93,12 @@ export function PastDistributions() {
           </button>
         </p>
       )}
-      {!error && !shown && loading && (
+      {/* rows stay up (dimmed) while the next load runs; an empty page
+          does not, or it would read as the new load's answer */}
+      {!error && loading && (!shown || shown.content.length === 0) && (
         <p className="mt-2 text-sm text-gray-500">Loading…</p>
       )}
-      {!error && shown && shown.content.length === 0 && (
+      {!error && !loading && shown && shown.content.length === 0 && (
         <p className="mt-2 text-sm text-gray-500">No distributions yet.</p>
       )}
       {shown && shown.content.length > 0 && (
