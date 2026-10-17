@@ -35,6 +35,9 @@ final class AfterCommit {
     private AfterCommit() {
     }
 
+    // AI-generated (edited by Claude Code; Leong Wei Zhi review pending):
+    // the afterCommit sketch credit-service already carries, from the
+    // team's PR #175 review
     static void run(Runnable work) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {

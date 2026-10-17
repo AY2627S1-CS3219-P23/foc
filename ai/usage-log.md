@@ -4339,3 +4339,40 @@ Entry template:
   saw the old role, a null `deleted_at` and the old password hash. The
   manual gateway walkthrough the PR description owes is still owed.
   Leong Wei Zhi to review via PR #183.
+
+## 2026-10-17 — Leong Wei Zhi (PR #183 Codex review)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** docs + analysis (issue #178, PR #183)
+- **Prompt(s):** "address latest pr comments", then — on the second
+  finding — "is this even valid?" and, after the analysis below,
+  "revert changes and reply to codex comments". The author's call on
+  both findings; no design decision was made by AI.
+- **Scope:** Codex's two P1 findings on `fb0f270`.
+  - **Accepted:** `AfterCommit.run` had no `// AI-generated (edited by
+    <name>)` block marker (AGENTS.md disclosure duty 2). Added in the
+    form the repo already uses, matching
+    `CreditOperationsService.afterCommit`, the sketch it follows.
+  - **Declined:** the claim that an older post-commit cutoff can
+    overwrite a newer one. Codex's mechanism does not hold — the cutoff
+    is read from the clock as the first statement of
+    `revokeUserSessions`, not captured at commit time and carried into
+    the callback, so a delayed callback writes a *later* second, never
+    the stale one in Codex's example. The genuine residue is narrower
+    than stated: the writes are indeed no longer ordered by the row
+    lock (confirmed in `AbstractPlatformTransactionManager.processCommit`,
+    spring-tx 7.0.9 — `doCommit` precedes `triggerAfterCommit`), but an
+    out-of-order *value* needs a ≥1 s stall inside the few instructions
+    between the clock read and the Redis command, with the other
+    request completing its whole transaction and stamp in that stall,
+    plus a login in between to mint a token worth resurrecting. A
+    monotonic Lua cutoff was drafted and then reverted on the author's
+    call. Noted for whoever revisits it: the case that would actually
+    bite is **clock skew between user-service replicas** (each stamps
+    from its own `Clock.systemUTC()`), which needs no stall at all —
+    latent today because compose runs one instance, and already a
+    property of G11's `iat`-versus-stamp comparison rather than
+    something this PR introduced.
+- **Author review:** comment-only change to `AfterCommit`; the
+  user-service suite is unchanged at 362/362 from the previous entry.
+  Both Codex threads answered on the PR. Leong Wei Zhi to review via
+  PR #183.
