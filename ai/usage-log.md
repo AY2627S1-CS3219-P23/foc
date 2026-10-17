@@ -230,6 +230,26 @@ Entry template:
   the backend half of #66 but not the web half) was valid against
   AGENTS.md duty 4 and is now addressed. 213 vitest tests, `tsc -b`,
   eslint and Prettier clean.
+- **PR #199 review, round 3 (2026-10-17), Claude Code (Opus 5):** the
+  approving review (@Sinnez1) left one actionable nit: "Load more" can
+  disappear before everything is loaded, because `totalElements` only
+  moves on a fetch while live pushes add rows to the list — 15 on the
+  server with 10 held, then 5 pushed, and the rows held reach a total
+  those rows postdate, hiding the pager over 5 unreachable rows. Valid
+  and fixed by keeping the two in step: a push raises the total by the
+  rows it actually prepends. The same defect runs the other way under
+  the Unread filter, which the nit did not mention — a row marked read
+  leaves the list but not the total, so one page of unread rows grew a
+  pager that offered a page already on screen — so the read path lowers
+  the total too. Two regression tests, both failing against the
+  pre-review code. The review's second point (credit-service's
+  rejection reasons are lowercase machine strings, so a row reads
+  "…rejected: insufficient available credits") was a copy fork rather
+  than a defect and the reviewer called it fine as it is; put to the
+  author via neutral options Q&A against leaving it, capitalising the
+  reason, and mapping the two known reasons — the author chose to leave
+  the service's wording unchanged, so no code change. 215 vitest tests,
+  `tsc -b`, eslint and Prettier clean.
 
 ---
 ## 2026-10-17 — Leong Wei Zhi (notification REST API, backend half of issue #66)

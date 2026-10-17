@@ -759,6 +759,73 @@ describe('notification center page', () => {
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
   })
 
+  test('a pushed row does not retire the pager while older rows wait', async () => {
+    const user = userEvent.setup()
+    // 15 on the server, page 0 holds 10. Five pushes bring the rows
+    // held to 15 as well — against a total those rows postdate, that
+    // reads as "everything is loaded" and the five oldest become
+    // unreachable until a reload (PR #199 review).
+    pages = [
+      pageOf(
+        Array.from({ length: 10 }, (_, i) =>
+          notification(300 + i, 'request.created', { requestId: `${i}` }, true),
+        ),
+        0,
+        2,
+        15,
+      ),
+      pageOf(
+        Array.from({ length: 5 }, (_, i) =>
+          notification(
+            310 + i,
+            'request.created',
+            { requestId: `${10 + i}` },
+            true,
+          ),
+        ),
+        1,
+        2,
+        15,
+      ),
+    ]
+    await renderCenter()
+    const onMessage = connectPush()
+    await act(async () => {
+      for (let i = 0; i < 5; i += 1) onMessage(pushFrame(acceptedBy(900 + i)))
+    })
+    expect(listRows()).toHaveLength(15)
+
+    // the pager is still there, and still has the older page behind it
+    await user.click(screen.getByRole('button', { name: 'Load more' }))
+
+    await waitFor(() => expect(listRows()).toHaveLength(20))
+    screen.getByRole('button', { name: 'Request #14 created' })
+  })
+
+  test('a row read in the Unread view does not conjure a pager', async () => {
+    const user = userEvent.setup()
+    // exactly one page of unread rows: reading one takes it out of the
+    // server's set too, so there is still nothing left to ask for
+    serverUnread = Array.from({ length: 10 }, (_, i) =>
+      notification(400 + i, 'request.created', { requestId: `${i}` }, false),
+    )
+    unreadCountOnServer = 10
+    await renderCenter()
+    await user.click(screen.getByRole('button', { name: 'Unread' }))
+    await waitFor(() => expect(listRows()).toHaveLength(10))
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Request #0 created — unread, select to mark read',
+      }),
+    )
+
+    await waitFor(() => expect(listRows()).toHaveLength(9))
+    // 9 rows held against a total of 9, not the 10 the last answer saw
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
+  })
+
   test('"Mark all as read" leaves a frame pushed after the bulk update unread', async () => {
     pages = [
       pageOf(

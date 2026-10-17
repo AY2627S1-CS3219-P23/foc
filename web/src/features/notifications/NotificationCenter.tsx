@@ -27,6 +27,11 @@
 // 2026-10-17, same tool, driving the branch in a browser: "Mark all as
 // read" left the Unread view's page count behind, so the empty state
 // rendered with a "Load more" under it.
+// 2026-10-17, same tool, PR #199 review round 3 (@Sinnez1): the rows
+// held and the total they are measured against now move together — a
+// pushed row raises the total, and a row read out of the Unread view
+// lowers it — so the pager neither disappears with older rows still
+// unloaded nor offers a page that is already on screen.
 
 import { useEffect, useState } from 'react'
 
@@ -92,7 +97,8 @@ export function NotificationCenter() {
   // `hasMore` true against the old filter's total and let "Load more"
   // skip the new filter's first page (PR #199 review).
   const [prevFilter, setPrevFilter] = useState<Filter>(filter)
-  if (filter !== prevFilter) {
+  const switching = filter !== prevFilter
+  if (switching) {
     setPrevFilter(filter)
     setItems([])
     setRequest(FIRST_PAGE)
@@ -172,13 +178,19 @@ export function NotificationCenter() {
   if (pushedNotifications !== consumed) {
     const fresh = pushedNotifications.filter((n) => !consumed.includes(n))
     setConsumed(pushedNotifications)
-    if (fresh.length > 0) {
-      setItems((prev) => {
-        const seen = new Set(prev.map((n) => n.id))
-        // newest first, matching the list's order
-        const add = fresh.filter((n) => !seen.has(n.id)).reverse()
-        return add.length > 0 ? [...add, ...prev] : prev
-      })
+    // what the list holds once this render commits: a filter switch
+    // above has already emptied it
+    const held = switching ? [] : items
+    const seen = new Set(held.map((n) => n.id))
+    // newest first, matching the list's order
+    const add = fresh.filter((n) => !seen.has(n.id)).reverse()
+    if (add.length > 0) {
+      setItems((prev) => [...add, ...prev])
+      // Each of these is a new member of the server's set, which the
+      // last answer's total predates. Left alone, the rows held catch
+      // up to a stale total and the pager disappears while older rows
+      // are still unloaded (PR #199 review).
+      setTotalElements((t) => t + add.length)
     }
   }
 
@@ -196,6 +208,11 @@ export function NotificationCenter() {
               n.id === notification.id ? { ...n, read: true } : n,
             ),
       )
+      // It left the unread set on the server as well, so the total
+      // comes down with it — otherwise the rows held fall one short of
+      // a total nothing will reach and the pager offers a page that is
+      // already on screen.
+      if (filter === 'unread') setTotalElements((t) => Math.max(0, t - 1))
       setError(null)
       // server-authoritative badge (options Q&A decision): re-fetch
       // rather than decrement locally
