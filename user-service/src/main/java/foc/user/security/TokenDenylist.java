@@ -17,6 +17,9 @@ Leong Wei Zhi via options Q&A).
 (@Sinnez1): the javadoc records the reviewer-reproduced same-second
 survivor and the login-racing-the-reset gap as the same accepted
 leak; no behaviour change.
+2026-10-17 (Claude Code, Opus 5), PR #183 review (@Sinnez1): the
+javadoc states the stamp-after-commit requirement the review's
+finding established; no behaviour change here.
 */
 
 package foc.user.security;
@@ -105,6 +108,13 @@ public class TokenDenylist {
      * reset landing in that gap stamps before the mint and the token
      * passes with {@code iat >= stamp}. Best-effort like
      * {@link #revoke} (G9).
+     *
+     * <p>Callers inside a transaction must stamp only once it has
+     * committed — see {@code AfterCommit} in {@code foc.user.service}.
+     * A cutoff written before the commit outlaws tokens minted before
+     * a change that is not yet visible, which lets a login in that gap
+     * mint one carrying the old state and an {@code iat} the stamp
+     * accepts (PR #183 review, @Sinnez1).
      */
     public void revokeUserSessions(Long userId) {
         String cutoff = String.valueOf(clock.instant().getEpochSecond());

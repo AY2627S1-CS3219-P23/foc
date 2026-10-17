@@ -40,6 +40,10 @@
 // alone, and a 401 landing while the login page is open shows the notice
 // there instead of saving it for a later visit.
 // Author review: Ryan to review via the PR.
+// 2026-10-17, Codex (GPT-6), PR #180 review, issue #94:
+// AI-generated (edited by Codex; Leong Wei Zhi review pending).
+// Provide response text in the sign-up 202 mocks for the stricter parser.
+// Author review: Leong Wei Zhi to review via PR #180.
 
 import {
   act,
@@ -81,6 +85,7 @@ function reply(
     ok: status < 400,
     status,
     headers: new Headers(headers),
+    text: async () => (body === undefined ? '' : JSON.stringify(body)),
     json: async () => body,
   }
 }

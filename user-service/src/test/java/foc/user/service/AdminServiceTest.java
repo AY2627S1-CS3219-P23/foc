@@ -14,6 +14,9 @@ includeDeleted.
 2026-10-12 (Claude Code, Fable 5), PR #179 approval follow-up (@Sinnez1):
 the remove-another-admin test pins the demotion to USER (owner decision
 via options Q&A).
+2026-10-12 (Claude Code, Fable 5), issue #178: changeRole and removeUser
+evict the target's sessions (TokenDenylist.revokeUserSessions) — pinned
+on every success path, and pinned absent on the no-op and refusal paths.
 */
 
 package foc.user.service;
@@ -47,6 +50,7 @@ import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.exception.UserNotFoundException;
 import foc.user.repository.UserRepository;
+import foc.user.security.TokenDenylist;
 
 @ExtendWith(MockitoExtension.class)
 class AdminServiceTest {
@@ -57,6 +61,9 @@ class AdminServiceTest {
     // runs real default methods (getActiveUser) against the stubbed finders
     @Mock(answer = Answers.CALLS_REAL_METHODS)
     private UserRepository userRepository;
+
+    @Mock
+    private TokenDenylist tokenDenylist;
 
     @InjectMocks
     private AdminService adminService;
@@ -91,6 +98,8 @@ class AdminServiceTest {
         assertThat(target.getRole()).isEqualTo(Role.ADMIN);
         assertThat(response.role()).isEqualTo("ADMIN");
         verify(userRepository).save(target);
+        // issue #178: the old token's USER claim is stale either way
+        verify(tokenDenylist).revokeUserSessions(TARGET_ID);
     }
 
     @Test
@@ -104,6 +113,8 @@ class AdminServiceTest {
 
         assertThat(target.getRole()).isEqualTo(Role.USER);
         assertThat(response.role()).isEqualTo("USER");
+        // issue #178: the demoted admin's outstanding tokens die now, not at exp
+        verify(tokenDenylist).revokeUserSessions(TARGET_ID);
     }
 
     @Test
@@ -116,6 +127,8 @@ class AdminServiceTest {
 
         assertThat(response.role()).isEqualTo("ADMIN");
         verify(userRepository, never()).save(any());
+        // no change, no revocation: the held token's claim is still right
+        verifyNoInteractions(tokenDenylist);
     }
 
     @Test
@@ -126,6 +139,7 @@ class AdminServiceTest {
 
         assertStatus(thrown, HttpStatus.FORBIDDEN);
         verifyNoInteractions(userRepository);
+        verifyNoInteractions(tokenDenylist);
     }
 
     @Test
@@ -140,6 +154,7 @@ class AdminServiceTest {
         assertStatus(thrown, HttpStatus.FORBIDDEN);
         assertThat(target.getRole()).isEqualTo(Role.OWNER);
         verify(userRepository, never()).save(any());
+        verifyNoInteractions(tokenDenylist);
     }
 
     @Test
@@ -149,6 +164,7 @@ class AdminServiceTest {
 
         assertThatThrownBy(() -> adminService.changeRole(TARGET_ID, Role.ADMIN))
             .isInstanceOf(UserNotFoundException.class);
+        verifyNoInteractions(tokenDenylist);
     }
 
     // removal
@@ -162,6 +178,8 @@ class AdminServiceTest {
 
         assertThat(target.getDeletedAt()).isNotNull();
         verify(userRepository).save(target);
+        // issue #178: the removed account's token stops working now, not at exp
+        verify(tokenDenylist).revokeUserSessions(TARGET_ID);
     }
 
     @Test
@@ -176,6 +194,7 @@ class AdminServiceTest {
         // PR #179 approval follow-up: a removed admin's later logins and
         // any self-restore must carry no admin powers
         assertThat(target.getRole()).isEqualTo(Role.USER);
+        verify(tokenDenylist).revokeUserSessions(TARGET_ID);
     }
 
     @Test
@@ -186,6 +205,7 @@ class AdminServiceTest {
 
         assertStatus(thrown, HttpStatus.FORBIDDEN);
         verifyNoInteractions(userRepository);
+        verifyNoInteractions(tokenDenylist);
     }
 
     @Test
@@ -200,6 +220,7 @@ class AdminServiceTest {
         assertStatus(thrown, HttpStatus.FORBIDDEN);
         assertThat(target.getDeletedAt()).isNull();
         verify(userRepository, never()).save(any());
+        verifyNoInteractions(tokenDenylist);
     }
 
     @Test
@@ -209,6 +230,7 @@ class AdminServiceTest {
 
         assertThatThrownBy(() -> adminService.removeUser(CALLER_ID, TARGET_ID))
             .isInstanceOf(UserNotFoundException.class);
+        verifyNoInteractions(tokenDenylist);
     }
 
     // list parameter validation

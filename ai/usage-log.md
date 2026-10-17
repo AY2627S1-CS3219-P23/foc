@@ -6,6 +6,13 @@
   change they describe, following the template below; each entry names
   its own tool, author, and review.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-10-17, Codex (GPT-6): recorded PR #180 review work and the
+  missing main-sync entry from its PR description and file headers.
+  Author review: Leong Wei Zhi to review via PR #180.
+  2026-10-17, Codex (GPT-6.1 Sol): recorded implementation and verification
+  of the Docker-unavailable test skips for issue #98.
+  PR #197 review: recorded the CI skipped-test check and its verification.
+  Author review: Leong Wei Zhi to review via pull request.
 -->
 
 # AI Usage Log
@@ -101,6 +108,150 @@ Entry template:
   the running stack at 1280 and 390 px wide, including a date filter
   the server accepted. Then, at the author's request, a loss's amount
   shown in red, as a gain's is in green. Pending pull request review.
+
+## 2026-10-17 — Leong Wei Zhi (notification REST API, backend half of issue #66)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `notification-service/` REST API (new `config/`,
+  `controller/`, `dto/` packages; `security/` filter + handlers;
+  repository queries; `NotificationQueryService`; both application
+  yamls; pom), `foc-contracts` request-event records
+  (requesterName/courierName + record-shape test), the nine test files
+  constructing those records (notification- and credit-service),
+  `compose.yaml`, `.env.example`, `docs/notification-service.md` (+
+  `.mmd`), service README/AGENTS.md. New tests: `SecurityConfigTest`
+  (chain 401s + the `/ws/info` stays-open canary for #67),
+  `NotificationControllerTest` (order, paging 400s, ownership 404s,
+  idempotent writes, unread count/filter).
+- **Prompt(s):** Asked to plan and resolve issue #66. Every API/UX
+  decision was made by the author via neutral options Q&A rounds
+  (no recommendations): scope split (backend + web PRs), PATCH-with-body
+  shape, `/notifications/me` base path, created_at list order,
+  204 + ownership-scoped bulk UPDATE (count 0 → 404, no existence
+  oracle), empty filter authorities, `POST /read-all`,
+  `GET /unread-count` → `{"count": n}`, `?unread=true` filter, and
+  display names carried in the event payloads rather than rendered from
+  IDs or looked up cross-service. Recorded as D24–D29 in
+  `docs/notification-service.md`; implementation mechanics transcribe
+  credit-service's precedent (its SecurityConfig/controller/test style).
+- **Author review:** full suites run — foc-contracts and credit-service
+  (217/217) green; notification-service 83 tests with the known
+  Java-26-local context-restart AMQP error on `RetentionPurgeSchedulerTest`
+  (passes alone; same environmental failure exists on main). To be
+  reviewed via pull request.
+- **PR #198 Codex review (2026-10-17):** both findings reproduced in
+  tests before fixing. (1) Jackson's default coercion bound
+  {"read":"true"}/{"read":1} → 204 where the contract promises 400 —
+  fixed with a field-scoped strict Boolean deserializer (the AMQP
+  mapper is untouched). (2) The /** CORS registration policed the /ws
+  paths, 403ing a handshake Origin the WS config allows — narrowed to
+  /notifications/**. Both pinned by new tests.
+- **PR #198 follow-up (2026-10-17):** reverted the strict-deserializer
+  fix above — author decided the PATCH `read` field should keep
+  Jackson's default scalar coercion rather than reject it, so
+  `StrictBooleanDeserializer` and its pinning test are removed and
+  `MarkReadRequest` is back to a plain `Boolean`. The CORS fix is
+  unaffected and stays. `docs/notification-service.md`'s REST API
+  contract (D24) is reworded to document the PATCH body's coercion as
+  deliberate rather than promising 400 for every non-boolean. Also
+  addressed Sinnez1's non-blocking review nit on the `unread` query
+  param: rather than hand-validating it like `page`/`size`, D27 and
+  the REST API table now document that `unread` uses Spring's
+  standard boolean conversion (accepts `1`/`yes`/`on` and
+  `0`/`no`/`off` alongside `true`/`false`) — both are the author's
+  decisions via options Q&A, not this tool's.
+- **Author review:** `mvn -pl notification-service test` after the
+  revert; reviewed via pull request.
+
+## 2026-10-16 — Ryan Ang (PR #193 review: expiry and redistribution scheduler)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + tests + docs
+- **Scope:** `credit-service/` and `docs/credit-service.md`, for Leong
+  Wei Zhi's review.
+  - `ExpiryAndRedistributionScheduler`: one routine, `run`, called by
+    the 00:00 daily job and at startup: the sweep, then the current
+    Singapore month's redistribution, which the service skips if the
+    month is recorded. The 00:10 job and the catch-up's time check are
+    gone. Review findings 1 (startup sweep), 2 (no retry of a failed
+    run) and 3 (order not enforced) are answered by it.
+  - `EarnedCreditLifetime`: the earned-credit expiry and its `>= 1`
+    check, moved from `CreditOperationsService` and used by both it
+    and `RedistributionService` (finding 4).
+  - Tests: `ExpiryAndRedistributionSchedulerTest` rewritten (8: the
+    order inside the routine, the Singapore month on the 1st, an
+    ordinary day and a startup with the month recorded, a missed
+    month at startup, a failed redistribution completed the next day,
+    and neither step throwing at startup);
+    `aPoolSmallerThanTheAccountsGivesOneEachAndSkipsTheRest` makes its
+    own accounts (finding 5); `CreditOperationsConfigurationTest`
+    builds the new component.
+  - Design doc: D12 and the failure table (the down-at-00:00 row, and
+    new rows for a failed run, a month that never completes, and a
+    startup run overlapping the 00:00 one). The service's README and
+    AGENTS.md, and the README's AI Use Summary, updated.
+- **Prompt(s):** Asked whether a proposed single daily-and-startup
+  routine answers the review's first two findings, then to implement
+  it with the review's smaller items.
+- **Author review:** The single routine, dropping the 00:10 time, and
+  accepting that a month failing every day until its end is skipped
+  (its credits stay in the pool) are team decisions; the tool wrote
+  the code, tests and doc text to them. The shared component is the
+  reviewer's suggested option. Pending pull request review.
+
+## 2026-10-16 — Ryan Ang (credit-service: expiry and redistribution scheduler, issue #173)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Scope:** `credit-service/` and `docs/credit-service.md`.
+  - `service/LotExpiryService`: moves what remains in each lot past its
+    expiry to the common pool, one transaction per account (the
+    owner's account lock, their lots read again, then the pool), with
+    one `EXPIRY` history row per account.
+  - `service/RedistributionService`: in one transaction, locks every
+    account in ascending user ID order and then the pool, gives each
+    `floor(pool / accounts)` and the remainder 1 each to accounts
+    chosen at random, each share a new lot that expires the
+    earned-credit lifetime after it is received, with a
+    `REDISTRIBUTION` history row; records the month in
+    `redistribution_run`, checked before and after the locks.
+  - `service/ExpiryAndRedistributionScheduler`: expiry daily at 00:00
+    and redistribution on the 1st at 00:10, Asia/Singapore; a missed
+    month caught up at startup, after an expiry run; one account's
+    failed expiry logged
+    without stopping the others. Off in the `test` profile
+    (`credit.scheduler.enabled`).
+  - Repositories: the expired lots and their owners, the pool's row
+    lock, every account locked by `user_id collate "C"`, and the run
+    row inserted rather than merged.
+  - Tests: `ExpiryAndRedistributionTest` (9, real Postgres, committing,
+    with the design doc's invariants checked after each; one covers a
+    pool smaller than the number of accounts, where a share of 0 writes
+    no lot or history row) and
+    `ExpiryAndRedistributionSchedulerTest` (7, mocked, fixed clock).
+  - Design doc: D12, the scheduler's component row and two failure
+    table rows record the team's decisions. The service's README and
+    AGENTS.md, and the README's AI Use Summary, updated.
+- **Prompt(s):** Implement issue #173 on
+  `feat/credit-expiry-redistribution`.
+- **Author review:** The behaviour is the team's, from
+  `docs/credit-service.md` (D2, D4, D12, "How lots are spent, returned
+  and expired") and issue #173. Where the doc was silent, the team
+  decided: both runs in Singapore time (expiry 00:00 daily,
+  redistribution 00:10 on the 1st, the Singapore month as the period),
+  one transaction per account for expiry, a month with an empty pool
+  still recorded, and a missed redistribution caught up at startup.
+  On review, a further team decision: the catch-up runs an expiry
+  first, the order of a normal night, so credits that expired while the
+  service was down are in that month's share (the tool's first draft
+  ran the redistribution alone). The tool also made the catch-up never
+  throw, since a failing ready-event listener stops the service from
+  starting. One `EXPIRY` row per account per run (the doc's "one row per 
+  affected account per operation"); a lot past its expiry when its `expires_at` 
+  is before the run's instant; the remainder given to distinct accounts 
+  by a shuffle; `distributed` in `redistribution_run` counting every 
+  credit taken from the pool, the remainder included; the "C" collation 
+  on the all-accounts lock so its order matches the transfer's Java
+  string order.
+  Pending pull request review.
 
 ## 2026-10-16 — Leong Wei Zhi (CI pipeline + Claude PR review)
 - **Tool:** Claude Code (Fable 5)
@@ -3970,6 +4121,31 @@ Entry template:
 
 ## 2026-10-12 — Leong Wei Zhi
 - **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (issue #178, server half — PR #183)
+- **Prompt(s):** Same issue #178 session as the web half above, for the
+  server side: which revocation mechanism (the author chose option A of
+  the issue's table — a per-user epoch stamp in Redis, enforced at the
+  gateway — via neutral options Q&A, accepting its documented trade-off
+  that one demotion signs the target out on every device) and how wide
+  to scope it (issue scope only: the two paths the issue names, no
+  further stamp points).
+- **Scope:** `user-service` — `AdminService` takes `TokenDenylist` and
+  calls `revokeUserSessions(targetId)` after the save in `changeRole`
+  (any actual change, promotion and self-demotion included; the
+  same-role early return and every refusal path stamp nothing) and in
+  `removeUser`, best-effort at the same call-site pattern as
+  `PasswordResetService.confirmReset`. `AdminServiceTest` pins the
+  eviction on each success path and its absence on the no-op and the
+  refusals; `AdminControllerTest` pins it end-to-end with
+  `TokenDenylist` as a `@MockitoBean` (no Redis in that test stack,
+  like `LogoutTest`). `docs/gateway.md` — decision G12 and its
+  request-flow note; **no gateway code changed**, since G11's
+  `iat`-versus-stamp check already covers the new stamp writer.
+- **Author review:** user-service suite via Testcontainers, and the
+  diff reviewed via PR #183.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
 - **Mode:** implementation + documentation (issue #67, remaining scope)
 - **Prompt(s):** Asked to plan and resolve issue #67. Exploration found
   the server half already merged (PR #74); the remaining scope was
@@ -4259,3 +4435,226 @@ Entry template:
   `vite build` clean; prettier clean on the touched files (the one
   warning, `src/features/user/jwt.ts`, is pre-existing on `main` and
   untouched here). The diff is reviewed via the PR.
+
+## 2026-10-16 — Leong Wei Zhi (PR #180 main sync; recorded 2026-10-17)
+- **Tool:** Claude Code (Opus 5); entry transcribed by Codex (GPT-6).
+- **Mode:** repository maintenance + debugging (issue #94, PR #180).
+- **Prompt(s):** Retrospective entry from PR #180's description and
+  commit `0ba4212` file headers: sync the frontend half of #94 with
+  main, including the merged #182 session handling and #185 provider.
+  The original prompt text is not available in this session.
+- **Scope:** Reconciled the route table so /forgot-password stays
+  inside AppShell and /account-recovery stays inside ProtectedRoute's
+  requiresSession branch under NotificationProvider. Preserved both
+  sides of header conflicts in AuthProvider, login, and http. Both
+  reset calls now pass auth: false; a successful reset clears the
+  local session with endSession(), without calling the logout endpoint.
+  Added password-reset regression tests and HTTP cases for empty/body
+  202 responses and the auth opt-out. The original #94 screen generation
+  is covered by the 2026-10-11 entries above (Claude Code, Fable 5).
+- **Author review:** PR #180 reports 145 web tests, lint, TypeScript,
+  build, touched-file formatting and browser reset/recovery walkthroughs
+  passing at that commit. These historical results are transcribed,
+  not newly executed by Codex. This retrospective disclosure is pending
+  Leong Wei Zhi's review via PR #180.
+
+## 2026-10-16 — Leong Wei Zhi (PR #183 main sync)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** repository maintenance (PR #183 main sync) + docs
+- **Prompt(s):** Asked to bring PR #183 up to date with the merged
+  PR #179, its base. The scope of that update was put to the author as
+  neutral options: fix the claims #179 left stale and add the owed
+  disclosures (chosen), conflicts only, or conflicts plus claims
+  without the disclosures; likewise retargeting to `main` and marking
+  the PR ready (chosen), and running the full user-service suite
+  (chosen). No design decision was made by AI.
+- **Scope:** The branch was rebased onto `main` (its base branch
+  `feat/account-recovery-password-reset` merged as #179, and #182 and
+  #185 landed since; #180 was still open at that point). Three files
+  conflicted and all three were resolved by keeping both sides:
+  `docs/gateway.md`'s header log (this branch's G12 line placed in date
+  order among #185's two entries), `AdminService`'s header log (#179's
+  approval follow-up entry, then this branch's), and
+  `AdminServiceTest`'s header plus the remove-another-admin case, where
+  #179's demotion assertion and this branch's eviction `verify` now both
+  stand.
+  One semantic change beyond the seams: #179's approval follow-up had
+  written, in `AdminService.removeUser`'s comment and in
+  `user-service/README.md`, that a token minted before a removal keeps
+  ADMIN until its `exp` — true of `main`, false once this branch's
+  stamp lands. Both copies now describe the revocation, with the
+  demotion to USER kept and re-framed as the fallback for a failed
+  best-effort write (G9) against a gateway failing open (G6).
+  `user-service/README.md` also gains the stamp in its admin-endpoint
+  list and in the token section's account of what this service writes
+  to the denylist, and `docs/gateway.md` records the two facts #185's
+  D23 content creates for G12: notification-service's CONNECT lookup
+  reads the same stamp, so a new STOMP session is refused too, while
+  an already-open session still is not (that accepted known limit now
+  names a demote/remove among its triggers).
+- **Author review:** user-service suite via Testcontainers after the
+  rebase; the resolution and the doc corrections reviewed via PR #183.
+
+## 2026-10-17 — Leong Wei Zhi (PR #180 review)
+- **Tool:** Codex (GPT-6).
+- **Mode:** debug + refactor + documentation (issue #94).
+- **Prompt(s):** "Address pr comments on
+  https://github.com/AY2627S1-CS3219-P23/foc/pull/180".
+- **Scope:** Applied @Sinnez1's recovery hold to all routes through the
+  shared AuthProvider; ProtectedRoute keeps the sign-in gate. Parsed
+  202 response text so only an empty body resolves undefined and
+  malformed JSON rejects. Moved the recovery request to profileApi
+  and removed its duplicate imperative home navigation. Reused the
+  existing CodeInput/emptyCode for six-digit reset entry and required
+  the email field. Added public-route and Home-link recovery regression
+  cases, malformed-202 cases using real Responses, and code-entry
+  integration coverage; updated existing response mocks and code-box
+  selectors. Added the retrospective main-sync entry above and the
+  README summary for PR #180. The reset API supplies no timing data,
+  so no cooldown/expiry values were invented or API changes made.
+  Unconditional local sign-out after reset retains the existing PR
+  behavior; the reviewer left changing it optional.
+- **Author review:** 157/157 frontend tests pass; lint, TypeScript and
+  production build pass. Prettier is clean on every touched source/test
+  file, and git diff --check passes. The nine new public-route/Home-link
+  and malformed-202 regression cases fail against the previous source
+  implementation. Recovery tests were rerun after correcting a test
+  query option caught by TypeScript. No live browser walkthrough was
+  performed in this review round. Leong Wei Zhi to review via PR #180.
+
+## 2026-10-17 — Leong Wei Zhi (PR #183 review)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debug + docs (issue #178, PR #183)
+- **Prompt(s):** "address mr comments on <PR #183> and rebase from
+  origin/main also before pushing". The review's one code finding names
+  two mechanisms, so both open choices were put to the author as
+  neutral options: the mechanism (chosen: the `afterCommit` sketch
+  credit-service already uses, over a
+  `@TransactionalEventListener(AFTER_COMMIT)` event) and the scope
+  (chosen: fix `PasswordResetService.confirmReset` too, which carries
+  the identical pre-commit write from the merged #179, rather than only
+  the two sites the review names). No design decision was made by AI;
+  the options were factual.
+- **Scope:** @Sinnez1's two non-blocking comments.
+  - The reviewer reproduced the revocation stamp being written inside
+    the caller's `@Transactional`, where the committed role is still
+    `ADMIN`, so a login in the gap between the Redis write and the
+    commit could mint an ADMIN token with an `iat` the stamp accepts.
+    New `foc.user.service.AfterCommit` runs the write on
+    `TransactionSynchronization.afterCommit`, or inline when no
+    transaction is open; `AdminService.changeRole`, `removeUser` and
+    `PasswordResetService.confirmReset` all stamp through it.
+    `TokenDenylist`'s javadoc states the requirement, and
+    `user-service/README.md` records it.
+  - The 2026-10-16 PR #183 main-sync entry claimed #180 had landed; it
+    was still open then, so the entry now says so. (#180 has merged
+    since — this round's rebase is onto `main` at `668b538`, which
+    includes it.)
+  - Also in this round: the branch rebased onto `main` for #180's
+    merge. `README.md` and this log conflicted and were resolved by
+    keeping both sides, with this branch's #178 server-half summary
+    paragraph kept next to the #182 web-half paragraph it refers back
+    to and main's #180 paragraph left after it.
+- **Author review:** user-service **362/362** via Testcontainers (the
+  two new `AdminControllerTest` cases). All three new ordering
+  assertions were confirmed to fail against the pre-fix code: each
+  reads the target's row over a second JDBC connection — committed
+  state only — at the moment the stamp is written, and before the fix
+  saw the old role, a null `deleted_at` and the old password hash. The
+  manual gateway walkthrough the PR description owes is still owed.
+  Leong Wei Zhi to review via PR #183.
+
+## 2026-10-17 — Leong Wei Zhi (PR #183 Codex review)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** docs + analysis (issue #178, PR #183)
+- **Prompt(s):** "address latest pr comments", then — on the second
+  finding — "is this even valid?" and, after the analysis below,
+  "revert changes and reply to codex comments". The author's call on
+  both findings; no design decision was made by AI.
+- **Scope:** Codex's two P1 findings on `fb0f270`.
+  - **Accepted:** `AfterCommit.run` had no `// AI-generated (edited by
+    <name>)` block marker (AGENTS.md disclosure duty 2). Added in the
+    form the repo already uses, matching
+    `CreditOperationsService.afterCommit`, the sketch it follows.
+  - **Declined:** the claim that an older post-commit cutoff can
+    overwrite a newer one. Codex's mechanism does not hold — the cutoff
+    is read from the clock as the first statement of
+    `revokeUserSessions`, not captured at commit time and carried into
+    the callback, so a delayed callback writes a *later* second, never
+    the stale one in Codex's example. The genuine residue is narrower
+    than stated: the writes are indeed no longer ordered by the row
+    lock (confirmed in `AbstractPlatformTransactionManager.processCommit`,
+    spring-tx 7.0.9 — `doCommit` precedes `triggerAfterCommit`), but an
+    out-of-order *value* needs a ≥1 s stall inside the few instructions
+    between the clock read and the Redis command, with the other
+    request completing its whole transaction and stamp in that stall,
+    plus a login in between to mint a token worth resurrecting. A
+    monotonic Lua cutoff was drafted and then reverted on the author's
+    call. Noted for whoever revisits it: the case that would actually
+    bite is **clock skew between user-service replicas** (each stamps
+    from its own `Clock.systemUTC()`), which needs no stall at all —
+    latent today because compose runs one instance, and already a
+    property of G11's `iat`-versus-stamp comparison rather than
+    something this PR introduced.
+- **Author review:** comment-only change to `AfterCommit`; the
+  user-service suite is unchanged at 362/362 from the previous entry.
+  Both Codex threads answered on the PR. Leong Wei Zhi to review via
+  PR #183.
+
+## 2026-10-17T11:17:00+08:00 — Leong Wei Zhi (issue #98)
+- **Tool:** Codex (GPT-6.1 Sol).
+- **Mode:** debugging + implementation + documentation.
+- **Prompt(s):** "can i close https://github.com/AY2627S1-CS3219-P23/foc/issues/98";
+  "what is meant by auto-skip docker?"; "create a plan to resolve this issue";
+  "Implement the plan."; "create the pr";
+  "wait are you sure you are opus 5? you are gpt 6.1 sol".
+- **Scope:** Implemented the approved automatic Docker-unavailable skip plan
+  in the shared user-service PostgreSQL test base: inherited
+  `@Testcontainers(disabledWithoutDocker = true)` and a Docker availability
+  guard around static startup. Preserved the singleton container and
+  `@ServiceConnection`, without adding `@Container` or catching startup
+  failures. Updated the service test instructions and consolidated README
+  AI Use Summary. No production code, API, schema, dependency, or CI changes.
+- **Verification:** Full user-service suite with Docker: 360 tests, zero
+  failures/errors/skips, one PostgreSQL container start. With Docker socket
+  access denied by the sandbox: 360 tests discovered, 157 unit tests executed,
+  203 integration tests skipped, zero failures/errors. Surefire reports
+  confirmed that exactly the 17 PostgreSQL test subclasses were skipped.
+  The unmodified base failed in the same Docker-inaccessible environment
+  with `ExceptionInInitializerError` from unconditional container startup.
+  Both successful runs used `./mvnw -o test` with Mockito's existing 5.23.0
+  jar passed as `-javaagent` through `-DargLine` to avoid this machine's
+  Java 26 self-attachment restriction; no build configuration was changed.
+  `git diff --check` passed.
+- **Attribution correction:** Model label refined from GPT-6 to GPT-6.1 Sol
+  using the model identification supplied by Leong Wei Zhi. Historical
+  Claude/Opus attributions from earlier work remain unchanged.
+- **Author review:** Leong Wei Zhi to review via pull request.
+
+## 2026-10-17T11:33:22+08:00 — Leong Wei Zhi (PR #197 review, issue #98)
+- **Tool:** Codex (GPT-6.1 Sol).
+- **Mode:** debugging + implementation + documentation.
+- **Prompt(s):** "address latest pr comments".
+- **Scope:** Addressed both inline reviews about CI succeeding when Docker
+  is unavailable. Added a user-service-only CI step after Maven verify to
+  reject any skipped Surefire suites and missing reports. Local automatic
+  skipping remains unchanged. Updated service instructions, workflow file
+  attribution, and the consolidated AI Use Summary.
+- **Verification:** Parsed the workflow YAML and executed its extracted
+  shell step against actual Surefire reports. The previous Docker-available
+  full run's reports (360 passed, zero skipped) passed the new check. A
+  fresh sandboxed Docker-unavailable run passed locally (157 tests executed,
+  203 skipped), then failed the new CI check with all 17 skipped integration
+  classes named in the error. Missing reports also failed the check.
+  The Maven rerun used the same existing Mockito jar as a Java agent for
+  this machine's Java 26 restriction. No Java code changed in this review
+  round; the Docker-available suite was not rerun. `git diff --check` passed.
+- **Author review:** Leong Wei Zhi to review via PR #197.
+
+## 2026-10-17 — Leong Wei Zhi (PR #197 comment cleanup)
+- **Tool:** Codex (GPT-6.1 Sol).
+- **Prompt(s):** "remove // AI-generated (edited by Codex; human review pending)."
+- **Scope:** Removed the specified inline Java comment at the user's
+  explicit request. File-header attribution remains accurate.
+- **Verification:** Comment-only change; `git diff --check` passed.
+- **Author review:** Leong Wei Zhi to review via PR #197.

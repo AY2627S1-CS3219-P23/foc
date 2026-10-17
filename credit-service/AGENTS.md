@@ -31,6 +31,11 @@
   the listener invariant updated for the team's decisions on a refused
   retry copy, and the exhaustive outcome switch. Re-review: "never
   dropped" narrowed to a missing dead-letter queue.
+  2026-10-16, Claude Code (Opus 5.5), issue #173: the package map,
+  status and invariants updated for the expiry and redistribution
+  scheduler.
+  2026-10-16, Claude Code (Opus 5.5), PR #193 review (Leong Wei Zhi):
+  the single-routine invariant and EarnedCreditLifetime in the map.
   2026-10-17, Claude Code (Opus 5.5), issue #174: the admin routes in
   the package map and the read-only invariant.
   Author review: Ryan Ang, pending pull request review.
@@ -54,11 +59,8 @@ IDs (D1–D12) when touching related code.
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
 | `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
-| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, and `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API, and `PoolQueryService`, the admin routes' reads |
+| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API, `PoolQueryService`, the admin routes' reads, and `ExpiryAndRedistributionScheduler` with `LotExpiryService` and `RedistributionService` (D12), and `EarnedCreditLifetime`, the earned-credit expiry both the transfer and the redistribution use (D4) |
 | `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), `RequestEventsListener` (settles each request event on the handler's outcome: ack, dead-letter, or a confirmed republish to the retry queue), and `DomainEventMessageConverter`, a copy of notification-service's |
-
-No expiry and redistribution scheduler yet (the outbox publisher is
-the only scheduled job).
 
 ## Invariants — do not break
 
@@ -142,6 +144,29 @@ the only scheduled job).
   discards a dead-letter it cannot route). The three dead-letters the listener decides are logged at
   ERROR. The outcome `switch` is an expression so that a new `Outcome`
   does not compile until it is settled: keep it one.
+- **The expiry and redistribution runs keep the D2 lock order.** Expiry
+  is one transaction per account: the owner's account, then their lots
+  read again under that lock, then the pool. Redistribution locks every
+  account with `CreditAccountRepository.findAllForUpdate`, then the
+  pool. That query orders by `user_id collate "C"` so it matches the
+  Java `String.compareTo` order the transfer locks two accounts in;
+  do not drop the collation.
+- **A month is redistributed once.** `RedistributionService` checks
+  `redistribution_run` before and after taking its locks, and inserts
+  the row (`RedistributionRunRepository.insert`, never `save`), so the
+  primary key stops a run that overlaps. An empty pool is still
+  recorded (team decision).
+- **One routine runs both jobs** (`ExpiryAndRedistributionScheduler.run`,
+  D12): daily at 00:00 and at startup, the sweep, then the month's
+  redistribution if it is missing. It is also the retry for a failed
+  run, so do not add a second schedule for either job, and keep it from
+  throwing: an exception at startup stops the service starting.
+- **The scheduler is off in the `test` profile**
+  (`credit.scheduler.enabled: false`), so a test context does not run
+  the startup routine; tests call the two services with their own
+  instants and periods. `ExpiryAndRedistributionTest` commits and its
+  redistributions share the pool out to every account in the test
+  database, so its assertions are about changes, not totals.
 - **What each operation answers is specified** in the design doc ("What
   each operation answers"); the handler depends on it.
 - **The REST API only reads, and only the caller's own data.** The user
