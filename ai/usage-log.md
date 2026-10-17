@@ -33,6 +33,40 @@ Entry template:
 ```
 
 ---
+## 2026-10-17 — Ryan Ang (PR #210 review: upcoming credit expiries)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + tests + docs
+- **Scope:** Leong Wei Zhi's review of PR #210 (issue #196), and a merge
+  of `main` (#202's order-service code) whose only conflict, this log,
+  was resolved by keeping both sides.
+  - `web/src/features/credit/CreditHistoryPage.tsx` and `api.ts`: the
+    expiries are read on page load and on every balance poll, keyed on
+    the poll's `version` instead of `available`/`reserved`. The test
+    that pinned the old trigger is replaced by one with the reviewer's
+    case: the same balance, a different lot set, and the line and
+    notice update on the next poll.
+  - `CreditControllerTest`: a first expiries read that commits outside
+    the test transaction (`NOT_SUPPORTED`), like the balance and
+    history routes; "two first-read cases" made three there and in
+    `credit-service/AGENTS.md`.
+  - `docs/credit-service.md`: the contract's cadence sentence for
+    `GET /credits/me/expiries`, and the "No window" bullet's upper
+    bound (hundreds of lots for a busy courier, about 450 at five
+    errands a day) in place of the earlier understatement.
+- **Prompt(s):** Asked to go through the review's three findings. For
+  the blocker (the expiry line going stale when two balance changes
+  cancel out between polls), the tool laid out four options neutrally
+  (re-read daily, on a new history row, on every poll, or a marker on
+  the balance route), and the team chose re-reading on every poll,
+  reversing its earlier "not on every poll" decision. The two
+  non-blocking items were applied as the reviewer described: add the
+  first-read test, and correct the doc's stated list size rather than
+  add a limit.
+- **Author review:** `./mvnw test` in `credit-service` with Docker
+  (259/259) and the `web` suite (199/199) with `tsc -b`, eslint and
+  Prettier; the new web test fails against the old trigger. Pending
+  pull request review.
+
 ## 2026-10-17 — Ryan Ang (upcoming credit expiries: route and credits page, issue #196)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate + tests + docs
