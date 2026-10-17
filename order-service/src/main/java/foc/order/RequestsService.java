@@ -20,6 +20,8 @@
  * Same day: cancel and expire write request.cancelled and
  * request.expired, so the Credit Service releases the reward to the
  * requester (the author's decision). DROP still publishes nothing.
+ * 2026-10-18: accept refuses a courier who is the request's own
+ * requester, answered 409 (the author's decision).
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -79,9 +81,15 @@ public class RequestsService {
         return request;
     }
 
+    // A requester cannot be the courier of their own request. Thrown as
+    // IllegalStateException, so the controller answers 409 like any
+    // refused transition; the rollback undoes the status change.
     @Transactional
     public Requests accept(Long requestId, Long courierId) {
         Requests request = transition(requestId, OrderEvents.ACCEPT);
+        if (request.getRequesterId().equals(courierId)) {
+            throw new IllegalStateException("A requester cannot accept their own request");
+        }
         request.setCourierId(courierId);
         request.setAcceptedAt(Instant.now());
         return request;
