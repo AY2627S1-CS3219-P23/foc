@@ -15,6 +15,9 @@
   decision via options Q&A).
   2026-10-14, Claude Code (Fable 5), PR #185 review (@Sinnez1): the
   Redis row names the per-user reset cutoff the check also reads.
+  2026-10-17, Claude Code (Fable 5), issue #137: the retention rows and
+  Status line note the processed_events sweep (author decision via
+  options Q&A: same window, no new env var).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -59,7 +62,7 @@ stays `notification-service:8080`.
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / 6379 | Platform Redis for the denylist reads at STOMP `CONNECT` (D23) — a revoked jti, or a token issued before the account's password-reset cutoff, rejects the CONNECT; unreachable Redis fails open |
 | `NOTIFICATION_RETRY_TTL_MS` | 10 000 | Retry backoff (baked into the retry queue at declaration) |
 | `NOTIFICATION_RETRY_MAX_ATTEMPTS` | 3 | Total delivery attempts before dead-lettering |
-| `NOTIF_RETENTION_DAYS` | 30 | Notification retention window |
+| `NOTIF_RETENTION_DAYS` | 30 | Retention window for notifications and the `processed_events` dedupe table (#137) |
 | `NOTIF_PURGE_CRON` | daily 03:00 | Purge job schedule |
 
 Failed events land in the dead-letter queue — inspect and re-publish
@@ -89,7 +92,8 @@ are stranded).
 ## Status
 
 Event pipeline, retry/dead-lettering, STOMP push gateway, and the
-retention purge job are live. The REST API (list notifications, mark
+retention purge job (notifications + `processed_events`, #137) are
+live. The REST API (list notifications, mark
 read/unread) is pending
 [issue #66](https://github.com/AY2627S1-CS3219-P23/foc/issues/66); the
 frontend STOMP client waits on the SPA.

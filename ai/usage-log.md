@@ -33,6 +33,27 @@ Entry template:
 ```
 
 ---
+## 2026-10-17 — Leong Wei Zhi (issue #137: purge processed_events past retention)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** notification-service — `ProcessedEventRepository`
+  (`deleteByProcessedAtBefore`, bulk `@Modifying @Query` mirroring the
+  PR #81 notification purge pattern), `ProcessedEvent`
+  (`idx_processed_events_processed_at`), `RetentionPurgeScheduler`
+  (same run/cutoff also sweeps the dedupe table, one combined log
+  line), tests (`ProcessedEventRepositoryTest` new,
+  `RetentionPurgeSchedulerTest` extended), and the doc set
+  (design doc D4/D9/components/trace/config, service README, AGENTS.md).
+- **Prompt(s):** Asked to plan and resolve issue #137. Two
+  implementation details were author-decided via neutral options Q&A:
+  purge cutoff reuses the 30-day `NOTIF_RETENTION_DAYS` window (vs 2×
+  retention or a separate property), and `processed_at` gets an index
+  (vs matching the unindexed notifications purge).
+- **Author review:** `./mvnw clean test` — the new tests pass; the two
+  `ApplicationContext` restart errors (AMQP listener bean under local
+  Java 26) reproduce identically on unmodified main. Pending pull
+  request review.
+
 ## 2026-10-16 — Leong Wei Zhi (CI pipeline + Claude PR review)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate
