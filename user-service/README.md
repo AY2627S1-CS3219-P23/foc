@@ -71,6 +71,7 @@
   same-second exceptions. Decisions by Leong Wei Zhi via options Q&A.
   2026-10-17, Codex (GPT-6.1 Sol), issue #98: documented automatic skips
   for Docker-dependent tests and the integration coverage requirement.
+  PR #197 review: documented CI's rejection of skipped test suites.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -499,6 +500,8 @@ With Docker running, Testcontainers starts one shared PostgreSQL container
 and the full suite runs. When Docker is unavailable, PostgreSQL-dependent
 integration tests are automatically reported as skipped; unit tests still
 run. A successful run without Docker does not verify integration coverage.
-Run the full suite with Docker available before merging. Container startup,
-migration, and application failures with Docker available still fail the
-build.
+CI requires every user-service test to run and fails if Surefire reports
+any skipped tests or produces no reports, so Docker must be available on
+the runner. Run the full suite with Docker available before merging.
+Container startup, migration, and application failures with Docker
+available still fail the build.

@@ -11,6 +11,7 @@
   Author review: Leong Wei Zhi to review via PR #180.
   2026-10-17, Codex (GPT-6.1 Sol): recorded implementation and verification
   of the Docker-unavailable test skips for issue #98.
+  PR #197 review: recorded the CI skipped-test check and its verification.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -4268,3 +4269,23 @@ Entry template:
   using the model identification supplied by Leong Wei Zhi. Historical
   Claude/Opus attributions from earlier work remain unchanged.
 - **Author review:** Leong Wei Zhi to review via pull request.
+
+## 2026-10-17T11:33:22+08:00 — Leong Wei Zhi (PR #197 review, issue #98)
+- **Tool:** Codex (GPT-6.1 Sol).
+- **Mode:** debugging + implementation + documentation.
+- **Prompt(s):** "address latest pr comments".
+- **Scope:** Addressed both inline reviews about CI succeeding when Docker
+  is unavailable. Added a user-service-only CI step after Maven verify to
+  reject any skipped Surefire suites and missing reports. Local automatic
+  skipping remains unchanged. Updated service instructions, workflow file
+  attribution, and the consolidated AI Use Summary.
+- **Verification:** Parsed the workflow YAML and executed its extracted
+  shell step against actual Surefire reports. The previous Docker-available
+  full run's reports (360 passed, zero skipped) passed the new check. A
+  fresh sandboxed Docker-unavailable run passed locally (157 tests executed,
+  203 skipped), then failed the new CI check with all 17 skipped integration
+  classes named in the error. Missing reports also failed the check.
+  The Maven rerun used the same existing Mockito jar as a Java agent for
+  this machine's Java 26 restriction. No Java code changed in this review
+  round; the Docker-available suite was not rerun. `git diff --check` passed.
+- **Author review:** Leong Wei Zhi to review via PR #197.
