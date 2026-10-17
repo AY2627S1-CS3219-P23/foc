@@ -7,9 +7,10 @@
 // result is stamped with the query it answers
 // (derive-by-key, as NotificationProvider does with its token), so a
 // stale response never lands on a newer query.
-// 2026-10-17, issue #196: GET /credits/me/expiries, read on load and when
-// the balance changes (team decision: not on every poll), for the
-// balance card's line and the notice when credits expire within 7 days.
+// 2026-10-17, issue #196: GET /credits/me/expiries, for the balance
+// card's line and the notice when credits expire within 7 days. PR #210
+// review: read on load and on every balance poll (team decision), since
+// a balance-change trigger missed changes that cancel out.
 // Author review: Ryan Ang, pending pull request review.
 
 import { useEffect, useState } from 'react'
@@ -51,16 +52,14 @@ export function CreditHistoryPage() {
   // expiry line is a hint, so a failure shows nothing rather than an error
   const [expiries, setExpiries] = useState<CreditExpiry[] | null>(null)
 
-  // expiry dates change only when credits are earned, spent, released or
-  // swept, and each of those changes the balance; the poll's version
-  // changes on every poll, so it is not the trigger
-  const balanceKey =
-    state?.status === 'ready'
-      ? `${state.balance.available}/${state.balance.reserved}`
-      : null
+  // read on load and again on every poll (version goes up with each).
+  // Keying on the balance missed changes that cancel out between polls,
+  // such as the midnight sweep followed by a same-sized redistribution
+  // share (PR #210 review, team decision).
+  const expiriesKey = state?.status === 'ready' ? version : null
 
   useEffect(() => {
-    if (balanceKey === null) return
+    if (expiriesKey === null) return
     let cancelled = false
     creditApi.getExpiries().then(
       (data) => {
@@ -71,7 +70,7 @@ export function CreditHistoryPage() {
     return () => {
       cancelled = true
     }
-  }, [balanceKey])
+  }, [expiriesKey])
 
   useEffect(() => {
     if (filters === applied) return

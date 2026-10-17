@@ -7,6 +7,8 @@
  * row of "Errors", and both instant formats.
  * 2026-10-17, Claude Code (Opus 5.5), issue #196: the expiries route,
  * case by case of its contract rows.
+ * PR #210 review (Leong Wei Zhi): a first expiries read that commits
+ * outside the test transaction, like the balance and history ones.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.controller;
@@ -56,7 +58,7 @@ import io.jsonwebtoken.security.Keys;
 //
 // That would also hide a read that cannot write outside a test: a
 // read-only transaction of its own would join this one and pass. So the
-// two first-read cases marked NOT_SUPPORTED run with no test
+// three first-read cases marked NOT_SUPPORTED run with no test
 // transaction and commit, as a real first request does. What they
 // commit is a provisioned account, which keeps every invariant.
 //
@@ -139,6 +141,16 @@ class CreditControllerTest extends PostgresTestContainer {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.content[*].type", contains("PROVISION")))
             .andExpect(jsonPath("$.totalElements").value(1));
+
+        assertThat(accounts.existsById(caller)).isTrue();
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void aFirstExpiriesReadCommitsTheAccountOutsideAnyTestTransaction() throws Exception {
+        expiries()
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items", empty()));
 
         assertThat(accounts.existsById(caller)).isTrue();
     }

@@ -81,6 +81,10 @@
   /credits/me/expiries in the Read API contract (its route, response
   shape, order, which credits count, and how often the web app reads
   it), and the REST API component row.
+  2026-10-17, PR #210 review (Leong Wei Zhi), team decision transcribed:
+  the web app reads the expiries on every balance poll, since reading
+  them only on a balance change missed changes that cancel out; and the
+  "No window" bullet states the real upper bound on the list.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -419,9 +423,10 @@ For the web page:
 
 The caller's credits that will expire, one item per lot still holding
 some, soonest first (F6.1, D4). The web app reads it when the credits
-page opens and when the balance changes, not on the balance poll:
-expiry dates only change when credits are earned, spent, released or
-moved by the expiry run.
+page opens and again on every balance poll. Reading it only when the
+balance changed would miss changes that cancel out between two polls,
+such as the midnight expiry run followed by a redistribution share of
+the same size.
 
 ```json
 {
@@ -445,9 +450,11 @@ moved by the expiry run.
   and credits held by a reservation, which are in no lot's `remaining`
   until released and cannot expire while held.
 - **No window:** every lot still holding credits is listed. A user has
-  at most one lot per transfer or redistribution share in the last
-  three months. The web app chooses what to highlight (the next 7
-  days); a window, if ever needed, would be a query parameter.
+  one lot per transfer received or redistribution share in the last
+  three months, so a busy courier can hold hundreds: about 450 at five
+  completed errands a day. The web app chooses what to highlight (the
+  next 7 days); a window or limit, if ever needed, would be a query
+  parameter.
 - **Past dates:** an item's `expiresAt` may already have passed while
   its lot waits for that night's expiry run, for example after a
   release returned credits to it. The web app shows it as "expires

@@ -13,8 +13,8 @@
 // its past-distributions table, newest first, paged, and empty.
 // 2026-10-17, issue #196: upcoming expiries — grouping by Singapore
 // date, "tonight" for anything already due, the 7-day notice, the
-// Available card's line, and the list read on load and on a balance
-// change rather than on every poll.
+// Available card's line, and the list read on load and on every poll
+// (PR #210 review: a balance-change trigger missed offsetting changes).
 // Author review: Ryan Ang, pending pull request review.
 
 import { act, render, screen, waitFor, within } from '@testing-library/react'
@@ -837,19 +837,27 @@ describe('balance poll', () => {
     await waitFor(() => expect(creditApi.getHistory).toHaveBeenCalledTimes(3))
   })
 
-  it('reads the expiries again only when the balance changes', async () => {
+  it('reads the expiries again on every poll, even with the balance unchanged', async () => {
+    // 3 credits due tonight, then swept and handed back as the month's
+    // share between two polls: the same balance, different lots
+    vi.mocked(creditApi.getExpiries).mockResolvedValueOnce({
+      items: [{ amount: 3, expiresAt: new Date().toISOString() }],
+    })
     renderAt('/credits')
-    await screen.findByRole('table')
-    await waitFor(() => expect(creditApi.getExpiries).toHaveBeenCalledTimes(1))
+    expect(
+      await screen.findByText('3 credits expire tonight'),
+    ).toBeInTheDocument()
 
-    // an unchanged balance: the history reloads, the expiries do not
+    vi.mocked(creditApi.getExpiries).mockResolvedValue({ items: [] })
     await act(async () => vi.advanceTimersByTime(BALANCE_POLL_MS))
-    await waitFor(() => expect(creditApi.getHistory).toHaveBeenCalledTimes(2))
-    expect(creditApi.getExpiries).toHaveBeenCalledTimes(1)
 
-    balance = { available: 45, reserved: 8, total: 53 }
-    await act(async () => vi.advanceTimersByTime(BALANCE_POLL_MS))
     await waitFor(() => expect(creditApi.getExpiries).toHaveBeenCalledTimes(2))
+    await waitFor(() =>
+      expect(
+        screen.queryByText('3 credits expire tonight'),
+      ).not.toBeInTheDocument(),
+    )
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
   it('never lets an older balance answer replace a newer one', async () => {

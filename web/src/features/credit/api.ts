@@ -37,7 +37,7 @@ export const creditApi = {
       `/credits/me/history${toQuery(query)}`,
     )
   },
-  // read on page load and when the balance changes, not on every poll
+  // read on page load and on every balance poll (PR #210 review)
   getExpiries() {
     return apiFetch<CreditExpiries>('credit', '/credits/me/expiries')
   },

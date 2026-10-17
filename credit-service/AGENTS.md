@@ -40,6 +40,8 @@
   the package map and the read-only invariant.
   2026-10-17, Claude Code (Opus 5.5), issue #196: the expiries route in
   the package map.
+  PR #210 review (Leong Wei Zhi): the CreditControllerTest invariant
+  counts three first-read cases.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -190,7 +192,7 @@ IDs (D1–D12) when touching related code.
 - **`CreditControllerTest` commits nothing but a provisioned account.**
   It is `@Transactional`: its history rows are made up for the filters
   and do not add up to a balance, so committed they would fail the
-  whole-database checks below. The two first-read cases marked
+  whole-database checks below. The three first-read cases marked
   `Propagation.NOT_SUPPORTED` are the exception: they commit, as a real
   first request does, and what they commit keeps every invariant. A new
   `NOT_SUPPORTED` case must write nothing else.
