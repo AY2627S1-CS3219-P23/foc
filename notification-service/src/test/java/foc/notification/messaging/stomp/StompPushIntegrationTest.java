@@ -19,6 +19,9 @@
  * frame must be authenticated like CONNECT, client SEND frames must
  * be rejected, and SUBSCRIBE is limited to the one destination.
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-17, Claude Code (Fable 5), issue #66: fixtures updated for
+ * the display-name fields added to the request event records (D29);
+ * no behavior change in this test.
  */
 package foc.notification.messaging.stomp;
 
@@ -161,12 +164,12 @@ class StompPushIntegrationTest {
 
 	private static RequestAccepted accepted(String eventId, String requestId, List<String> parties) {
 		return new RequestAccepted(eventId, OCCURRED_AT, "order-service", "c-push", parties,
-				requestId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "push");
+				requestId, "usr-req-1001", "maya", "usr-cou-2002", "marcus", "Techno Edge", "COM3-01-19", "push");
 	}
 
 	private static RequestCollected collected(String eventId, String requestId, List<String> parties) {
 		return new RequestCollected(eventId, OCCURRED_AT, "order-service", "c-push", parties,
-				requestId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "push");
+				requestId, "usr-req-1001", "maya", "usr-cou-2002", "marcus", "Techno Edge", "COM3-01-19", "push");
 	}
 
 	private static WebSocketStompClient rawWebSocketClient() {
@@ -234,7 +237,9 @@ class StompPushIntegrationTest {
 		assertThat(frame.payload()).isEqualTo(Map.of(
 				"requestId", "ord-push-1",
 				"requesterId", "usr-req-1001",
+				"requesterName", "maya",
 				"courierId", "usr-cou-2002",
+				"courierName", "marcus",
 				"pickupLocation", "Techno Edge",
 				"dropoffLocation", "COM3-01-19",
 				"note", "push"));

@@ -7,7 +7,9 @@
   "parties": ["usr-req-1001", "usr-cou-2002"],
   "requestId": "req-20260919-0042",
   "requesterId": "usr-req-1001",
+  "requesterName": "maya",
   "courierId": "usr-cou-2002",
+  "courierName": "marcus",
   "pickupLocation": "Techno Edge",
   "dropoffLocation": "COM3-01-19",
   "note": "Chicken rice, less chilli"
