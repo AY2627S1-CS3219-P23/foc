@@ -13,6 +13,11 @@
   of the Docker-unavailable test skips for issue #98.
   PR #197 review: recorded the CI skipped-test check and its verification.
   2026-10-17, Claude Code (Opus 5): appended the issue #203 entry below.
+  PR #209 main merge: this file was the only conflict — both sides had
+  appended fresh entries under the same `---`, so both were kept (the
+  #203 entry first, then main's three order-service ones) and the stray
+  second `---` the #203 entry had introduced was dropped; nothing
+  reworded or removed.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
