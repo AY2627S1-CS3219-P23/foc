@@ -20,11 +20,17 @@
 // Scope: tests for the Admin Dashboard page — the Users section, the
 // route guard and the nav link.
 // Reviewed by: Ryan Ang
+// 2026-10-17, Claude Code (Opus 5.5), issue #174: the credit domain's
+// Common Pool box is faked (getPoolSummary), so no case reaches a real
+// gateway, and the page case expects it beside the Users section.
+// Same day: its past-distributions call faked too.
+// Author review: Ryan Ang, pending pull request review.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
+import { creditApi } from '@/features/credit/api'
 import { adminUserApi } from '@/features/user/adminApi'
 import { USERS_PAGE_SIZE } from '@/features/user/components/UsersSection'
 import type {
@@ -167,6 +173,22 @@ beforeEach(() => {
   // /admin sits behind ProtectedRoute, which only checks that
   // AuthProvider found a stored session under "user".
   localStorage.setItem('user', JSON.stringify({ sub: 'test-admin' }))
+  // the Common Pool box above the Users section (credit domain)
+  vi.spyOn(creditApi, 'getPoolSummary').mockResolvedValue({
+    poolBalance: 0,
+    accounts: 0,
+    share: 0,
+    remainder: 0,
+    lastRun: null,
+    nextRunAt: '2026-10-31T16:00:00Z',
+  })
+  vi.spyOn(creditApi, 'getRedistributions').mockResolvedValue({
+    content: [],
+    page: 0,
+    size: 12,
+    totalElements: 0,
+    totalPages: 0,
+  })
   users = seedUsers.map((u) => ({ ...u }))
   vi.spyOn(adminUserApi, 'listUsers').mockImplementation(async (params) =>
     fakeListUsers(params),
@@ -774,11 +796,15 @@ describe('Users section', () => {
 })
 
 describe('Admin Dashboard page', () => {
-  test('shows only the Users section for now', async () => {
+  test('shows the Common Pool and Users sections', async () => {
     renderAdmin()
     await findSectionTable('Users')
 
-    expect(screen.getAllByRole('region')).toHaveLength(1)
+    expect(
+      screen
+        .getAllByRole('region')
+        .map((r) => r.getAttribute('aria-labelledby')),
+    ).toEqual(['pool-heading', 'users-heading'])
     expect(
       screen.queryByRole('region', { name: 'Suppliers' }),
     ).not.toBeInTheDocument()

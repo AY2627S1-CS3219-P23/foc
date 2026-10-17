@@ -6,6 +6,9 @@
 // 2026-10-17, Claude Code (Fable 5), issue #66: the bell is a link to
 // the Notification Center now, so its query asks for a link.
 // Reviewed by: Leong Wei Zhi (via pull request).
+// 2026-10-16, Claude Code (Opus 5.5), issue #174: the credits slot is
+// now the live badge, a link that shows a dash while logged out.
+// Author review: Ryan Ang, pending pull request review.
 
 import { render, screen } from '@testing-library/react'
 import { RouterProvider, createMemoryRouter } from 'react-router'
@@ -25,7 +28,7 @@ test('shell renders nav, brand, credits and notification slots on /', () => {
 
   expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument()
   expect(screen.getByText('FoC (Favours on Campus)')).toBeInTheDocument()
-  expect(screen.getByTitle('Credit balance (placeholder)')).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Credits: —' })).toBeInTheDocument()
   expect(
     screen.getByRole('link', { name: 'Notifications' }),
   ).toBeInTheDocument()

@@ -16,9 +16,14 @@
   for a new email address. Both were the author's call via options Q&A.
   Author review: Leong Wei Zhi to review via PR #150 — which also closes
   the pending marker the 2026-09-27 entry above was left with.
+  2026-10-17, Claude Code (Opus 5.5), issue #174: the credit-history.png
+  row records where the credits page departs from the wireframe; the
+  deviations are team decisions via options Q&A.
+  Author review: Ryan Ang, pending pull request review.
   2026-10-17, Claude Code (Fable 5), issue #66: the
   notification-center.png row records the shipped Center and its three
   beyond-the-wireframe controls (author decisions via options Q&A).
+  Author review: Leong Wei Zhi to review via PR #199.
 -->
 
 # web/ — Frontend Agent Guide
@@ -57,7 +62,7 @@ first**; they cost nothing to read, unlike Figma MCP calls:
 | `docs/wireframes/dashboard.png` | Dashboard — credit balance, requester/courier mode toggle, quick actions, active requests with status chips, recent activity |
 | `docs/wireframes/suppliers.png` | Suppliers — search and category filters, supplier detail panel, empty state (wireframe image still shows a campus-zone filter; team dropped the zone feature, see `docs/supplier-service.md` D4 — the image is directional, not a spec, per this file's own note above) |
 | `docs/wireframes/profile.png` | Profile — account details, edit flows, delete-account modal (built in PR #149; two deviations the shipped #92 endpoints force, same convention as the signup.png note above: **Change Password has no Current Password field** — `POST /users/me/password` takes `{newPassword, confirmPassword, otp}` and the code emailed to the current address *is* the authentication, so the card ends in a code step instead; and a **second code step** the wireframe doesn't draw confirms a new email address from that address before it replaces the old one, F2.1.3) |
-| `docs/wireframes/credit-history.png` | Credit history — balances and transaction list |
+| `docs/wireframes/credit-history.png` | Credit history — balances and transaction list (built for issue #174 at `/credits`, reached from the top-bar credits badge and the profile card rather than a nav item; three deviations the read API forces or the team chose, same convention as the signup.png note above: the **"Total lifetime earned" card shows Total** (available + reserved) and there is **no running-balance column**, since `GET /credits/me` and the history rows carry neither; and the **"Amount: All" dropdown is two fields, minimum and maximum**, mapping straight to the API's `minAmount`/`maxAmount`) |
 | `docs/wireframes/order-history.png` | Order history — past/current orders |
 | `docs/wireframes/create-request.png` | Create request — new errand form |
 | `docs/wireframes/my-requests.png` | My requests — requester's view of own requests |
