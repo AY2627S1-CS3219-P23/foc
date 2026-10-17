@@ -20,12 +20,17 @@
 // the Center's writes via refreshUnreadCount (author decision via
 // options Q&A: the server count is authoritative; pushes increment on
 // top of the seeded baseline). The pushed frame's body is now parsed
-// and exposed as latestNotification so the open Center can prepend the
-// row (author decision via options Q&A). Count sync failures are
+// and exposed so the open Center can prepend the row (author decision
+// via options Q&A). Count sync failures are
 // non-fatal, like the missing-URL case: a broken badge must not break
 // every page the shell renders.
+// 2026-10-17, Claude Code (Opus 5), PR #199 review (@claude, @codex):
+// a count sync no longer loses a push that raced it (newest-sync-wins
+// guard, and a push triggers its own sync), and pushes queue instead
+// of a single replaceable value, so two frames delivered in one
+// WebSocket message both reach the open Center.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet } from 'react-router'
 import { Client, ReconnectionTimeMode } from '@stomp/stompjs'
 import { serviceBaseUrls } from '@/lib/api/config'
@@ -44,6 +49,15 @@ import type { NotificationDto } from './types'
 const ERROR_RETRY_LIMIT = 3
 const ERROR_RETRY_DELAY_MS = 30_000
 
+// How many pushed frames to keep for the Center to pick up. Only frames
+// that arrive while it is open are prepended, so this just has to cover
+// a burst delivered inside one render.
+const PUSH_BUFFER = 20
+
+// one frozen empty array, so a session with no pushes keeps a stable
+// reference and the Center's render-phase pickup does not re-run
+const NO_PUSHES: NotificationDto[] = []
+
 // the count stamped with the session that produced it, so a logout or
 // re-login starts over without a reset write (the same derive-by-token
 // rule AuthProvider's meCheck uses)
@@ -61,24 +75,41 @@ export const NotificationProvider = () => {
       ? sessionCount.count
       : 0
 
-  // the last pushed frame, stamped like the count so a re-login never
-  // shows the previous session's notification
+  // The frames pushed this session, oldest first, stamped like the
+  // count so a re-login never shows the previous session's rows. A
+  // queue rather than one replaceable value: two frames delivered in a
+  // single WebSocket message run their callbacks in one task, so React
+  // batches them into one render and a single-value field would expose
+  // only the last (PR #199 review). Capped — the Center dedupes by id
+  // and anything older is already in the list it fetched.
   const [pushed, setPushed] = useState<{
     token: string
-    dto: NotificationDto
+    items: NotificationDto[]
   } | null>(null)
-  const latestNotification =
-    accessToken !== null && pushed?.token === accessToken ? pushed.dto : null
+  const pushedNotifications =
+    accessToken !== null && pushed?.token === accessToken
+      ? pushed.items
+      : NO_PUSHES
+
+  // Only the newest sync may land. Two syncs can overlap (login racing
+  // a connect, a write racing either), and a push starts one of its own,
+  // so without this an older snapshot could overwrite a newer count —
+  // including erasing a pushed increment (PR #199 review).
+  const syncSeq = useRef(0)
 
   // Seeds/re-syncs the badge from the REST count (issue #66). Replaces
   // the count wholesale: the server stores a notification before
-  // pushing it, so its count is authoritative over local increments.
-  // Failure keeps the current count — same softer-than-apiFetch stance
-  // as the missing-URL branch below.
+  // pushing it, so a snapshot taken after that store is authoritative
+  // over local increments. Failure keeps the current count — same
+  // softer-than-apiFetch stance as the missing-URL branch below.
   const refreshUnreadCount = useCallback(() => {
     if (!accessToken) return
+    const seq = ++syncSeq.current
     getUnreadCount()
       .then((body) => {
+        // a later sync started while this one was out: its snapshot is
+        // the newer one, so this answer must not land
+        if (seq !== syncSeq.current) return
         // treat a wrong-shaped body like a failed sync: a NaN badge is
         // worse than a briefly stale one
         if (typeof body?.count === 'number' && Number.isFinite(body.count)) {
@@ -156,14 +187,24 @@ export const NotificationProvider = () => {
             token: accessToken,
             count: (prev?.token === accessToken ? prev.count : 0) + 1,
           }))
+          // The local bump above is instant feedback; this sync is the
+          // authority. Its snapshot is taken after the server stored
+          // and pushed this row, so it cannot undercount it — and it
+          // supersedes any sync still in flight, which might (PR #199
+          // review).
+          refreshUnreadCount()
           // the body is the same NotificationDto the REST list returns;
           // the open Center prepends it. The count above never depends
           // on the body parsing (a malformed frame still counts).
           try {
-            setPushed({
+            const dto = JSON.parse(message.body) as NotificationDto
+            setPushed((prev) => ({
               token: accessToken,
-              dto: JSON.parse(message.body) as NotificationDto,
-            })
+              items: [
+                ...(prev?.token === accessToken ? prev.items : []),
+                dto,
+              ].slice(-PUSH_BUFFER),
+            }))
           } catch {
             console.warn('unparseable notification push frame ignored')
           }
@@ -207,10 +248,10 @@ export const NotificationProvider = () => {
     () => ({
       unreadCount,
       pushStopped,
-      latestNotification,
+      pushedNotifications,
       refreshUnreadCount,
     }),
-    [unreadCount, pushStopped, latestNotification, refreshUnreadCount],
+    [unreadCount, pushStopped, pushedNotifications, refreshUnreadCount],
   )
 
   return (

@@ -13,6 +13,10 @@
 // pushed notification body is exposed so the open Center can prepend
 // it live (author decision via options Q&A).
 // Reviewed by: Leong Wei Zhi (via pull request).
+// 2026-10-17, Claude Code (Opus 5), PR #199 review (@codex): the single
+// latestNotification became a queue — two frames delivered in one
+// WebSocket message batch into a single render, and only the last would
+// have survived a replaceable field.
 
 import { createContext, useContext } from 'react'
 import type { NotificationDto } from './types'
@@ -28,9 +32,12 @@ export interface NotificationsData {
   // must not present it as live. Only a re-login restores push — the
   // SPA has no token refresh (PR #185 re-review)
   pushStopped: boolean
-  // the most recent notification pushed over STOMP this session (null
-  // until one arrives): the open Notification Center prepends it
-  latestNotification: NotificationDto | null
+  // the notifications pushed over STOMP this session, oldest first and
+  // capped: the open Notification Center prepends the ones that arrive
+  // while it is mounted. A queue, not just the newest — a burst
+  // delivered inside one render must not lose all but its last frame
+  // (PR #199 review). The reference only changes when a frame arrives.
+  pushedNotifications: NotificationDto[]
   // re-fetch the unread count from the REST API — the Center calls it
   // after a successful mark-read/read-all, keeping the server
   // authoritative over the badge

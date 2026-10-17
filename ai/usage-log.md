@@ -97,6 +97,26 @@ Entry template:
   controls the wireframe doesn't draw are recorded in web/AGENTS.md.
 - **Author review:** `npm run lint`, `prettier --check`, all 168 vitest
   tests and `npm run build` pass. To be reviewed via pull request.
+- **PR #199 review (2026-10-17), Claude Code (Opus 5):** eleven inline
+  findings from the two reviewer bots (@claude, @codex) triaged — the
+  two backend ones were already fixed on main by the #205 review and
+  are not in this diff; the rest were valid and are fixed, each with a
+  regression test that fails against the pre-review code. A failed
+  "Load more" is retryable rather than skipping its page (`loaded` /
+  `attempt` split from `page`); a filter switch clears the previous
+  filter's page count; a page-0 answer merges rather than discards
+  frames pushed while it was in flight; "Mark all as read" only touches
+  rows that existed when it started; the empty state hides behind an
+  error banner; the bulk control falls back to the loaded rows when the
+  best-effort badge count is unavailable; a count sync can no longer
+  erase a pushed increment (newest-sync-wins guard, plus a push starting
+  its own sync); pushes queue instead of a single replaceable value, so
+  two frames batched into one render both land; and the relative times
+  tick on a 60 s clock. One finding was a UX fork, not a defect, so the
+  author decided it via neutral options Q&A: under the Unread filter a
+  row marked read now leaves the list (and read-all empties it), while
+  the All filter keeps graying in place. Re-verified: 179 vitest tests,
+  `tsc -b`, eslint and Prettier clean.
 
 ---
 ## 2026-10-17 — Leong Wei Zhi (notification REST API, backend half of issue #66)

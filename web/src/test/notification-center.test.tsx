@@ -11,7 +11,14 @@
 // features/notifications/NotificationCenter.tsx).
 // Reviewed by: Leong Wei Zhi (via pull request).
 
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 import type { StompConfig, messageCallbackType } from '@stomp/stompjs'
@@ -82,6 +89,33 @@ let pages: Array<PageResponse<NotificationDto>> = []
 let unreadPages: Array<PageResponse<NotificationDto>> = []
 let unreadCountOnServer = 0
 let listFailure: { status: number; detail: string } | null = null
+// fail just the list requests this answers true for, so a test can fail
+// one page (or one filter) and then let the retry through
+let failList: ((page: number, unread: boolean) => boolean) | null = null
+let countFailure = false
+// one-shot holds, for racing a response against a push: the stub takes
+// its snapshot when the request arrives and answers when the test says
+let listGate: Deferred | null = null
+let countGate: Deferred | null = null
+let readAllGate: Deferred | null = null
+
+interface Deferred {
+  promise: Promise<void>
+  release: () => void
+}
+
+function deferred(): Deferred {
+  let release: () => void = () => {}
+  const promise = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  return { promise, release }
+}
+
+// take a one-shot gate, so only the next request waits on it
+async function passGate(gate: Deferred | null) {
+  if (gate) await gate.promise
+}
 
 function pageOf(
   content: NotificationDto[],
@@ -108,6 +142,11 @@ beforeEach(() => {
   unreadPages = [pageOf([], 0, 0, 0)]
   unreadCountOnServer = 0
   listFailure = null
+  failList = null
+  countFailure = false
+  listGate = null
+  countGate = null
+  readAllGate = null
   fetchMock.mockReset()
   fetchMock.mockImplementation(async (rawUrl: string, init?: RequestInit) => {
     const url = String(rawUrl)
@@ -121,24 +160,47 @@ beforeEach(() => {
       })
     }
     if (url.includes('/notifications/me/unread-count')) {
-      return jsonResponse(200, { count: unreadCountOnServer })
+      // the count the server would have reported when the request
+      // arrived — a held answer is therefore a stale snapshot, which is
+      // exactly the race the lost-update guard has to survive
+      const snapshot = unreadCountOnServer
+      const gate = countGate
+      countGate = null
+      await passGate(gate)
+      if (countFailure) {
+        return jsonResponse(500, { status: 500, detail: 'count is down' })
+      }
+      return jsonResponse(200, { count: snapshot })
     }
     if (url.includes('/notifications/me/read-all')) {
+      const gate = readAllGate
+      readAllGate = null
+      await passGate(gate)
       return { ok: true, status: 204, headers: new Headers() }
     }
     if (/\/notifications\/me\/\d+$/.test(url)) {
       return { ok: true, status: 204, headers: new Headers() }
     }
     if (url.includes('/notifications/me')) {
+      const params = new URL(url).searchParams
+      const page = Number(params.get('page') ?? '0')
+      const unread = params.get('unread') === 'true'
+      const gate = listGate
+      listGate = null
+      await passGate(gate)
       if (listFailure) {
         return jsonResponse(listFailure.status, {
           status: listFailure.status,
           detail: listFailure.detail,
         })
       }
-      const params = new URL(url).searchParams
-      const page = Number(params.get('page') ?? '0')
-      const source = params.get('unread') === 'true' ? unreadPages : pages
+      if (failList?.(page, unread)) {
+        return jsonResponse(500, {
+          status: 500,
+          detail: `page ${page} is unavailable`,
+        })
+      }
+      const source = unread ? unreadPages : pages
       return jsonResponse(200, source[page] ?? pageOf([], page, 0, 0))
     }
     if (init?.method === undefined) {
@@ -179,6 +241,26 @@ function listRequests() {
     .filter((url) => /\/notifications\/me(\?|$)/.test(url))
     .map((url) => new URL(url).searchParams)
 }
+
+// the provider's STOMP client, connected, with its message callback
+function connectPush() {
+  act(() => stomp.instances[0].config.onConnect?.(undefined as never))
+  return stomp.instances[0].subscribe.mock.calls[0][1] as messageCallbackType
+}
+
+const pushFrame = (dto: NotificationDto) =>
+  ({ body: JSON.stringify(dto) }) as Parameters<messageCallbackType>[0]
+
+// "Request #1048 accepted by courier_maya"
+const acceptedBy = (id: number) =>
+  notification(
+    id,
+    'request.accepted',
+    { requestId: '1048', courierName: 'courier_maya' },
+    false,
+  )
+
+const listRows = () => within(screen.getByRole('list')).getAllByRole('button')
 
 describe('notification center page', () => {
   test("renders the caller's rows: titles, unread dot rows clickable, read rows inert and grayed", async () => {
@@ -400,7 +482,7 @@ describe('notification center page', () => {
     act(() => stomp.instances[0].config.onConnect?.(undefined as never))
     const onMessage = stomp.instances[0].subscribe.mock
       .calls[0][1] as messageCallbackType
-    act(() => {
+    await act(async () => {
       onMessage({
         body: JSON.stringify(
           notification(
@@ -433,5 +515,336 @@ describe('notification center page', () => {
 
     screen.getByRole('heading', { name: 'Log In' })
     expect(screen.queryByText('No new notifications')).toBeNull()
+  })
+
+  // ---- PR #199 review: one case per finding ----
+
+  test('a failed "Load more" retries its own page instead of skipping it', async () => {
+    const user = userEvent.setup()
+    pages = [
+      pageOf(
+        [notification(12, 'request.created', { requestId: '12' }, false)],
+        0,
+        3,
+        3,
+      ),
+      pageOf(
+        [notification(11, 'request.created', { requestId: '11' }, true)],
+        1,
+        3,
+        3,
+      ),
+      pageOf(
+        [notification(10, 'request.created', { requestId: '10' }, true)],
+        2,
+        3,
+        3,
+      ),
+    ]
+    failList = (page) => page === 1
+    await renderCenter()
+
+    await user.click(screen.getByRole('button', { name: 'Load more' }))
+
+    // the page failed, so the pager stays and still points at that page
+    await screen.findByText('page 1 is unavailable')
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeEnabled()
+
+    failList = null
+    await user.click(screen.getByRole('button', { name: 'Load more' }))
+
+    const requested = listRequests().map((p) => p.get('page'))
+    // asked for page 1 twice and never skipped ahead to page 2
+    expect(requested.filter((p) => p === '1')).toHaveLength(2)
+    expect(requested).not.toContain('2')
+    screen.getByRole('button', { name: 'Request #11 created' })
+  })
+
+  test("switching filters drops the other filter's page count", async () => {
+    const user = userEvent.setup()
+    pages = [
+      pageOf(
+        [notification(2, 'request.created', { requestId: '2' }, false)],
+        0,
+        3,
+        3,
+      ),
+    ]
+    // every unread request fails, so nothing replaces the page count
+    failList = (_page, unread) => unread
+    await renderCenter()
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: 'Unread' }))
+
+    await screen.findByText('page 0 is unavailable')
+    // "All" had 3 pages; offering page 1 here would skip the Unread
+    // view's own first page for good
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
+  })
+
+  test('a frame pushed while the first page loads survives its answer', async () => {
+    pages = [
+      pageOf(
+        [notification(1, 'request.created', { requestId: '1' }, true)],
+        0,
+        1,
+        1,
+      ),
+    ]
+    // hold page 0: its snapshot predates the push that follows
+    listGate = deferred()
+    const held = listGate
+    localStorage.setItem('user', JSON.stringify(session))
+    render(
+      <RouterProvider
+        router={createMemoryRouter(routes, {
+          initialEntries: ['/notifications'],
+        })}
+      />,
+    )
+    await act(async () => {})
+
+    const onMessage = connectPush()
+    await act(async () => onMessage(pushFrame(acceptedBy(99))))
+
+    await act(async () => {
+      held.release()
+    })
+
+    const rows = listRows()
+    expect(rows).toHaveLength(2)
+    // newest on top, and not replaced away by the stale page
+    expect(rows[0]).toHaveAccessibleName(
+      'Request #1048 accepted by courier_maya — unread, select to mark read',
+    )
+  })
+
+  test('under the Unread filter, a row marked read leaves the list', async () => {
+    const user = userEvent.setup()
+    unreadPages = [
+      pageOf(
+        [
+          notification(2, 'request.created', { requestId: '2' }, false),
+          notification(1, 'request.expired', { requestId: '1' }, false),
+        ],
+        0,
+        1,
+        2,
+      ),
+    ]
+    unreadCountOnServer = 2
+    await renderCenter()
+    await user.click(screen.getByRole('button', { name: 'Unread' }))
+    await waitFor(() => expect(listRows()).toHaveLength(2))
+
+    unreadCountOnServer = 1
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Request #2 created — unread, select to mark read',
+      }),
+    )
+
+    // an Unread view must not keep showing a row it just marked read
+    expect(listRows()).toHaveLength(1)
+    expect(
+      screen.queryByRole('button', { name: 'Request #2 created' }),
+    ).toBeNull()
+    screen.getByRole('button', {
+      name: 'Request #1 expired — unread, select to mark read',
+    })
+  })
+
+  test('"Mark all as read" empties the Unread view', async () => {
+    const user = userEvent.setup()
+    unreadPages = [
+      pageOf(
+        [
+          notification(2, 'request.created', { requestId: '2' }, false),
+          notification(1, 'request.expired', { requestId: '1' }, false),
+        ],
+        0,
+        1,
+        2,
+      ),
+    ]
+    unreadCountOnServer = 2
+    await renderCenter()
+    await user.click(screen.getByRole('button', { name: 'Unread' }))
+    await waitFor(() => expect(listRows()).toHaveLength(2))
+
+    unreadCountOnServer = 0
+    await user.click(screen.getByRole('button', { name: 'Mark all as read' }))
+
+    await screen.findByText('No new notifications')
+    expect(screen.queryByRole('list')).toBeNull()
+  })
+
+  test('"Mark all as read" leaves a frame pushed after the bulk update unread', async () => {
+    pages = [
+      pageOf(
+        [notification(1, 'request.created', { requestId: '1' }, false)],
+        0,
+        1,
+        1,
+      ),
+    ]
+    unreadCountOnServer = 1
+    await renderCenter()
+    const onMessage = connectPush()
+
+    // hold the POST open: the server has already marked everything read
+    readAllGate = deferred()
+    const held = readAllGate
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Mark all as read' }))
+    })
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).endsWith('/notifications/me/read-all'),
+      ),
+    ).toBe(true)
+
+    // this row is stored after that update, so it is still unread there
+    await act(async () => onMessage(pushFrame(acceptedBy(99))))
+    await act(async () => {
+      held.release()
+    })
+
+    expect(
+      screen.getByRole('button', { name: 'Request #1 created' }),
+    ).toBeDisabled()
+    // marking it read here would leave the badge counting a row the
+    // list renders as inert, with no way to click it
+    expect(
+      screen.getByRole('button', {
+        name: 'Request #1048 accepted by courier_maya — unread, select to mark read',
+      }),
+    ).toBeEnabled()
+  })
+
+  test('a failed load shows no "all caught up" empty state', async () => {
+    listFailure = { status: 500, detail: 'notifications are on fire' }
+    await renderCenter()
+
+    screen.getByText('notifications are on fire')
+    expect(screen.queryByText('No new notifications')).toBeNull()
+    expect(screen.queryByText("You're all caught up for today.")).toBeNull()
+  })
+
+  test('"Mark all as read" survives a failed badge count', async () => {
+    // the list loads; only the best-effort count endpoint is down
+    countFailure = true
+    pages = [
+      pageOf(
+        [notification(1, 'request.created', { requestId: '1' }, false)],
+        0,
+        1,
+        1,
+      ),
+    ]
+    await renderCenter()
+
+    screen.getByRole('button', {
+      name: 'Request #1 created — unread, select to mark read',
+    })
+    // an unread row on screen is proof there is something to mark
+    expect(
+      screen.getByRole('button', { name: 'Mark all as read' }),
+    ).toBeEnabled()
+  })
+
+  test('two frames delivered in one render both prepend', async () => {
+    pages = [
+      pageOf(
+        [notification(1, 'request.created', { requestId: '1' }, true)],
+        0,
+        1,
+        1,
+      ),
+    ]
+    await renderCenter()
+    const onMessage = connectPush()
+
+    // one WebSocket message carrying two frames: both callbacks run in
+    // the same task, so React commits them together
+    await act(async () => {
+      onMessage(
+        pushFrame(
+          notification(98, 'request.expired', { requestId: '98' }, false),
+        ),
+      )
+      onMessage(
+        pushFrame(
+          notification(99, 'request.created', { requestId: '99' }, false),
+        ),
+      )
+    })
+
+    const rows = listRows()
+    expect(rows).toHaveLength(3)
+    // newest first, and neither frame lost to the other
+    expect(rows[0]).toHaveAccessibleName(
+      'Request #99 created — unread, select to mark read',
+    )
+    expect(rows[1]).toHaveAccessibleName(
+      'Request #98 expired — unread, select to mark read',
+    )
+  })
+
+  test('a stale count answer cannot erase a pushed increment', async () => {
+    unreadCountOnServer = 0
+    await renderCenter()
+
+    // the connect-time sync snapshots 0 and is held open
+    countGate = deferred()
+    const held = countGate
+    const onMessage = connectPush()
+
+    // the server stores and pushes a notification after that snapshot
+    unreadCountOnServer = 1
+    await act(async () => {
+      onMessage(pushFrame(acceptedBy(99)))
+    })
+    await screen.findByRole('link', { name: 'Notifications (1 unread)' })
+
+    // the stale answer lands last and must not be believed
+    await act(async () => {
+      held.release()
+    })
+
+    screen.getByRole('link', { name: 'Notifications (1 unread)' })
+  })
+
+  test('relative times tick while the page sits open', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      pages = [
+        pageOf(
+          [
+            notification(
+              1,
+              'request.created',
+              { requestId: '1' },
+              false,
+              new Date().toISOString(),
+            ),
+          ],
+          0,
+          1,
+          1,
+        ),
+      ]
+      await renderCenter()
+      expect(listRows()[0]).toHaveTextContent('just now')
+
+      await act(async () => {
+        vi.advanceTimersByTime(2 * 60_000)
+      })
+
+      expect(listRows()[0]).toHaveTextContent('2 min ago')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

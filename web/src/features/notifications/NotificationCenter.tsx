@@ -13,6 +13,17 @@
 // as deviations in web/AGENTS.md. Loading/error/banner styling follows
 // routes/suppliers.tsx.
 // Reviewed by: Leong Wei Zhi (via pull request).
+// 2026-10-17, Claude Code (Opus 5), PR #199 review (@claude, @codex):
+// a failed "Load more" is retryable instead of skipping its page; the
+// filter switch clears the page count too; a page-0 answer no longer
+// discards frames pushed while it was in flight; under the Unread
+// filter a row that is marked read leaves the list (author decision via
+// options Q&A, superseding the gray-in-place behaviour there only);
+// "Mark all as read" only touches rows that existed when it started;
+// the empty state is hidden behind an error; the bulk control falls
+// back to the loaded rows when the best-effort badge is unavailable;
+// pushes are consumed from the provider's queue; and the relative times
+// tick while the page sits open.
 
 import { useEffect, useState } from 'react'
 
@@ -24,15 +35,29 @@ import { errorMessage } from '@/lib/api/http'
 
 const PAGE_SIZE = 10
 
+// "just now" / "10 min ago" are computed at render, and an open page
+// has no other reason to re-render: tick a shared clock at the smallest
+// unit the labels show so they cannot sit frozen (PR #199 review).
+const CLOCK_TICK_MS = 60_000
+
 type Filter = 'all' | 'unread'
 
 export function NotificationCenter() {
-  const { unreadCount, latestNotification, refreshUnreadCount } =
+  const { unreadCount, pushedNotifications, refreshUnreadCount } =
     useNotifications()
 
   const [items, setItems] = useState<NotificationDto[]>([])
   const [filter, setFilter] = useState<Filter>('all')
+  // `page` is the page the effect requests; `loaded` the newest page a
+  // fetch actually returned (-1 before the first one lands). They part
+  // company while a page is in flight or after one failed, which is what
+  // makes a failed page retryable rather than skipped: paging off
+  // `loaded` asks for the same page again, and `attempt` is what makes
+  // the effect re-run when the page number does not change (PR #199
+  // review).
   const [page, setPage] = useState(0)
+  const [loaded, setLoaded] = useState(-1)
+  const [attempt, setAttempt] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -41,18 +66,30 @@ export function NotificationCenter() {
 
   // Switching the filter restarts the list from page 0 — reset during
   // render (the suppliers page's prop-change pattern) so a stale page
-  // of the other filter never flashes.
+  // of the other filter never flashes. The page count goes with it: left
+  // behind, a failed page-0 fetch for the new filter would leave
+  // `hasMore` true against the old filter's total and let "Load more"
+  // skip the new filter's first page (PR #199 review).
   const [prevFilter, setPrevFilter] = useState<Filter>(filter)
   if (filter !== prevFilter) {
     setPrevFilter(filter)
     setItems([])
     setPage(0)
+    setLoaded(-1)
+    setTotalPages(0)
   }
 
+  // the clock the relative labels read, ticking while the page is open
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), CLOCK_TICK_MS)
+    return () => clearInterval(timer)
+  }, [])
+
   // One effect owns every list fetch: page 0 replaces (initial load and
-  // filter switches), later pages append ("Load more"). Appends dedupe
-  // by id — a pushed row prepended below may already be in the next
-  // page the server returns.
+  // filter switches), later pages append ("Load more"). Both merges
+  // dedupe by id — a pushed row prepended below may already be in what
+  // the server returns.
   useEffect(() => {
     let cancelled = false
 
@@ -68,8 +105,18 @@ export function NotificationCenter() {
         })
         if (cancelled) return
         setTotalPages(result.totalPages)
+        setLoaded(page)
         setItems((prev) => {
-          if (page === 0) return result.content
+          if (page === 0) {
+            // Rows pushed while this request was out are newer than the
+            // server's snapshot, so they stay on top rather than being
+            // replaced away (PR #199 review). Only pushes can be here:
+            // the reset above empties the list before this runs, on a
+            // filter switch as on the first load.
+            const returned = new Set(result.content.map((n) => n.id))
+            const pushedSince = prev.filter((n) => !returned.has(n.id))
+            return [...pushedSince, ...result.content]
+          }
           const seen = new Set(prev.map((n) => n.id))
           return [...prev, ...result.content.filter((n) => !seen.has(n.id))]
         })
@@ -89,25 +136,28 @@ export function NotificationCenter() {
     return () => {
       cancelled = true
     }
-  }, [page, filter])
+  }, [page, attempt, filter])
 
-  // A frame pushed while the page is open joins the top of the list
-  // (it is the newest stored row, which is exactly where D25's order
-  // puts it). Render-phase adjust-on-prop-change, the suppliers page's
-  // pattern, rather than an effect. Dedupe by id: the same row may
-  // already be here from a fetch that raced the push.
-  const [prevPushed, setPrevPushed] = useState<NotificationDto | null>(null)
-  if (latestNotification !== prevPushed) {
-    setPrevPushed(latestNotification)
-    if (
-      latestNotification &&
-      !items.some((n) => n.id === latestNotification.id)
-    ) {
-      setItems((prev) =>
-        prev.some((n) => n.id === latestNotification.id)
-          ? prev
-          : [latestNotification, ...prev],
-      )
+  // Frames pushed while this page is open join the top of the list (the
+  // newest stored row is exactly where D25's order puts it). Render-phase
+  // adjust-on-prop-change, the suppliers page's pattern, rather than an
+  // effect. The provider hands over a queue, so a burst delivered inside
+  // one render arrives whole; `consumed` starts at whatever had already
+  // been pushed before mount, since those rows belong wherever the
+  // server's own ordering puts them, not on top. Dedupe by id: the same
+  // row may already be here from a fetch that raced the push.
+  const [consumed, setConsumed] =
+    useState<NotificationDto[]>(pushedNotifications)
+  if (pushedNotifications !== consumed) {
+    const fresh = pushedNotifications.filter((n) => !consumed.includes(n))
+    setConsumed(pushedNotifications)
+    if (fresh.length > 0) {
+      setItems((prev) => {
+        const seen = new Set(prev.map((n) => n.id))
+        // newest first, matching the list's order
+        const add = fresh.filter((n) => !seen.has(n.id)).reverse()
+        return add.length > 0 ? [...add, ...prev] : prev
+      })
     }
   }
 
@@ -116,7 +166,14 @@ export function NotificationCenter() {
     try {
       await setNotificationRead(notification.id, true)
       setItems((prev) =>
-        prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n)),
+        // The Unread view must not show read rows, so there the row
+        // leaves the list instead of graying in place (author decision
+        // via options Q&A, PR #199 review).
+        filter === 'unread'
+          ? prev.filter((n) => n.id !== notification.id)
+          : prev.map((n) =>
+              n.id === notification.id ? { ...n, read: true } : n,
+            ),
       )
       setError(null)
       // server-authoritative badge (options Q&A decision): re-fetch
@@ -129,9 +186,20 @@ export function NotificationCenter() {
 
   async function handleMarkAllRead() {
     setMarking(true)
+    // Only the rows this request covers. A frame pushed after the server
+    // ran the bulk update is still unread there, so marking it read here
+    // would leave the badge counting an unread row the list shows as
+    // inert — with no way to click it (PR #199 review).
+    const covered = new Set(items.map((n) => n.id))
     try {
       await markAllRead()
-      setItems((prev) => prev.map((n) => (n.read ? n : { ...n, read: true })))
+      setItems((prev) =>
+        filter === 'unread'
+          ? prev.filter((n) => !covered.has(n.id))
+          : prev.map((n) =>
+              n.read || !covered.has(n.id) ? n : { ...n, read: true },
+            ),
+      )
       setError(null)
       refreshUnreadCount()
     } catch (err) {
@@ -141,7 +209,14 @@ export function NotificationCenter() {
     }
   }
 
-  const hasMore = page + 1 < totalPages
+  // off `loaded`, not `page`: after a failed page the button has to come
+  // back pointing at that same page (PR #199 review)
+  const hasMore = loaded >= 0 && loaded + 1 < totalPages
+  // The badge is best-effort — the provider swallows a failed count sync
+  // and keeps the current value, which is 0 before the first one lands.
+  // An unread row on screen is proof enough that there is something to
+  // mark, so it must not be gated on the badge alone (PR #199 review).
+  const canMarkAll = unreadCount > 0 || items.some((n) => !n.read)
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -155,7 +230,7 @@ export function NotificationCenter() {
         <button
           type="button"
           onClick={handleMarkAllRead}
-          disabled={marking || unreadCount === 0}
+          disabled={marking || !canMarkAll}
           className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Mark all as read
@@ -191,21 +266,29 @@ export function NotificationCenter() {
         </p>
       )}
 
-      {loading ? (
+      {loading && (
         <p className="text-sm text-gray-500">Loading notifications...</p>
-      ) : items.length === 0 ? (
+      )}
+
+      {/* An empty list only means "all caught up" when the load worked;
+          behind an error banner it would be a reassuring lie (PR #199
+          review). */}
+      {!loading && items.length === 0 && !error && (
         <div className="rounded-lg border-2 border-dashed border-gray-200 bg-white py-12 text-center">
           <p className="font-medium text-gray-900">No new notifications</p>
           <p className="mt-1 text-sm text-gray-500">
             You&apos;re all caught up for today.
           </p>
         </div>
-      ) : (
+      )}
+
+      {!loading && items.length > 0 && (
         <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
           {items.map((notification) => (
             <NotificationRow
               key={notification.id}
               notification={notification}
+              now={now}
               onClick={() => handleRowClick(notification)}
             />
           ))}
@@ -216,7 +299,10 @@ export function NotificationCenter() {
         <div className="text-center">
           <button
             type="button"
-            onClick={() => setPage((p) => p + 1)}
+            onClick={() => {
+              setPage(loaded + 1)
+              setAttempt((a) => a + 1)
+            }}
             disabled={loadingMore}
             className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
@@ -230,13 +316,15 @@ export function NotificationCenter() {
 
 function NotificationRow({
   notification,
+  now,
   onClick,
 }: {
   notification: NotificationDto
+  now: Date
   onClick: () => void
 }) {
   const { icon, title } = notificationMessage(notification)
-  const time = relativeTime(notification.occurredAt)
+  const time = relativeTime(notification.occurredAt, now)
 
   // An unread row is a button (clicking marks it read); a read row is
   // inert — there is deliberately no mark-unread control (options Q&A).
