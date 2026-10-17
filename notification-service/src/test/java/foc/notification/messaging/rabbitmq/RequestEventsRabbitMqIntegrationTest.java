@@ -16,9 +16,6 @@
  * 2026-09-20: order→request event vocabulary rename applied (author
  * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
- * 2026-10-17, Claude Code (Fable 5), issue #66: fixtures updated for
- * the display-name fields added to the request event records (D29);
- * no behavior change in this test.
  */
 package foc.notification.messaging.rabbitmq;
 
@@ -267,13 +264,13 @@ class RequestEventsRabbitMqIntegrationTest {
 	private static RequestCollected collected(String eventId) {
 		return new RequestCollected(eventId, Instant.parse("2026-09-19T09:00:00Z"),
 				"order-service", "c-int", List.of("usr-req-1001"), "req-20260919-0042",
-				"usr-req-1001", "maya", "usr-cou-2002", "marcus", "Techno Edge", "COM3-01-19", "integration");
+				"usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "integration");
 	}
 
 	private static RequestCompleted completed(String eventId) {
 		return new RequestCompleted(eventId, Instant.parse("2026-09-19T09:05:00Z"),
 				"order-service", "c-int", List.of("usr-req-1001"), "req-20260919-0042",
-				"usr-req-1001", "maya", "usr-cou-2002", "marcus", "Techno Edge", "COM3-01-19", "integration");
+				"usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "integration");
 	}
 
 	private static byte[] validBodyWithEventId(String eventId) {
