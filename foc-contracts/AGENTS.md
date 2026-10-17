@@ -11,6 +11,9 @@
   review: Ryan Ang, pending pull request review.
   2026-10-09, Claude Code (Opus 5.5): nullable-components note updated
   for note (author's decision, issue #165).
+  2026-10-17, Claude Code (Fable 5), issue #66: nullable-components
+  passage extended for the requesterName/courierName display names
+  (author decision D29, docs/notification-service.md).
 -->
 
 # foc-contracts/ — Agent Guide
@@ -55,8 +58,11 @@ design authority is
   internal config belong to their service, not here.
 - Currently the `@Nullable` components are
   `RequestCancelled.courierId` (a pre-acceptance cancel has no
-  courier) and every request record's `note` (a request may have
-  none, issue #165); `RequestEventRecordsTest` holds the latter.
+  courier), every request record's `note` (a request may have
+  none, issue #165), and the display names `requesterName`/
+  `courierName` beside the party IDs (notification copy, issue #66,
+  D29 — producers stamp them; a missing name must never dead-letter
+  an event); `RequestEventRecordsTest` holds the note and name rules.
 
 ## Adding a new event
 

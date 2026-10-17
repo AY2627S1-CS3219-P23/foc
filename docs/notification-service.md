@@ -3,7 +3,7 @@
   Tool: Claude Code (Fable 5), 2026-09-15 – 2026-09-21.
   Scope: transcribed and maintained the team-decided notification-service
   design in this document and the companion diagram. Every design decision
-  (D1–D23) was made by a team member — recorded per decision in the
+  (D1–D29) was made by a team member — recorded per decision in the
   Decisions table, chosen via neutral options Q&As where AI assisted — and
   the decision-by-decision history lives in ai/usage-log.md and git
   history. The tool documented decisions, derived the traceability
@@ -34,6 +34,12 @@
   client policy's ERROR-frame handling rewritten — bounded retry then a
   reported stop, chosen by Leong Wei Zhi from four options via neutral
   options Q&A.
+  2026-10-17, Claude Code (Fable 5), issue #66: D24–D29 added (REST API
+  contract, list order, write mechanism, paging/filter, REST filter
+  authorities, event display names — all author decisions via neutral
+  options Q&A), the REST API component/traceability rows flipped from
+  planned to built, the "REST API contract" section added transcribing
+  those decisions, and the event catalog updated for D29's name fields.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -54,7 +60,7 @@ Companion diagram: [`notification-service.mmd`](notification-service.mmd)
 
 All decisions were made by Leong Wei Zhi (D1–D10 on 2026-09-15, D11 on
 2026-09-18, D12–D19 on 2026-09-19, D20–D22 on 2026-09-20, D23 on
-2026-10-12) and count as
+2026-10-12, D24–D29 on 2026-10-17) and count as
 the team's finalized design for this service. Superseded decisions
 (D5, D14) have been removed; gaps in the numbering are intentional.
 
@@ -81,6 +87,12 @@ the team's finalized design for this service. Superseded decisions
 | D21 | Unconvertible-message path | **Dead-letter on first rejection**, skipping the retry queue — retrying a message that cannot convert could never succeed | Notif F2.3 |
 | D22 | Event vocabulary | **`request` replaces `order`** across classes, routing keys, exchange and queue names, and fixtures; `foc-contracts` split into `events.core` / `events.request` packages. A one-time pre-production break (no producer existed yet) | consistency with the D1 backlog |
 | D23 | WebSocket revocation check | **This service makes the gateway's denylist lookups itself at STOMP CONNECT** — the token travels in the CONNECT frame, which never reaches the gateway's access phase. Both key shapes: `EXISTS denylist:<jti>` for a logged-out token (G10) and the account's `denylist:user:<id>` cutoff stamp, which refuses a token whose `iat` is strictly before it (G11, a password reset). A token missing the claim a lookup needs skips that lookup, and a Redis failure **fails open** behind finite 2 s timeouts (G6 semantics). The check runs at CONNECT only (see Session mechanics). A deliberate, narrow exception to gateway decision G4 | closes [`gateway.md`](gateway.md)'s logged-out-socket known limit |
+| D24 | REST API surface | **`/notifications/me` base path** (caller = JWT `sub`, no user ID in any route, as credit-service's `/credits/me`): paged `GET` list, `PATCH /{id}` with body `{"read": true\|false}` → 204, `POST /read-all` → 204, `GET /unread-count` → `{"count": n}` — see [REST API contract](#rest-api-contract-d24d28) | Notif F3.1, F3.2 |
+| D25 | List order | **`created_at` newest-first, ID descending as tiebreaker** — a late-delivered event surfaces at the top, where a catch-up reader expects it; no sort parameter | Notif F3.1 |
+| D26 | Read-flag write mechanism | **One ownership-scoped bulk `UPDATE`, row count checked**: 0 rows → 404, so a foreign ID and a missing ID are indistinguishable (no existence oracle); counting matched rows makes repeats idempotent | Notif F3.2 |
+| D27 | List paging & filter | **Hand-validated `page`/`size`** (defaults 0/20, cap 100, out-of-range → 400 — credit-service's anti-`Pageable` stance) plus an optional **`unread=true` filter**, bound as a primitive `boolean` — deliberately as lenient as Spring's standard conversion (`1`/`yes`/`on` and `0`/`no`/`off` alongside `true`/`false`), not hand-validated like `page`/`size` | Notif F3.1 |
+| D28 | REST filter authorities | **Empty authorities**: the JWT filter authenticates the subject only — this service's verifier exposes no role claim and no route is role-gated; the denylist is NOT re-checked on REST (gateway decision G4; D23 stays the STOMP-only exception) | least change |
+| D29 | Event display names | **`@Nullable requesterName`/`courierName` ride beside the party IDs** in every request event, so notification copy can say who acted without a cross-service lookup; producers populate them, a missing name never dead-letters (the `note` rationale, issue #165) | Notif F3.1 UX |
 
 ## Components
 
@@ -102,7 +114,7 @@ the team's finalized design for this service. Superseded decisions
 | **Dead-letter queue** (RabbitMQ) | Durable queue for events that exhausted max attempts — or couldn't convert (D21); retained for inspection and manual re-publish (F2.3). |
 | **AMQP listener** (Spring Boot) | Consumes with manual acknowledgement; acks only after the processor's DB transaction commits (NFR1.1). |
 | **Idempotent event processor** (Spring Boot) | Core logic: rejects already-seen event IDs (F2.1), creates one notification row per party (F1.2) from the typed event alone — never querying another service (F1.1). Works against the `DomainEvent` interface, so every cataloged event type flows through generically. |
-| **Notification REST API** (Spring Boot) | *Planned — issue #66.* Will let the Web App list a user's recent notifications and mark them read/unread (F3.1, F3.2). |
+| **Notification REST API** (Spring Boot) | Lets the Web App list the caller's notifications (paged, newest first, optional unread filter), read the unread count, and mark rows read/unread (F3.1, F3.2) — JWT-authenticated, every route scoped to the token's user (D24–D28, issue #66). |
 | **STOMP push gateway** (Spring Boot) | WebSocket endpoint with Spring's STOMP simple broker; pushes each stored notification to the affected users' `/user/...` destinations within the 5-second budget (F1.2; Order NFR1.1–1.2). |
 | **Retention purge scheduler** (Spring Boot) | Scheduled job deleting notifications older than the configured window (F3.4). |
 | **Notification DB** (PostgreSQL) | Owned exclusively by this service: notification rows with read/unread state plus processed event IDs — one schema so dedupe and notification insert commit atomically. |
@@ -150,9 +162,11 @@ courier-arrival update, F4.1.1–F4.1.2): `request.created`,
 `request.cancelled`, `request.expired`, `request.courier-arrived`, and
 the Credit saga's `request.submitted` and `request.rejected`
 ([`credit-service.md`](credit-service.md) D7–D8). All request events
-carry `requestId`, `requesterId`, `pickupLocation`, `dropoffLocation`,
+carry `requestId`, `requesterId`, a nullable `requesterName` (D29),
+`pickupLocation`, `dropoffLocation`,
 and `note` (nullable: a request may have none); the post-acceptance events add `courierId` (nullable on
-`request.cancelled` — a pre-acceptance cancel has no courier),
+`request.cancelled` — a pre-acceptance cancel has no courier) with a
+nullable `courierName` beside it (D29),
 `request.submitted` adds `reward` and `request.rejected` adds
 `reason`. The credit domain's `credit.reserved` and
 `credit.reservation-rejected` carry `requestId`, `requesterId` and
@@ -187,6 +201,30 @@ changes (D16).
   the container's rejection plus the dead-letter leg — no custom
   error-handler code.
 
+## REST API contract (D24–D28)
+
+All routes sit behind the gateway prefix (`/api/notification/…`,
+stripped in transit) and require `Authorization: Bearer <JWT>` — the
+same HS256 platform token the STOMP CONNECT carries, verified by the
+service itself (the gateway has already checked signature, expiry and
+the denylist; the service does not re-check the denylist, per G4/D28).
+The caller is always the token's `sub`: no route takes a user ID, so
+there is no path to another user's rows.
+
+| Route | What it does |
+| --- | --- |
+| `GET /notifications/me?page=0&size=20[&unread=true]` | One page of the caller's notifications, `created_at` newest-first with ID tiebreak (D25). `page`/`size` are hand-validated (D27): `page ≥ 0`, `1 ≤ size ≤ 100`, out of range → 400. `unread` is deliberately lenient (D27): Spring's standard boolean conversion, so `1`/`yes`/`on` and `0`/`no`/`off` also bind. Returns the platform page envelope `{content, page, size, totalElements, totalPages}`; each element is the same `NotificationDto` the STOMP push sends — `{id, eventType, payload (parsed object), occurredAt, read, createdAt}` — so the frontend has one type for both. |
+| `GET /notifications/me/unread-count` | `{"count": n}` — what the bell badge shows; the SPA re-syncs it on load, on reconnect and after writes (the list's `totalElements` can't serve this). |
+| `PATCH /notifications/me/{id}` body `{"read": true\|false}` | Sets one row's flag, both directions; 204 on success. A missing `read` → 400; a present `read` is otherwise deliberately as lenient as Jackson's default scalar coercion (e.g. `"true"`/`"false"` strings and `0`/`1` numbers also bind — D24). 404 when the caller has no such row — someone else's and nonexistent are deliberately the same answer (D26). Repeats are the same 204. |
+| `POST /notifications/me/read-all` | Marks every unread row of the caller read in one statement; 204, also when nothing was unread. |
+
+Errors are RFC 9457 problem+json throughout: 401 (`WWW-Authenticate:
+Bearer`) is written by the security chain before any controller runs,
+400/404 carry the contract's `detail` strings above. A page past the
+last one is an empty page, not an error. A mark racing the retention
+purge (D9) can 404 on a row the client just displayed — correct, the
+row is gone.
+
 ## Diagram legend
 
 The companion diagram uses the same notation as
@@ -208,8 +246,8 @@ not drawn on the diagram — the traceability table below maps them.
 | Notif F2.1 — no duplicate notification on redelivery | unique event-ID constraint checked in the same DB transaction as the notification insert (D4) |
 | Notif F2.2 — retry failed deliveries | listener republish → TTL retry queue → redelivery with backoff, up to max attempts (D6/D20) |
 | Notif F2.3 — record events that exhaust retries | durable DLQ for inspection/re-publish (D7/D20); unconvertible messages arrive on first rejection (D21) |
-| Notif F3.1 — view recent notifications in-app | Notification REST API (planned, issue #66) + stored rows |
-| Notif F3.2 — mark read/unread | read/unread flag on the notification row, toggled via the REST API (planned, issue #66) |
+| Notif F3.1 — view recent notifications in-app | REST list over the stored rows: `GET /notifications/me`, paged newest-first (D24/D25/D27) |
+| Notif F3.2 — mark read/unread | `PATCH /notifications/me/{id}` flips the row's flag both ways; `POST /read-all` in bulk (D24/D26) |
 | Notif F3.4 — retention window | purge scheduler, `NOTIF_RETENTION_DAYS` (default 30) |
 | Notif NFR1.1 — at-least-once delivery | durable queue + manual ack after transaction commit |
 | Notif NFR1.2 — persist undelivered events across restarts | durable exchanges/queues + persistent messages (D8) |
@@ -414,8 +452,10 @@ Why the push channel is centralized here rather than per service:
   stopped and the bell greys its badge and says "updates paused, sign
   in again" in its accessible name — the count stays visible (those
   notifications did arrive) but stops being presented as current.
-  Nothing is re-fetched, because there is no count endpoint to re-fetch
-  from: the count is session-local until issue #66's REST API. An unset
+  Nothing is re-fetched by this policy; the REST API's
+  `/notifications/me/unread-count` (issue #66) is what the SPA seeds and
+  re-syncs the badge from once the Notification Center's web half lands
+  (until then the count is session-local). An unset
   `VITE_NOTIFICATION_SERVICE_URL` reports the same paused state, since
   no socket is ever opened. Recovery is a re-login, which changes the
   token and re-runs the provider's effect. Transport drops with no
