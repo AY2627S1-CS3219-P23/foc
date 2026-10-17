@@ -160,6 +160,9 @@
   2026-10-17, Codex (GPT-6.1 Sol), issue #98: disclosed the user-service
   Docker-unavailable test skips and verification documentation.
   PR #197 review: disclosed CI's rejection of skipped user-service tests.
+  2026-10-17, Claude Code (Opus 5), PR #199 review: AI Use Summary
+  extended for the web half of issue #66 (the Notification Center) and
+  that PR's review round — the summary had the backend half only.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -769,6 +772,22 @@ behind it (`/credits/admin/pool` and `/credits/admin/redistributions`,
 `ADMIN` and `OWNER` only) with their tests, added to the design doc's
 Read API contract; the routes' shape, access, the share preview and
 the branch were decided by the team via options Q&A.
+
+Claude Code (Fable 5 and Opus 5) wrote the web half of issue #66, the
+Notification Center: the `/notifications` page and its feature folder
+(`web/src/features/notifications/`: the REST calls, one display
+template per cataloged request event, the paged list with its All and
+Unread filters, click-to-mark-read and "Mark all as read"), the bell
+badge seeded and re-synced from `GET /notifications/me/unread-count`,
+and frames pushed over STOMP joining the open list live, with their
+tests. Written to the `notification-center.png` wireframe and the REST
+contract in `docs/notification-service.md`; the interactions the
+wireframe does not draw (the filter toggle, the "Load more" pager, a
+click marking a row read, and — after the PR #199 review — a read row
+leaving the Unread view) were decided by the author via options Q&A and
+recorded in `web/AGENTS.md` and `ai/usage-log.md`. The same tool
+addressed that review's bot findings, including the paging and
+count-sync races it and a live browser run surfaced.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

@@ -207,6 +207,29 @@ Entry template:
   button under it. Fixed (the bulk write clears the Unread page count,
   and the pager is gated on having rows) with a regression test that
   fails against the pre-fix code; 180 vitest tests green.
+- **PR #199 review, round 2 (2026-10-17), Claude Code (Opus 5):** after
+  the #195 main sync, two threads were still open. @claude found that
+  "Load more" skips rows under the Unread filter: the list is
+  offset-paged over a set that shrinks as rows are read, so asking for
+  `loaded + 1` steps past the rows that moved up into the slice just
+  vacated. Confirmed against the live API — with 13 unread, marking 3
+  read makes `page=1` return 0 rows while `page=0` returns the 10
+  remaining, 3 of them never seen. Fixed by deriving the next offset
+  from the rows held (`floor(items.length / PAGE_SIZE)`, the held rows
+  being a prefix of the server's current set) and testing "is there
+  more" against `totalElements` rather than a page count computed from
+  an older, larger set; the fetch request became one value carrying its
+  own replace/append mode, so a page number and the merge it implies
+  cannot disagree. The reviewer's secondary claim that a push also
+  loses a row does not hold — a push shifts every offset by exactly one
+  and the one-row overlap is absorbed by the id dedupe. The test stub
+  gained a small mutating server model for the unread set, which is
+  what makes "mark read, then Load more" honest; two paging fixtures
+  that used one-row pages against a `size=10` request were corrected.
+  @codex's standing P1 (the README's consolidated AI Use Summary had
+  the backend half of #66 but not the web half) was valid against
+  AGENTS.md duty 4 and is now addressed. 213 vitest tests, `tsc -b`,
+  eslint and Prettier clean.
 
 ---
 ## 2026-10-17 — Leong Wei Zhi (notification REST API, backend half of issue #66)

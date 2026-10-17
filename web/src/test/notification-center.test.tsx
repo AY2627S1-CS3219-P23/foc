@@ -93,6 +93,11 @@ let listFailure: { status: number; detail: string } | null = null
 // one page (or one filter) and then let the retry through
 let failList: ((page: number, unread: boolean) => boolean) | null = null
 let countFailure = false
+// When set, unread queries page over this list and the write endpoints
+// mutate it — so "mark read, then Load more" sees the set shrink the
+// way the real server's does. Canned `unreadPages` still serves the
+// tests that never write.
+let serverUnread: NotificationDto[] | null = null
 // one-shot holds, for racing a response against a push: the stub takes
 // its snapshot when the request arrives and answers when the test says
 let listGate: Deferred | null = null
@@ -144,6 +149,7 @@ beforeEach(() => {
   listFailure = null
   failList = null
   countFailure = false
+  serverUnread = null
   listGate = null
   countGate = null
   readAllGate = null
@@ -176,9 +182,15 @@ beforeEach(() => {
       const gate = readAllGate
       readAllGate = null
       await passGate(gate)
+      if (serverUnread) serverUnread = []
       return { ok: true, status: 204, headers: new Headers() }
     }
-    if (/\/notifications\/me\/\d+$/.test(url)) {
+    const patched = /\/notifications\/me\/(\d+)$/.exec(url)
+    if (patched) {
+      if (serverUnread) {
+        const id = Number(patched[1])
+        serverUnread = serverUnread.filter((n) => n.id !== id)
+      }
       return { ok: true, status: 204, headers: new Headers() }
     }
     if (url.includes('/notifications/me')) {
@@ -199,6 +211,18 @@ beforeEach(() => {
           status: 500,
           detail: `page ${page} is unavailable`,
         })
+      }
+      if (unread && serverUnread) {
+        const start = page * 10
+        return jsonResponse(
+          200,
+          pageOf(
+            serverUnread.slice(start, start + 10),
+            page,
+            Math.ceil(serverUnread.length / 10),
+            serverUnread.length,
+          ),
+        )
       }
       const source = unread ? unreadPages : pages
       return jsonResponse(200, source[page] ?? pageOf([], page, 0, 0))
@@ -438,16 +462,26 @@ describe('notification center page', () => {
     const user = userEvent.setup()
     pages = [
       pageOf(
-        [notification(12, 'request.created', { requestId: '12' }, false)],
+        [
+          notification(12, 'request.created', { requestId: '12' }, false),
+          ...Array.from({ length: 9 }, (_, i) =>
+            notification(
+              20 + i,
+              'request.created',
+              { requestId: `2${i}` },
+              true,
+            ),
+          ),
+        ],
         0,
         2,
-        2,
+        11,
       ),
       pageOf(
         [notification(11, 'request.created', { requestId: '11' }, true)],
         1,
         2,
-        2,
+        11,
       ),
     ]
     await renderCenter()
@@ -523,22 +557,18 @@ describe('notification center page', () => {
     const user = userEvent.setup()
     pages = [
       pageOf(
-        [notification(12, 'request.created', { requestId: '12' }, false)],
+        Array.from({ length: 10 }, (_, i) =>
+          notification(30 + i, 'request.created', { requestId: `3${i}` }, true),
+        ),
         0,
-        3,
-        3,
+        2,
+        11,
       ),
       pageOf(
         [notification(11, 'request.created', { requestId: '11' }, true)],
         1,
-        3,
-        3,
-      ),
-      pageOf(
-        [notification(10, 'request.created', { requestId: '10' }, true)],
         2,
-        3,
-        3,
+        11,
       ),
     ]
     failList = (page) => page === 1
@@ -657,16 +687,9 @@ describe('notification center page', () => {
 
   test('"Mark all as read" empties the Unread view', async () => {
     const user = userEvent.setup()
-    unreadPages = [
-      pageOf(
-        [
-          notification(2, 'request.created', { requestId: '2' }, false),
-          notification(1, 'request.expired', { requestId: '1' }, false),
-        ],
-        0,
-        1,
-        2,
-      ),
+    serverUnread = [
+      notification(2, 'request.created', { requestId: '2' }, false),
+      notification(1, 'request.expired', { requestId: '1' }, false),
     ]
     unreadCountOnServer = 2
     await renderCenter()
@@ -684,21 +707,9 @@ describe('notification center page', () => {
     const user = userEvent.setup()
     // 13 unread over 2 pages, so the page count outlives the rows if
     // nothing clears it (found by driving the real app)
-    unreadPages = [
-      pageOf(
-        Array.from({ length: 10 }, (_, i) =>
-          notification(
-            100 + i,
-            'request.created',
-            { requestId: `${i}` },
-            false,
-          ),
-        ),
-        0,
-        2,
-        13,
-      ),
-    ]
+    serverUnread = Array.from({ length: 13 }, (_, i) =>
+      notification(100 + i, 'request.created', { requestId: `${i}` }, false),
+    )
     unreadCountOnServer = 13
     await renderCenter()
     await user.click(screen.getByRole('button', { name: 'Unread' }))
@@ -710,6 +721,41 @@ describe('notification center page', () => {
 
     await screen.findByText('No new notifications')
     // an empty list with a "Load more" under it offers more of nothing
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
+  })
+
+  test('"Load more" in the Unread view skips no row as the set shrinks', async () => {
+    const user = userEvent.setup()
+    // 13 unread; page 0 is the first 10. Marking 3 read shortens the
+    // server's set to 10, so a page-1 request (offset 10) would return
+    // nothing and rows 11-13 would never be reachable (PR #199 review).
+    serverUnread = Array.from({ length: 13 }, (_, i) =>
+      notification(200 + i, 'request.created', { requestId: `${i}` }, false),
+    )
+    unreadCountOnServer = 13
+    await renderCenter()
+    await user.click(screen.getByRole('button', { name: 'Unread' }))
+    await waitFor(() => expect(listRows()).toHaveLength(10))
+
+    for (const i of [0, 1, 2]) {
+      await user.click(
+        screen.getByRole('button', {
+          name: `Request #${i} created — unread, select to mark read`,
+        }),
+      )
+    }
+    expect(listRows()).toHaveLength(7)
+
+    await user.click(screen.getByRole('button', { name: 'Load more' }))
+
+    // every unread row the server still has is now on screen, none lost
+    await waitFor(() => expect(listRows()).toHaveLength(10))
+    for (const i of [10, 11, 12]) {
+      screen.getByRole('button', {
+        name: `Request #${i} created — unread, select to mark read`,
+      })
+    }
+    // and nothing is left to ask for
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
   })
 

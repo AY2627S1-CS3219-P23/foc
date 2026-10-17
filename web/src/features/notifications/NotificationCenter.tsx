@@ -45,23 +45,41 @@ const CLOCK_TICK_MS = 60_000
 
 type Filter = 'all' | 'unread'
 
+interface ListRequest {
+  page: number
+  append: boolean
+  // bumped to re-run the effect when `page` does not change
+  attempt: number
+}
+
+const FIRST_PAGE: ListRequest = { page: 0, append: false, attempt: 0 }
+
+// re-read the current filter's first page, replacing what is held
+const refill = (r: ListRequest): ListRequest => ({
+  page: 0,
+  append: false,
+  attempt: r.attempt + 1,
+})
+
 export function NotificationCenter() {
   const { unreadCount, pushedNotifications, refreshUnreadCount } =
     useNotifications()
 
   const [items, setItems] = useState<NotificationDto[]>([])
   const [filter, setFilter] = useState<Filter>('all')
-  // `page` is the page the effect requests; `loaded` the newest page a
-  // fetch actually returned (-1 before the first one lands). They part
-  // company while a page is in flight or after one failed, which is what
-  // makes a failed page retryable rather than skipped: paging off
-  // `loaded` asks for the same page again, and `attempt` is what makes
-  // the effect re-run when the page number does not change (PR #199
-  // review).
-  const [page, setPage] = useState(0)
-  const [loaded, setLoaded] = useState(-1)
-  const [attempt, setAttempt] = useState(0)
-  const [totalPages, setTotalPages] = useState(0)
+  // What the effect should fetch, as one value so a page number and the
+  // merge it implies can never disagree. `append` false replaces the
+  // list (first load, filter switch); true adds to it ("Load more").
+  // `attempt` is what makes the effect re-run when the page number does
+  // not change, so a failed page can be retried rather than skipped
+  // (PR #199 review).
+  const [request, setRequest] = useState<ListRequest>(FIRST_PAGE)
+  // true once a fetch has answered for the current filter
+  const [loaded, setLoaded] = useState(false)
+  // of the current filter, from the last answer — not `totalPages`: the
+  // unread set shrinks as rows are read, so a page count computed
+  // against an older, larger set is the thing that goes stale
+  const [totalElements, setTotalElements] = useState(0)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [marking, setMarking] = useState(false)
@@ -77,9 +95,9 @@ export function NotificationCenter() {
   if (filter !== prevFilter) {
     setPrevFilter(filter)
     setItems([])
-    setPage(0)
-    setLoaded(-1)
-    setTotalPages(0)
+    setRequest(FIRST_PAGE)
+    setLoaded(false)
+    setTotalElements(0)
   }
 
   // the clock the relative labels read, ticking while the page is open
@@ -89,16 +107,16 @@ export function NotificationCenter() {
     return () => clearInterval(timer)
   }, [])
 
-  // One effect owns every list fetch: page 0 replaces (initial load and
-  // filter switches), later pages append ("Load more"). Both merges
-  // dedupe by id — a pushed row prepended below may already be in what
-  // the server returns.
+  // One effect owns every list fetch. Both merges dedupe by id — a
+  // pushed row prepended below may already be in what the server
+  // returns, and an adjusted offset can re-read rows already held.
   useEffect(() => {
     let cancelled = false
+    const { page, append } = request
 
     async function load() {
-      if (page === 0) setLoading(true)
-      else setLoadingMore(true)
+      if (append) setLoadingMore(true)
+      else setLoading(true)
       setError(null)
       try {
         const result = await listNotifications({
@@ -107,10 +125,10 @@ export function NotificationCenter() {
           unread: filter === 'unread',
         })
         if (cancelled) return
-        setTotalPages(result.totalPages)
-        setLoaded(page)
+        setTotalElements(result.totalElements)
+        setLoaded(true)
         setItems((prev) => {
-          if (page === 0) {
+          if (!append) {
             // Rows pushed while this request was out are newer than the
             // server's snapshot, so they stay on top rather than being
             // replaced away (PR #199 review). Only pushes can be here:
@@ -139,7 +157,7 @@ export function NotificationCenter() {
     return () => {
       cancelled = true
     }
-  }, [page, attempt, filter])
+  }, [request, filter])
 
   // Frames pushed while this page is open join the top of the list (the
   // newest stored row is exactly where D25's order puts it). Render-phase
@@ -204,11 +222,12 @@ export function NotificationCenter() {
             ),
       )
       if (filter === 'unread') {
-        // The write covered every unread row the caller had, so the
-        // Unread view has no further pages. Without this the page count
-        // from the last fetch outlives the rows it described and the
-        // empty state renders with a "Load more" under it (browser run).
-        setTotalPages(0)
+        // Every row this covered has left the unread set, so the view's
+        // page-0 slice is whatever is left: ask the server rather than
+        // reason about it. Without this the totals from the last fetch
+        // outlive the rows they described and the empty state renders
+        // with a "Load more" under it (browser run).
+        setRequest(refill)
       }
       setError(null)
       refreshUnreadCount()
@@ -219,11 +238,24 @@ export function NotificationCenter() {
     }
   }
 
-  // off `loaded`, not `page`: after a failed page the button has to come
-  // back pointing at that same page (PR #199 review). `items.length`
-  // guards the other direction: a write that empties the list locally
-  // must not leave a pager offering more of nothing (browser run).
-  const hasMore = loaded >= 0 && loaded + 1 < totalPages && items.length > 0
+  // Against `totalElements`, not a page count: under the Unread filter
+  // the set shrinks as rows are read, so "is there more" has to be asked
+  // of how many rows exist now versus how many are held (PR #199
+  // review). `loaded` keeps the pager off screen until a fetch answers.
+  const hasMore = loaded && items.length < totalElements
+  // The offset to read from, derived from the rows held rather than
+  // from the last page number. Under the Unread filter the set shrinks
+  // as rows are read, so `loaded + 1` would step past the rows that
+  // moved up into the slice just vacated and lose them (PR #199
+  // review). The rows held are a prefix of the server's current set —
+  // a pushed row is its newest member, and a row marked read has left
+  // it — so the next unread row sits at exactly that offset. Re-read
+  // overlap is deduped by the append merge.
+  const nextPage = (r: ListRequest): ListRequest => ({
+    page: Math.floor(items.length / PAGE_SIZE),
+    append: true,
+    attempt: r.attempt + 1,
+  })
   // The badge is best-effort — the provider swallows a failed count sync
   // and keeps the current value, which is 0 before the first one lands.
   // An unread row on screen is proof enough that there is something to
@@ -311,10 +343,7 @@ export function NotificationCenter() {
         <div className="text-center">
           <button
             type="button"
-            onClick={() => {
-              setPage(loaded + 1)
-              setAttempt((a) => a + 1)
-            }}
+            onClick={() => setRequest(nextPage)}
             disabled={loadingMore}
             className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
