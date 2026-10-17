@@ -29,6 +29,7 @@
   the scheduler paragraph for the single daily and startup routine.
   2026-10-16, Claude Code (Opus 5.5), issue #173: status and contents
   updated for the expiry and redistribution scheduler.
+  2026-10-17, Claude Code (Opus 5.5), issue #174: the admin API.
   2026-10-17, Claude Code (Opus 5.5), issue #196: the expiries route in
   the read API and how to call it.
   Author review: Ryan Ang, pending pull request review.
@@ -89,6 +90,14 @@ What is here:
   Each one creates the caller's account with its sign-up credits on
   first use, so none answers 404. An invalid parameter is a 400
   problem+json whose `detail` names it.
+- **Admin API** (`controller/AdminCreditController`,
+  `service/PoolQueryService`), for `ADMIN` and `OWNER` only (403
+  otherwise):
+  - `GET /credits/admin/pool`: the common pool's balance, the number
+    of accounts it is shared among, a preview of each one's share, the
+    last redistribution and when the next is due.
+  - `GET /credits/admin/redistributions`: the recorded months, newest
+    first, with `page` and `size` as above.
 - **Reply outbox** (`service/ReplyOutbox`, `ReplyOutboxService`):
   enqueue writes the reply as an `outbox_event` row inside the
   caller's transaction, so it commits with the balance change or not at
@@ -189,7 +198,8 @@ curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8090/api/credit/credits/me
 curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8090/api/credit/credits/me/history?minAmount=2&from=2026-10-01T00:00:00Z&size=10"
-curl -H "Authorization: Bearer $TOKEN"   http://localhost:8090/api/credit/credits/me/expiries
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8090/api/credit/credits/me/expiries
 ```
 
 `from` and `to` are full instants with an offset. Send UTC (`Z`); a
