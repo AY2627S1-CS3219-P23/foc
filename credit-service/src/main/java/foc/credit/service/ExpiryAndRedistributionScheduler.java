@@ -95,7 +95,7 @@ public class ExpiryAndRedistributionScheduler {
         } catch (RuntimeException ex) {
             log.error("expiry run outcome=FAILED", ex);
         }
-        redistribute(YearMonth.now(clock), now);
+        redistribute(YearMonth.from(now.atZone(clock.getZone())), now);
     }
 
     private void expireLots(Instant now) {
