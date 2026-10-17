@@ -25,6 +25,10 @@
 # warning per JPA repository.
 # 2026-10-17, issue #66: web-allowed-origin repeated here (shadowed)
 # for the REST API's CORS bean to resolve in tests.
+# 2026-10-17, issue #66: user-service lookup keys repeated (shadowed)
+# with the disabled defaults — context tests need the adapter bean to
+# construct; the tests that need names stub the UserDirectory port, and
+# the adapter's own unit test builds it directly.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 notification:
@@ -46,6 +50,11 @@ notification:
     purge-cron: "0 0 3 * * *"
   # Shadowed like the rest: the REST API's CORS bean needs it to resolve.
   web-allowed-origin: http://localhost:5173
+  user-service:
+    # Disabled (empty = no lookups), like the main yaml's defaults.
+    base-url: ""
+    internal-token: ""
+    name-cache-ttl: 10m
 
 spring:
   rabbitmq:
