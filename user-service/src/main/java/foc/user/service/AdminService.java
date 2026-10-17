@@ -27,6 +27,17 @@ removal demotes the target to USER (owner decision via options Q&A — the
 reviewer showed a removed admin keeping the admin endpoints while deleted
 and restoring itself as an admin; the alternatives were an active-check
 in the admin routes or documenting the behaviour as accepted).
+2026-10-12 (Claude Code, Fable 5), issue #178: changeRole and removeUser
+now evict the target's outstanding sessions via TokenDenylist's per-user
+stamp (G11/G12 — owner decision via options Q&A: the epoch mechanism from
+PR #179, scoped to these two paths), so a demoted admin or removed user
+loses their token on the next request instead of keeping it until exp;
+that also retires the follow-up comment's "keeps ADMIN until exp" caveat.
+2026-10-17 (Claude Code, Opus 5), PR #183 review (@Sinnez1): both stamps
+run through AfterCommit instead of inside the @Transactional — the
+reviewer showed the cutoff landing before the role change committed, so a
+login in that gap could still mint a token with the old role (mechanism
+chosen by the owner via options Q&A, from the two the review named).
 */
 
 package foc.user.service;
@@ -48,6 +59,7 @@ import foc.user.dto.UserResponse;
 import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.repository.UserRepository;
+import foc.user.security.TokenDenylist;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
@@ -65,9 +77,11 @@ public class AdminService {
     private static final List<Role> ROLE_RANK = List.of(Role.values());
 
     private final UserRepository userRepository;
+    private final TokenDenylist tokenDenylist;
 
-    public AdminService(UserRepository userRepository) {
+    public AdminService(UserRepository userRepository, TokenDenylist tokenDenylist) {
         this.userRepository = userRepository;
+        this.tokenDenylist = tokenDenylist;
     }
 
     // active accounts only, unless includeDeleted: soft-deleted ones are
@@ -106,7 +120,22 @@ public class AdminService {
         }
 
         target.setRole(newRole);
-        return UserResponse.from(userRepository.save(target));
+        UserResponse response = UserResponse.from(userRepository.save(target));
+        // issue #178: the role lives in the JWT claim, so without this a
+        // demoted admin keeps the admin API until their token expires (≤1 h,
+        // from any client still holding it). The per-user stamp revokes every
+        // outstanding token at once — the target signs in again and the fresh
+        // token carries the new role. Any actual change stamps, promotion
+        // included (the old token's claim is wrong either way); the same-role
+        // early return above does not. Best-effort like the writes in
+        // PasswordResetService (G9): if Redis is down the gateway is failing
+        // open anyway (G6), and the token still dies at its own exp.
+        // After the commit (PR #183 review, @Sinnez1): stamped from inside
+        // the transaction, the cutoff preceded the new role becoming
+        // visible, so a login in that gap could mint a token with the old
+        // role and an iat the stamp no longer outlaws.
+        AfterCommit.run(() -> tokenDenylist.revokeUserSessions(targetId));
+        return response;
     }
 
     // soft delete, same as self-deletion: the account stays recoverable
@@ -117,8 +146,12 @@ public class AdminService {
     // but removal demotes to USER, so a removed admin's later logins
     // (deleted accounts can still log in) and any self-restored account
     // carry no admin powers; only re-promotion gives them back. A token
-    // minted before the removal keeps ADMIN until its exp (≤ 1 h) —
-    // admin routes trust the token's role.
+    // minted before the removal no longer outlives it either (issue
+    // #178): the stamp below makes the gateway refuse it on the next
+    // request, rather than leaving it ADMIN until its exp (≤ 1 h). The
+    // demotion stays as the belt for what the stamp cannot cover — a
+    // Redis-down write (best-effort, G9) against a gateway that fails
+    // open (G6), and the account's own later logins after a restore.
     @Transactional
     public void removeUser(Long callerId, Long targetId) {
         if (targetId.equals(callerId)) {
@@ -131,6 +164,13 @@ public class AdminService {
         target.setRole(Role.USER);
         target.softDelete(Instant.now());
         userRepository.save(target);
+        // issue #178: same stamp as changeRole, and deferred past the commit
+        // for the same reason — without it the removed account's token keeps
+        // authenticating until exp (only getActiveUser paths 404 it; the
+        // demotion above closes the admin routes alone). Self-restore is
+        // unaffected: login works for soft-deleted accounts, and the fresh
+        // token postdates the stamp.
+        AfterCommit.run(() -> tokenDenylist.revokeUserSessions(targetId));
     }
 
     private static void ensureNotOwner(User target) {

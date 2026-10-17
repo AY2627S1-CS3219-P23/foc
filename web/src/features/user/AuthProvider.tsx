@@ -25,6 +25,14 @@
 // POST /auth/logout (best-effort, team decision) so the server denylists
 // the token; the local session is cleared either way.
 // Reviewed by: Ryan Ang (everything above).
+// 2026-10-11, Claude Code (Fable 5), issue #94: a login whose response
+// carries deletionScheduledFor (a soft-deleted account — login no longer
+// recovers it) lands on /account-recovery instead of home, and the
+// GET /users/me fetch is skipped while the flag stands (the active-only
+// lookup would 404 and poison `me`). restored() is the recovery screen's
+// exit: it strips the flag from the stored session and seeds `me` with
+// the account POST /users/me/recover returned.
+// Reviewed by: Ryan Ang (issue #94).
 // 2026-10-12, Claude Code (Fable 5), issue #178: registers apiFetch's
 // unauthorized handler — a 401 on a token-bearing request (admin demoted
 // or removed the account, password reset elsewhere, token expired) clears
@@ -50,10 +58,28 @@
 // bounce, so this handler does not navigate at all. The effect also
 // unregisters the handler and the token source on unmount, so an
 // unmounted provider cannot act on a late 401.
+// 2026-10-16, Claude Code (Opus 5), PR #180 main sync: endSession(),
+// the local-only half of logout() — no POST /auth/logout, no
+// navigation. The password-reset page calls it once a reset lands:
+// the server has already evicted the account's sessions (G11), so
+// the stored token is dead and a best-effort logout would be a
+// guaranteed 401. Clearing it here is what makes the user arrive at
+// /login actually signed out, instead of holding a token whose next
+// 401 would stack a second notice on the reset one.
 // Author review: Leong Wei Zhi; Ryan Ang to re-review via PR #182.
+// 2026-10-17, Codex (GPT-6), PR #180 review, issue #94:
+// AI-generated (edited by Codex; Leong Wei Zhi review pending).
+// Apply the recovery hold before rendering any public or protected page.
+// Author review: Leong Wei Zhi to review via PR #180.
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
-import { useLocation, useMatches, useNavigate, Outlet } from 'react-router'
+import {
+  useLocation,
+  useMatches,
+  useNavigate,
+  Navigate,
+  Outlet,
+} from 'react-router'
 import { AuthContext } from './useAuth'
 import { readStoredValue, useLocalStorage } from './useLocalStorage'
 import {
@@ -140,6 +166,10 @@ export const AuthProvider = () => {
   const [meCheck, setMeCheck] = useState<MeCheck | null>(null)
   useEffect(() => {
     if (!token) return
+    // a still-deleted session (issue #94): GET /users/me filters deleted
+    // accounts and would 404. The recovery screen reads the token, not
+    // `me`; restored() seeds `me` once the account is back
+    if (token.deletionScheduledFor) return
     let cancelled = false
     adminUserApi.getCurrentUser().then(
       (user) => {
@@ -175,7 +205,9 @@ export const AuthProvider = () => {
     // call this function to set login values
     const login = async (session: LoginResponse) => {
       setToken(session)
-      navigate('/')
+      // a deleted account logs in without being recovered (issue #94):
+      // offer the restore-or-keep-deleted choice before anything else
+      navigate(session.deletionScheduledFor ? '/account-recovery' : '/')
     }
 
     // call this function to sign out logged in user
@@ -200,12 +232,37 @@ export const AuthProvider = () => {
       if (token) setMeCheck({ token, me: { status: 'ready', user } })
     }
 
-    return { token, role, me, login, logout, updateMe }
+    // the recovery screen's exit (issue #94): the account is active
+    // again, so the session sheds its deletion flag — kept, the guard
+    // would bounce every page back to /account-recovery — and `me` is
+    // seeded from the restore's response, stamped with the NEW session
+    // object so the identity check above keeps it
+    const restored = (user: AdminUser) => {
+      if (!token) return
+      const recovered: LoginResponse = { ...token }
+      delete recovered.deletionScheduledFor
+      setToken(recovered)
+      setMeCheck({ token: recovered, me: { status: 'ready', user } })
+    }
+
+    // logout()'s local half, with no server call and no navigation
+    // (PR #180 main sync): the password-reset page calls this once a
+    // reset lands. The server has already evicted every session the
+    // account held (G11), so POST /auth/logout would be a guaranteed
+    // 401 — and the caller is navigating to /login itself, so there is
+    // nothing here to navigate to.
+    const endSession = () => setToken(null)
+
+    return { token, role, me, login, logout, updateMe, restored, endSession }
   }, [token, role, me, navigate, setToken])
 
   return (
     <AuthContext.Provider value={value}>
-      <Outlet />
+      {token?.deletionScheduledFor && pathname !== '/account-recovery' ? (
+        <Navigate to="/account-recovery" replace />
+      ) : (
+        <Outlet />
+      )}
     </AuthContext.Provider>
   )
 }

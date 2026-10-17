@@ -138,7 +138,26 @@
   2026-10-16: AI Use Summary extended for the credit expiry and
   redistribution scheduler (issue #173) by Claude Code (Opus 5.5);
   same day, extended for the PR #193 review fixes.
+  2026-10-16: AI Use Summary extended for the server half of issue #178
+  (PR #183) by Claude Code (Opus 5) — the summary covered the web half
+  only.
+  2026-10-16: PR #183 rebased onto main now that its base PR #179 has
+  merged — the conflicts `docs/gateway.md`, `AdminService.java` and
+  `AdminServiceTest.java` carried resolved by keeping both sides, and
+  the one claim #179's approval follow-up left stale (a removed admin's
+  token keeping ADMIN until its exp) corrected, by Claude Code
+  (Opus 5).
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-10-17: the #178 clause extended for the PR #183 human-review
+  round (@Sinnez1) and the branch rebased again for #180's merge, by
+  Claude Code (Opus 5).
+  2026-10-17, Codex (GPT-6), PR #180 review: added the web #94
+  disclosure and the missing 2026-10-16 main-sync coverage.
+  Author review: Leong Wei Zhi to review via PR #180.
+  2026-10-17, Codex (GPT-6.1 Sol), issue #98: disclosed the user-service
+  Docker-unavailable test skips and verification documentation.
+  PR #197 review: disclosed CI's rejection of skipped user-service tests.
+  Author review: Leong Wei Zhi to review via pull request.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -683,6 +702,51 @@ Wei Zhi via neutral options Q&A (2026-10-14): on a page that needs no
 session the dead token is now dropped in place, with no redirect and
 no notice, and the redirect for a session-gated page is
 ProtectedRoute's own bounce.
+
+The server half of the same issue (#178, PR #183): `AdminService`
+writes the per-user revocation stamp after an admin role change (any
+actual change) or an admin removal, so the target's outstanding tokens
+are refused at the gateway on their next request instead of lasting to
+their `exp`; its service and controller tests; and decision G12 in
+`docs/gateway.md`, which needed no gateway code because PR #179's G11
+check already enforces the stamp. The mechanism (option A of the
+issue's options table, a Redis epoch stamp over a per-request role
+lookup or refresh tokens) and the scope (those two paths only) were
+decided by Leong Wei Zhi via neutral options Q&A, recorded in
+`ai/usage-log.md`. Rebasing that branch onto the merged #179 also
+corrected a sentence #179's own follow-up had added — that a token
+minted before a removal keeps ADMIN until it expires — in
+`user-service/README.md` and the `AdminService` comment. The PR #183
+human-review round (@Sinnez1) added one defect fix with no new design
+decision: the reviewer showed the stamp being written inside the
+caller's transaction, before the role change or removal committed, so a
+login in that gap could still mint a token carrying the old role —
+every stamp now runs after the commit, including the identical call
+site in the password reset from #179. Which of the two mechanisms the
+review named to use, and whether to extend the fix to that reset call
+site, were decided by Leong Wei Zhi via neutral options Q&A
+(2026-10-17).
+
+The web half of issue #94 (PR #180), generated with Claude Code
+(Fable 5; main sync with Opus 5), adds the forgot-password and explicit
+account-recovery screens, login link and arrival notice, recovery session
+flag handling, and support for bodyless 202 reset responses. The
+2026-10-16 sync reconciled the routes with #182/#185, opted both reset
+calls out of bearer authentication, and added local session clearing on
+successful reset with regression coverage. The PR #180 review fixes
+(Codex, GPT-6, 2026-10-17) extend the recovery hold to public routes,
+reject malformed nonempty 202 bodies, move the recovery request into
+profileApi, remove the duplicate home redirect, reuse the six-box
+CodeInput, and require the reset email field. The reset API returns no
+cooldown or expiry timings; the screen does not display those values.
+
+Issue #98's user-service test fix (Codex, GPT-6.1 Sol, 2026-10-17) adds
+inherited automatic skips when Docker is unavailable and guards shared PostgreSQL
+container startup. Unit tests still run without Docker; integration tests
+retain their existing shared container when Docker is available. The
+service README documents both modes and their coverage. The PR #197 review
+follow-up adds a CI check that rejects skipped user-service tests and
+missing test reports, enforcing the full suite on the runner.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
