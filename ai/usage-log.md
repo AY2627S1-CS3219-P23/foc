@@ -26,6 +26,51 @@ Entry template:
 ```
 
 ---
+## 2026-10-17 — Aung Ko Khant (order-service: state machine states, pushed first)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `OrderStates` (PENDING and REJECTED added by
+  the tool on 2026-10-15; ARRIVED added by the author on 2026-10-16),
+  `OrderEvents` (RESERVE, REJECT, TIMEOUT on 2026-10-15; ARRIVE on
+  2026-10-16), `OrderStateMachine` (PENDING -RESERVE-> CREATED,
+  -REJECT-> REJECTED, -TIMEOUT-> CANCELLED; COLLECTED -ARRIVE->
+  ARRIVED -COMPLETE-> COMPLETED) and `OrderStateMachineTests`.
+  Committed ahead of the rest of the 2026-10-15 to 10-17 order-service
+  work at the author's request ("Can we push state machine changes
+  first?"); the service, messaging and endpoint code that fires these
+  events follows in later commits with their own entries.
+- **Prompt(s):** 2026-10-15: "I think we need to add 2 additional
+  stages pending and rejected to coordinate with credit service"; the
+  saga is the team's design (`docs/credit-service.md` D7-D8), and the
+  author chose the event names RESERVE / REJECT / TIMEOUT and that only
+  they leave PENDING. 2026-10-16: "I would like to add an arrived state
+  between collected and completed, the point is to inform requester
+  that courier has arrived"; the author chose COMPLETE only from
+  ARRIVED (no direct COLLECTED -> COMPLETED).
+- **Author review:** this commit's tests run in a Maven container on a
+  clean checkout of it: 15 tests, 0 failures. To be reviewed via pull
+  request.
+
+## 2026-10-11 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service request state machine skeleton —
+  `foc.order.OrderStateMachine` (transition table) and
+  `OrderStateMachineTests`; `package foc.order;` line added to the
+  author's `OrderStates` / `OrderEvents` enums; order-service README
+  status paragraph; README AI Use Summary.
+- **Prompt(s):** "Help me implement skeleton of state mchine", with
+  the author's hand-written `OrderStates` and `OrderEvents` enums
+  (including the guard comments on CANCEL, DROP and EXPIRE) as input.
+  The tool asked two neutral-options questions and the author chose:
+  DROP leads ACCEPTED -> CREATED (not CANCELLED), and a plain-Java
+  transition table (not the Spring Statemachine library). The
+  remaining transitions were transcribed from the enums and their
+  comments.
+- **Author review:** Transition table pinned by unit tests (every
+  permitted transition, every other state/event pair rejected);
+  `mvn test` passes (11 tests). Reviewed via pull request.
+
 ## 2026-10-15 — Aung Ko Khant
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** docs

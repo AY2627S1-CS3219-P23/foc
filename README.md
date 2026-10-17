@@ -99,6 +99,8 @@
   Claude Code (Opus 5.5).
   2026-10-11: AI Use Summary extended for the order-service Requests
   entity/repository skeleton by Claude Code (Opus 5.5).
+  2026-10-17: AI Use Summary extended for the order-service request
+  state machine by Claude Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -565,7 +567,12 @@ engine and image version, host ports, and broker-wiring scope chosen
 by the author via neutral-options Q&A and recorded in
 `ai/usage-log.md`; and the order-service `Requests` entity and
 repository (table name and columns given by the author as an ER
-diagram, which the tool transcribed into the entity unchanged).
+diagram, which the tool transcribed into the entity unchanged); and
+the order-service request state machine (a plain-Java transition table
+and its unit tests over the author's own state and event enums, with
+the DROP target, the no-library form, the PENDING/REJECTED saga
+transitions' names and the ARRIVED step chosen by the author via
+neutral-options Q&A and recorded in `ai/usage-log.md`).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
