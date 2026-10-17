@@ -57,7 +57,6 @@ public abstract class PostgresTestContainer {
     static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17");
 
     static {
-        // AI-generated (edited by Codex; human review pending).
         // The extension skips subclasses without Docker; guard initialization too.
         // Keep this singleton outside @Container's per-class start/stop lifecycle.
         if (DockerClientFactory.instance().isDockerAvailable()) {

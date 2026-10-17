@@ -4289,3 +4289,11 @@ Entry template:
   this machine's Java 26 restriction. No Java code changed in this review
   round; the Docker-available suite was not rerun. `git diff --check` passed.
 - **Author review:** Leong Wei Zhi to review via PR #197.
+
+## 2026-10-17 — Leong Wei Zhi (PR #197 comment cleanup)
+- **Tool:** Codex (GPT-6.1 Sol).
+- **Prompt(s):** "remove // AI-generated (edited by Codex; human review pending)."
+- **Scope:** Removed the specified inline Java comment at the user's
+  explicit request. File-header attribution remains accurate.
+- **Verification:** Comment-only change; `git diff --check` passed.
+- **Author review:** Leong Wei Zhi to review via PR #197.
