@@ -21,6 +21,11 @@
 // 2026-10-10, Claude Code (Opus 5.5), PR #162 re-review (Leong Wei Zhi):
 // clearing the state keeps the URL's query and hash.
 // Reviewed by: Ryan Ang (everything above).
+// 2026-10-11, Claude Code (Fable 5), issue #94: "Forgot password?" link
+// to the reset-request page, and a "password reset" notice (the same
+// cleared-once-read navigation-state shape as the sign-up notice) shown
+// when the reset page sends the user back here.
+// Reviewed by: Ryan Ang (issue #94).
 // 2026-10-12, Claude Code (Fable 5), issue #178: "session ended" notice,
 // shown when AuthProvider forces a sign-out after a 401 on a
 // token-bearing request (owner decision via options Q&A). Carried by
@@ -34,6 +39,11 @@
 // open shows the notice then — rather than being skipped and surfacing
 // on the next visit, after a manual logout.
 // Reviewed by: Ryan Ang (@Sinnez1), PR #182 review rounds.
+// 2026-10-16, Claude Code (Opus 5), PR #180 main sync: the #94 and
+// #178 notices both stand, in the order sessionEnded, accountCreated,
+// passwordReset. They are not mutually exclusive in markup, but the
+// reset page now ends the local session before it navigates here, so
+// a reset cannot also raise the session-ended flag on arrival.
 
 import React, { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
@@ -54,12 +64,17 @@ export function Login() {
   const data = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
-  // set by the sign-up page after it creates the account
-  const cameFromSignup =
-    (location.state as { accountCreated?: boolean } | null)?.accountCreated ===
-    true
+  // set by the sign-up page after it creates the account, and by the
+  // reset page after a password reset (issue #94)
+  const arrivalState = location.state as {
+    accountCreated?: boolean
+    passwordReset?: boolean
+  } | null
+  const cameFromSignup = arrivalState?.accountCreated === true
+  const cameFromReset = arrivalState?.passwordReset === true
   // kept here because the navigation state is cleared below
   const [accountCreated] = useState(cameFromSignup)
+  const [passwordReset] = useState(cameFromReset)
   // set by AuthProvider when a 401 forced a sign-out (issue #178): read
   // on arrival, and subscribed to for the 401 that lands while this page
   // is already open. Either way the flag is consumed, so it can't show
@@ -81,7 +96,7 @@ export function Login() {
   // the browser keeps navigation state across a reload, so drop it once
   // read: the notice shows on arrival only
   useEffect(() => {
-    if (cameFromSignup) {
+    if (cameFromSignup || cameFromReset) {
       // query and hash kept: only the state is dropped
       navigate(location.pathname + location.search + location.hash, {
         replace: true,
@@ -90,6 +105,7 @@ export function Login() {
     }
   }, [
     cameFromSignup,
+    cameFromReset,
     navigate,
     location.pathname,
     location.search,
@@ -143,6 +159,14 @@ export function Login() {
           Account created. Log in to continue.
         </p>
       )}
+      {passwordReset && !error && (
+        <p
+          role="status"
+          className="mt-4 rounded-md border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-700"
+        >
+          Password reset. Log in with your new password.
+        </p>
+      )}
       {error && (
         <p
           role="alert"
@@ -171,6 +195,15 @@ export function Login() {
             className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 font-normal focus:border-gray-400 focus:outline-none"
           />
         </label>
+        <p className="text-right text-sm">
+          <button
+            type="button"
+            onClick={() => router.navigate('/forgot-password')}
+            className="font-medium text-gray-900 underline cursor-pointer"
+          >
+            Forgot password?
+          </button>
+        </p>
         <button
           type="submit"
           className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
