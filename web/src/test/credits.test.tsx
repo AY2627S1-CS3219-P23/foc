@@ -7,7 +7,7 @@
 // amount and date filters as query parameters (local days to UTC, the
 // end exclusive), the client-side range checks, paging, empty and error
 // states, and the 30 s poll that pauses in a hidden tab and reloads the
-// rows when the balance changes.
+// rows on each poll.
 // 2026-10-17: the admin dashboard's Common Pool box — its figures, the
 // times in Singapore time, the empty and preview wording, and an error;
 // its past-distributions table, newest first, paged, and empty.
@@ -19,6 +19,7 @@ import { RouterProvider, createMemoryRouter } from 'react-router'
 
 import { creditApi } from '@/features/credit/api'
 import { BALANCE_POLL_MS } from '@/features/credit/CreditBalanceProvider'
+import { NO_FILTERS, parseFilters } from '@/features/credit/history'
 import type {
   CreditBalance,
   CreditHistoryEntry,
@@ -293,6 +294,50 @@ describe('credits page', () => {
     ).toBeInTheDocument()
   })
 
+  it('waits for typing to pause before asking the server', async () => {
+    const user = userEvent.setup()
+    renderAt('/credits')
+    await screen.findByRole('table')
+
+    await user.type(screen.getByLabelText('Min amount'), '100')
+
+    await waitFor(() =>
+      expect(creditApi.getHistory).toHaveBeenLastCalledWith({
+        page: 0,
+        minAmount: 100,
+      }),
+    )
+    // one request for the whole number, none for 1 or 10
+    const asked = vi
+      .mocked(creditApi.getHistory)
+      .mock.calls.map(([q]) => q?.minAmount)
+    expect(asked).not.toContain(1)
+    expect(asked).not.toContain(10)
+  })
+
+  it('words the empty state for the rows shown, not the inputs', async () => {
+    const user = userEvent.setup()
+    renderAt('/credits')
+    await screen.findByRole('table')
+    // a filtered query finds nothing; the unfiltered one never answers
+    vi.mocked(creditApi.getHistory).mockImplementation((q) =>
+      q?.minAmount ? Promise.resolve(page([])) : new Promise(() => {}),
+    )
+
+    await user.type(screen.getByLabelText('Min amount'), '99')
+    await screen.findByText('No transactions match these filters.')
+    await user.click(screen.getByRole('button', { name: 'Clear Filters' }))
+
+    // still the filtered result while the unfiltered page loads
+    await waitFor(() =>
+      expect(creditApi.getHistory).toHaveBeenLastCalledWith({ page: 0 }),
+    )
+    expect(
+      screen.getByText('No transactions match these filters.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('No transactions yet.')).not.toBeInTheDocument()
+  })
+
   it("shows the server's reason when the history fails to load", async () => {
     vi.mocked(creditApi.getHistory).mockRejectedValue(
       new ApiError(400, { status: 400, detail: 'size must be at most 100' }),
@@ -309,6 +354,38 @@ describe('credits page', () => {
     expect(
       await screen.findByRole('heading', { name: 'Log In' }),
     ).toBeInTheDocument()
+  })
+})
+
+describe('date filters', () => {
+  // the start of a local day, built as the page does
+  const localDay = (year: number, month: number, day: number) => {
+    const d = new Date(0)
+    d.setFullYear(year, month - 1, day)
+    d.setHours(0, 0, 0, 0)
+    return d.toISOString()
+  }
+
+  it('keeps a two-digit year as typed, not 19xx', () => {
+    const parsed = parseFilters({ ...NO_FILTERS, from: '0026-10-01' })
+    expect(parsed).toEqual({
+      ok: true,
+      query: { from: localDay(26, 10, 1) },
+    })
+  })
+
+  it('ends a range on 31 December at the start of the next year', () => {
+    const parsed = parseFilters({ ...NO_FILTERS, to: '2026-12-31' })
+    expect(parsed).toEqual({ ok: true, query: { to: localDay(2027, 1, 1) } })
+  })
+
+  it('refuses a value that is not a date instead of throwing', () => {
+    for (const from of ['2026-10', 'not a date', '2026-02-30']) {
+      expect(parseFilters({ ...NO_FILTERS, from })).toEqual({
+        ok: false,
+        error: 'Dates must be valid calendar dates.',
+      })
+    }
   })
 })
 
@@ -484,6 +561,54 @@ describe('admin common pool box', () => {
     })
   })
 
+  it('keeps the last page up after a failed one, and can try again', async () => {
+    vi.spyOn(creditApi, 'getPoolSummary').mockResolvedValue({
+      poolBalance: 0,
+      accounts: 2,
+      share: 0,
+      remainder: 0,
+      lastRun: null,
+      nextRunAt: '2026-10-20T16:00:00Z',
+    })
+    let failSecondPage = true
+    vi.mocked(creditApi.getRedistributions).mockImplementation(async (q) => {
+      if (q?.page === 1 && failSecondPage) {
+        throw new ApiError(500, { status: 500, detail: 'Server error' })
+      }
+      return {
+        content: [
+          {
+            period: q?.page === 1 ? '2025-10' : '2026-10',
+            distributed: 3,
+            remainder: 0,
+            ranAt: '2026-09-30T16:00:00Z',
+          },
+        ],
+        page: q?.page ?? 0,
+        size: 12,
+        totalElements: 13,
+        totalPages: 2,
+      }
+    })
+    const user = userEvent.setup()
+    renderAt('/admin')
+    const past = await pastRuns()
+    await past.findByText('October 2026')
+
+    await user.click(past.getByRole('button', { name: 'Page 2' }))
+
+    expect(await past.findByRole('alert')).toHaveTextContent('Server error')
+    // the first page and the pager are still there
+    expect(past.getByText('October 2026')).toBeInTheDocument()
+    expect(past.getByRole('button', { name: 'Page 2' })).toBeInTheDocument()
+
+    failSecondPage = false
+    await user.click(past.getByRole('button', { name: 'Try again' }))
+
+    expect(await past.findByText('October 2025')).toBeInTheDocument()
+    expect(past.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('says when nothing has been distributed yet', async () => {
     vi.spyOn(creditApi, 'getPoolSummary').mockResolvedValue({
       poolBalance: 0,
@@ -568,19 +693,45 @@ describe('balance poll', () => {
     ).toBeInTheDocument()
   })
 
-  it('reloads the history rows when the balance changes', async () => {
+  it('reloads the history rows on every poll, the balance changed or not', async () => {
     renderAt('/credits')
     await screen.findByRole('table')
     await waitFor(() => expect(creditApi.getHistory).toHaveBeenCalledTimes(1))
 
-    // an unchanged balance leaves the rows alone
+    // unchanged: a reserve and a release between polls add rows too
     await act(async () => vi.advanceTimersByTime(BALANCE_POLL_MS))
-    await waitFor(() => expect(creditApi.getBalance).toHaveBeenCalledTimes(2))
-    expect(creditApi.getHistory).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(creditApi.getHistory).toHaveBeenCalledTimes(2))
 
     balance = { available: 45, reserved: 8, total: 53 }
     await act(async () => vi.advanceTimersByTime(BALANCE_POLL_MS))
+    await waitFor(() => expect(creditApi.getHistory).toHaveBeenCalledTimes(3))
+  })
 
-    await waitFor(() => expect(creditApi.getHistory).toHaveBeenCalledTimes(2))
+  it('never lets an older balance answer replace a newer one', async () => {
+    renderAt('/')
+    await screen.findByRole('link', { name: 'Credits: 42' })
+
+    // the interval's poll is slow; showing the tab again starts another
+    let answerSlow: (b: CreditBalance) => void = () => {}
+    vi.mocked(creditApi.getBalance)
+      .mockImplementationOnce(
+        () => new Promise((resolve) => (answerSlow = resolve)),
+      )
+      .mockImplementationOnce(async () => ({
+        available: 45,
+        reserved: 8,
+        total: 53,
+      }))
+    await act(async () => vi.advanceTimersByTime(BALANCE_POLL_MS))
+    act(() => setVisibility('hidden'))
+    act(() => setVisibility('visible'))
+    await screen.findByRole('link', { name: 'Credits: 45' })
+
+    // the slow, older answer arrives last
+    await act(async () => answerSlow({ available: 40, reserved: 8, total: 48 }))
+
+    expect(
+      screen.getByRole('link', { name: 'Credits: 45' }),
+    ).toBeInTheDocument()
   })
 })

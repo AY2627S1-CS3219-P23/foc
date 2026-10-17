@@ -16,8 +16,9 @@ export type BalanceState =
 export interface CreditBalanceData {
   // null while logged out
   state: BalanceState | null
-  // goes up each time a poll finds the balance changed, so the credits
-  // page knows to reload its history rows
+  // goes up on each poll after the first, so the credits page reloads
+  // its history rows; a balance that came back to the same value can
+  // still hide new rows
   version: number
 }
 

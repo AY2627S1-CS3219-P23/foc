@@ -26,6 +26,9 @@ interface Result {
 
 export function PastDistributions() {
   const [page, setPage] = useState(0)
+  // bumped to load `page` again: after a failed page the pager still
+  // shows the last good one, so picking the failed page changes nothing
+  const [attempt, setAttempt] = useState(0)
   const [result, setResult] = useState<Result | null>(null)
 
   useEffect(() => {
@@ -36,17 +39,24 @@ export function PastDistributions() {
       },
       (err) => {
         if (!cancelled) {
-          setResult({
+          // the last good rows, and with them the pager, stay up
+          setResult((prev) => ({
             page,
+            runs: prev?.runs,
             error: errorMessage(err, 'Could not load past distributions.'),
-          })
+          }))
         }
       },
     )
     return () => {
       cancelled = true
     }
-  }, [page])
+  }, [page, attempt])
+
+  const goTo = (next: number) => {
+    setPage(next)
+    setAttempt((a) => a + 1)
+  }
 
   const loading = result?.page !== page
   // the last rows stay up while the next page loads
@@ -64,7 +74,14 @@ export function PastDistributions() {
 
       {error && (
         <p role="alert" className="mt-2 text-sm text-red-700">
-          {error}
+          {error}{' '}
+          <button
+            type="button"
+            onClick={() => setAttempt((a) => a + 1)}
+            className="font-medium underline"
+          >
+            Try again
+          </button>
         </p>
       )}
       {!error && !shown && loading && (
@@ -73,7 +90,7 @@ export function PastDistributions() {
       {!error && shown && shown.content.length === 0 && (
         <p className="mt-2 text-sm text-gray-500">No distributions yet.</p>
       )}
-      {!error && shown && shown.content.length > 0 && (
+      {shown && shown.content.length > 0 && (
         <div className={`mt-2 overflow-x-auto ${loading ? 'opacity-60' : ''}`}>
           <table className="w-full text-left text-sm">
             <thead>
@@ -118,7 +135,7 @@ export function PastDistributions() {
           <Pagination
             page={shown.page + 1}
             totalPages={shown.totalPages}
-            onPageChange={(p) => setPage(p - 1)}
+            onPageChange={(p) => goTo(p - 1)}
             disabled={loading}
           />
         </div>

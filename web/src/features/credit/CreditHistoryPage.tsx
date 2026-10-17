@@ -3,8 +3,8 @@
 // Scope: the credits page (Credit F4.1, F4.1.2, F4.1.3), per
 // web/docs/wireframes/credit-history.png: the balance from the shared
 // poll, and GET /credits/me/history with paging and the amount and
-// date-range filters. The current page reloads when the poll finds the
-// balance changed. A result is stamped with the query it answers
+// date-range filters. The current page reloads on each balance poll. A
+// result is stamped with the query it answers
 // (derive-by-key, as NotificationProvider does with its token), so a
 // stale response never lands on a newer query.
 // Author review: Ryan Ang, pending pull request review.
@@ -21,51 +21,83 @@ import { NO_FILTERS, parseFilters, type HistoryFilterInputs } from './history'
 import type { CreditHistoryEntry, CreditPage } from './types'
 import { useCreditBalance } from './useCreditBalance'
 
+// typing in a filter field applies once it pauses, as the admin user
+// search does, so each keystroke is not a request
+export const FILTER_DEBOUNCE_MS = 300
+
 interface HistoryResult {
+  // the query it answers, without the poll's version: a poll's reload
+  // of the same query is not a new query
   key: string
+  // whether that query had any filter, for the empty-state wording
+  filtered: boolean
   page?: CreditPage<CreditHistoryEntry>
   error?: string
 }
 
 export function CreditHistoryPage() {
   const { state, version } = useCreditBalance()
+  // the inputs as typed, checked at once; `applied` is what is queried
   const [filters, setFilters] = useState<HistoryFilterInputs>(NO_FILTERS)
+  const [applied, setApplied] = useState<HistoryFilterInputs>(NO_FILTERS)
   const [page, setPage] = useState(0)
   const [result, setResult] = useState<HistoryResult | null>(null)
 
+  useEffect(() => {
+    if (filters === applied) return
+    const timer = setTimeout(() => {
+      setApplied(filters)
+      setPage(0)
+    }, FILTER_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [filters, applied])
+
   const parsed = parseFilters(filters)
-  const query = parsed.ok ? parsed.query : null
+  const appliedParsed = parseFilters(applied)
+  const query = appliedParsed.ok ? appliedParsed.query : null
   const minAmount = query?.minAmount
   const maxAmount = query?.maxAmount
   const from = query?.from
   const to = query?.to
   const valid = query !== null
-  const key = JSON.stringify([minAmount, maxAmount, from, to, page, version])
+  const filtered = [minAmount, maxAmount, from, to].some((v) => v !== undefined)
+  const key = JSON.stringify([minAmount, maxAmount, from, to, page])
 
   useEffect(() => {
     if (!valid) return
     let cancelled = false
     creditApi.getHistory({ page, minAmount, maxAmount, from, to }).then(
       (data) => {
-        if (!cancelled) setResult({ key, page: data })
+        if (!cancelled) setResult({ key, filtered, page: data })
       },
       (err) => {
         if (!cancelled) {
-          setResult({
-            key,
-            error: errorMessage(err, 'Could not load your transactions.'),
-          })
+          setResult((prev) =>
+            // a failed reload of the rows already up keeps them
+            prev?.key === key && prev.page
+              ? prev
+              : {
+                  key,
+                  filtered,
+                  error: errorMessage(err, 'Could not load your transactions.'),
+                },
+          )
         }
       },
     )
     return () => {
       cancelled = true
     }
-  }, [key, valid, page, minAmount, maxAmount, from, to])
+    // version: each balance poll reloads the rows already up
+  }, [key, filtered, valid, page, minAmount, maxAmount, from, to, version])
 
   const changeFilters = (next: HistoryFilterInputs) => {
     setFilters(next)
-    setPage(0)
+    // clearing applies at once: there is nothing more to type
+    if (next === NO_FILTERS) {
+      setApplied(NO_FILTERS)
+      setPage(0)
+    }
   }
 
   const loading = valid && result?.key !== key
@@ -107,7 +139,7 @@ export function CreditHistoryPage() {
         )}
         {!error && shown && shown.content.length === 0 && (
           <p className="text-sm text-gray-500">
-            {Object.values(filters).some((v) => v !== '')
+            {result?.filtered
               ? 'No transactions match these filters.'
               : 'No transactions yet.'}
           </p>

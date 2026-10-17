@@ -13,7 +13,6 @@ import { Outlet } from 'react-router'
 import { errorMessage } from '@/lib/api/http'
 import { useAuth } from '../user/useAuth'
 import { creditApi } from './api'
-import type { CreditBalance } from './types'
 import { CreditBalanceContext, type BalanceState } from './useCreditBalance'
 
 export const BALANCE_POLL_MS = 30_000
@@ -24,9 +23,6 @@ interface SessionBalance {
   state: BalanceState
   version: number
 }
-
-const sameBalance = (a: CreditBalance, b: CreditBalance) =>
-  a.available === b.available && a.reserved === b.reserved
 
 // one object, so the context value is stable while a first load is out
 const LOADING: BalanceState = { status: 'loading' }
@@ -46,24 +42,29 @@ export const CreditBalanceProvider = () => {
 
     let disposed = false
     let timer: ReturnType<typeof setInterval> | undefined
+    // the newest load() started; showing the tab again can start one
+    // while an interval load is still out, and only the newest may land
+    let latest = 0
 
     const load = async () => {
+      const request = ++latest
       try {
         const balance = await creditApi.getBalance()
-        if (disposed) return
+        if (disposed || request !== latest) return
         setResult((prev) => {
           const mine = prev?.token === accessToken ? prev : null
-          const before =
-            mine?.state.status === 'ready' ? mine.state.balance : null
-          const changed = before !== null && !sameBalance(before, balance)
+          const polled = mine?.state.status === 'ready'
           return {
             token: accessToken,
             state: { status: 'ready', balance },
-            version: (mine?.version ?? 0) + (changed ? 1 : 0),
+            // every poll after the first, not only a changed balance: a
+            // reserve and a release between two polls leave the balance
+            // as it was, yet add two history rows
+            version: (mine?.version ?? 0) + (polled ? 1 : 0),
           }
         })
       } catch (err) {
-        if (disposed) return
+        if (disposed || request !== latest) return
         setResult((prev) => {
           const mine = prev?.token === accessToken ? prev : null
           // a failed poll keeps the last balance it had rather than

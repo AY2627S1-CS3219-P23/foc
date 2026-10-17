@@ -16,11 +16,13 @@ package foc.credit.service;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,8 +40,11 @@ import foc.credit.repository.RedistributionRunRepository;
 @Service
 public class PoolQueryService {
 
-    // the zone the redistribution decides its month in (D12)
-    static final ZoneId ZONE = ZoneId.of("Asia/Singapore");
+    // the scheduler's own zone and schedule, so "next run" cannot drift
+    // from when the run actually happens (D12)
+    static final ZoneId ZONE = ZoneId.of(ExpiryAndRedistributionScheduler.ZONE);
+    private static final CronExpression SCHEDULE =
+        CronExpression.parse(ExpiryAndRedistributionScheduler.DAILY_CRON);
 
     // "yyyy-MM" sorts as text in date order
     private static final Sort LATEST_FIRST = Sort.by(Sort.Order.desc("period"));
@@ -70,16 +75,19 @@ public class PoolQueryService {
         return runs.findAll(PageRequest.of(page, size, LATEST_FIRST));
     }
 
-    // Once this month is recorded, the next run is the 1st of next month
-    // at 00:00. Until then the daily routine tries it at each midnight,
-    // so a missed or failed month is due at the next one.
+    // Once this month is recorded, the next run is the scheduler's first
+    // firing in next month. Until then the daily routine tries it at each
+    // firing, so a missed or failed month is due at the next one.
     static Instant nextRunAt(Instant now, Optional<RedistributionRun> last) {
-        YearMonth month = YearMonth.from(now.atZone(ZONE));
+        ZonedDateTime local = now.atZone(ZONE);
+        YearMonth month = YearMonth.from(local);
         boolean recorded = last.map(run -> run.getPeriod().equals(month.toString())).orElse(false);
-        if (recorded) {
-            return month.plusMonths(1).atDay(1).atStartOfDay(ZONE).toInstant();
-        }
-        return now.atZone(ZONE).toLocalDate().plusDays(1).atStartOfDay(ZONE).toInstant();
+        // next() is strictly after its argument, so the month's first
+        // instant is reached from one nanosecond before it
+        ZonedDateTime after = recorded
+            ? month.plusMonths(1).atDay(1).atStartOfDay(ZONE).minusNanos(1)
+            : local;
+        return SCHEDULE.next(after).toInstant();
     }
 
     /**

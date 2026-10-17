@@ -99,11 +99,22 @@ export const NO_FILTERS: HistoryFilterInputs = {
 export type ParsedFilters =
   { ok: true; query: CreditHistoryQuery } | { ok: false; error: string }
 
-// the start of a local day as a UTC instant; `dayOffset` 1 gives the
-// start of the next day, which is the exclusive end of a range
-function localDayStart(date: string, dayOffset = 0): string {
-  const [year, month, day] = date.split('-').map(Number)
-  return new Date(year, month - 1, day + dayOffset).toISOString()
+// the start of a local day as a UTC instant, or null when `date` is not
+// a yyyy-mm-dd date; `dayOffset` 1 gives the start of the next day,
+// which is the exclusive end of a range
+function localDayStart(date: string, dayOffset = 0): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  if (!match) return null
+  const [year, month, day] = match.slice(1).map(Number)
+  // setFullYear, not the Date constructor: the constructor reads years 0
+  // to 99 as 1900 to 1999
+  const start = new Date(0)
+  start.setFullYear(year, month - 1, day)
+  start.setHours(0, 0, 0, 0)
+  // a day the month doesn't have (30 February) rolls over: refuse it
+  if (start.getMonth() !== month - 1 || start.getDate() !== day) return null
+  start.setDate(day + dayOffset)
+  return start.toISOString()
 }
 
 function parseAmount(value: string): number | null | 'invalid' {
@@ -126,6 +137,13 @@ export function parseFilters(inputs: HistoryFilterInputs): ParsedFilters {
       error: 'The minimum amount cannot be above the maximum.',
     }
   }
+  const from = inputs.from ? localDayStart(inputs.from) : undefined
+  // the last picked day is included, so the range ends where the next
+  // one starts
+  const to = inputs.to ? localDayStart(inputs.to, 1) : undefined
+  if (from === null || to === null) {
+    return { ok: false, error: 'Dates must be valid calendar dates.' }
+  }
   // yyyy-mm-dd strings compare in date order
   if (inputs.from && inputs.to && inputs.from > inputs.to) {
     return { ok: false, error: 'The start date cannot be after the end date.' }
@@ -135,10 +153,8 @@ export function parseFilters(inputs: HistoryFilterInputs): ParsedFilters {
     query: {
       minAmount: minAmount ?? undefined,
       maxAmount: maxAmount ?? undefined,
-      from: inputs.from ? localDayStart(inputs.from) : undefined,
-      // the last picked day is included, so the range ends where the
-      // next one starts
-      to: inputs.to ? localDayStart(inputs.to, 1) : undefined,
+      from,
+      to,
     },
   }
 }

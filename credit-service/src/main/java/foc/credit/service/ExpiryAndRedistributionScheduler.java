@@ -72,7 +72,11 @@ public class ExpiryAndRedistributionScheduler {
         this.clock = clock.withZone(ZoneId.of(ZONE));
     }
 
-    @Scheduled(cron = "0 0 0 * * *", zone = ZONE)
+    // PoolQueryService.nextRunAt reads this and ZONE to tell admins when
+    // the next redistribution is due: change the schedule here only
+    static final String DAILY_CRON = "0 0 0 * * *";
+
+    @Scheduled(cron = DAILY_CRON, zone = ZONE)
     public void runDaily() {
         run();
     }
