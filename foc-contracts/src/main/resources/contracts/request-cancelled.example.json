@@ -7,9 +7,7 @@
   "parties": ["usr-req-1001"],
   "requestId": "req-20260919-0042",
   "requesterId": "usr-req-1001",
-  "requesterName": "maya",
   "courierId": null,
-  "courierName": null,
   "pickupLocation": "Techno Edge",
   "dropoffLocation": "COM3-01-19",
   "note": "Chicken rice, less chilli"

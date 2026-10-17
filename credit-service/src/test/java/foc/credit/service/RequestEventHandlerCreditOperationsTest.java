@@ -10,9 +10,6 @@
  * arrives before its reservation throws and is paid when retried; the
  * operation's log line is written only once the transaction commits.
  * Author review: Ryan Ang, pending pull request review.
- * 2026-10-17, Claude Code (Fable 5), issue #66: fixtures updated for
- * the display-name fields added to the request event records (D29);
- * no behavior change in this test.
  */
 package foc.credit.service;
 
@@ -124,7 +121,7 @@ class RequestEventHandlerCreditOperationsTest extends PostgresTestContainer {
         handler.handle(submitted(3));
 
         assertThat(handler.handle(new RequestCancelled("evt-cancelled", SENT_AT, "order-service", "corr-1",
-            List.of(requester), request, requester, null, null, null, "UTown", "PGP", null))).isEqualTo(Outcome.HANDLED);
+            List.of(requester), request, requester, null, "UTown", "PGP", null))).isEqualTo(Outcome.HANDLED);
 
         assertBalance(requester, 5, 0);
         assertThat(statusOf(request)).isEqualTo(ReservationStatus.RELEASED);
@@ -133,7 +130,7 @@ class RequestEventHandlerCreditOperationsTest extends PostgresTestContainer {
     @Test
     void anExpiryThatArrivesFirstMakesTheLateSubmissionADuplicateWithNoReply() {
         assertThat(handler.handle(new RequestExpired("evt-expired", SENT_AT, "order-service", "corr-1",
-            List.of(requester), request, requester, null, "UTown", "PGP", null))).isEqualTo(Outcome.HANDLED);
+            List.of(requester), request, requester, "UTown", "PGP", null))).isEqualTo(Outcome.HANDLED);
 
         assertThat(handler.handle(submitted(3))).isEqualTo(Outcome.HANDLED);
 
@@ -161,12 +158,12 @@ class RequestEventHandlerCreditOperationsTest extends PostgresTestContainer {
 
     private RequestSubmitted submitted(int reward) {
         return new RequestSubmitted("evt-submitted", SENT_AT, "order-service", "corr-1", List.of(requester),
-            request, requester, null, "UTown", "PGP", null, reward);
+            request, requester, "UTown", "PGP", null, reward);
     }
 
     private RequestCompleted completed(String courierId) {
         return new RequestCompleted("evt-completed", SENT_AT, "order-service", "corr-1",
-            List.of(requester, courierId), request, requester, null, courierId, null, "UTown", "PGP", null);
+            List.of(requester, courierId), request, requester, courierId, "UTown", "PGP", null);
     }
 
     private void assertBalance(String userId, int available, int reserved) {

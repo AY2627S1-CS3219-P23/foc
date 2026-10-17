@@ -24,8 +24,6 @@
 # 2026-10-14, PR #185 review (@Sinnez1): Redis repository scanning
 # switched off — the starter's scan logged a store-assignment warning
 # per JPA repository on every start.
-# 2026-10-17, issue #66: web-allowed-origin binding for the REST API's
-# CORS, same property shape as credit-service's.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -94,9 +92,6 @@ notification:
     # browser's Origin header passes through the API gateway unchanged
     # (docs/gateway.md), so the patterns name the SPA origin(s).
     allowed-origins: ${NOTIFICATION_WS_ALLOWED_ORIGINS:http://localhost:*}
-  # The SPA origin the REST API's CORS headers allow (docs/gateway.md,
-  # "CORS stays per-service"); the WS handshake has its own list above.
-  web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
   retention:
     # Retention window for stored notifications (D9); the purge
     # scheduler hard-deletes rows once created_at is older than this

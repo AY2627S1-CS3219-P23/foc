@@ -23,8 +23,6 @@
 # 2026-10-14, PR #185 review (@Sinnez1): Redis repository scanning off,
 # repeated from the main yaml (shadowed) — it logs a store-assignment
 # warning per JPA repository.
-# 2026-10-17, issue #66: web-allowed-origin repeated here (shadowed)
-# for the REST API's CORS bean to resolve in tests.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 notification:
@@ -44,8 +42,6 @@ notification:
   retention:
     days: 30
     purge-cron: "0 0 3 * * *"
-  # Shadowed like the rest: the REST API's CORS bean needs it to resolve.
-  web-allowed-origin: http://localhost:5173
 
 spring:
   rabbitmq:
