@@ -9,6 +9,8 @@
  * rows, and a foreign ID answers the same 404 as a missing one.
  * Test style follows credit-service's CreditControllerTest (real JWTs
  * through the whole filter chain, H2 database).
+ * 2026-10-17, PR #198 Codex review: non-boolean read values ("true",
+ * 1) pinned as 400s — Jackson's default coercion was binding them.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.controller;
@@ -209,6 +211,25 @@ class NotificationControllerTest {
 						.content("{}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.detail").value("read is required and must be true or false"));
+	}
+
+	@ParameterizedTest
+	@CsvSource({
+			"'{\"read\":\"true\"}'",
+			"'{\"read\":1}'",
+			"'{\"read\":\"yes\"}'",
+	})
+	@DisplayName("A non-boolean read is 400, never coerced (PR #198 review)")
+	void patchWithNonBooleanReadIs400(String body) throws Exception {
+		Notification row = stored(ALICE, "request.created", "{\"requestId\":\"req-1\"}");
+		mockMvc.perform(patch("/notifications/me/" + row.getId())
+						.header("Authorization", bearer(ALICE))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(body))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+		// the refused write changed nothing
+		assertThat(notifications.findById(row.getId()).orElseThrow().isRead()).isFalse();
 	}
 
 	@Test

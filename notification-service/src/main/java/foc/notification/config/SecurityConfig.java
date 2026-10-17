@@ -11,6 +11,13 @@
  * re-check the denylist: the gateway does that for every /api request
  * (docs/gateway.md, G4). Stateless sessions and the JWT filter built
  * inline, both as credit-service does.
+ * 2026-10-17, PR #198 Codex review: the CORS registration narrowed
+ * from /** to /notifications/** — registered at /**, the REST policy
+ * also policed the /ws handshake and SockJS fallback paths, 403ing a
+ * handshake whose Origin the WS config allows (its
+ * NOTIFICATION_WS_ALLOWED_ORIGINS patterns are broader than the single
+ * WEB_ALLOWED_ORIGIN) and answering SockJS preflights without the
+ * credentials header SockJS's own CORS handling sends.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.config;
@@ -49,7 +56,12 @@ public class SecurityConfig {
 		cors.setAllowedMethods(List.of("GET", "POST", "PATCH", "OPTIONS"));
 		cors.setAllowedHeaders(List.of("Authorization", "Content-Type"));
 		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-		source.registerCorsConfiguration("/**", cors);
+		// REST routes only, never /** — the /ws handshake and SockJS
+		// fallback paths have their own origin policy
+		// (notification.websocket.allowed-origins) and credential
+		// semantics, which a global registration here overrides (PR #198
+		// Codex review: an Origin the WS config allows was 403'd)
+		source.registerCorsConfiguration("/notifications/**", cors);
 		return source;
 	}
 

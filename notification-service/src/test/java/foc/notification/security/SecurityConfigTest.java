@@ -9,12 +9,17 @@
  * SockJS handshake path /ws/info must stay open, because the #67
  * STOMP client authenticates at the CONNECT frame (D23), not the
  * HTTP upgrade — this is the regression canary for that feature.
+ * 2026-10-17, PR #198 Codex review: the REST CORS policy must not
+ * police the WS paths — pinned with a handshake-origin case (the /**
+ * registration was 403ing an Origin the WS config allows) and a REST
+ * preflight case proving the narrowed registration still answers.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -74,6 +79,26 @@ class SecurityConfigTest {
 		// browser sends it with no Authorization header; a 401 here would
 		// break the #67 push client outright
 		mockMvc.perform(get("/ws/info")).andExpect(status().isOk());
+	}
+
+	@Test
+	@DisplayName("The REST CORS policy keeps its hands off the WS paths (PR #198 review)")
+	void restCorsDoesNotPoliceWebSocketPaths() throws Exception {
+		// an Origin the WS config allows (http://localhost:* in the test
+		// yaml) but the single REST WEB_ALLOWED_ORIGIN does not — with the
+		// CORS registration at /**, this was a 403 before the handshake
+		mockMvc.perform(get("/ws/info").header("Origin", "http://localhost:4000"))
+				.andExpect(status().isOk());
+	}
+
+	@Test
+	@DisplayName("A REST preflight from the SPA origin still answers after the narrowed CORS mapping")
+	void restPreflightStillAnswers() throws Exception {
+		mockMvc.perform(options("/notifications/me")
+						.header("Origin", "http://localhost:5173")
+						.header("Access-Control-Request-Method", "PATCH"))
+				.andExpect(status().isOk())
+				.andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"));
 	}
 
 	@Test

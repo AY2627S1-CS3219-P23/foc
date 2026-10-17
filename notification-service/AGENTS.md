@@ -8,6 +8,8 @@
   2026-10-17, Claude Code (Fable 5), issue #66: package map, invariants
   and test list updated for the REST API (controller/config/dto
   packages, security chain, D24-D29); stale D1-D22 range fixed.
+  2026-10-17, Claude Code (Fable 5), PR #198 Codex review: the config/
+  row records the CORS registration's /notifications/** scope.
 -->
 
 # notification-service/ — Agent Guide
@@ -30,7 +32,7 @@ the decision ID when touching related code.
 | `messaging/rabbitmq/` | The only package allowed to touch broker types: `DomainEventsListener` (manual ack, retry republish), `DomainEventMessageConverter` (dispatch on body `eventType` via `EventTypeRegistry`), `RabbitMqTopology` + `RabbitMqTopologyInitializer` (startup declaration), `RabbitMqMessageConverterConfig` |
 | `messaging/stomp/` | `WebSocketStompConfig` (`/ws`, SockJS, heartbeats — also owns the app's sole `TaskScheduler`), `JwtChannelInterceptor` (CONNECT auth), `NotificationPushListener` (`AFTER_COMMIT` push), `StompPrincipal` |
 | `security/` | `JwtVerifier` (HS256, jjwt; fails startup on missing/short secret), `JwtAuthenticationFilter` (REST bearer → security context, empty authorities per D28; built inline by `SecurityConfig`, not a bean), `RestAuthEntryPoint`/`RestAccessDeniedHandler` (401/403 problem+json), `redis/RedisTokenDenylist` (D23 — STOMP CONNECT only, never the REST path, G4) |
-| `config/` | `SecurityConfig` — stateless chain: `/error`, `/actuator/health` and the `/ws` SockJS paths open (the CONNECT frame authenticates, not the handshake), everything else bearer-authenticated; CORS from `WEB_ALLOWED_ORIGIN` |
+| `config/` | `SecurityConfig` — stateless chain: `/error`, `/actuator/health` and the `/ws` SockJS paths open (the CONNECT frame authenticates, not the handshake), everything else bearer-authenticated; CORS from `WEB_ALLOWED_ORIGIN`, registered for `/notifications/**` only — never `/**`, which would put the REST origin policy in front of the WS handshake/SockJS paths (PR #198 review) |
 | `controller/` | `NotificationController` (`/notifications/me` routes, D24–D27), `ApiExceptionHandler` (problem+json 400/404), the contract's exceptions |
 | `dto/` | `PageResponse` (the platform page envelope — a copy, not an import, D15), `MarkReadRequest`, `UnreadCountResponse` |
 
