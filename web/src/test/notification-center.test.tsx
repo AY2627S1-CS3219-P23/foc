@@ -680,6 +680,39 @@ describe('notification center page', () => {
     expect(screen.queryByRole('list')).toBeNull()
   })
 
+  test('"Mark all as read" leaves no pager under the Unread empty state', async () => {
+    const user = userEvent.setup()
+    // 13 unread over 2 pages, so the page count outlives the rows if
+    // nothing clears it (found by driving the real app)
+    unreadPages = [
+      pageOf(
+        Array.from({ length: 10 }, (_, i) =>
+          notification(
+            100 + i,
+            'request.created',
+            { requestId: `${i}` },
+            false,
+          ),
+        ),
+        0,
+        2,
+        13,
+      ),
+    ]
+    unreadCountOnServer = 13
+    await renderCenter()
+    await user.click(screen.getByRole('button', { name: 'Unread' }))
+    await waitFor(() => expect(listRows()).toHaveLength(10))
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeEnabled()
+
+    unreadCountOnServer = 0
+    await user.click(screen.getByRole('button', { name: 'Mark all as read' }))
+
+    await screen.findByText('No new notifications')
+    // an empty list with a "Load more" under it offers more of nothing
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
+  })
+
   test('"Mark all as read" leaves a frame pushed after the bulk update unread', async () => {
     pages = [
       pageOf(

@@ -24,6 +24,9 @@
 // back to the loaded rows when the best-effort badge is unavailable;
 // pushes are consumed from the provider's queue; and the relative times
 // tick while the page sits open.
+// 2026-10-17, same tool, driving the branch in a browser: "Mark all as
+// read" left the Unread view's page count behind, so the empty state
+// rendered with a "Load more" under it.
 
 import { useEffect, useState } from 'react'
 
@@ -200,6 +203,13 @@ export function NotificationCenter() {
               n.read || !covered.has(n.id) ? n : { ...n, read: true },
             ),
       )
+      if (filter === 'unread') {
+        // The write covered every unread row the caller had, so the
+        // Unread view has no further pages. Without this the page count
+        // from the last fetch outlives the rows it described and the
+        // empty state renders with a "Load more" under it (browser run).
+        setTotalPages(0)
+      }
       setError(null)
       refreshUnreadCount()
     } catch (err) {
@@ -210,8 +220,10 @@ export function NotificationCenter() {
   }
 
   // off `loaded`, not `page`: after a failed page the button has to come
-  // back pointing at that same page (PR #199 review)
-  const hasMore = loaded >= 0 && loaded + 1 < totalPages
+  // back pointing at that same page (PR #199 review). `items.length`
+  // guards the other direction: a write that empties the list locally
+  // must not leave a pager offering more of nothing (browser run).
+  const hasMore = loaded >= 0 && loaded + 1 < totalPages && items.length > 0
   // The badge is best-effort — the provider swallows a failed count sync
   // and keeps the current value, which is 0 before the first one lands.
   // An unread row on screen is proof enough that there is something to

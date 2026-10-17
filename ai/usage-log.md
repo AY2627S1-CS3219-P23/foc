@@ -117,6 +117,20 @@ Entry template:
   row marked read now leaves the list (and read-all empties it), while
   the All filter keeps graying in place. Re-verified: 179 vitest tests,
   `tsc -b`, eslint and Prettier clean.
+- **Browser run (2026-10-17), Claude Code (Opus 5):** drove the branch
+  against the live compose stack with Playwright (Vite dev server on
+  5173, gateway 8090, 14 then 13 seeded notifications published to the
+  `request-events` exchange as demo_user_001). Confirmed working: the
+  REST-seeded badge, all nine event templates with D30 display names,
+  D25's created_at ordering, "Load more", the Unread filter, a row
+  marked read leaving the Unread list, a live STOMP push prepending and
+  re-syncing the badge, and the ticking relative times. It also found
+  one defect the unit tests had missed: after "Mark all as read"
+  emptied the Unread view, the page count from the last fetch outlived
+  its rows and the dashed empty state rendered with a "Load more"
+  button under it. Fixed (the bulk write clears the Unread page count,
+  and the pager is gated on having rows) with a regression test that
+  fails against the pre-fix code; 180 vitest tests green.
 
 ---
 ## 2026-10-17 — Leong Wei Zhi (notification REST API, backend half of issue #66)
