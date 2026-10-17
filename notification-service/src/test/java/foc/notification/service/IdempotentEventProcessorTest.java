@@ -10,9 +10,6 @@
  * 2026-09-20: order→request event vocabulary rename applied (author
  * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
- * 2026-10-17, Claude Code (Fable 5), issue #66: fixtures updated for
- * the display-name fields added to the request event records (D29);
- * no behavior change in this test.
  */
 package foc.notification.service;
 
@@ -62,12 +59,12 @@ class IdempotentEventProcessorTest {
 
 	private static RequestAccepted accepted(String eventId, String requestId, List<String> parties) {
 		return new RequestAccepted(eventId, OCCURRED_AT, "order-service", "c-1", parties,
-				requestId, "usr-req-1001", "maya", "usr-cou-2002", "marcus", "Techno Edge", "COM3-01-19", "hi");
+				requestId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "hi");
 	}
 
 	private static RequestCreated created(String eventId, String requestId, List<String> parties) {
 		return new RequestCreated(eventId, OCCURRED_AT, "order-service", "c-1", parties,
-				requestId, "usr-req-1001", "maya", "Techno Edge", "COM3-01-19", "hi");
+				requestId, "usr-req-1001", "Techno Edge", "COM3-01-19", "hi");
 	}
 
 	@Test
@@ -96,7 +93,6 @@ class IdempotentEventProcessorTest {
 		assertThat(payload).containsExactlyInAnyOrderEntriesOf(Map.of(
 				"requestId", "req-1",
 				"requesterId", "usr-req-1001",
-				"requesterName", "maya",
 				"pickupLocation", "Techno Edge",
 				"dropoffLocation", "COM3-01-19",
 				"note", "hi"));
