@@ -9,6 +9,9 @@ title: "FoC Notification Service — Component-Level Architecture"
 %% Reviewed by: Leong Wei Zhi (via pull request).
 %% 2026-10-17, Claude Code (Fable 5), issue #66: the REST API node is
 %% built — dashed "planned" styling removed, label updated.
+%% 2026-10-17, Claude Code (Fable 5), issue #66: user directory node +
+%% lookup edge added for the ingest-time name enrichment (author
+%% decisions D30/D31 via options Q&A).
 %% Legend, decisions and traceability: see docs/notification-service.md
 flowchart TB
     ORDER_SVC["<b>Order Service</b> (order-service/)<br/>publishes a typed event on every<br/>request state transition"]
@@ -23,7 +26,8 @@ flowchart TB
 
     subgraph NOTIF ["Notification Service (notification-service/) — Java + Spring Boot"]
         LISTENER["<b>AMQP listener</b><br/>dispatch on body eventType;<br/>manual ack after DB commit"]
-        PROCESSOR["<b>Idempotent event processor</b><br/>dedupe by event ID;<br/>one notification per party"]
+        PROCESSOR["<b>Idempotent event processor</b><br/>dedupe by event ID;<br/>one notification per party;<br/>name enrichment at ingest (D30)"]
+        DIRECTORY["<b>User directory</b><br/>GET /users/{id} + TTL cache;<br/>internal token (D31), best-effort"]
         API["<b>Notification REST API</b><br/>list + unread count + mark<br/>read/unread (JWT, /notifications/me)"]
         PUSH["<b>STOMP push gateway</b><br/>per-user destinations"]
         PURGE["<b>Retention purge scheduler</b>"]
@@ -39,6 +43,8 @@ flowchart TB
     WORKQ ==>|"after max attempts, or<br/>unconvertible on first rejection"| DLQ
 
     LISTENER -->|"typed event"| PROCESSOR
+    PROCESSOR -->|"party IDs → usernames"| DIRECTORY
+    DIRECTORY -.->|"X-Internal-Token"| USER_SVC["<b>User Service</b> (user-service/)<br/>public profile: username"]
     PROCESSOR ---|"insert notification + event ID<br/>in one transaction"| NOTIF_DB
     PROCESSOR -->|"stored notification"| PUSH
     PUSH ==>|"STOMP push to each<br/>party's /user destination"| WEB

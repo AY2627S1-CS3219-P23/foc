@@ -14,9 +14,10 @@
  * (team design, docs/credit-service.md D7-D8); author review: Ryan Ang,
  * pending pull request review.
  * 2026-10-17, Claude Code (Fable 5), issue #66: display-name guard
- * added — every request record carries a @Nullable requesterName, and
- * a courierName wherever there is a courierId (author decision D29),
- * for the same never-dead-letter-over-display-fields reason as note.
+ * added (D29), then inverted the same day — the author reopened D29
+ * via options Q&A and chose IDs-only events (D30): the guard now
+ * asserts no request record carries a display-name component, since
+ * notification-service resolves names at ingest instead.
  */
 package foc.contracts.events.request;
 
@@ -99,28 +100,20 @@ class RequestEventRecordsTest {
 	}
 
 	/**
-	 * Display names ride beside the party IDs so notification copy can
-	 * say who acted (issue #66, D29). They are display-only: every one
-	 * must be @Nullable, or a producer without the name would have its
-	 * event dead-lettered over a cosmetic field (the note's rationale,
-	 * issue #165).
+	 * Events carry party IDs only (D30, superseding D29): display names
+	 * are a notification concern, resolved by notification-service at
+	 * ingest, and must not creep back into the producers' contract.
 	 */
 	@Test
-	void everyRequestRecordHasNullableDisplayNames() {
+	void noRequestRecordCarriesDisplayNames() {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
 			if (!RequestEvent.class.isAssignableFrom(entry.eventClass())) {
 				continue;
 			}
-			Set<String> components = componentNames(entry.eventClass());
-			assertTrue(components.contains("requesterName"),
-					entry.eventClass() + " must declare a requesterName component");
-			assertEquals(components.contains("courierId"), components.contains("courierName"),
-					entry.eventClass() + " must declare courierName exactly when it has a courierId");
 			for (RecordComponent component : entry.eventClass().getRecordComponents()) {
-				if (component.getName().endsWith("Name")) {
-					assertTrue(component.isAnnotationPresent(Nullable.class),
-							entry.eventClass() + "." + component.getName() + " must be @Nullable");
-				}
+				assertFalse(component.getName().endsWith("Name"),
+						entry.eventClass() + "." + component.getName()
+								+ " looks like a display name — events carry IDs only (D30)");
 			}
 		}
 	}

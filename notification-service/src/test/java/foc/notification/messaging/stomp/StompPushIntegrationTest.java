@@ -21,7 +21,10 @@
  * Reviewed by: Leong Wei Zhi (via pull request).
  * 2026-10-17, Claude Code (Fable 5), issue #66: fixtures updated for
  * the display-name fields added to the request event records (D29);
- * no behavior change in this test.
+ * no behavior change in this test. Same day, D29 superseded by the
+ * author's D30 (options Q&A): the fields left the records again, and
+ * the pushed frame's names now prove the ingest-time UserDirectory
+ * enrichment (stubbed, like the denylist) reaches the live push.
  */
 package foc.notification.messaging.stomp;
 
@@ -34,6 +37,7 @@ import foc.contracts.events.request.RequestCollected;
 import foc.notification.security.TokenDenylist;
 import foc.notification.service.EventProcessor;
 import foc.notification.service.NotificationDto;
+import foc.notification.service.UserDirectory;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.lang.reflect.Type;
@@ -121,6 +125,23 @@ class StompPushIntegrationTest {
 		}
 	}
 
+	/**
+	 * Stubs the D30 ingest-time username lookup (the REST adapter has
+	 * its own unit test): the frame assertions prove enriched names
+	 * reach the pushed payload.
+	 */
+	@TestConfiguration
+	static class StubUserDirectoryConfig {
+		@Bean
+		@Primary
+		UserDirectory stubUserDirectory() {
+			Map<String, String> names = Map.of(
+					"usr-req-1001", "maya",
+					"usr-cou-2002", "marcus");
+			return userId -> java.util.Optional.ofNullable(names.get(userId));
+		}
+	}
+
 	@LocalServerPort
 	private int port;
 
@@ -164,12 +185,12 @@ class StompPushIntegrationTest {
 
 	private static RequestAccepted accepted(String eventId, String requestId, List<String> parties) {
 		return new RequestAccepted(eventId, OCCURRED_AT, "order-service", "c-push", parties,
-				requestId, "usr-req-1001", "maya", "usr-cou-2002", "marcus", "Techno Edge", "COM3-01-19", "push");
+				requestId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "push");
 	}
 
 	private static RequestCollected collected(String eventId, String requestId, List<String> parties) {
 		return new RequestCollected(eventId, OCCURRED_AT, "order-service", "c-push", parties,
-				requestId, "usr-req-1001", "maya", "usr-cou-2002", "marcus", "Techno Edge", "COM3-01-19", "push");
+				requestId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "push");
 	}
 
 	private static WebSocketStompClient rawWebSocketClient() {

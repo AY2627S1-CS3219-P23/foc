@@ -13,7 +13,9 @@
  * Author review: Ryan Ang, pending pull request review.
  * 2026-10-17, Claude Code (Fable 5), issue #66: fixtures updated for
  * the display-name fields added to the request event records (D29);
- * no behavior change in this test.
+ * no behavior change in this test. Same day, reverted: the author
+ * superseded D29 with D30 (IDs-only events, options Q&A,
+ * docs/notification-service.md) and the fields left the records.
  */
 package foc.credit.service;
 
@@ -62,7 +64,7 @@ class RequestEventHandlerTest {
 
     private static RequestSubmitted submitted(int reward) {
         return new RequestSubmitted("evt-1", SENT_AT, "order-service", "corr-1", List.of("u-req"),
-            "r-1", "u-req", null, "UTown", "PGP", null, reward);
+            "r-1", "u-req", "UTown", "PGP", null, reward);
     }
 
     private DomainEvent enqueuedReply() {
@@ -144,7 +146,7 @@ class RequestEventHandlerTest {
         when(operations.transfer("r-1", "u-cou")).thenReturn(result);
 
         RequestCompleted completed = new RequestCompleted("evt-2", SENT_AT, "order-service", "corr-1",
-            List.of("u-req", "u-cou"), "r-1", "u-req", null, "u-cou", null, "UTown", "PGP", null);
+            List.of("u-req", "u-cou"), "r-1", "u-req", "u-cou", "UTown", "PGP", null);
 
         assertThat(handler.handle(completed)).isEqualTo(expected);
         verifyNoInteractions(outbox);
@@ -155,7 +157,7 @@ class RequestEventHandlerTest {
         when(operations.transfer("r-1", "u-cou")).thenReturn(SettleResult.NO_RESERVATION);
 
         RequestCompleted completed = new RequestCompleted("evt-2", SENT_AT, "order-service", "corr-1",
-            List.of("u-req", "u-cou"), "r-1", "u-req", null, "u-cou", null, "UTown", "PGP", null);
+            List.of("u-req", "u-cou"), "r-1", "u-req", "u-cou", "UTown", "PGP", null);
 
         assertThatThrownBy(() -> handler.handle(completed))
             .isInstanceOf(ReservationNotFoundException.class).hasMessageContaining("r-1");
@@ -168,7 +170,7 @@ class RequestEventHandlerTest {
         when(operations.release("r-1", "u-req")).thenReturn(result);
 
         RequestCancelled cancelled = new RequestCancelled("evt-3", SENT_AT, "order-service", "corr-1",
-            List.of("u-req"), "r-1", "u-req", null, null, null, "UTown", "PGP", null);
+            List.of("u-req"), "r-1", "u-req", null, "UTown", "PGP", null);
 
         assertThat(handler.handle(cancelled)).isEqualTo(expected);
         verifyNoInteractions(outbox);
@@ -180,7 +182,7 @@ class RequestEventHandlerTest {
         when(operations.release("r-1", "u-req")).thenReturn(result);
 
         RequestExpired expired = new RequestExpired("evt-4", SENT_AT, "order-service", "corr-1",
-            List.of("u-req"), "r-1", "u-req", null, "UTown", "PGP", null);
+            List.of("u-req"), "r-1", "u-req", "UTown", "PGP", null);
 
         assertThat(handler.handle(expired)).isEqualTo(expected);
         verifyNoInteractions(outbox);

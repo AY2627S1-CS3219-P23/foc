@@ -19,7 +19,9 @@
   #165).
   2026-10-17, Claude Code (Fable 5), issue #66: nullable-components
   passage extended for the requesterName/courierName display names
-  (author decision D29, docs/notification-service.md).
+  (author decision D29, docs/notification-service.md), then reverted
+  the same day — the author reopened D29 and chose IDs-only events
+  (D30): notification-service resolves names at ingest instead.
 -->
 
 # foc-contracts
@@ -106,9 +108,7 @@ Leong Wei Zhi — D16–D19 in
    migration and is retired in a later release. Every record
    component is **required on the wire** unless marked with the
    contracts' `@Nullable` annotation (currently
-   `RequestCancelled.courierId`, every request record's `note`, and
-   the display names `requesterName`/`courierName` added beside the
-   party IDs for notification copy — issue #66, D29);
+   `RequestCancelled.courierId` and every request record's `note`);
    consumers reject events with
    missing required fields as conversion failures. An unknown event
    *type* is likewise a conversion failure — which is also how a

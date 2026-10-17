@@ -17,7 +17,9 @@
  * Author review: Ryan Ang, pending pull request review.
  * 2026-10-17, Claude Code (Fable 5), issue #66: fixtures updated for
  * the display-name fields added to the request event records (D29);
- * no behavior change in this test.
+ * no behavior change in this test. Same day, reverted: the author
+ * superseded D29 with D30 (IDs-only events, options Q&A,
+ * docs/notification-service.md) and the fields left the records.
  */
 package foc.credit.messaging.rabbitmq;
 
@@ -306,16 +308,16 @@ class RequestEventsListenerIntegrationTest extends PostgresTestContainer {
 
 	private static RequestSubmitted submitted(String request, String requester, int reward) {
 		return new RequestSubmitted(UUID.randomUUID().toString(), Instant.now(), "order-service", "c-it",
-				List.of(requester), request, requester, null, "Techno Edge", "COM3-01-19", null, reward);
+				List.of(requester), request, requester, "Techno Edge", "COM3-01-19", null, reward);
 	}
 
 	private static RequestCompleted completed(String request, String requester, String courier) {
 		return new RequestCompleted(UUID.randomUUID().toString(), Instant.now(), "order-service", "c-it",
-				List.of(requester, courier), request, requester, null, courier, null, "Techno Edge", "COM3-01-19", null);
+				List.of(requester, courier), request, requester, courier, "Techno Edge", "COM3-01-19", null);
 	}
 
 	private static RequestCancelled cancelled(String request, String requester) {
 		return new RequestCancelled(UUID.randomUUID().toString(), Instant.now(), "order-service", "c-it",
-				List.of(requester), request, requester, null, null, null, "Techno Edge", "COM3-01-19", null);
+				List.of(requester), request, requester, null, "Techno Edge", "COM3-01-19", null);
 	}
 }

@@ -132,7 +132,7 @@ class DomainEventMessageConverterTest {
 	void toMessageInjectsEventTypeAndRoundTrips() {
 		RequestAccepted event = new RequestAccepted("e-1", Instant.parse("2026-09-19T08:30:00Z"),
 				"order-service", "c-1", List.of("usr-req-1001", "usr-cou-2002"),
-				"req-1", "usr-req-1001", "maya", "usr-cou-2002", "marcus", "Techno Edge", "COM3-01-19", "hi");
+				"req-1", "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "hi");
 
 		Message message = converter.toMessage(event, new MessageProperties());
 

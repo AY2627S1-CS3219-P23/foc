@@ -7,7 +7,9 @@
  * Author review: Ryan Ang, pending pull request review.
  * 2026-10-17, Claude Code (Fable 5), issue #66: fixtures updated for
  * the display-name fields added to the request event records (D29);
- * no behavior change in this test.
+ * no behavior change in this test. Same day, reverted: the author
+ * superseded D29 with D30 (IDs-only events, options Q&A,
+ * docs/notification-service.md) and the fields left the records.
  */
 package foc.credit.service;
 
@@ -54,7 +56,7 @@ class RequestEventHandlerTransactionTest extends PostgresTestContainer {
         }).when(outbox).enqueue(any());
 
         handler.handle(new RequestSubmitted("evt-1", Instant.now(), "order-service", "corr-1",
-            List.of("u-req"), "r-1", "u-req", null, "UTown", "PGP", null, 3));
+            List.of("u-req"), "r-1", "u-req", "UTown", "PGP", null, 3));
 
         verify(outbox).enqueue(any());
         assertThat(active).as("a transaction is open in reserve and in enqueue").containsExactly(true, true);

@@ -33,6 +33,38 @@ Entry template:
 ```
 
 ---
+## 2026-10-17 — Leong Wei Zhi (issue #66: D29 reversed — ingest-time name enrichment, D30/D31)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor + generate
+- **Scope:** `foc-contracts` (requesterName/courierName removed from
+  all nine request records, example JSONs, README/AGENTS, record-shape
+  test inverted to a no-display-names guard), `user-service`
+  (`InternalServiceTokenFilter` + SecurityConfig wiring + yaml binding
+  + ProfileControllerTest cases), `notification-service`
+  (`UserDirectory` port, `RestUserDirectory` adapter + unit test,
+  processor enrichment, both yamls, pom: spring-boot-starter-restclient),
+  `compose.yaml`, `.env.example`, `docs/notification-service.md`
+  (D29 removed as superseded; D30/D31 + "Display-name enrichment"
+  section added).
+- **Prompt(s):** The author questioned coupling display names into the
+  shared event contracts ("do we really want to couple name in events
+  since requester id is already present?") and decided the reversal
+  through neutral options Q&A rounds: IDs-only events with
+  notification-service enrichment (D30); enrichment at ingest, stored
+  in the payload, after establishing the live STOMP push would
+  otherwise prepend actor-less rows; names injected into the payload
+  map so the web templates are untouched; lookups via the existing
+  GET /users/{id} behind a TTL cache; and a zero-trust static internal
+  token (D31) after explicitly rejecting the AI-suggested permitAll
+  ("we want zero trust even though gateway has it"). AI also explained
+  why borrowing the STOMP CONNECT JWT cannot work (offline recipients,
+  1 h token lifetime vs CONNECT-only checks, credential replay).
+- **Author review:** foc-contracts suite green; user-service
+  ProfileControllerTest 20/20; notification-service 91/92 with only the
+  known Java-26-local context-restart AMQP error on
+  `RetentionPurgeSchedulerTest` (passes alone; exists on main). To be
+  reviewed via pull request (PR #198).
+
 ## 2026-10-17 — Leong Wei Zhi (notification REST API, backend half of issue #66)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate
