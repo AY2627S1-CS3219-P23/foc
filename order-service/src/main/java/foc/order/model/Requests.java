@@ -51,7 +51,7 @@ public class Requests {
     @Column(nullable = false)
     private Integer creditAmount;
 
-    // CREATED/ACCEPTED/COLLECTED/COMPLETED/CANCELLED/EXPIRED (F0.1)
+    // PENDING/REJECTED/CREATED/ACCEPTED/COLLECTED/ARRIVED/COMPLETED/CANCELLED/EXPIRED (F0.1)
     @Column(nullable = false, columnDefinition = "text")
     private String status;
 
