@@ -82,6 +82,11 @@
   2026-10-17, Codex (GPT-6.1 Sol), issue #98: documented automatic skips
   for Docker-dependent tests and the integration coverage requirement.
   PR #197 review: documented CI's rejection of skipped test suites.
+  2026-10-17, Claude Code (Opus 5), issue #203: the login and
+  soft-delete sections now state what self-deletion does to the role
+  (nothing), next to what admin removal does — the login section's
+  "no admin powers ride along" claim was true only of removal.
+  Accepted as-is (option C) by Leong Wei Zhi via options Q&A.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -201,10 +206,14 @@ sign-up never reserves an email or username.
   keep using the other services for the whole 30-day window, not just
   one token's hour (PR #179 review, @Sinnez1). Accepted, owner
   decision: the same user can restore with one click at any moment, so
-  the deleted state withholds nothing but the profile routes — and no
-  admin powers ride along, because admin removal demotes to USER
-  first (below); only a pre-removal ADMIN token keeps them, for its
-  ≤ 1 h `exp`.
+  the deleted state withholds nothing but the profile routes. Whether
+  admin powers ride along depends on *how* the account was deleted
+  (#203): admin removal demotes the target to USER first (below), so
+  only a pre-removal ADMIN token keeps them, for its ≤ 1 h `exp` —
+  self-deletion leaves the role untouched, so an admin who deletes
+  their own account keeps the admin routes for the whole window, every
+  fresh login included, and restores as ADMIN (owner decision, #203:
+  accepted, see below).
   Login therefore tells a caller whether an account exists — the author
   chose that over the non-revealing failures of #89, as sign-up's
   "already taken" 400s reveal the same thing.
@@ -499,10 +508,21 @@ A token the target already held does not outlive the removal either
 reset does, so the gateway answers that token 401 "Token has been
 revoked" on its next request instead of honouring it until its ≤ 1 h
 `exp` — the demotion is what still holds if that best-effort write
-fails (G9) against a gateway failing open (G6). A daily scheduler
-(`AccountPurgeScheduler`, default 03:00) hard-deletes accounts whose
-`deleted_at` is older than the retention window, together with their
-`password_reset_otps` rows — that purge is what frees the identifiers. The
+fails (G9) against a gateway failing open (G6).
+Self-deletion does neither (#203): `deleteOwnAccount` stamps
+`deleted_at` and nothing else — no demotion, no denylist stamp — so an
+ADMIN who deletes their own account keeps the role, and because the
+admin routes authorize on the token's claim alone, every fresh login
+inside the 30-day window reaches them; the self-restore brings the
+account back as ADMIN. Owner decision (issue #203, option C): accepted
+rather than closed, since nobody but the account's owner can put it in
+that state and the same owner can leave it with one click.
+`JwtAuthenticationTest.selfDeletedAdminKeepsAdminRoutes` pins the
+behaviour.
+A daily scheduler (`AccountPurgeScheduler`, default 03:00) hard-deletes
+accounts whose `deleted_at` is older than the retention window,
+together with their `password_reset_otps` rows — that purge is what
+frees the identifiers. The
 same daily run sweeps expired `pending_signups`, `account_update_otps`,
 `pending_email_changes` and `password_reset_otps` rows (hygiene only: every
 flow rejects an expired row on sight; the by-user sweeps run before the

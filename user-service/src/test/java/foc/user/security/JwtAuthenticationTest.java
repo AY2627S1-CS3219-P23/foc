@@ -11,6 +11,10 @@ Scope: integration tests for the JWT filter chain (issue #91) against the
        2026-09-29, Claude Code (Fable 5), issue #88: sign-up answers 202
        now (a code is emailed; no account yet), so the garbage-token
        sign-up case expects that, with the email sender mocked out.
+       2026-10-17, Claude Code (Opus 5), issue #203: one test pinning the
+       self-deletion/admin-removal asymmetry — a self-deleted ADMIN keeps
+       the role, so its fresh logins still reach GET /users (owner
+       decision, option C, via options Q&A).
 Author review: Ryan to review via the PR.
 */
 
@@ -170,6 +174,43 @@ class JwtAuthenticationTest extends PostgresTestContainer {
         mockMvc.perform(delete("/users/{id}", admin.getId()).with(bearer(jwtIssuer.issue(admin))))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.detail").value("Use DELETE /users/me to delete your own account"));
+    }
+
+    @Test
+    @DisplayName("A self-deleted ADMIN keeps the role, so a fresh login still reaches the admin routes")
+    void selfDeletedAdminKeepsAdminRoutes() throws Exception {
+        // issue #203, owner decision (option C): DELETE /users/me is a soft
+        // delete and nothing else — unlike DELETE /users/{id}, which demotes
+        // the target to USER and revokes its sessions (#179, #178). The
+        // asymmetry is deliberate: self-deletion is self-inflicted and the
+        // same user can restore with one click, so the 30-day window where
+        // the account still answers as ADMIN is theirs alone to open.
+        admin.setPasswordHash(passwordEncoder.encode(PASSWORD));
+        userRepository.save(admin);
+
+        mockMvc.perform(delete("/users/me").with(bearer(jwtIssuer.issue(admin))))
+            .andExpect(status().isNoContent());
+        assertThat(userRepository.findById(admin.getId()).orElseThrow().isActive()).isFalse();
+
+        // a deleted account logs in normally for the whole window (#94)
+        String body = mockMvc.perform(post("/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(JsonMapper.builder().build().writeValueAsString(
+                    Map.of("usernameOrEmail", "an_admin", "password", PASSWORD))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.deletionScheduledFor").isNotEmpty())
+            .andReturn().getResponse().getContentAsString();
+        String token = JsonMapper.builder().build().readTree(body).get("accessToken").asString();
+
+        // the fresh token carries the role the row still holds...
+        assertThat(jwtVerifier.verify(token).role()).isEqualTo(Role.ADMIN);
+        // ...and the admin routes trust that claim alone, so they answer
+        assertThat(userRepository.findById(admin.getId()).orElseThrow().getRole()).isEqualTo(Role.ADMIN);
+        mockMvc.perform(get("/users").with(bearer(token)))
+            .andExpect(status().isOk());
+        // only the profile routes are withheld while deleted
+        mockMvc.perform(get("/users/me").with(bearer(token)))
+            .andExpect(status().isNotFound());
     }
 
     @Test
