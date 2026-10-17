@@ -13,7 +13,7 @@
  * user.retention.purge-cron and owner.setup.token pinned too (the token
  * moved here from application-test.yaml).
  * Author review: Ryan to review via the PR.
- * 2026-10-17, Codex (GPT-6), issue #98: skip integration tests when
+ * 2026-10-17, Codex (GPT-6.1 Sol), issue #98: skip integration tests when
  * Docker is unavailable, preserving the shared container lifecycle.
  * Author review: Leong Wei Zhi to review via pull request.
  */

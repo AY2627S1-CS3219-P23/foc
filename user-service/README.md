@@ -69,7 +69,7 @@
   send restores the pre-renewal OTP row, and the stale old-JWT
   sentence (pre-G11) was corrected to the Redis-failure and
   same-second exceptions. Decisions by Leong Wei Zhi via options Q&A.
-  2026-10-17, Codex (GPT-6), issue #98: documented automatic skips
+  2026-10-17, Codex (GPT-6.1 Sol), issue #98: documented automatic skips
   for Docker-dependent tests and the integration coverage requirement.
   Author review: Leong Wei Zhi to review via pull request.
 -->

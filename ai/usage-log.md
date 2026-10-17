@@ -9,7 +9,7 @@
   2026-10-17, Codex (GPT-6): recorded PR #180 review work and the
   missing main-sync entry from its PR description and file headers.
   Author review: Leong Wei Zhi to review via PR #180.
-  2026-10-17, Codex (GPT-6): recorded implementation and verification
+  2026-10-17, Codex (GPT-6.1 Sol): recorded implementation and verification
   of the Docker-unavailable test skips for issue #98.
   Author review: Leong Wei Zhi to review via pull request.
 -->
@@ -4240,11 +4240,12 @@ Entry template:
   performed in this review round. Leong Wei Zhi to review via PR #180.
 
 ## 2026-10-17T11:17:00+08:00 — Leong Wei Zhi (issue #98)
-- **Tool:** Codex (GPT-6).
+- **Tool:** Codex (GPT-6.1 Sol).
 - **Mode:** debugging + implementation + documentation.
 - **Prompt(s):** "can i close https://github.com/AY2627S1-CS3219-P23/foc/issues/98";
   "what is meant by auto-skip docker?"; "create a plan to resolve this issue";
-  "Implement the plan."; "create the pr".
+  "Implement the plan."; "create the pr";
+  "wait are you sure you are opus 5? you are gpt 6.1 sol".
 - **Scope:** Implemented the approved automatic Docker-unavailable skip plan
   in the shared user-service PostgreSQL test base: inherited
   `@Testcontainers(disabledWithoutDocker = true)` and a Docker availability
@@ -4263,4 +4264,7 @@ Entry template:
   jar passed as `-javaagent` through `-DargLine` to avoid this machine's
   Java 26 self-attachment restriction; no build configuration was changed.
   `git diff --check` passed.
+- **Attribution correction:** Model label refined from GPT-6 to GPT-6.1 Sol
+  using the model identification supplied by Leong Wei Zhi. Historical
+  Claude/Opus attributions from earlier work remain unchanged.
 - **Author review:** Leong Wei Zhi to review via pull request.
