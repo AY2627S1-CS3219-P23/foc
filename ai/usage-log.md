@@ -61,6 +61,17 @@ Entry template:
   pre-existing #68 design (documented in `WebSocketStompConfig`), with
   the indexed daily delete far below the 10 s heartbeat interval at
   this scale.
+- **main merge (2026-10-17):** merged `origin/main` (through PR #195)
+  into the branch to clear the PR #201 conflict. Three docs conflicted,
+  all against #66's notification work: `ai/usage-log.md` (both sides
+  appended at the top — kept every entry), the design doc and the
+  service README (disclosure headers kept both lines; the F3.4 trace
+  row and the Status line take #66's newer REST wording with the
+  `processed_events` sweep folded in). No code conflict. `./mvnw clean
+  test`: 94 run, 1 error — the `RetentionPurgeSchedulerTest`
+  `ApplicationContext` AMQP failure, which unmodified main reproduces
+  identically (92 run, same error); both purge tests pass 2/2 in
+  isolation.
 
 ## 2026-10-17 — Ryan Ang (admin dashboard: common pool box, issue #174 branch)
 - **Tool:** Claude Code (Opus 5.5)
