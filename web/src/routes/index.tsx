@@ -26,6 +26,9 @@
 // can tell a session-gated page from a public one when a 401 forces a
 // sign-out (owner decision: clear the session in place on public pages,
 // no redirect). Declared here because this is where the gating lives.
+// 2026-10-17, Claude Code (Fable 5), issue #66: /notifications route
+// added inside ProtectedRoute — the Notification Center lists the
+// session user's own rows, so it needs one.
 // 2026-10-16, Claude Code (Opus 5), PR #180 main sync: the route
 // table was the one conflict git could not shelve correctly — it put
 // /forgot-password outside <AppShell /> and /account-recovery outside
@@ -41,6 +44,7 @@ import { AppShell } from '@/shared/shell/AppShell'
 import { NotFound } from '@/shared/shell/NotFound'
 import { Admin } from './admin'
 import { Home } from './home'
+import { Notifications } from './notifications'
 import { Profile } from './profile'
 import { Suppliers } from './suppliers'
 import { AccountRecovery } from '../features/user/account-recovery'
@@ -81,6 +85,7 @@ export const routes: RouteObject[] = [
                 handle: { requiresSession: true } satisfies RouteHandle,
                 children: [
                   { path: 'suppliers', element: <Suppliers /> },
+                  { path: 'notifications', element: <Notifications /> },
                   { path: 'profile', element: <Profile /> },
                   { path: 'account-recovery', element: <AccountRecovery /> },
                   {

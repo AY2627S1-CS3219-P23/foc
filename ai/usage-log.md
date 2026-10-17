@@ -72,6 +72,33 @@ Entry template:
   @Transactional); duplicates now pay a cache-absorbed lookup. Suite
   re-run green (same 91/92).
 
+## 2026-10-17 — Leong Wei Zhi (Notification Center, web half of issue #66)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `web/src/features/notifications/` (new: types, api module,
+  eventMessage templates + relativeTime, NotificationCenter page;
+  modified: NotificationProvider — badge seeds from
+  GET /notifications/me/unread-count on login/reconnect and re-syncs
+  after writes, pushed frame body exposed for the open Center to
+  prepend; useNotifications context widened), `routes/notifications.tsx`
+  + the route table, the bell (button → Link to /notifications), tests
+  (`notification-center.test.tsx` new; `notifications.test.tsx` and
+  `app.test.tsx` updated for the link bell and a URL-dispatching fetch
+  stub), `web/AGENTS.md` wireframe row.
+- **Prompt(s):** The web half of issue #66's plan. UI decisions were the
+  author's via neutral options Q&A (no recommendations): clicking an
+  unread row marks it read (no mark-unread affordance), an All/Unread
+  filter toggle, a "Load more" append pager, display names rendered
+  from the event payloads (backend D29; superseded the same day by D30 —
+  the names now arrive via ingest-time enrichment, same payload
+  shape, web untouched), pushed frames prepend into the
+  open Center, and the badge re-fetches the server count after writes.
+  Layout follows web/docs/wireframes/notification-center.png; the three
+  controls the wireframe doesn't draw are recorded in web/AGENTS.md.
+- **Author review:** `npm run lint`, `prettier --check`, all 168 vitest
+  tests and `npm run build` pass. To be reviewed via pull request.
+
+---
 ## 2026-10-17 — Leong Wei Zhi (notification REST API, backend half of issue #66)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate
