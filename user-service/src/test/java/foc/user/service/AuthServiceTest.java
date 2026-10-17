@@ -159,7 +159,8 @@ class AuthServiceTest {
             new OtpService(PLAIN_ENCODER, OTP_TTL, OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN);
         authService = new AuthService(userRepository, pendingSignupRepository, PLAIN_ENCODER,
             issuer, otpService, otpEmailSender,
-            new LoginAttempts(userRepository, entityManager, 30), Clock.fixed(NOW, ZoneOffset.UTC));
+            new LoginAttempts(userRepository, entityManager, 30), Clock.fixed(NOW, ZoneOffset.UTC), 
+            "expected-owner-key");
 
         user = new User("e1234567@u.nus.edu", "student_alex", PLAIN_ENCODER.encode(PASSWORD), Role.USER);
         ReflectionTestUtils.setField(user, "id", 42L);
@@ -185,7 +186,7 @@ class AuthServiceTest {
             .thenAnswer(inv -> inv.getArgument(0));
 
         SignupResponse response = authService.signup(
-            new SignupRequest(" E1234567@U.NUS.EDU ", " student_alex ", PASSWORD));
+            new SignupRequest(" E1234567@U.NUS.EDU ", " student_alex ", PASSWORD, ""));
 
         ArgumentCaptor<PendingSignup> saved = ArgumentCaptor.forClass(PendingSignup.class);
         verify(pendingSignupRepository).saveAndFlush(saved.capture());
@@ -210,14 +211,14 @@ class AuthServiceTest {
     // a live pending sign-up for the usual email, pended at `sentAt`
     private PendingSignup existingPending(String username, String password, Instant sentAt) {
         PendingSignup existing = new PendingSignup("e1234567@u.nus.edu", username,
-            PLAIN_ENCODER.encode(password), "hashed:000000", sentAt, sentAt.plus(OTP_TTL));
+            PLAIN_ENCODER.encode(password), "hashed:000000", sentAt, sentAt.plus(OTP_TTL), "");
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(existing));
         return existing;
     }
 
     private SignupResponse signupAgain(String username, String password) {
-        return authService.signup(new SignupRequest("e1234567@u.nus.edu", username, password));
+        return authService.signup(new SignupRequest("e1234567@u.nus.edu", username, password, ""));
     }
 
     @Test
@@ -405,7 +406,7 @@ class AuthServiceTest {
         when(userRepository.existsByEmail("e1234567@u.nus.edu")).thenReturn(true);
 
         Throwable thrown = catchThrowable(() -> authService.signup(
-            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD)));
+            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD, "")));
 
         assertBadRequest(thrown, "Email is already registered");
         verify(pendingSignupRepository, never()).saveAndFlush(any());
@@ -417,7 +418,7 @@ class AuthServiceTest {
         when(userRepository.existsByUsernameIgnoreCase("student_alex")).thenReturn(true);
 
         Throwable thrown = catchThrowable(() -> authService.signup(
-            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD)));
+            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD, "")));
 
         assertBadRequest(thrown, "Username is already taken");
     }
@@ -429,7 +430,7 @@ class AuthServiceTest {
             .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
         Throwable thrown = catchThrowable(() -> authService.signup(
-            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD)));
+            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD, "")));
 
         // the same answer as finding the row up front: the situation is
         // identical, the race only made it arrive half a millisecond later
@@ -449,7 +450,7 @@ class AuthServiceTest {
             .when(otpEmailSender).sendSignupCode(any(), any(), any());
 
         Throwable thrown = catchThrowable(() -> authService.signup(
-            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD)));
+            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD, "")));
 
         assertThat(thrown).isInstanceOf(ResponseStatusException.class);
         ResponseStatusException e = (ResponseStatusException) thrown;
@@ -468,7 +469,7 @@ class AuthServiceTest {
 
     private PendingSignup pendingWithCode(String code) {
         PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
-            "hashed:" + PASSWORD, "hashed:" + code, NOW, NOW.plus(OTP_TTL));
+            "hashed:" + PASSWORD, "hashed:" + code, NOW, NOW.plus(OTP_TTL), "");
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(pending));
         return pending;
@@ -529,7 +530,7 @@ class AuthServiceTest {
     void verify_expired() {
         // the boundary case: expires_at == now must reject, not accept
         PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
-            "hashed:" + PASSWORD, "hashed:123456", NOW.minus(OTP_TTL), NOW);
+            "hashed:" + PASSWORD, "hashed:123456", NOW.minus(OTP_TTL), NOW, "");
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(pending));
 
@@ -547,7 +548,7 @@ class AuthServiceTest {
     @DisplayName("A wrong code is otp-invalid, not otp-expired")
     void verify_wrongCodeIsTypedInvalid() {
         PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
-            "hashed:" + PASSWORD, "hashed:123456", NOW, NOW.plus(OTP_TTL));
+            "hashed:" + PASSWORD, "hashed:123456", NOW, NOW.plus(OTP_TTL), "");
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(pending));
 
@@ -884,4 +885,29 @@ class AuthServiceTest {
             .isInstanceOf(LoginFailedException.class)
             .hasMessage("No account found for that username or email.");
     }
+
+    @Test
+    @DisplayName("The right ownerKey creates an owner and clears the pending row")
+    void verify_createsOwner() {
+        PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
+            "hashed:" + PASSWORD, "hashed:" + "123456", NOW, NOW.plus(OTP_TTL), "expected-owner-key");
+        when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
+            .thenReturn(Optional.of(pending));
+        
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UserResponse response = authService.verifySignup(
+            new SignupVerifyRequest(" E1234567@U.NUS.EDU ", "123456"));
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getEmail()).isEqualTo("e1234567@u.nus.edu");
+        assertThat(saved.getValue().getUsername()).isEqualTo("student_alex");
+        // the hash from sign-up is carried over, never re-encoded
+        assertThat(saved.getValue().getPasswordHash()).isEqualTo("hashed:" + PASSWORD);
+        assertThat(saved.getValue().getRole()).isEqualTo(Role.OWNER);
+        assertThat(response.role()).isEqualTo("OWNER");
+        verify(pendingSignupRepository).delete(pending);
+    }
+
 }

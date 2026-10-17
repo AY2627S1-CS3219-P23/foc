@@ -131,12 +131,15 @@ already renders.
 
 package foc.user.service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
@@ -190,6 +193,7 @@ public class AuthService {
     // email takes as long to verify as a wrong code (same trick login
     // used before #146 made its messages revealing; these stay identical)
     private final String unknownPendingCodeHash;
+    private final String expectedOwnerKey;
 
     @Autowired
     public AuthService(
@@ -199,9 +203,10 @@ public class AuthService {
             JwtIssuer jwtIssuer,
             OtpService otpService,
             OtpEmailSender otpEmailSender,
-            LoginAttempts loginAttempts) {
+            LoginAttempts loginAttempts,
+            @Value("${owner.setup.token:}") String expectedOwnerKey) {
         this(userRepository, pendingSignupRepository, passwordEncoder, jwtIssuer,
-            otpService, otpEmailSender, loginAttempts, Clock.systemUTC());
+            otpService, otpEmailSender, loginAttempts, Clock.systemUTC(), expectedOwnerKey);
     }
 
     AuthService(
@@ -212,7 +217,8 @@ public class AuthService {
             OtpService otpService,
             OtpEmailSender otpEmailSender,
             LoginAttempts loginAttempts,
-            Clock clock) {
+            Clock clock,
+            @Value("${owner.setup.token:}") String expectedOwnerKey) {
         this.userRepository = userRepository;
         this.pendingSignupRepository = pendingSignupRepository;
         this.passwordEncoder = passwordEncoder;
@@ -222,6 +228,7 @@ public class AuthService {
         this.loginAttempts = loginAttempts;
         this.clock = clock;
         this.unknownPendingCodeHash = otpService.hash("no-pending-signup");
+        this.expectedOwnerKey = expectedOwnerKey;
     }
 
     // parks the request in pending_signups and emails a code; the users
@@ -233,6 +240,7 @@ public class AuthService {
     public SignupResponse signup(SignupRequest request) {
         String email = NewAccountDetails.normalizeEmail(request.email());
         String username = NewAccountDetails.normalizeUsername(request.username());
+        String ownerKey = request.ownerKey() == null ? "" : request.ownerKey().trim();
         NewAccountDetails.ensureUnique(userRepository, email, username);
 
         // one pending row per email, and while it is live it belongs to
@@ -284,10 +292,10 @@ public class AuthService {
         String codeHash = otpService.hash(code);
         if (pending == null) {
             pending = new PendingSignup(email, username, passwordEncoder.encode(request.password()),
-                codeHash, now, now.plus(otpService.ttl()));
+                codeHash, now, now.plus(otpService.ttl()), ownerKey);
         } else if (expired) {
             pending.replaceExpired(username, passwordEncoder.encode(request.password()),
-                codeHash, now, now.plus(otpService.ttl()));
+                codeHash, now, now.plus(otpService.ttl()), ownerKey);
         } else if (spent) {
             // the row's own requester (proven same-request above) gets a
             // fresh code and attempt budget behind the cooldown — but the
@@ -422,6 +430,11 @@ public class AuthService {
         }
         // the hash stored at sign-up is already BCrypt: never re-encode
         User user = new User(email, pending.getUsername(), pending.getPasswordHash(), Role.USER);
+        // check ownerKey for owner setup
+        if (checkOwnerKey(pending.getOwnerKey())) {
+            user = new User(email, pending.getUsername(), pending.getPasswordHash(), Role.OWNER);
+        }
+
         try {
             user = userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException e) {
@@ -500,5 +513,19 @@ public class AuthService {
         return identifier.contains("@")
             ? userRepository.findByEmail(identifier.toLowerCase())
             : userRepository.findByUsernameIgnoreCase(identifier);
+    }
+
+    private boolean checkOwnerKey(String providedOwnerKey) {
+        if (expectedOwnerKey == null || expectedOwnerKey.isBlank()) {
+            throw new ResponseStatusException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Owner setup is disabled: OWNER_SETUP_TOKEN is not configured"
+            );
+        }
+
+        byte[] expected = expectedOwnerKey.getBytes(StandardCharsets.UTF_8);
+        byte[] provided = (providedOwnerKey == null ? "" : providedOwnerKey).getBytes(StandardCharsets.UTF_8);
+
+        return MessageDigest.isEqual(expected, provided);
     }
 }

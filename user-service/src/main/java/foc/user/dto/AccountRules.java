@@ -34,6 +34,8 @@ public final class AccountRules {
     public static final String PASSWORD_MESSAGE =
         "Password must contain at least one uppercase letter, one lowercase letter, and one number.";
 
+    public static final int OWNER_KEY_MAX = 255;
+    public static final String OWNER_KEY_SIZE_MESSAGE = "Owner key must be at most 255 characters long";
     private AccountRules() {
     }
 }

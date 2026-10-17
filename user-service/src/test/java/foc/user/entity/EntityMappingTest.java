@@ -96,7 +96,7 @@ class EntityMappingTest extends PostgresTestContainer {
     @Test
     void pendingSignupRoundTrip() {
         PendingSignup saved = persistAndFlush(new PendingSignup(
-            "e2234567@u.nus.edu", "pending_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY));
+            "e2234567@u.nus.edu", "pending_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY, ""));
         entityManager.clear();
 
         PendingSignup found = entityManager.find(PendingSignup.class, saved.getId());
@@ -105,6 +105,7 @@ class EntityMappingTest extends PostgresTestContainer {
         assertThat(found.getUsername()).isEqualTo("pending_user");
         assertThat(found.getPasswordHash()).isEqualTo("bcrypt_hash");
         assertThat(found.getCodeHash()).isEqualTo("code_hash");
+        assertThat(found.getOwnerKey()).isEqualTo("");
         assertThat(found.getLastSentAt()).isEqualTo(SENT_AT);
         assertThat(found.getExpiresAt()).isEqualTo(EXPIRY);
         assertThat(found.getAttempts()).isZero();
@@ -113,12 +114,12 @@ class EntityMappingTest extends PostgresTestContainer {
     @Test
     void pendingSignupEmailIsUnique() {
         persistAndFlush(new PendingSignup(
-            "e2234567@u.nus.edu", "first_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY));
+            "e2234567@u.nus.edu", "first_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY, ""));
 
         // one pending sign-up per email: the second insert must trip the
         // unique index (usernames may repeat — users' index decides those)
         assertThatThrownBy(() -> persistAndFlush(new PendingSignup(
-                "e2234567@u.nus.edu", "second_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY)))
+                "e2234567@u.nus.edu", "second_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY, "")))
             .isInstanceOf(PersistenceException.class);
     }
 

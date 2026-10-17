@@ -155,7 +155,7 @@ class AuthControllerTest extends PostgresTestContainer {
     }
 
     private ResultActions signup(String email, String username, String password) throws Exception {
-        return postJson("/auth/signup", Map.of("email", email, "username", username, "password", password));
+        return postJson("/auth/signup", Map.of("email", email, "username", username, "password", password, "ownerKey", ""));
     }
 
     private ResultActions verifySignup(String email, String code) throws Exception {

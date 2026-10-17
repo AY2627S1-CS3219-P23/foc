@@ -54,6 +54,7 @@ export interface SignupPending {
   email: string
   username: string
   password: string
+  ownerKey: string
   expiresAt: number // epoch ms
   resendAt: number // epoch ms
 }
