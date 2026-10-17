@@ -40,6 +40,19 @@ export interface CreditPage<T> {
   totalPages: number
 }
 
+// one item of GET /credits/me/expiries: credits left in one lot and when
+// they expire; expiresAt may already be past, until that night's sweep
+export interface CreditExpiry {
+  amount: number
+  expiresAt: string
+}
+
+// GET /credits/me/expiries, soonest first; sign-up and reserved credits
+// are never in it
+export interface CreditExpiries {
+  items: CreditExpiry[]
+}
+
 // GET /credits/me/history's query; from/to are UTC instants, to exclusive
 export interface CreditHistoryQuery {
   page?: number

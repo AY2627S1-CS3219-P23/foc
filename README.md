@@ -161,8 +161,9 @@
   Docker-unavailable test skips and verification documentation.
   PR #197 review: disclosed CI's rejection of skipped user-service tests.
   Author review: Leong Wei Zhi to review via pull request.
-  2026-10-17: AI Use Summary extended for the credit expiries route
-  (issue #196) by Claude Code (Opus 5.5).
+  2026-10-17: AI Use Summary extended for the upcoming credit expiries
+  (issue #196: the route and the credits page) by Claude Code
+  (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -606,7 +607,10 @@ team; and the upcoming-expiry route (issue #196:
 controller tests), written to the design doc's Read API contract, with
 the route, the response shape, the order, which credits count, no
 window and how often the web app reads it decided by the team and
-recorded there.
+recorded there, and its web half (the Available card's line for the
+soonest credits to expire and a notice when they expire within 7
+days, in Singapore dates, with their tests), where they are shown and
+the wording also decided by the team.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their

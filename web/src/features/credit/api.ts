@@ -8,6 +8,7 @@
 import { apiFetch } from '@/lib/api/http'
 import type {
   CreditBalance,
+  CreditExpiries,
   CreditHistoryEntry,
   CreditHistoryQuery,
   CreditPage,
@@ -35,6 +36,10 @@ export const creditApi = {
       'credit',
       `/credits/me/history${toQuery(query)}`,
     )
+  },
+  // read on page load and when the balance changes, not on every poll
+  getExpiries() {
+    return apiFetch<CreditExpiries>('credit', '/credits/me/expiries')
   },
   // ADMIN and OWNER only; anyone else gets a 403
   getPoolSummary() {

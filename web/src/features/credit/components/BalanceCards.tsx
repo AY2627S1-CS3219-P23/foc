@@ -4,8 +4,11 @@
 // web/docs/wireframes/credit-history.png. Team decision: the
 // wireframe's "Total lifetime earned" card is replaced by Total
 // (available + reserved), since the read API has no lifetime figure.
+// 2026-10-17, issue #196: the Available card's line for the soonest
+// credits to expire (team decision: on the cards, in Singapore dates).
 // Author review: Ryan Ang, pending pull request review.
 
+import { expiryLine, type NextExpiry } from '../expiry'
 import type { BalanceState } from '../useCreditBalance'
 
 const CARDS = [
@@ -22,7 +25,14 @@ const CARDS = [
   { key: 'total', title: 'Total credits', hint: 'Available plus reserved' },
 ] as const
 
-export function BalanceCards({ state }: { state: BalanceState }) {
+export function BalanceCards({
+  state,
+  next = null,
+}: {
+  state: BalanceState
+  // the soonest credits to expire; null when none will, or not loaded
+  next?: NextExpiry | null
+}) {
   return (
     <div>
       {state.status === 'error' && (
@@ -46,6 +56,11 @@ export function BalanceCards({ state }: { state: BalanceState }) {
             <dd className="mt-1 hidden text-xs text-gray-500 md:block">
               {card.hint}
             </dd>
+            {card.key === 'available' && next && (
+              <dd className="mt-1 text-xs font-medium text-amber-700">
+                {expiryLine(next)}
+              </dd>
+            )}
           </div>
         ))}
       </dl>
