@@ -33,6 +33,96 @@ Entry template:
 ```
 
 ---
+## 2026-10-16 — Ryan Ang (PR #193 review: expiry and redistribution scheduler)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + tests + docs
+- **Scope:** `credit-service/` and `docs/credit-service.md`, for Leong
+  Wei Zhi's review.
+  - `ExpiryAndRedistributionScheduler`: one routine, `run`, called by
+    the 00:00 daily job and at startup: the sweep, then the current
+    Singapore month's redistribution, which the service skips if the
+    month is recorded. The 00:10 job and the catch-up's time check are
+    gone. Review findings 1 (startup sweep), 2 (no retry of a failed
+    run) and 3 (order not enforced) are answered by it.
+  - `EarnedCreditLifetime`: the earned-credit expiry and its `>= 1`
+    check, moved from `CreditOperationsService` and used by both it
+    and `RedistributionService` (finding 4).
+  - Tests: `ExpiryAndRedistributionSchedulerTest` rewritten (8: the
+    order inside the routine, the Singapore month on the 1st, an
+    ordinary day and a startup with the month recorded, a missed
+    month at startup, a failed redistribution completed the next day,
+    and neither step throwing at startup);
+    `aPoolSmallerThanTheAccountsGivesOneEachAndSkipsTheRest` makes its
+    own accounts (finding 5); `CreditOperationsConfigurationTest`
+    builds the new component.
+  - Design doc: D12 and the failure table (the down-at-00:00 row, and
+    new rows for a failed run, a month that never completes, and a
+    startup run overlapping the 00:00 one). The service's README and
+    AGENTS.md, and the README's AI Use Summary, updated.
+- **Prompt(s):** Asked whether a proposed single daily-and-startup
+  routine answers the review's first two findings, then to implement
+  it with the review's smaller items.
+- **Author review:** The single routine, dropping the 00:10 time, and
+  accepting that a month failing every day until its end is skipped
+  (its credits stay in the pool) are team decisions; the tool wrote
+  the code, tests and doc text to them. The shared component is the
+  reviewer's suggested option. Pending pull request review.
+
+## 2026-10-16 — Ryan Ang (credit-service: expiry and redistribution scheduler, issue #173)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Scope:** `credit-service/` and `docs/credit-service.md`.
+  - `service/LotExpiryService`: moves what remains in each lot past its
+    expiry to the common pool, one transaction per account (the
+    owner's account lock, their lots read again, then the pool), with
+    one `EXPIRY` history row per account.
+  - `service/RedistributionService`: in one transaction, locks every
+    account in ascending user ID order and then the pool, gives each
+    `floor(pool / accounts)` and the remainder 1 each to accounts
+    chosen at random, each share a new lot that expires the
+    earned-credit lifetime after it is received, with a
+    `REDISTRIBUTION` history row; records the month in
+    `redistribution_run`, checked before and after the locks.
+  - `service/ExpiryAndRedistributionScheduler`: expiry daily at 00:00
+    and redistribution on the 1st at 00:10, Asia/Singapore; a missed
+    month caught up at startup, after an expiry run; one account's
+    failed expiry logged
+    without stopping the others. Off in the `test` profile
+    (`credit.scheduler.enabled`).
+  - Repositories: the expired lots and their owners, the pool's row
+    lock, every account locked by `user_id collate "C"`, and the run
+    row inserted rather than merged.
+  - Tests: `ExpiryAndRedistributionTest` (9, real Postgres, committing,
+    with the design doc's invariants checked after each; one covers a
+    pool smaller than the number of accounts, where a share of 0 writes
+    no lot or history row) and
+    `ExpiryAndRedistributionSchedulerTest` (7, mocked, fixed clock).
+  - Design doc: D12, the scheduler's component row and two failure
+    table rows record the team's decisions. The service's README and
+    AGENTS.md, and the README's AI Use Summary, updated.
+- **Prompt(s):** Implement issue #173 on
+  `feat/credit-expiry-redistribution`.
+- **Author review:** The behaviour is the team's, from
+  `docs/credit-service.md` (D2, D4, D12, "How lots are spent, returned
+  and expired") and issue #173. Where the doc was silent, the team
+  decided: both runs in Singapore time (expiry 00:00 daily,
+  redistribution 00:10 on the 1st, the Singapore month as the period),
+  one transaction per account for expiry, a month with an empty pool
+  still recorded, and a missed redistribution caught up at startup.
+  On review, a further team decision: the catch-up runs an expiry
+  first, the order of a normal night, so credits that expired while the
+  service was down are in that month's share (the tool's first draft
+  ran the redistribution alone). The tool also made the catch-up never
+  throw, since a failing ready-event listener stops the service from
+  starting. One `EXPIRY` row per account per run (the doc's "one row per 
+  affected account per operation"); a lot past its expiry when its `expires_at` 
+  is before the run's instant; the remainder given to distinct accounts 
+  by a shuffle; `distributed` in `redistribution_run` counting every 
+  credit taken from the pool, the remainder included; the "C" collation 
+  on the all-accounts lock so its order matches the transfer's Java
+  string order.
+  Pending pull request review.
+
 ## 2026-10-16 — Leong Wei Zhi (CI pipeline + Claude PR review)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate

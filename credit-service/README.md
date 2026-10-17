@@ -25,6 +25,10 @@
   the listener's handling of a refused retry copy (team decisions).
   Same day, re-review: the confirm timeout's environment variable, and
   the listener paragraph reflowed.
+  2026-10-16, Claude Code (Opus 5.5), PR #193 review (Leong Wei Zhi):
+  the scheduler paragraph for the single daily and startup routine.
+  2026-10-16, Claude Code (Opus 5.5), issue #173: status and contents
+  updated for the expiry and redistribution scheduler.
   Author review: Ryan Ang, pending pull request review.
   2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the run
   section's service URL updated for the gateway cutover (#151) — the
@@ -38,13 +42,15 @@ Credit balances, reservation, transfer and history for FoC — the
 design is [`docs/credit-service.md`](../docs/credit-service.md).
 
 **Status: the credit operations, the read API, the event listener and
-handler, the reply outbox with its publisher, and the broker
-topology.** The service starts, applies the schema, declares its queues
-and verifies login tokens. A signed-in user can read their balance and
-history. A request event published to `request-events` now reserves,
-transfers or releases credits, and a reservation's reply is published
-to `credit-events`. Nothing publishes those events until the Order
-Service does. The expiry and redistribution scheduler is not built yet.
+handler, the reply outbox with its publisher, the expiry and
+redistribution scheduler, and the broker topology.** The service
+starts, applies the schema, declares its queues and verifies login
+tokens. A signed-in user can read their balance and history. A request
+event published to `request-events` now reserves, transfers or releases
+credits, and a reservation's reply is published to `credit-events`.
+Nothing publishes those events until the Order Service does. Earned
+credits expire into the common pool daily, and the pool is shared out
+monthly.
 
 What is here:
 
@@ -99,6 +105,23 @@ What is here:
   Spring's own "Returned message but no callback available" warning:
   the publisher registers no returns callback on the shared
   `RabbitTemplate`, which takes only one.
+- **Expiry and redistribution** (`service/ExpiryAndRedistributionScheduler`,
+  `LotExpiryService`, `RedistributionService`), in Singapore time:
+  - Daily at 00:00, what remains in each lot past its expiry moves to
+    the common pool with an `EXPIRY` history row, one transaction per
+    account; an account that fails is logged and tried again the next
+    day. Held credits are untouched until they are released.
+  - Straight after that sweep, if the month has no recorded run, the
+    pool is shared out (so on the 1st at 00:00): `floor(pool /
+    accounts)` to every account and the remainder 1 credit each to
+    accounts chosen at random, each share a new lot that expires the
+    earned-credit lifetime after it is received. The month (the
+    Singapore month) is recorded in `redistribution_run` even when the
+    pool was empty, so a second run for it changes nothing. A run that
+    fails records nothing, so the next day's run completes it.
+  - The same routine runs at startup, so a month missed while the
+    service was down is shared out then.
+  - Off in tests (`credit.scheduler.enabled: false`).
 - **Scheduler threads**: `spring.task.scheduling.pool.size` is 2, so
   an outbox poll waiting on the broker does not hold up another
   `@Scheduled` job.

@@ -135,6 +135,9 @@
   NotificationProvider layout route, resolved by keeping that route and
   moving this branch's `handle: { requiresSession: true }` onto the
   nested ProtectedRoute it gates, by Claude Code (Opus 5).
+  2026-10-16: AI Use Summary extended for the credit expiry and
+  redistribution scheduler (issue #173) by Claude Code (Opus 5.5);
+  same day, extended for the PR #193 review fixes.
   2026-10-16: AI Use Summary extended for the server half of issue #178
   (PR #183) by Claude Code (Opus 5) — the summary covered the web half
   only.
@@ -581,7 +584,18 @@ original, a nacked or unconfirmed one requeues it after a 5 s pause,
 and a timed-out confirm documented as possibly running the event
 twice), the approach to each decided by the team, and its re-review
 follow-ups (the confirm timeout's environment variable, an
-unresolvable broker host in the test profile, and doc wording).
+unresolvable broker host in the test profile, and doc wording);
+and the expiry and redistribution scheduler
+(issue #173: the daily expiry into the common pool and the monthly
+redistribution, their locking queries, and their unit and Postgres
+tests), written to D2, D4 and D12 of `docs/credit-service.md`, with the
+run times and zone, the per-account expiry transaction, the empty
+month recorded and the startup catch-up decided by the team and
+recorded there, and its PR #193 review fixes (one routine, daily and
+at startup, that sweeps then redistributes a missing month, so a
+failed run is retried the next day; the earned-credit expiry shared;
+a test made independent of test order), the approach decided by the
+team.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their
