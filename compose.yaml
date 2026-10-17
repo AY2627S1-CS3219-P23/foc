@@ -85,6 +85,10 @@
 # rebasing onto the gateway cutover (issue #151, PR review): like the
 # other backends it has no published port and is reached only through
 # the gateway's /api/order/** prefix (docs/gateway.md).
+# 2026-10-15, Claude Code (Opus 5.5): ORDER_PENDING_* and ORDER_RETRY_*
+# passed to the order service for the saga with the Credit Service
+# (30 s pending timeout swept every 15 s, and credit-service's 2 s / 5
+# attempts retry values; Ko-Khan via options Q&A).
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -440,10 +444,18 @@ services:
       ORDER_DB_NAME: ${ORDER_DB_NAME:-order}
       ORDER_DB_USER: ${ORDER_DB_USER:-order}
       ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?set in .env}
+      # the saga's request events and the Credit Service's replies
+      # (docs/credit-service.md)
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: "5672"
       RABBITMQ_USER: ${RABBITMQ_USER:-foc}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set in .env}
+      # how long a request may stay PENDING, and how often that is checked
+      ORDER_PENDING_TIMEOUT_MS: ${ORDER_PENDING_TIMEOUT_MS:-30000}
+      ORDER_PENDING_SWEEP_INTERVAL_MS: ${ORDER_PENDING_SWEEP_INTERVAL_MS:-15000}
+      # retry delay and attempts for a failed credit reply
+      ORDER_RETRY_TTL_MS: ${ORDER_RETRY_TTL_MS:-2000}
+      ORDER_RETRY_MAX_ATTEMPTS: ${ORDER_RETRY_MAX_ATTEMPTS:-5}
     depends_on:
       order-db:
         condition: service_healthy

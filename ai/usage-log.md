@@ -26,6 +26,125 @@ Entry template:
 ```
 
 ---
+## 2026-10-17 — Aung Ko Khant (order-service: request.cancelled / request.expired)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService.cancel` and `.expire` write
+  `request.cancelled` / `request.expired` to the outbox with the state
+  change; `RequestEvents.expired` (new) and the existing `cancelled`
+  builder; a comment on `drop` that it must not publish (Order F5.2);
+  README saga section; tests (65 passing): each event's fields and
+  parties, and no event from a refused cancel.
+- **Prompt(s):** "Can we add events for expire and cancel, these should
+  release credits back to requester". The Credit Service already
+  releases on both (docs/credit-service.md D9). The tool noted that the
+  foc-contracts `RequestExpired` record has no `courierId` and
+  describes expiry before acceptance, while the state machine also
+  expires ACCEPTED requests, and asked who goes in `parties`. The
+  author chose: expired = requester plus the courier when one had
+  accepted; cancelled = requester only.
+- **Author review:** `mvn test` in a Maven container: 65 tests, 0
+  failures. Not yet run end to end against credit-service. To be
+  reviewed via pull request.
+
+## 2026-10-17 — Aung Ko Khant (order-service: request.completed)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService.complete` writes
+  `request.completed` to the outbox in the same transaction as the
+  COMPLETED status; `RequestEvents.completed` builds it from the
+  existing foc-contracts `RequestCompleted` record; README saga
+  section; tests (62 passing): the event's fields, the event sequence,
+  and no event when COMPLETE is refused.
+- **Prompt(s):** "I would like to publish an event when an order is
+  completed successfully, to signal to credit service to release
+  credits to courier". The Credit Service already transfers on
+  `request.completed` using `requestId` and `courierId`
+  (docs/credit-service.md D9). The tool asked as neutral options who
+  goes in `parties`; the author chose requester and courier.
+- **Author review:** `mvn test` in a Maven container: 62 tests, 0
+  failures. Not yet run end to end against a live broker and
+  credit-service. To be reviewed via pull request.
+
+## 2026-10-16 — Aung Ko Khant (order-service: status enum)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `Requests` (`status` is now `OrderStates` with
+  `@Enumerated(EnumType.STRING)` and a hand-written
+  `check (status in (...))` in its text column definition),
+  `RequestsService`, `CreditReplyHandler`, `PendingTimeoutSweeper`,
+  `RequestsRepository` (enum instead of names), and tests (60 passing):
+  a save without `createdAt`, a bad status rejected by the database,
+  and every `OrderStates` constant accepted by it. The `createdAt`
+  default from the same session was committed on its own earlier.
+- **Prompt(s):** "Is it enforced that status must be one
+  of the enums we defined" (it was not) and "I would like the states to
+  be an enum". `columnDefinition = "text"` stopped Hibernate generating
+  its check constraint; the tool asked as neutral options (drop the
+  column definition / write the check into it / Java-only) and the
+  author chose the hand-written check.
+- **Author review:** `mvn test` in a Maven container: 60 tests, 0
+  failures. Under `ddl-auto: update` an existing order-db `requests`
+  table does not gain the check until it is recreated. To be reviewed
+  via pull request.
+
+## 2026-10-15 — Aung Ko Khant (order-service: saga with the Credit Service)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService` (create starts PENDING; reserve/reject/timeout),
+  new `CreditReplyHandler`, `PendingTimeoutSweeper`, `RequestEvents`,
+  `EventOutbox`, `EventPublisher`, `OutboxPublisher`, `OutboxEvent` +
+  repository, `messaging.rabbitmq` (converter, topology, initializer,
+  `RabbitEventPublisher`, `CreditEventsListener`), configuration,
+  compose/`.env.example` variables, the order-service README, and
+  tests (54 passing). The state-machine part (PENDING, REJECTED and
+  their events) was committed on its own earlier; the harness and
+  `order-event.ps1` changes follow in a later commit.
+- **Prompt(s):** "I think we need to add 2 additional stages pending
+  and rejected to coordinate with credit service. Pending is to check
+  if there are enough credits for requester and to reserve it, rejected
+  is in the event that there are not enough". The saga itself was
+  already the team's design (`docs/credit-service.md` D7–D8, D10, and
+  "What the other services must build"). The tool asked the open
+  order-side choices as neutral options; the author chose: event names
+  RESERVE / REJECT / TIMEOUT; only those leave PENDING; scope including
+  the broker wiring; only the four saga transitions publish; copy
+  credit-service's outbox and retry layout with its values; field
+  mapping pickupLocation = supplierName, note = item; correlationId =
+  the request id; 30 s pending timeout swept every 15 s.
+- **Tool's readings, for the author to confirm:** a reply naming no
+  known request is dead-lettered at once (credit-service D11's rule
+  for events that conflict with the recorded state); queue names
+  `order-service.credit-events[.retry|.dlq]` follow credit-service's
+  consumer-prefixed convention; the listener's retry republish waits
+  on a correlated confirm (the outbox needs correlated confirms on the
+  same connection, where notification-service uses simple ones).
+- **Author review:** `./mvnw test` run in a Maven container: 54 tests,
+  0 failures. Not yet run against a live broker or credit-service. To
+  be reviewed via pull request.
+
+## 2026-10-12 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, explain
+- **Scope:** order-service `foc.order.RequestsService` (body of the
+  author's empty `@Service` stub) and `RequestsServiceTests`;
+  order-service README status paragraph; README AI Use Summary.
+- **Prompt(s):** "So how do we add transitions to this file?", "How do
+  I wire this to db?", "Which existing module's responsibility is it
+  to change the db?" (explanations only), then "Can you populate
+  requestservice". The tool wrote one method per `OrderEvents`
+  constant: load via `RequestsRepository`, ask `OrderStateMachine`
+  for the next state, set the status and the entity's existing
+  courier/timestamp columns. The class was named `RequestsService` to
+  match the author's file name (the stub's class was `RequestService`,
+  which does not compile in `RequestsService.java`). The `status`
+  field was left as a `String`; the tool raised String-vs-enum as the
+  author's choice and changed nothing in the entity. No validation,
+  ownership checks, error mapping or event publishing were added.
+- **Author review:** Integration tests against in-memory H2 (each
+  event's stored status and columns; illegal event leaves the row
+  unchanged); `mvn test` passes (19 tests). Reviewed via pull request.
+
 ## 2026-10-17 — Aung Ko Khant (order-service: createdAt default, pushed first)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** debug

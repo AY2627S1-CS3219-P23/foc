@@ -2,8 +2,11 @@
 # Tool: Claude Code (Opus 5.5), 2026-10-10.
 # Scope: test configuration scaffolded following the supplier-service
 # pattern (in-memory H2 so `./mvnw test` needs no running PostgreSQL).
-# No broker settings: nothing declares or listens on the broker yet, so
-# the context loads without a running RabbitMQ.
+# 2026-10-15: the broker parts of the saga switched off (topology
+# declaration, outbox publisher, listener, rabbit health) and the
+# pending-timeout sweep off, following credit-service's test config, so
+# the context still loads without a running RabbitMQ; the tests drive
+# the publisher and the sweep themselves.
 # Reviewed by: Ko-Khan (via pull request).
 
 spring:
@@ -14,3 +17,39 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+  rabbitmq:
+    listener:
+      simple:
+        # no broker in the tests: a listener must not try to connect
+        auto-startup: false
+
+# This file replaces the main application.yaml on the test classpath
+# (same name), so every order.* setting the beans read is repeated here
+# with the main file's defaults.
+order:
+  rabbitmq:
+    # no broker in the tests: nothing is declared at startup
+    provision-on-startup: false
+    retry:
+      ttl-ms: 2000
+      max-attempts: 5
+  outbox:
+    publisher:
+      # no broker in the tests: the publisher does not poll
+      enabled: false
+      poll-interval-ms: 1000
+      batch-size: 100
+      confirm-timeout-ms: 5000
+      unroutable-retry-delay-ms: 30000
+  pending:
+    timeout-ms: 30000
+    sweep:
+      # the tests call PendingTimeoutSweeper.cancelOverdue() themselves
+      enabled: false
+      interval-ms: 15000
+
+management:
+  health:
+    rabbit:
+      # no broker in the tests; the deployed service keeps this check
+      enabled: false

@@ -102,6 +102,9 @@
   2026-10-17: AI Use Summary extended for the order-service request
   state machine by Claude Code (Opus 5.5), then for the Requests
   createdAt default (PR review fix).
+  2026-10-17: AI Use Summary extended for the order-service request
+  events (RequestsService, outbox, credit reply listener) by Claude
+  Code (Opus 5.5).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -574,7 +577,17 @@ and its unit tests over the author's own state and event enums, with
 the DROP target, the no-library form, the PENDING/REJECTED saga
 transitions' names and the ARRIVED step chosen by the author via
 neutral-options Q&A and recorded in `ai/usage-log.md`), and a
-`createdAt` default on the `Requests` entity (PR review fix).
+`createdAt` default on the `Requests` entity (PR review fix); and
+the order-service request events — `RequestsService` applying the state
+machine, a transactional outbox and publisher and a credit reply
+listener with retry and dead-letter queues copied from credit-service
+and notification-service, the pending-timeout sweep, events on
+submit / reserve / reject / timeout / arrive / complete / cancel /
+expire, and `status` as the `OrderStates` enum with a database check —
+with the event names, which transitions publish, the field mapping and
+parties, the copy-not-share choice, the timeout values and the check's
+form chosen by the author via neutral-options Q&A and recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
