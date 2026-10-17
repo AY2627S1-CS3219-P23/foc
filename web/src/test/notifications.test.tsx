@@ -10,6 +10,12 @@
 // 2026-10-16, Claude Code (Opus 5), PR #185 re-review (@Sinnez1): the
 // ERROR-frame case rewritten for the bounded retry and the stopped
 // state the bell now reports.
+// 2026-10-17, Claude Code (Fable 5), issue #66: the bell is a link to
+// the Notification Center now, so its queries ask for a link; the
+// blanket fetch mock became URL-dispatching (the provider now also
+// calls GET /notifications/me/unread-count, which must not be answered
+// with the /users/me body); a seed test covers the REST-seeded badge
+// composing with pushed frames.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import { act, render, screen, waitFor } from '@testing-library/react'
@@ -62,23 +68,40 @@ vi.mock('@stomp/stompjs', () => {
 })
 
 const fetchMock = vi.fn()
+// what GET /notifications/me/unread-count answers; per-test override
+let unreadCountOnServer = 0
+
+function jsonResponse(status: number, body: unknown) {
+  return {
+    ok: status < 400,
+    status,
+    headers: new Headers(),
+    json: async () => body,
+  }
+}
 
 beforeEach(() => {
   localStorage.clear()
   stomp.instances.length = 0
+  unreadCountOnServer = 0
   fetchMock.mockReset()
-  // AuthProvider asks GET /users/me once a session exists
-  fetchMock.mockResolvedValue({
-    ok: true,
-    status: 200,
-    headers: new Headers(),
-    json: async () => ({
-      id: 1,
-      email: 'e1234567@u.nus.edu',
-      username: 'student_alex',
-      role: 'USER',
-      createdAt: '2026-09-01T00:00:00Z',
-    }),
+  // dispatch on the URL: AuthProvider asks GET /users/me, the
+  // notification provider asks GET /notifications/me/unread-count —
+  // a blanket body would feed the badge the /users/me object
+  fetchMock.mockImplementation(async (url: string) => {
+    if (String(url).includes('/notifications/me/unread-count')) {
+      return jsonResponse(200, { count: unreadCountOnServer })
+    }
+    if (String(url).includes('/users/me')) {
+      return jsonResponse(200, {
+        id: 1,
+        email: 'e1234567@u.nus.edu',
+        username: 'student_alex',
+        role: 'USER',
+        createdAt: '2026-09-01T00:00:00Z',
+      })
+    }
+    return jsonResponse(404, null)
   })
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -192,7 +215,7 @@ describe('notification STOMP client', () => {
     renderApp(true)
 
     const onMessage = connectAndSubscribe()
-    const bell = screen.getByRole('button', { name: 'Notifications' })
+    const bell = screen.getByRole('link', { name: 'Notifications' })
     expect(bell).not.toHaveTextContent('1')
 
     pushFrame(onMessage)
@@ -201,9 +224,29 @@ describe('notification STOMP client', () => {
     expect(bell).toHaveTextContent('2')
     // aria-label overrides the badge text, so the count must be in the
     // accessible name for screen readers (PR #185 Copilot review)
+    expect(screen.getByRole('link', { name: 'Notifications (2 unread)' })).toBe(
+      bell,
+    )
+  })
+
+  test('the badge seeds from the REST unread count and pushes stack on top (issue #66)', async () => {
+    unreadCountOnServer = 5
+    renderApp(true)
+
+    // the seed is a fetch; wait for it to land on the badge
+    const bell = await screen.findByRole('link', {
+      name: 'Notifications (5 unread)',
+    })
+    expect(bell).toHaveTextContent('5')
+
+    const onMessage = connectAndSubscribe()
+    // let the resync-on-connect land first (it answers 5 again) so the
+    // pushed frame below increments the settled baseline
+    await act(async () => {})
+    pushFrame(onMessage)
     expect(
-      screen.getByRole('button', { name: 'Notifications (2 unread)' }),
-    ).toBe(bell)
+      screen.getByRole('link', { name: 'Notifications (6 unread)' }),
+    ).toHaveTextContent('6')
   })
 
   test('resubscribes on every (re)connect', () => {
@@ -221,14 +264,14 @@ describe('notification STOMP client', () => {
     const onMessage = connectAndSubscribe()
     pushFrame(onMessage)
     expect(
-      screen.getByRole('button', { name: 'Notifications (1 unread)' }),
+      screen.getByRole('link', { name: 'Notifications (1 unread)' }),
     ).toHaveTextContent('1')
 
     await user.click(await screen.findByRole('button', { name: 'Logout' }))
 
     await waitFor(() => expect(client().deactivate).toHaveBeenCalled())
     expect(
-      screen.getByRole('button', { name: 'Notifications' }),
+      screen.getByRole('link', { name: 'Notifications' }),
     ).not.toHaveTextContent('1')
   })
 
@@ -249,7 +292,7 @@ describe('notification STOMP client', () => {
 
       expect(client().activate).toHaveBeenCalledTimes(2)
       // still live as far as the bell is concerned
-      screen.getByRole('button', { name: 'Notifications' })
+      screen.getByRole('link', { name: 'Notifications' })
     } finally {
       vi.useRealTimers()
     }
@@ -274,7 +317,7 @@ describe('notification STOMP client', () => {
 
       // no fifth attempt, and the count is kept but no longer sold as live
       expect(client().activate).toHaveBeenCalledTimes(4)
-      const bell = screen.getByRole('button', {
+      const bell = screen.getByRole('link', {
         name: 'Notifications (1 unread) — updates paused, sign in again',
       })
       expect(bell).toHaveTextContent('1')
@@ -300,7 +343,7 @@ describe('notification STOMP client', () => {
       act(() => vi.advanceTimersByTime(30_000))
 
       expect(client().activate).toHaveBeenCalledTimes(5)
-      screen.getByRole('button', { name: 'Notifications' })
+      screen.getByRole('link', { name: 'Notifications' })
     } finally {
       vi.useRealTimers()
     }
@@ -315,7 +358,7 @@ describe('notification STOMP client', () => {
       renderApp(true)
 
       // no socket will ever open, so the bell must not imply a live one
-      screen.getByRole('button', {
+      screen.getByRole('link', {
         name: 'Notifications — updates paused, sign in again',
       })
     } finally {

@@ -26,6 +26,9 @@
 // can tell a session-gated page from a public one when a 401 forces a
 // sign-out (owner decision: clear the session in place on public pages,
 // no redirect). Declared here because this is where the gating lives.
+// 2026-10-17, Claude Code (Fable 5), issue #66: /notifications route
+// added inside ProtectedRoute — the Notification Center lists the
+// session user's own rows, so it needs one.
 // 2026-10-16, Claude Code (Opus 5), PR #180 main sync: the route
 // table was the one conflict git could not shelve correctly — it put
 // /forgot-password outside <AppShell /> and /account-recovery outside
@@ -37,6 +40,11 @@
 // layout route below NotificationProvider (the shared balance poll needs
 // the session, and the shell's badge reads it), and /credits behind
 // ProtectedRoute.
+// 2026-10-17, Claude Code (Opus 5), PR #199 main sync (#195 landed):
+// the same mis-aligned hunk as the #180 sync above — git paired this
+// branch's gated routes against main's public ones. /notifications
+// stays inside ProtectedRoute, now under the CreditBalanceProvider
+// layout #195 added; the public four keep their place in the shell.
 // Author review: Leong Wei Zhi to review via the PR.
 
 import { createBrowserRouter, type RouteObject } from 'react-router'
@@ -46,6 +54,7 @@ import { NotFound } from '@/shared/shell/NotFound'
 import { Admin } from './admin'
 import { Credits } from './credits'
 import { Home } from './home'
+import { Notifications } from './notifications'
 import { Profile } from './profile'
 import { Suppliers } from './suppliers'
 import { AccountRecovery } from '../features/user/account-recovery'
@@ -90,6 +99,7 @@ export const routes: RouteObject[] = [
                     handle: { requiresSession: true } satisfies RouteHandle,
                     children: [
                       { path: 'suppliers', element: <Suppliers /> },
+                      { path: 'notifications', element: <Notifications /> },
                       { path: 'profile', element: <Profile /> },
                       {
                         path: 'account-recovery',

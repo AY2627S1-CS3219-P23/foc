@@ -314,6 +314,110 @@ Entry template:
   @Transactional); duplicates now pay a cache-absorbed lookup. Suite
   re-run green (same 91/92).
 
+## 2026-10-17 — Leong Wei Zhi (Notification Center, web half of issue #66)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `web/src/features/notifications/` (new: types, api module,
+  eventMessage templates + relativeTime, NotificationCenter page;
+  modified: NotificationProvider — badge seeds from
+  GET /notifications/me/unread-count on login/reconnect and re-syncs
+  after writes, pushed frame body exposed for the open Center to
+  prepend; useNotifications context widened), `routes/notifications.tsx`
+  + the route table, the bell (button → Link to /notifications), tests
+  (`notification-center.test.tsx` new; `notifications.test.tsx` and
+  `app.test.tsx` updated for the link bell and a URL-dispatching fetch
+  stub), `web/AGENTS.md` wireframe row.
+- **Prompt(s):** The web half of issue #66's plan. UI decisions were the
+  author's via neutral options Q&A (no recommendations): clicking an
+  unread row marks it read (no mark-unread affordance), an All/Unread
+  filter toggle, a "Load more" append pager, display names rendered
+  from the event payloads (backend D29; superseded the same day by D30 —
+  the names now arrive via ingest-time enrichment, same payload
+  shape, web untouched), pushed frames prepend into the
+  open Center, and the badge re-fetches the server count after writes.
+  Layout follows web/docs/wireframes/notification-center.png; the three
+  controls the wireframe doesn't draw are recorded in web/AGENTS.md.
+- **Author review:** `npm run lint`, `prettier --check`, all 168 vitest
+  tests and `npm run build` pass. To be reviewed via pull request.
+- **PR #199 review (2026-10-17), Claude Code (Opus 5):** eleven inline
+  findings from the two reviewer bots (@claude, @codex) triaged — the
+  two backend ones were already fixed on main by the #205 review and
+  are not in this diff; the rest were valid and are fixed, each with a
+  regression test that fails against the pre-review code. A failed
+  "Load more" is retryable rather than skipping its page (`loaded` /
+  `attempt` split from `page`); a filter switch clears the previous
+  filter's page count; a page-0 answer merges rather than discards
+  frames pushed while it was in flight; "Mark all as read" only touches
+  rows that existed when it started; the empty state hides behind an
+  error banner; the bulk control falls back to the loaded rows when the
+  best-effort badge count is unavailable; a count sync can no longer
+  erase a pushed increment (newest-sync-wins guard, plus a push starting
+  its own sync); pushes queue instead of a single replaceable value, so
+  two frames batched into one render both land; and the relative times
+  tick on a 60 s clock. One finding was a UX fork, not a defect, so the
+  author decided it via neutral options Q&A: under the Unread filter a
+  row marked read now leaves the list (and read-all empties it), while
+  the All filter keeps graying in place. Re-verified: 179 vitest tests,
+  `tsc -b`, eslint and Prettier clean.
+- **Browser run (2026-10-17), Claude Code (Opus 5):** drove the branch
+  against the live compose stack with Playwright (Vite dev server on
+  5173, gateway 8090, 14 then 13 seeded notifications published to the
+  `request-events` exchange as demo_user_001). Confirmed working: the
+  REST-seeded badge, all nine event templates with D30 display names,
+  D25's created_at ordering, "Load more", the Unread filter, a row
+  marked read leaving the Unread list, a live STOMP push prepending and
+  re-syncing the badge, and the ticking relative times. It also found
+  one defect the unit tests had missed: after "Mark all as read"
+  emptied the Unread view, the page count from the last fetch outlived
+  its rows and the dashed empty state rendered with a "Load more"
+  button under it. Fixed (the bulk write clears the Unread page count,
+  and the pager is gated on having rows) with a regression test that
+  fails against the pre-fix code; 180 vitest tests green.
+- **PR #199 review, round 2 (2026-10-17), Claude Code (Opus 5):** after
+  the #195 main sync, two threads were still open. @claude found that
+  "Load more" skips rows under the Unread filter: the list is
+  offset-paged over a set that shrinks as rows are read, so asking for
+  `loaded + 1` steps past the rows that moved up into the slice just
+  vacated. Confirmed against the live API — with 13 unread, marking 3
+  read makes `page=1` return 0 rows while `page=0` returns the 10
+  remaining, 3 of them never seen. Fixed by deriving the next offset
+  from the rows held (`floor(items.length / PAGE_SIZE)`, the held rows
+  being a prefix of the server's current set) and testing "is there
+  more" against `totalElements` rather than a page count computed from
+  an older, larger set; the fetch request became one value carrying its
+  own replace/append mode, so a page number and the merge it implies
+  cannot disagree. The reviewer's secondary claim that a push also
+  loses a row does not hold — a push shifts every offset by exactly one
+  and the one-row overlap is absorbed by the id dedupe. The test stub
+  gained a small mutating server model for the unread set, which is
+  what makes "mark read, then Load more" honest; two paging fixtures
+  that used one-row pages against a `size=10` request were corrected.
+  @codex's standing P1 (the README's consolidated AI Use Summary had
+  the backend half of #66 but not the web half) was valid against
+  AGENTS.md duty 4 and is now addressed. 213 vitest tests, `tsc -b`,
+  eslint and Prettier clean.
+- **PR #199 review, round 3 (2026-10-17), Claude Code (Opus 5):** the
+  approving review (@Sinnez1) left one actionable nit: "Load more" can
+  disappear before everything is loaded, because `totalElements` only
+  moves on a fetch while live pushes add rows to the list — 15 on the
+  server with 10 held, then 5 pushed, and the rows held reach a total
+  those rows postdate, hiding the pager over 5 unreachable rows. Valid
+  and fixed by keeping the two in step: a push raises the total by the
+  rows it actually prepends. The same defect runs the other way under
+  the Unread filter, which the nit did not mention — a row marked read
+  leaves the list but not the total, so one page of unread rows grew a
+  pager that offered a page already on screen — so the read path lowers
+  the total too. Two regression tests, both failing against the
+  pre-review code. The review's second point (credit-service's
+  rejection reasons are lowercase machine strings, so a row reads
+  "…rejected: insufficient available credits") was a copy fork rather
+  than a defect and the reviewer called it fine as it is; put to the
+  author via neutral options Q&A against leaving it, capitalising the
+  reason, and mapping the two known reasons — the author chose to leave
+  the service's wording unchanged, so no code change. 215 vitest tests,
+  `tsc -b`, eslint and Prettier clean.
+
+---
 ## 2026-10-17 — Leong Wei Zhi (notification REST API, backend half of issue #66)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate

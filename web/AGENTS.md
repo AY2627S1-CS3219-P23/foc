@@ -23,6 +23,10 @@
   upcoming-expiry line and notice, which the wireframe doesn't draw
   (team decisions).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-17, Claude Code (Fable 5), issue #66: the
+  notification-center.png row records the shipped Center and its three
+  beyond-the-wireframe controls (author decisions via options Q&A).
+  Author review: Leong Wei Zhi to review via PR #199.
 -->
 
 # web/ — Frontend Agent Guide
@@ -70,7 +74,7 @@ first**; they cost nothing to read, unlike Figma MCP calls:
 | `docs/wireframes/admin-dashboard.png` | Admin dashboard — user/vendor management |
 | `docs/wireframes/forgot-password.png` | Forgot/reset password — email step + reset form |
 | `docs/wireframes/account-recovery.png` | Account recovery — restore a deleted account within 30 days |
-| `docs/wireframes/notification-center.png` | Notification center — bell with unread badge, read/unread list, empty state |
+| `docs/wireframes/notification-center.png` | Notification center — bell with unread badge, read/unread list, empty state (built in the web half of issue #66: rows, blue unread dot, grayed read rows, "Mark all as read", empty-state copy as drawn; three additions the wireframe doesn't show, each an author decision via options Q&A — an **All/Unread filter toggle**, a **"Load more"** button (the wireframe draws no paging control; the REST list is paged), and **clicking an unread row marks it read** (no per-row control is drawn; mark-unread exists in the API but has no UI affordance)) |
 | `docs/wireframes/add-edit-supplier.png` | Add/edit supplier (admin) — form modal + delete confirmation |
 | `docs/wireframes/public-profile.png` | Public profile — another user's minimal profile view |
 | `docs/wireframes/rating-review.png` | Rating & review — post-completion star rating, write-up, report user |
