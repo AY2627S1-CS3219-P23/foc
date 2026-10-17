@@ -92,6 +92,9 @@
 # (author decision via options Q&A). Deliberately no depends_on redis —
 # the check fails open (G6/D23), so gating startup on Redis would block
 # valid traffic exactly when the design says to serve it.
+# 2026-10-17, Claude Code (Fable 5), issue #66: WEB_ALLOWED_ORIGIN passed
+# to the notification service for its REST API's CORS config, as
+# supplier/user/credit already receive it.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -179,6 +182,7 @@ services:
       NOTIF_PURGE_CRON: "${NOTIF_PURGE_CRON:-0 0 3 * * *}"
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       NOTIFICATION_WS_ALLOWED_ORIGINS: ${NOTIFICATION_WS_ALLOWED_ORIGINS:-http://localhost:*}
+      WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
       # Platform Redis: denylist read at STOMP CONNECT (D23). No
       # depends_on redis on purpose — the check fails open (G6).
       REDIS_HOST: redis

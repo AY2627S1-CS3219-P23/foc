@@ -7,6 +7,8 @@ title: "FoC Notification Service — Component-Level Architecture"
 %% Leong Wei Zhi, recorded in docs/notification-service.md); the tool
 %% made no design decisions.
 %% Reviewed by: Leong Wei Zhi (via pull request).
+%% 2026-10-17, Claude Code (Fable 5), issue #66: the REST API node is
+%% built — dashed "planned" styling removed, label updated.
 %% Legend, decisions and traceability: see docs/notification-service.md
 flowchart TB
     ORDER_SVC["<b>Order Service</b> (order-service/)<br/>publishes a typed event on every<br/>request state transition"]
@@ -22,7 +24,7 @@ flowchart TB
     subgraph NOTIF ["Notification Service (notification-service/) — Java + Spring Boot"]
         LISTENER["<b>AMQP listener</b><br/>dispatch on body eventType;<br/>manual ack after DB commit"]
         PROCESSOR["<b>Idempotent event processor</b><br/>dedupe by event ID;<br/>one notification per party"]
-        API["<b>Notification REST API</b><br/>(planned, issue #66)"]
+        API["<b>Notification REST API</b><br/>list + unread count + mark<br/>read/unread (JWT, /notifications/me)"]
         PUSH["<b>STOMP push gateway</b><br/>per-user destinations"]
         PURGE["<b>Retention purge scheduler</b>"]
     end
@@ -44,5 +46,3 @@ flowchart TB
     API ---|"read/update rows"| NOTIF_DB
     PURGE ---|"delete rows older<br/>than retention window"| NOTIF_DB
 
-    classDef planned stroke-dasharray: 6 4
-    class API planned

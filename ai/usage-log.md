@@ -33,6 +33,60 @@ Entry template:
 ```
 
 ---
+## 2026-10-17 — Leong Wei Zhi (notification REST API, backend half of issue #66)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `notification-service/` REST API (new `config/`,
+  `controller/`, `dto/` packages; `security/` filter + handlers;
+  repository queries; `NotificationQueryService`; both application
+  yamls; pom), `foc-contracts` request-event records
+  (requesterName/courierName + record-shape test), the nine test files
+  constructing those records (notification- and credit-service),
+  `compose.yaml`, `.env.example`, `docs/notification-service.md` (+
+  `.mmd`), service README/AGENTS.md. New tests: `SecurityConfigTest`
+  (chain 401s + the `/ws/info` stays-open canary for #67),
+  `NotificationControllerTest` (order, paging 400s, ownership 404s,
+  idempotent writes, unread count/filter).
+- **Prompt(s):** Asked to plan and resolve issue #66. Every API/UX
+  decision was made by the author via neutral options Q&A rounds
+  (no recommendations): scope split (backend + web PRs), PATCH-with-body
+  shape, `/notifications/me` base path, created_at list order,
+  204 + ownership-scoped bulk UPDATE (count 0 → 404, no existence
+  oracle), empty filter authorities, `POST /read-all`,
+  `GET /unread-count` → `{"count": n}`, `?unread=true` filter, and
+  display names carried in the event payloads rather than rendered from
+  IDs or looked up cross-service. Recorded as D24–D29 in
+  `docs/notification-service.md`; implementation mechanics transcribe
+  credit-service's precedent (its SecurityConfig/controller/test style).
+- **Author review:** full suites run — foc-contracts and credit-service
+  (217/217) green; notification-service 83 tests with the known
+  Java-26-local context-restart AMQP error on `RetentionPurgeSchedulerTest`
+  (passes alone; same environmental failure exists on main). To be
+  reviewed via pull request.
+- **PR #198 Codex review (2026-10-17):** both findings reproduced in
+  tests before fixing. (1) Jackson's default coercion bound
+  {"read":"true"}/{"read":1} → 204 where the contract promises 400 —
+  fixed with a field-scoped strict Boolean deserializer (the AMQP
+  mapper is untouched). (2) The /** CORS registration policed the /ws
+  paths, 403ing a handshake Origin the WS config allows — narrowed to
+  /notifications/**. Both pinned by new tests.
+- **PR #198 follow-up (2026-10-17):** reverted the strict-deserializer
+  fix above — author decided the PATCH `read` field should keep
+  Jackson's default scalar coercion rather than reject it, so
+  `StrictBooleanDeserializer` and its pinning test are removed and
+  `MarkReadRequest` is back to a plain `Boolean`. The CORS fix is
+  unaffected and stays. `docs/notification-service.md`'s REST API
+  contract (D24) is reworded to document the PATCH body's coercion as
+  deliberate rather than promising 400 for every non-boolean. Also
+  addressed Sinnez1's non-blocking review nit on the `unread` query
+  param: rather than hand-validating it like `page`/`size`, D27 and
+  the REST API table now document that `unread` uses Spring's
+  standard boolean conversion (accepts `1`/`yes`/`on` and
+  `0`/`no`/`off` alongside `true`/`false`) — both are the author's
+  decisions via options Q&A, not this tool's.
+- **Author review:** `mvn -pl notification-service test` after the
+  revert; reviewed via pull request.
+
 ## 2026-10-16 — Ryan Ang (PR #193 review: expiry and redistribution scheduler)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** refactor + tests + docs

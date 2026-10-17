@@ -14,6 +14,9 @@
  * the event's own failure is kept as a suppressed exception. The
  * confirm timeout is passed in, so no test waits out 5 s.
  * Author review: Ryan Ang, pending pull request review.
+ * 2026-10-17, Claude Code (Fable 5), issue #66: fixtures updated for
+ * the display-name fields added to the request event records (D29);
+ * no behavior change in this test.
  */
 package foc.credit.messaging.rabbitmq;
 
@@ -260,6 +263,6 @@ class RequestEventsListenerTest {
 
 	private static RequestCompleted completed() {
 		return new RequestCompleted("e-1", Instant.parse("2026-10-14T08:00:00Z"), "order-service", "c-1",
-				List.of("u-req", "u-cou"), "r-1", "u-req", "u-cou", "Techno Edge", "COM3-01-19", null);
+				List.of("u-req", "u-cou"), "r-1", "u-req", null, "u-cou", null, "Techno Edge", "COM3-01-19", null);
 	}
 }
