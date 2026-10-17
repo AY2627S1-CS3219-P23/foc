@@ -6,6 +6,8 @@
  * transcribed from the author's ER diagram (bigint -> Long, text ->
  * String, int -> Integer, timestamptz -> Instant, version -> @Version);
  * no columns added or changed by the tool.
+ * 2026-10-16: createdAt defaults to Instant.now() (PR review fix: a
+ * save without setCreatedAt failed the not-null check).
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order.model;
@@ -49,7 +51,7 @@ public class Requests {
     @Column(nullable = false)
     private Integer creditAmount;
 
-    // CREATED/ACCEPTED/COLLECTED/COMPLETED/CANCELLED/EXPIRED (F0.1)
+    // PENDING/REJECTED/CREATED/ACCEPTED/COLLECTED/ARRIVED/COMPLETED/CANCELLED/EXPIRED (F0.1)
     @Column(nullable = false, columnDefinition = "text")
     private String status;
 
@@ -64,8 +66,10 @@ public class Requests {
     // Starts the 1 h auto-complete clock (F7.2)
     private Instant arrivedAt;
 
+    // Defaults to construction time, so a save that never sets it still
+    // passes the not-null check (as in user-service's User)
     @Column(nullable = false)
-    private Instant createdAt;
+    private Instant createdAt = Instant.now();
 
     // Optimistic lock
     @Version

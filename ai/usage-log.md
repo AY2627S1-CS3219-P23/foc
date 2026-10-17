@@ -65,7 +65,67 @@ Entry template:
   Verified by `./mvnw clean test` in `user-service` (367/367 green,
   one more than before).
 
----
+## 2026-10-17 — Aung Ko Khant (order-service: createdAt default, pushed first)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug
+- **Scope:** order-service `Requests.createdAt` defaults to
+  `Instant.now()`, so a `save()` that never calls `setCreatedAt` still
+  passes the not-null check; the column stays NOT NULL.
+- **Prompt(s):** 2026-10-16, pasted PR review comment (blocking:
+  `createdAt` is `nullable = false` but nothing sets it). The reviewer
+  offered a field default (as Notification and User do),
+  `@CreationTimestamp` or `@PrePersist`; the tool applied the field
+  default, compared it with `@CreationTimestamp` when asked, and the
+  author kept the default.
+- **Author review:** a test saving a request without `createdAt` comes
+  with the service code in a later commit; this commit's tests run in a
+  Maven container on a clean checkout. To be reviewed via pull request.
+
+## 2026-10-17 — Aung Ko Khant (order-service: state machine states, pushed first)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `OrderStates` (PENDING and REJECTED added by
+  the tool on 2026-10-15; ARRIVED added by the author on 2026-10-16),
+  `OrderEvents` (RESERVE, REJECT, TIMEOUT on 2026-10-15; ARRIVE on
+  2026-10-16), `OrderStateMachine` (PENDING -RESERVE-> CREATED,
+  -REJECT-> REJECTED, -TIMEOUT-> CANCELLED; COLLECTED -ARRIVE->
+  ARRIVED -COMPLETE-> COMPLETED) and `OrderStateMachineTests`.
+  Committed ahead of the rest of the 2026-10-15 to 10-17 order-service
+  work at the author's request ("Can we push state machine changes
+  first?"); the service, messaging and endpoint code that fires these
+  events follows in later commits with their own entries.
+- **Prompt(s):** 2026-10-15: "I think we need to add 2 additional
+  stages pending and rejected to coordinate with credit service"; the
+  saga is the team's design (`docs/credit-service.md` D7-D8), and the
+  author chose the event names RESERVE / REJECT / TIMEOUT and that only
+  they leave PENDING. 2026-10-16: "I would like to add an arrived state
+  between collected and completed, the point is to inform requester
+  that courier has arrived"; the author chose COMPLETE only from
+  ARRIVED (no direct COLLECTED -> COMPLETED).
+- **Author review:** this commit's tests run in a Maven container on a
+  clean checkout of it: 15 tests, 0 failures. To be reviewed via pull
+  request.
+
+## 2026-10-11 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service request state machine skeleton —
+  `foc.order.OrderStateMachine` (transition table) and
+  `OrderStateMachineTests`; `package foc.order;` line added to the
+  author's `OrderStates` / `OrderEvents` enums; order-service README
+  status paragraph; README AI Use Summary.
+- **Prompt(s):** "Help me implement skeleton of state mchine", with
+  the author's hand-written `OrderStates` and `OrderEvents` enums
+  (including the guard comments on CANCEL, DROP and EXPIRE) as input.
+  The tool asked two neutral-options questions and the author chose:
+  DROP leads ACCEPTED -> CREATED (not CANCELLED), and a plain-Java
+  transition table (not the Spring Statemachine library). The
+  remaining transitions were transcribed from the enums and their
+  comments.
+- **Author review:** Transition table pinned by unit tests (every
+  permitted transition, every other state/event pair rejected);
+  `mvn test` passes (11 tests). Reviewed via pull request.
+
 ## 2026-10-17 — Ryan Ang (admin dashboard: common pool box, issue #174 branch)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (code + tests + docs)
@@ -479,6 +539,25 @@ Entry template:
   was the author's choice when order-db was wired into compose.yaml
   (2026-10-10); the tool only recorded it.
 - **Author review:** Reviewed via pull request.
+
+## 2026-10-14 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, docs
+- **Scope:** `order-db` host port default 5436 -> 5437 in
+  `compose.yaml`, `.env.example`, `AGENTS.md` (service DB table) and
+  `order-service/README.md`.
+- **Prompt(s):** "I need to use port 5437 instead as 5436 is used by
+  credit service". Port chosen by the author; the tool only applied it.
+- **Author review:** Reviewed via pull request.
+- **Same day:** rebased `feat/order-service-scaffold` onto main after
+  the gateway cutover (#151) and, per the PR review, removed
+  order-service's `ports:` block and `ORDER_SERVICE_PORT` (compose,
+  `.env.example`, order-service README). Conflicts with the
+  credit-service work resolved by keeping both sides (credit-db on
+  5436, order-db on 5437; main's gateway `VITE_*` URLs kept).
+  Prompt: "Please carry out 1" (rebase and drop the ports block, as
+  the reviewer asked). `docker compose config` validated; the service
+  build and tests were not re-run.
 
 ## 2026-10-14 — Ryan Ang (PR #189 review follow-ups)
 - **Tool:** Claude Code (Opus 5.5)
