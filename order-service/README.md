@@ -3,7 +3,14 @@
   Tool: Claude Code (Opus 5.5), 2026-10-10.
   Scope: service README written while scaffolding the Spring Boot
   skeleton. 2026-10-11: status paragraph updated for the Requests
-  entity/repository skeleton.
+  entity/repository skeleton, then for the state machine skeleton.
+  2026-10-12: status paragraph updated for RequestsService.
+  2026-10-13: endpoints section for the RequestsController mappings.
+  2026-10-15: status paragraph and a "Saga with the Credit Service"
+  section for PENDING/REJECTED, the outbox and the reply listener.
+  2026-10-16: the ARRIVED state and /arrive.
+  2026-10-17: request.completed on COMPLETE; request.cancelled and
+  request.expired on CANCEL and EXPIRE.
   Reviewed by: Ko-Khan (via pull request).
 -->
 
@@ -17,7 +24,70 @@ Spring Boot 4 · Java 21 · Maven · PostgreSQL (service-owned) · RabbitMQ
 
 Scaffold only for now — one actuator health endpoint, database and
 broker connection wired, and the `Requests` entity (table `requests`)
-with its repository; no endpoints or event publishing yet.
+with its repository, the request state machine
+(`OrderStateMachine`, a transition table over `OrderStates` /
+`OrderEvents`), `RequestsService`, which applies those transitions
+to stored requests, the HTTP endpoints below, and the saga with the
+Credit Service (next section); no authentication or input validation
+yet.
+
+## Saga with the Credit Service
+
+The team's design is in [`docs/credit-service.md`](../docs/credit-service.md)
+(D7–D8, "The saga").
+
+- `/create` stores the request as **PENDING** and writes
+  `request.submitted` to the outbox. A PENDING request cannot be
+  accepted, cancelled or expired.
+- `credit.reserved` moves it to **CREATED** (`request.created`);
+  `credit.reservation-rejected` moves it to **REJECTED**, which is final
+  (`request.rejected`, with the Credit Service's reason).
+- A request still PENDING after `ORDER_PENDING_TIMEOUT_MS` (30 s) is
+  cancelled by a sweep every `ORDER_PENDING_SWEEP_INTERVAL_MS` (15 s)
+  and `request.cancelled` is written, so a late reservation is
+  released. A reply for a request that is no longer PENDING is ignored.
+- Besides these four transitions, ARRIVE publishes
+  `request.courier-arrived` (tells the requester the courier is at the
+  drop-off) and COMPLETE publishes `request.completed`, on which the
+  Credit Service transfers the held reward to the courier (`parties` =
+  requester and courier). COMPLETE is only allowed from ARRIVED.
+  CANCEL publishes `request.cancelled` and EXPIRE `request.expired`,
+  on which the Credit Service releases the held reward to the requester
+  (`parties` = requester, plus the courier on an expiry after
+  acceptance). DROP publishes nothing, so the reward stays held; ACCEPT
+  and COLLECT publish nothing yet. Nothing fires EXPIRE yet (no
+  deadline sweep).
+- **Publishing:** a transactional outbox (`outbox_event` table), sent to
+  the `request-events` exchange by a poller with publisher confirms —
+  a copy of credit-service's (D10).
+- **Consuming:** queue `order-service.credit-events` on `credit-events`,
+  bound to the two replies, with `.retry` (2 s, 5 attempts:
+  `ORDER_RETRY_*`) and `.dlq` queues — credit-service's D11 layout. A
+  reply naming no known request goes straight to the DLQ.
+- Event fields: `pickupLocation` = supplier name, `note` = item,
+  `reward` = credit amount, ids as decimal strings, `correlationId` =
+  the request id, `parties` = the requester (plus the courier where
+  noted above).
+
+Without the Credit Service running, a new request stays PENDING and
+is cancelled after 30 s.
+
+## Endpoints
+
+All are `POST` with a JSON body and answer `{"message": "..."}`:
+200 on success, 409 if the event is not allowed from the request's
+current state (including a courier action on a still-PENDING
+request), 404 if no request has that id.
+
+| Path | Body |
+| --- | --- |
+| `/create` | `requesterId`, `supplierId`, `supplierName`, `dropoffLocation`, `item`, `creditAmount`, `deadline` (ISO-8601 instant) |
+| `/accept` | `requestId`, `courierId` |
+| `/collect` | `requestId` |
+| `/arrive` | `requestId` |
+| `/drop` | `requestId` |
+| `/cancel` | `requestId` |
+| `/complete` | `requestId` |
 
 ## Run
 

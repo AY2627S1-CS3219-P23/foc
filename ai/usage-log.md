@@ -26,6 +26,78 @@ Entry template:
 ```
 
 ---
+## 2026-10-16 — Aung Ko Khant (order-service: ARRIVED state)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService
+  .arrive` (sets `arrivedAt`, writes `request.courier-arrived` to the
+  outbox), `RequestEvents.courierArrived`, `POST /arrive` in
+  `RequestsController`, the `Requests` status comment, `endpoints.txt`,
+  the README, and tests (57 passing). The ARRIVED constant in
+  `OrderStates` was the author's own edit; the state-machine part
+  (ARRIVE, COLLECTED -> ARRIVED -> COMPLETED) was committed on its own
+  earlier, and the harness, `order-curl.ps1` and `order-event.ps1`
+  changes follow in a later commit.
+- **Prompt(s):** "I would like to add an arrived state between
+  collected and completed, the point is to inform requester that
+  courier has arrived". The tool asked the open choices as neutral
+  options; the author chose: COMPLETE only from ARRIVED (no direct
+  COLLECTED -> COMPLETED); ARRIVE publishes `request.courier-arrived`
+  (the existing foc-contracts record) now; `parties` = the requester
+  only. `/arrive` takes the same `{requestId}` body as `/collect`.
+- **Author review:** `mvn test` run in a Maven container: 57 tests,
+  0 failures. Not yet run against a live broker or notification-service.
+  To be reviewed via pull request.
+
+## 2026-10-13 — Aung Ko Khant (order-service: RequestsController)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, explain
+- **Scope:** order-service `foc.order.controller.RequestsController`
+  (new; six POST endpoints) and `RequestsControllerTests` (new);
+  `order-service/README.md`; README AI Use Summary. The same session's
+  `order-event.ps1`, `order-curl.ps1` and harness interactive mode are
+  logged with the manual-testing tools in a later commit.
+- **Prompt(s):** "How can I start adding endpoints", "Treat order
+  service as its own isolated microservice for now" (explanations
+  only; the tool declined to pick routes or request/response shapes
+  and listed them as the author's decisions), then "Can you add a
+  method for each event for me to fill out?". The tool wrote a
+  `@RestController` with one unmapped, empty stub method per
+  `OrderEvents` constant, each commented with the `RequestsService`
+  method it corresponds to. No routes, HTTP methods, parameters,
+  DTOs or status codes were chosen by the tool. Then "For the create
+  event, I would like a row to be added to db based on the
+  parameters supplied to create method, status should be created":
+  the tool filled in `create()` to take the entity's caller-supplied
+  columns as parameters, build a `Requests` and store it through the
+  existing `RequestsService.create` (which sets status `CREATED`).
+  The method is still unmapped. Then "fill out stub methods with
+  corresponding method from request service. Modify method
+  signatures as needed": the tool made `accept`, `collect`,
+  `cancel`, `drop`, `expire` and `complete` each delegate to the
+  `RequestsService` method of the same name, taking that method's
+  parameters and returning its `Requests` result, and fixed the
+  compile errors in the author's in-progress edits (`void` methods
+  returning a value, a `requestService` typo, and a
+  `setStatus('CREATED')` line, removed because
+  `RequestsService.create` already sets the status). Still unmapped.
+  Not compiled or run by the tool (no JDK or Docker available in the
+  session). Then "Can you help me add the endpoints": the
+  tool declined to pick the interface and listed what it needed; the
+  author wrote `endpoints.txt` (paths and parameters for create,
+  accept, collect, drop, cancel, complete) and asked "Can we create
+  these endpoints?". Four points the file left open were put to the
+  author as neutral-options Q&A, and the author chose: POST with a
+  JSON body; `creditAmount` and `deadline` added to `/create` (both
+  are NOT NULL columns); a JSON `{"message": ...}` response with 200
+  / 409 (illegal transition) / 404 (unknown id); endpoints only, no
+  event publishing in this change. The tool mapped the six
+  controller methods accordingly (`expire` left unmapped), added
+  `RequestsControllerTests`, and ran the full order-service suite in
+  a Maven container (25 tests, all passing).
+- **Author review:** Stubs are to be filled out by the author, who
+  decides the interface; reviewed via pull request.
+
 ## 2026-10-17 — Aung Ko Khant (order-service: request.cancelled / request.expired)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate

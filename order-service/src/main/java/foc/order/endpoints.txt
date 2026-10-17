@@ -1,0 +1,7 @@
+/create param: -requester id (user id) -supplier id -supplier name -item -dropoff location  -> return success message + published event to tell credit service to reserve credits
+/accept param: -courier id (user id), request id ->return success or error message
+/collect -request id -> returns success message
+/arrive request id -> returns success or error message + publish event to tell the requester the courier has arrived
+/drop request id -> returns success or error message
+/cancel request id -> returns success or error message
+/complete request id -> returns success message + publish event for credit service to release funds

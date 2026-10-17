@@ -104,7 +104,7 @@
   createdAt default (PR review fix).
   2026-10-17: AI Use Summary extended for the order-service request
   events (RequestsService, outbox, credit reply listener) by Claude
-  Code (Opus 5.5).
+  Code (Opus 5.5), then for the RequestsController endpoints.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -587,7 +587,9 @@ expire, and `status` as the `OrderStates` enum with a database check —
 with the event names, which transitions publish, the field mapping and
 parties, the copy-not-share choice, the timeout values and the check's
 form chosen by the author via neutral-options Q&A and recorded in
-`ai/usage-log.md`.
+`ai/usage-log.md`; and the `RequestsController` (seven POST endpoints
+delegating to `RequestsService`, with tests; paths, parameters and
+request/response shapes specified by the author).
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
