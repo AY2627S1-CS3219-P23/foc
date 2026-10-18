@@ -51,6 +51,13 @@ export function OpenRequests() {
         setOrders(open.content)
         setTotalPages(open.totalPages)
         setDeliveries(mine.content)
+        // The feed can shrink under us (requests accepted or expired
+        // since we last loaded): step back to the last page that still
+        // exists instead of staring at an empty, unpageable one. The
+        // page change re-runs this effect.
+        if (page > 0 && page >= open.totalPages) {
+          setPage(Math.max(0, open.totalPages - 1))
+        }
       })
       .catch((err) => {
         if (!cancelled)

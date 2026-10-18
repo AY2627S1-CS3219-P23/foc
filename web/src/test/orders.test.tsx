@@ -193,6 +193,27 @@ describe('open requests', () => {
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
   })
 
+  it('steps back a page when the feed shrinks under the courier', async () => {
+    const other = { ...base, id: 6, requesterId: 9, requesterUsername: 'other' }
+    const list = vi
+      .spyOn(orderApi, 'listOpenOrders')
+      .mockResolvedValueOnce({ ...pageOf([other]), totalPages: 2 })
+      // after page 2 is opened, it no longer exists: one page remains
+      .mockResolvedValueOnce({ ...pageOf([]), totalPages: 1 })
+      .mockResolvedValue({ ...pageOf([other]), totalPages: 1 })
+    renderAt('/requests')
+    await screen.findByRole('button', { name: 'Accept' })
+
+    await userEvent.click(screen.getByRole('button', { name: /2/ }))
+
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(0, expect.any(Number)),
+    )
+    expect(
+      await screen.findByRole('button', { name: 'Accept' }),
+    ).toBeInTheDocument()
+  })
+
   it('opens the delivery page after a successful accept', async () => {
     vi.spyOn(orderApi, 'listOpenOrders').mockResolvedValue(
       pageOf([{ ...base, id: 6, requesterId: 9, requesterUsername: 'other' }]),
