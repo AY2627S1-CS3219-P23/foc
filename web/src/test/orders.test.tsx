@@ -19,8 +19,9 @@ import { MyRequests } from '@/routes/my-requests'
 import { ActiveDelivery } from '@/routes/active-delivery'
 import { OpenRequests } from '@/routes/open-requests'
 
+const session = vi.hoisted(() => ({ userId: 3 as number | null }))
 vi.mock('@/features/order/useCurrentUserId', () => ({
-  useCurrentUserId: () => 3,
+  useCurrentUserId: () => session.userId,
 }))
 
 const base: Order = {
@@ -69,6 +70,7 @@ const pageOf = (content: Order[]) => ({
 })
 
 beforeEach(() => {
+  session.userId = 3
   vi.spyOn(orderApi, 'getBalance').mockResolvedValue({
     available: 10,
     reserved: 0,
@@ -171,6 +173,20 @@ describe('open requests', () => {
       await screen.findByRole('button', { name: 'Your request' }),
     ).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Accept' })).toBeEnabled()
+  })
+
+  it('keeps Accept disabled while the signed-in user is unknown', async () => {
+    session.userId = null
+    vi.spyOn(orderApi, 'listOpenOrders').mockResolvedValue(
+      pageOf([{ ...base, id: 5 }]),
+    )
+    const accept = vi.spyOn(orderApi, 'acceptOrder')
+    renderAt('/requests')
+
+    const button = await screen.findByRole('button', { name: 'Accept' })
+    expect(button).toBeDisabled()
+    await userEvent.click(button)
+    expect(accept).not.toHaveBeenCalled()
   })
 
   it('shows the conflict when another courier got there first, and refetches', async () => {

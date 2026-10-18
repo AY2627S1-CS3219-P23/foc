@@ -152,7 +152,11 @@ export function OpenRequests() {
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {orders.map((order) => {
+            // Ownership unknown (account still loading, or /users/me
+            // failed) counts as "not safe to accept": the backend refuses
+            // a self-accept, but the button shouldn't invite it.
             const own = userId !== null && order.requesterId === userId
+            const unknown = userId === null
             return (
               <li
                 key={order.id}
@@ -198,8 +202,14 @@ export function OpenRequests() {
                 <button
                   type="button"
                   onClick={() => accept(order)}
-                  disabled={own || acceptingId !== null}
-                  title={own ? 'You cannot accept your own request' : undefined}
+                  disabled={own || unknown || acceptingId !== null}
+                  title={
+                    own
+                      ? 'You cannot accept your own request'
+                      : unknown
+                        ? 'Checking your account…'
+                        : undefined
+                  }
                   className="mt-auto rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500"
                 >
                   {own
