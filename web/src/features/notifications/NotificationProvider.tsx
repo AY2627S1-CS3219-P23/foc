@@ -29,13 +29,34 @@
 // guard, and a push triggers its own sync), and pushes queue instead
 // of a single replaceable value, so two frames delivered in one
 // WebSocket message both reach the open Center.
+// 2026-10-18, Claude Code (Fable 5), notification sound (follow-up to
+// issue #66, no issue yet): a live push now plays a chime, keyed on the
+// pushed queue's identity — the one signal that moves only on live
+// arrivals, never on the REST seeds/re-syncs — so a burst batched into
+// one render chimes once and a reconnect catch-up stays silent. The
+// localStorage-backed toggle (device preference, default on) lives here
+// and is shared through the context.
+// 2026-10-18, Claude Code (Fable 5), PR #215 review (@Sinnez1): the
+// chime keys on an arrival counter bumped before the body parse, so a
+// frame that fails JSON.parse still chimes like it still bumps the
+// badge (same live-only guarantee: the counter moves nowhere else);
+// only the visible tab chimes — every open tab holds its own
+// subscription and the user destination delivers to all; the first
+// pointerdown unlocks the audio context inside a gesture for iOS
+// Safari.
+// 2026-10-18, Claude Code (Fable 5), PR #215 review (@claude bot): the
+// sound preference opts into useLocalStorage's now-opt-in cross-tab
+// sync ({ sync: true }); the session key keeps its old per-tab
+// behaviour.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet } from 'react-router'
 import { Client, ReconnectionTimeMode } from '@stomp/stompjs'
 import { serviceBaseUrls } from '@/lib/api/config'
 import { useAuth } from '@/features/user/useAuth'
+import { useLocalStorage } from '@/features/user/useLocalStorage'
 import { getUnreadCount } from './api'
+import { playChime, unlockChime } from './chime'
 import { NotificationsContext } from './useNotifications'
 import { brokerUrl } from './stompUrl'
 import type { NotificationDto } from './types'
@@ -57,6 +78,11 @@ const PUSH_BUFFER = 20
 // one frozen empty array, so a session with no pushes keeps a stable
 // reference and the Center's render-phase pickup does not re-run
 const NO_PUSHES: NotificationDto[] = []
+
+// whether a live push plays the chime — a device preference (the same
+// browser profile regardless of account), unlike the per-account keys
+// AuthProvider and ProfileSection keep
+const SOUND_KEY = 'notificationSoundEnabled'
 
 // the count stamped with the session that produced it, so a logout or
 // re-login starts over without a reset write (the same derive-by-token
@@ -90,6 +116,49 @@ export const NotificationProvider = () => {
     accessToken !== null && pushed?.token === accessToken
       ? pushed.items
       : NO_PUSHES
+
+  // Null (unset) and corrupt values both land on the default: on.
+  // sync: a mute written in another tab lands here live — a device-wide
+  // preference, unlike the per-account keys that must not sync (PR #215
+  // review).
+  const [storedSound, setStoredSound] = useLocalStorage<boolean>(
+    SOUND_KEY,
+    true,
+    { sync: true },
+  )
+  const soundEnabled = storedSound !== false
+
+  // Live frames received, counted before the body parse — a frame that
+  // fails JSON.parse bumps the badge, so it must chime too (PR #215
+  // review). Bumped nowhere else, so REST count seeds/re-syncs cannot
+  // move it, and it never resets — logout changes nothing, so nothing
+  // fires.
+  const [arrivalSeq, setArrivalSeq] = useState(0)
+
+  // A chime per committed render that delivered new frames: a burst
+  // batched into one render moves the counter once per frame but
+  // commits once, and chimes once (an effect because sound is a side
+  // effect, not render output).
+  const chimed = useRef(arrivalSeq)
+  useEffect(() => {
+    if (arrivalSeq === chimed.current) return
+    // advance even when the chime is skipped, so toggling the sound on
+    // (or focusing the tab) later never replays an old arrival
+    chimed.current = arrivalSeq
+    // only the tab being looked at chimes: every open tab holds its own
+    // subscription and the user destination delivers to all of them
+    // (PR #215 review)
+    if (soundEnabled && document.visibilityState === 'visible') playChime()
+  }, [arrivalSeq, soundEnabled])
+
+  // iOS Safari only unlocks an audio context created or resumed inside
+  // a user gesture — a resume from the push effect above stays
+  // suspended forever. The first pointerdown anywhere is that gesture
+  // (PR #215 review).
+  useEffect(() => {
+    window.addEventListener('pointerdown', unlockChime, { once: true })
+    return () => window.removeEventListener('pointerdown', unlockChime)
+  }, [])
 
   // Only the newest sync may land. Two syncs can overlap (login racing
   // a connect, a write racing either), and a push starts one of its own,
@@ -183,6 +252,9 @@ export const NotificationProvider = () => {
         // the badge up (issue #66)
         refreshUnreadCount()
         client.subscribe('/user/queue/notifications', (message) => {
+          // before the parse: like the count below, the chime must not
+          // depend on the body parsing (PR #215 review)
+          setArrivalSeq((n) => n + 1)
           setSessionCount((prev) => ({
             token: accessToken,
             count: (prev?.token === accessToken ? prev.count : 0) + 1,
@@ -250,8 +322,17 @@ export const NotificationProvider = () => {
       pushStopped,
       pushedNotifications,
       refreshUnreadCount,
+      soundEnabled,
+      setSoundEnabled: setStoredSound,
     }),
-    [unreadCount, pushStopped, pushedNotifications, refreshUnreadCount],
+    [
+      unreadCount,
+      pushStopped,
+      pushedNotifications,
+      refreshUnreadCount,
+      soundEnabled,
+      setStoredSound,
+    ],
   )
 
   return (

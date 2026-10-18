@@ -67,8 +67,13 @@ const refill = (r: ListRequest): ListRequest => ({
 })
 
 export function NotificationCenter() {
-  const { unreadCount, pushedNotifications, refreshUnreadCount } =
-    useNotifications()
+  const {
+    unreadCount,
+    pushedNotifications,
+    refreshUnreadCount,
+    soundEnabled,
+    setSoundEnabled,
+  } = useNotifications()
 
   const [items, setItems] = useState<NotificationDto[]>([])
   const [filter, setFilter] = useState<Filter>('all')
@@ -288,14 +293,47 @@ export function NotificationCenter() {
             Manage your courier transactions and credit activities
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleMarkAllRead}
-          disabled={marking || !canMarkAll}
-          className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Mark all as read
-        </button>
+        <div className="flex items-center gap-2">
+          {/* sound toggle (beyond the wireframe, like the filter below).
+              Fixed label + aria-pressed carries on/off to AT, matching
+              the filter buttons' pattern. */}
+          <button
+            type="button"
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            aria-pressed={soundEnabled}
+            aria-label="Notification sound"
+            title={
+              soundEnabled ? 'Notification sound on' : 'Notification sound off'
+            }
+            className="rounded-md border border-gray-300 p-2 text-gray-700 hover:bg-gray-50"
+          >
+            <svg
+              className="h-5 w-5"
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3.5 7.5h2L10 4v12l-4.5-3.5h-2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Z" />
+              {soundEnabled ? (
+                <path d="M13 7.5a3.5 3.5 0 0 1 0 5M15 5.5a6 6 0 0 1 0 9" />
+              ) : (
+                <path d="M13 8l4 4m0-4l-4 4" />
+              )}
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={handleMarkAllRead}
+            disabled={marking || !canMarkAll}
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Mark all as read
+          </button>
+        </div>
       </div>
 
       {/* All/Unread filter (options Q&A decision; not in the wireframe) */}

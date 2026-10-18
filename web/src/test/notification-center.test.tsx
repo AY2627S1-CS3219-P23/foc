@@ -12,6 +12,10 @@
 // 2026-10-18: request.dropped template cases (with and without the
 // enriched courierName); pending pull request review.
 // Reviewed by: Leong Wei Zhi (via pull request).
+// 2026-10-18, Claude Code (Fable 5), notification sound (follow-up to
+// issue #66, no issue yet): header sound-toggle cases — default on,
+// click flips aria-pressed and the stored key and silences/restores the
+// (mocked) chime, a pre-seeded 'false' renders off.
 
 import {
   act,
@@ -52,6 +56,11 @@ const stomp = vi.hoisted(() => {
   }> = []
   return { instances }
 })
+
+// the provider chimes on live pushes; here only the toggle's gating is
+// under test, so the module is a spy
+const chime = vi.hoisted(() => ({ playChime: vi.fn(), unlockChime: vi.fn() }))
+vi.mock('@/features/notifications/chime', () => chime)
 
 vi.mock('@stomp/stompjs', () => {
   class Client {
@@ -144,6 +153,7 @@ function jsonResponse(status: number, body: unknown) {
 
 beforeEach(() => {
   localStorage.clear()
+  chime.playChime.mockClear()
   stomp.instances.length = 0
   pages = [pageOf([], 0, 0, 0)]
   unreadPages = [pageOf([], 0, 0, 0)]
@@ -991,6 +1001,41 @@ describe('notification center page', () => {
     })
 
     screen.getByRole('link', { name: 'Notifications (1 unread)' })
+  })
+
+  test('the header sound toggle flips the chime, the stored key, and its pressed state', async () => {
+    const user = userEvent.setup()
+    await renderCenter()
+    const onMessage = connectPush()
+    await act(async () => {})
+
+    const toggle = screen.getByRole('button', { name: 'Notification sound' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    expect(localStorage.getItem('notificationSoundEnabled')).toBe('false')
+    await act(async () => {
+      onMessage(pushFrame(acceptedBy(99)))
+    })
+    expect(chime.playChime).not.toHaveBeenCalled()
+
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    expect(localStorage.getItem('notificationSoundEnabled')).toBe('true')
+    await act(async () => {
+      onMessage(pushFrame(acceptedBy(100)))
+    })
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+  })
+
+  test('a stored "false" renders the sound toggle off', async () => {
+    localStorage.setItem('notificationSoundEnabled', 'false')
+    await renderCenter()
+
+    expect(
+      screen.getByRole('button', { name: 'Notification sound' }),
+    ).toHaveAttribute('aria-pressed', 'false')
   })
 
   test('relative times tick while the page sits open', async () => {

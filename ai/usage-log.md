@@ -39,6 +39,83 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Leong Wei Zhi (PR #215 bot-review round)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor + docs
+- **Source:** the three @claude bot comments on PR #215.
+- **Scope:** `useLocalStorage`'s cross-tab `storage` listener became
+  opt-in (`{ sync: true }`, used only by the sound preference) — the
+  hook-wide listener had silently made the `'user'` session key swap a
+  tab's account live when another tab logged in, a behaviour change
+  beyond this PR with no test; the listener's `defaultValue` fallback
+  now reads through a ref so an object-literal default cannot
+  re-subscribe every render; a new `notifications.test.tsx` case pins
+  that another tab's write of `'user'` is NOT adopted. The PR
+  description no longer promises background-tab chimes (the visibility
+  gate is deliberate: the visible tab speaks for all open tabs).
+- **Prompt(s):** "address the latest pr comments from claude bot".
+- **Author review:** Leong Wei Zhi to review via the PR; `npm test`
+  (273 passing), lint, format:check, build all clean.
+
+## 2026-10-18 — Leong Wei Zhi (PR #215 review fixes)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debug + refactor
+- **Source:** all six items are @Sinnez1's PR #215 review comments.
+- **Scope:**
+  - **`chime.ts`:** a policy-blocked `resume()` is no longer awaited —
+    its promise stays pending until a user gesture, so stacked awaits
+    all released and chimed together on the first click (the blocking
+    item); a context that reached `closed` is replaced, not reused; the
+    context suspends itself ~0.6 s after a chime so the audio thread
+    idles, with an `idled` flag so that self-suspension is woken by the
+    next chime rather than mistaken for an autoplay block; new
+    `unlockChime()` creates/resumes the context inside a gesture for
+    iOS Safari.
+  - **`NotificationProvider.tsx`:** the chime keys on an arrival
+    counter bumped before the body parse (a frame that fails
+    `JSON.parse` bumps the badge, so it chimes too); only the visible
+    tab chimes; the first `pointerdown` hands its gesture to
+    `unlockChime`.
+  - **`useLocalStorage.tsx`:** a `storage` listener adopts another
+    tab's write of the key, so a mute in one tab lands everywhere
+    (noted: this also syncs the `'user'` session across tabs).
+  - Tests follow in `chime.test.ts` (never-settling fake `resume`,
+    no-stack-on-unlock, closed-context replacement, idle/wake,
+    unlockChime) and `notifications.test.tsx` (malformed frame chimes,
+    hidden tab quiet, cross-tab mute, pointerdown unlock).
+- **Author review:** Leong Wei Zhi to review via the PR; `npm test`
+  (271 passing), lint, format:check, build all clean.
+
+## 2026-10-18 — Leong Wei Zhi (notification sound, follow-up to issue #66)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `web/` — a bell chime on live STOMP notification arrivals
+  with a client-stored mute: new `features/notifications/chime.ts` (Web
+  Audio two-tone synth, every blocked/muted path silent);
+  `NotificationProvider` keys the chime on the pushed queue's identity
+  (live arrivals only — REST seeds, reconnect catch-ups and the logout
+  reset stay silent; a burst batched into one render chimes once) and
+  holds the localStorage-backed toggle (`notificationSoundEnabled`,
+  default on) in the context; toggle surfaces in the Notification
+  Center header (`aria-pressed` icon button) and a new profile
+  Preferences card (`role="switch"`); `useLocalStorage.setValue`
+  memoized so the context `useMemo` holds; tests in `chime.test.ts`
+  plus new cases in `notifications.test.tsx`,
+  `notification-center.test.tsx`, `profile.test.tsx`; wireframe
+  deviation rows in `web/AGENTS.md`.
+- **Prompt(s):** "i want to have a bell sound on the web everytime a
+  notification is arrived, the sound can be disabled by the client (the
+  setting should be stored on the client), also if the external system
+  like os or web browser tab disables sound, then the notification
+  should be silent" — surface (both toggles) and sound source (Web
+  Audio synthesis, no binary asset) chosen by the author via options
+  Q&A.
+- **Author review:** Leong Wei Zhi to review via the PR; `npm test`
+  (263 passing), `npm run lint`, `npm run format:check`, `npm run
+  build` all clean. Known limit flagged in the PR: a push arriving
+  before the first user gesture after a cold page load may be silent
+  (browser autoplay policy; accepted, no workaround added).
+
 ## 2026-10-18 — Leong Wei Zhi (PR #214 review round)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor + docs
