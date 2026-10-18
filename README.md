@@ -182,6 +182,9 @@
   2026-10-17: AI Use Summary extended for the upcoming credit expiries
   (issue #196: the route and the credits page) by Claude Code
   (Opus 5.5).
+  2026-10-18: AI Use Summary extended for the issue #165 follow-ups
+  (a duplicate reservation resends its reply, the contract test's
+  parties check, the credit legend) by Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -849,6 +852,20 @@ leaving the Unread view) were decided by the author via options Q&A and
 recorded in `web/AGENTS.md` and `ai/usage-log.md`. The same tool
 addressed that review's bot findings, including the paging and
 count-sync races it and a live browser run surfaced.
+
+Claude Code (Opus 5.5) applied follow-ups from Leong Wei Zhi's PR #163
+re-review (issue #165), each the reviewer's suggestion taken by the
+team: a redelivered `request.submitted` whose reservation is already
+held or refused sends its reply again, rebuilt from the event with the
+record's decision; the notification-service contract test again
+requires request events to name their parties; the credit design doc's
+diagram legend states where it differs from `architecture.md`; and, at
+the author's instruction, the implementation column of that doc's
+Credit F2.1.3 row was reworded. The same tool then applied Leong Wei
+Zhi's PR #212 review suggestions: the Credit F2.1.3 requirement text
+restored and left in "Requirements to revise" for the team, the resent
+reply's comments and docs corrected, and the reserve and `parties()`
+comments extended.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

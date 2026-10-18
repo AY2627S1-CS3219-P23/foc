@@ -39,6 +39,88 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Ryan Ang (PR #212 review follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** docs + code comments
+- **Source:** every item below is a suggestion from 
+  PR #212 review.
+- **Scope:**
+  - **Credit F2.1.3** (`docs/credit-service.md`): the traceability
+    row's left column restored to the requirement as stated ("reject
+    creation when available < reward"), keeping the reworded
+    implementation column; Credit F2.1.3 put back next to Order F1.1.4
+    in "Requirements to revise", and the "has been revised" sentence
+    removed. The requirement itself is left for the team.
+  - **Resent reply wording:** comments in `ReserveResult`,
+    `RequestEventHandler`, `CreditOperationsService` and two test
+    headers, the `request.submitted` handler row and the README now say
+    the reply is rebuilt from the event with the record's decision,
+    not "the recorded reply"; the rejection reason is described as
+    worked out from the recorded reward.
+  - **Redelivery failure row:** names the two cases in which the
+    resend comes into play (a crash between commit and ack, an operator
+    replaying the submission), since the outbox never drops a reply.
+  - **Comments:** `CreditOperations.reserve` javadoc states its result
+    per existing record status; the `REJECTED` case in
+    `applyReserve` points at the `V1__baseline.sql` invariant;
+    `DomainEvent.parties()` (foc-contracts) states that only credit
+    events may name no one.
+  - README AI Use Summary paragraph updated and its grammar fixed.
+  - Not done: storing the rejection reason on the row (a migration the
+    reviewer left optional; a team decision), and the PR body's
+    "Closes" line (author's choice).
+- **Prompt(s):** Asked to read the PR #212 review comments, then to
+  review the blocking item and all notes except the PR-body one.
+- **Verification:** comment and doc changes only. foc-contracts
+  `./mvnw install` (with its tests), credit-service main and test
+  compile, and notification-service `DomainEventContractTest` all pass;
+  `git diff --check` clean.
+- **Author review:** Ryan Ang, pending pull request review.
+
+## 2026-10-18 — Ryan Ang (issue #165 follow-ups from Leong Wei Zhi's PR #163 re-review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** implementation + tests + docs
+- **Source:** every item below was found by Leong Wei Zhi in the
+  PR #163 re-review and tracked in issue #165; the fixes are the
+  reviewer's suggestions, taken as written by team decision.
+- **Scope:**
+  - **Duplicate `request.submitted` on `HELD` / `REJECTED`:** it
+    answered nothing, so a reply lost after the commit (for example a
+    dead-lettered `credit.reserved`) could never be recovered and the
+    Order Service's give-up timer would cancel a request whose credits
+    had reserved fine. `ReserveResult` gains `ALREADY_RESERVED`,
+    `ALREADY_REJECTED_INSUFFICIENT_CREDITS` and
+    `ALREADY_REJECTED_INVALID_AMOUNT` (the reason rebuilt from the
+    recorded reward, since only a reward below 1 is refused as
+    invalid); `RequestEventHandler` resends `credit.reserved` or
+    `credit.reservation-rejected` for them. `DUPLICATE` now means a
+    settled record (`TRANSFERRED` / `RELEASED`), which owes no reply.
+    Tests: operations, handler and listener integration tests updated
+    or added. `docs/credit-service.md`: the `request.submitted` row of
+    "How each event is handled" and two failure rows.
+  - **`DomainEventContractTest`** (notification-service): `parties`
+    must be non-empty for request events again; only credit events may
+    have none.
+  - **Diagram legend** in `docs/credit-service.md`: no longer claims
+    the same notation as `architecture.md`, and states the two
+    differences (`-->` covers JDBC, `---` unused).
+  - **Credit F2.1.3** (the credit half of #165's "Requirements to
+    revise" item): the traceability row in `docs/credit-service.md`
+    reworded to describe what is implemented (refused as `REJECTED`,
+    rejection published, request moves `pending` → `rejected`, same
+    rejection on redelivery), and Credit F2.1.3 dropped from
+    "Requirements to revise". Transcription of the existing saga
+    design; no new behaviour chosen. The Order requirements (F0.1,
+    F1.1, F1.1.4, NFR1.1) left for the Order owner.
+- **Prompt(s):** Asked to fix the duplicate-reply item using the
+  reviewer's suggestion and to explain the problem, then to continue
+  with the remaining #165 follow-ups, then to update the credit-side
+  requirement to match the implementation and leave the Order ones.
+- **Verification:** credit-service `./mvnw test` with Docker running:
+  262 tests, 0 failures, 0 skipped. notification-service
+  `DomainEventContractTest`: 2 tests, 0 failures.
+- **Author review:** Ryan Ang, pending pull request review.
+
 ## 2026-10-16 — Alastair Tan (order-service frontend pages)
 - **Tool:** Claude Code (Sonnet 5.5)
 - **Mode:** generate

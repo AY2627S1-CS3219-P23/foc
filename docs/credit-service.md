@@ -85,6 +85,20 @@
   the web app reads the expiries on every balance poll, since reading
   them only on a balance change missed changes that cancel out; and the
   "No window" bullet states the real upper bound on the list.
+  2026-10-18, issue #165 (Leong Wei Zhi's PR #163 re-review), the
+  reviewer's suggestion taken by the team: a redelivered
+  `request.submitted` on a `HELD` or `REJECTED` record sends its
+  reply again (the handler row and two failure rows); and the
+  legend states where it differs from `architecture.md`'s. The tool
+  transcribed them. Same day, at the author's instruction: the Credit
+  F2.1.3 traceability row's right-hand column reworded to the
+  behaviour as implemented.
+  PR #212 review (Leong Wei Zhi), the reviewer's suggestions taken by
+  the author: the Credit F2.1.3 requirement text restored and the item
+  kept in "Requirements to revise" for the team; the resent reply
+  described as rebuilt from the event with the record's decision; and
+  the redelivery failure row names the two cases in which the resend
+  comes into play.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -297,7 +311,7 @@ reservations instead.
 
 ## Diagram legend
 
-Same notation as [`architecture.md`](architecture.md):
+Based on the notation of [`architecture.md`](architecture.md), with two differences: the thin arrow `-->` here also covers database access over JDBC, and the plain line `---` (database access in `architecture.md`) is not used.
 
 | Notation | Meaning |
 | --- | --- |
@@ -322,7 +336,7 @@ Same notation as [`architecture.md`](architecture.md):
 | Credit F2.1 - reserve from available when a request is created | `request.submitted` event: the amount moves from `available` to `reserved` and a `HELD` record is written |
 | Credit F2.1.1 - release on cancellation or expiry | `request.cancelled` or `request.expired` event: status changes from `HELD` to `RELEASED`, the amount returns to `available` |
 | Credit F2.1.2 - available never below zero | The account row is locked before the balance check, and a database `CHECK` constraint rejects a negative balance |
-| Credit F2.1.3 - reject creation when available < reward | The reservation is refused and `credit.reservation-rejected` is published; the Order Service moves the request to `rejected`. **The rejection is no longer immediate** (see "Requirements to revise"). |
+| Credit F2.1.3 - reject creation when available < reward | The reserve operation refuses it without changing the balance and records it as `REJECTED`, and `credit.reservation-rejected` (reason "insufficient available credits") is published in the same transaction; the Order Service moves the request from `pending` to `rejected`. A redelivered `request.submitted` sends the same rejection again, even if the balance has since grown. |
 | Credit F3.1 - transfer reserved credits on completion | `request.completed` event: status changes from `HELD` to `TRANSFERRED` |
 | Credit F3.1.1 - deduct from requester's reserved balance | Requester's `reserved` decreases by the held amount |
 | Credit F3.1.2 - add to courier's available balance | Courier's `available` increases by the same amount, as a new credit lot earned at transfer time |
@@ -536,7 +550,7 @@ listener acknowledges the event only after the commit.
  
 | Event | No record | `HELD` | `REJECTED` | `TRANSFERRED` | `RELEASED` |
 | --- | --- | --- | --- | --- | --- |
-| `request.submitted` | Enough balance: reserve, write `HELD`, reply `credit.reserved`. Otherwise write `REJECTED`, reply `credit.reservation-rejected`. | Nothing (duplicate) | Nothing (duplicate) | Nothing (duplicate) | Nothing: the request was already cancelled |
+| `request.submitted` | Enough balance: reserve, write `HELD`, reply `credit.reserved`. Otherwise write `REJECTED`, reply `credit.reservation-rejected`. | Reply `credit.reserved` again; nothing else changes | Reply `credit.reservation-rejected` again, with the reason worked out from the recorded reward; nothing else changes | Nothing (duplicate) | Nothing: the request was already cancelled |
 | `request.completed` | Retry; dead-letter after the maximum attempts | Transfer to the courier; set `TRANSFERRED` | Dead-letter | Same courier: nothing (duplicate). A different courier: dead-letter | Dead-letter |
 | `request.cancelled`, `request.expired` | Get-or-create the requester's account, then write `RELEASED` with amount 0, so a late `request.submitted` is ignored | Release to the requester; set `RELEASED` | Nothing | Dead-letter | Nothing (duplicate) |
  
@@ -695,9 +709,9 @@ tests.
 | --- | --- |
 | Credit Service crashes mid-operation | PostgreSQL discards the uncommitted transaction; the unacknowledged event is redelivered (F5.1.1, NFR2.1) |
 | Credit Service crashes after committing but before publishing the reply | The reply is in the outbox and is published when the service restarts |
-| The same event is delivered twice | The second delivery finds the record in its new status and changes nothing (NFR2.2.1) |
+| The same event is delivered twice | The second delivery finds the record in its new status and changes nothing (NFR2.2.1). A redelivered `request.submitted` on a `HELD` or `REJECTED` record also sends its reply again, rebuilt from the event with the decision the record holds. The outbox publisher never drops a reply, so this only comes into play when the `request.submitted` is delivered again after its reply was enqueued: a crash between the handler's commit and the ack, or an operator replaying the submission (from the DLQ or by hand) |
 | A reply is published twice | The Order Service ignores a reply for a request that is no longer `pending` |
-| A refused `request.submitted` is redelivered after the requester's balance has grown | The `REJECTED` record stands; the request is not approved the second time |
+| A refused `request.submitted` is redelivered after the requester's balance has grown | The `REJECTED` record stands and the same rejection is sent again; the request is not approved the second time |
 | Two deliveries of one event are processed at the same time | Once a record exists, the lock on it makes them run one after the other; the second changes nothing. Two first deliveries have no record to lock: the second insert fails on the `request_ref` primary key, that event goes to the retry queue, and its redelivery finds the record and changes nothing |
 | A reply is published while no queue is bound to `credit-events` (the Order Service has not started) | The broker returns it as unroutable, so it stays unsent in the outbox and is tried again every 30 s until a queue is bound. Between attempts no poll reads it, so the replies behind it are not held back |
 | The broker is unreachable, the connection is lost, the broker nacks a reply, or no confirm arrives within 5 s, while the outbox is being published | The poll stops at that reply. It and the replies after it stay unsent, the ones already confirmed stay marked sent, and the next poll, 1 s later, starts again from the oldest unsent |
