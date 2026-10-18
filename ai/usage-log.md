@@ -39,6 +39,24 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Leong Wei Zhi (PR #215 bot-review round)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor + docs
+- **Source:** the three @claude bot comments on PR #215.
+- **Scope:** `useLocalStorage`'s cross-tab `storage` listener became
+  opt-in (`{ sync: true }`, used only by the sound preference) — the
+  hook-wide listener had silently made the `'user'` session key swap a
+  tab's account live when another tab logged in, a behaviour change
+  beyond this PR with no test; the listener's `defaultValue` fallback
+  now reads through a ref so an object-literal default cannot
+  re-subscribe every render; a new `notifications.test.tsx` case pins
+  that another tab's write of `'user'` is NOT adopted. The PR
+  description no longer promises background-tab chimes (the visibility
+  gate is deliberate: the visible tab speaks for all open tabs).
+- **Prompt(s):** "address the latest pr comments from claude bot".
+- **Author review:** Leong Wei Zhi to review via the PR; `npm test`
+  (273 passing), lint, format:check, build all clean.
+
 ## 2026-10-18 — Leong Wei Zhi (PR #215 review fixes)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** debug + refactor

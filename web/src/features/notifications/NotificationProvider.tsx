@@ -44,6 +44,10 @@
 // subscription and the user destination delivers to all; the first
 // pointerdown unlocks the audio context inside a gesture for iOS
 // Safari.
+// 2026-10-18, Claude Code (Fable 5), PR #215 review (@claude bot): the
+// sound preference opts into useLocalStorage's now-opt-in cross-tab
+// sync ({ sync: true }); the session key keeps its old per-tab
+// behaviour.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet } from 'react-router'
@@ -113,10 +117,14 @@ export const NotificationProvider = () => {
       ? pushed.items
       : NO_PUSHES
 
-  // null (unset) and corrupt values both land on the default: on
+  // Null (unset) and corrupt values both land on the default: on.
+  // sync: a mute written in another tab lands here live — a device-wide
+  // preference, unlike the per-account keys that must not sync (PR #215
+  // review).
   const [storedSound, setStoredSound] = useLocalStorage<boolean>(
     SOUND_KEY,
     true,
+    { sync: true },
   )
   const soundEnabled = storedSound !== false
 

@@ -26,6 +26,10 @@
 // for the review fixes — a frame that fails to parse still chimes (it
 // still bumps the badge), a hidden tab stays quiet, another tab's mute
 // lands via the storage event without a reload.
+// 2026-10-18, Claude Code (Fable 5), PR #215 review (@claude bot): the
+// cross-tab sync became opt-in, so a case pins the session key's
+// unchanged behaviour — another tab's write of 'user' must not touch
+// this tab's session.
 
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -473,6 +477,29 @@ describe('notification STOMP client', () => {
 
     pushFrame(onMessage)
     expect(chime.playChime).not.toHaveBeenCalled()
+  })
+
+  test("another tab's write of the session key is NOT adopted (sync is opt-in)", async () => {
+    renderApp(true)
+    const onMessage = connectAndSubscribe()
+    pushFrame(onMessage)
+    expect(
+      screen.getByRole('link', { name: 'Notifications (1 unread)' }),
+    ).toBeInTheDocument()
+
+    // another tab logs out (clears 'user'): this tab's session must not
+    // follow — only keys that opted into sync may (PR #215 review)
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', { key: 'user', newValue: null }),
+      )
+    })
+
+    // still signed in, badge and socket untouched
+    expect(
+      screen.getByRole('link', { name: 'Notifications (1 unread)' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Logout' })).toBeVisible()
   })
 
   test('the first pointerdown hands the gesture to the audio unlock', async () => {
