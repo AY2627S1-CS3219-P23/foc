@@ -7,6 +7,8 @@
  * role and state, the admin view limited to ADMIN / OWNER, paging and
  * parameter errors. Each test uses its own user ids, since the H2
  * database is shared by every test in the run.
+ * Same day: the filters (supplier, reward range, deadline and created
+ * ranges), the sort parameter, and their 400s.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -25,6 +27,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -188,7 +191,105 @@ class RequestsReadEndpointsTests {
 		mockMvc.perform(get("/users/" + requester + "/requests")).andExpect(status().isUnauthorized());
 	}
 
+	@Test
+	void mineFiltersBySupplierAndRewardRange() throws Exception {
+		Long cheapDeck = createWith(2, 1, "2099-01-01T00:00:00Z");
+		Long dearDeck = createWith(2, 9, "2099-01-01T00:00:00Z");
+		Long midTechno = createWith(5, 4, "2099-01-01T00:00:00Z");
+
+		assertEquals(List.of(dearDeck, cheapDeck), ids(getJson("/requests/mine?role=requester&supplierId=2", requester)));
+		assertEquals(List.of(midTechno, dearDeck),
+				ids(getJson("/requests/mine?role=requester&minCredit=4", requester)));
+		assertEquals(List.of(midTechno), ids(getJson("/requests/mine?role=requester&minCredit=2&maxCredit=4", requester)));
+		assertEquals(List.of(cheapDeck),
+				ids(getJson("/requests/mine?role=requester&supplierId=2&maxCredit=1", requester)));
+	}
+
+	@Test
+	void mineFiltersByDeadlineAndCreatedRanges() throws Exception {
+		Long soon = createWith(2, 3, "2098-01-01T00:00:00Z");
+		Long later = createWith(2, 3, "2099-06-01T00:00:00Z");
+		Long createdLongAgo = createWith(2, 3, "2099-01-01T00:00:00Z");
+		setCreatedAt(createdLongAgo, Instant.parse("2020-01-01T00:00:00Z"));
+
+		assertEquals(List.of(later, createdLongAgo),
+				ids(getJson("/requests/mine?role=requester&deadlineAfter=2098-06-01T00:00:00Z", requester)));
+		assertEquals(List.of(soon),
+				ids(getJson("/requests/mine?role=requester&deadlineBefore=2099-01-01T00:00:00Z", requester)));
+		// the lower bound is inclusive, the upper exclusive
+		assertEquals(List.of(createdLongAgo),
+				ids(getJson("/requests/mine?role=requester&deadlineAfter=2099-01-01T00:00:00Z"
+						+ "&deadlineBefore=2099-06-01T00:00:00Z", requester)));
+		assertEquals(List.of(createdLongAgo),
+				ids(getJson("/requests/mine?role=requester&createdTo=2021-01-01T00:00:00%2B08:00", requester)));
+		assertEquals(List.of(later, soon),
+				ids(getJson("/requests/mine?role=requester&createdFrom=2021-01-01T00:00:00Z", requester)));
+	}
+
+	@Test
+	void sortByDeadlinePutsTheNearestFirst() throws Exception {
+		Long far = createWith(2, 3, "2099-06-01T00:00:00Z");
+		Long near = createWith(2, 3, "2098-01-01T00:00:00Z");
+		Long middle = createWith(2, 3, "2099-01-01T00:00:00Z");
+
+		assertEquals(List.of(middle, near, far), ids(getJson("/requests/mine?role=requester", requester)));
+		assertEquals(List.of(middle, near, far), ids(getJson("/requests/mine?role=requester&sort=createdAt", requester)));
+		assertEquals(List.of(near, middle, far), ids(getJson("/requests/mine?role=requester&sort=deadline", requester)));
+	}
+
+	@Test
+	void openRequestsAndTheAdminViewTakeTheFiltersToo() throws Exception {
+		long supplier = NEXT_USER.incrementAndGet(); // a supplier id no other test uses
+		Long match = createWith(supplier, 5, "2099-01-01T00:00:00Z");
+		requestsService.reserve(match);
+		Long tooCheap = createWith(supplier, 1, "2099-01-01T00:00:00Z");
+		requestsService.reserve(tooCheap);
+
+		assertEquals(List.of(match), ids(getJson("/requests?supplierId=" + supplier + "&minCredit=2", stranger)));
+		assertEquals(List.of(match),
+				ids(getJson("/users/" + requester + "/requests?minCredit=2&sort=deadline", stranger, "ADMIN")));
+	}
+
+	@Test
+	void badFilterValuesAreBadRequests() throws Exception {
+		String mine = "/requests/mine?role=requester&";
+		expectBadRequest(mine + "minCredit=0", "minCredit must be at least 1");
+		expectBadRequest(mine + "minCredit=5&maxCredit=2", "minCredit must not be above maxCredit");
+		expectBadRequest(mine + "deadlineAfter=2099-01-01T00:00:00Z&deadlineBefore=2099-01-01T00:00:00Z",
+				"deadlineAfter must be before deadlineBefore");
+		expectBadRequest(mine + "createdFrom=2026-02-01T00:00:00Z&createdTo=2026-01-01T00:00:00Z",
+				"createdFrom must be before createdTo");
+		expectBadRequest(mine + "sort=price", "sort must be createdAt or deadline");
+		expectBadRequest(mine + "minCredit=abc", "Invalid value for minCredit");
+		expectBadRequest(mine + "createdFrom=2026-01-01", "Invalid value for createdFrom");
+		expectBadRequest("/requests?supplierId=deck", "Invalid value for supplierId");
+		expectBadRequest(mine + "page=first", "Invalid value for page");
+	}
+
 	// --- helpers
+
+	private void expectBadRequest(String path, String message) throws Exception {
+		send(get(path), requester)
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(message));
+	}
+
+	// Creates a request as the requester with the given supplier, reward and deadline.
+	private Long createWith(long supplierId, int credit, String deadline) throws Exception {
+		send(post("/create").contentType(MediaType.APPLICATION_JSON).content(
+				"{\"supplierId\": " + supplierId + ", \"supplierName\": \"The Deck\", "
+						+ "\"dropoffLocation\": \"COM3 Level 2\", \"item\": \"Chicken rice\", "
+						+ "\"creditAmount\": " + credit + ", \"deadline\": \"" + deadline + "\"}"), requester)
+				.andExpect(status().isOk());
+		return requestsRepository.findAll().stream()
+				.map(r -> r.getId()).max(Comparator.naturalOrder()).orElseThrow();
+	}
+
+	private void setCreatedAt(Long id, Instant createdAt) {
+		var stored = requestsRepository.findById(id).orElseThrow();
+		stored.setCreatedAt(createdAt);
+		requestsRepository.save(stored);
+	}
 
 	// Creates a request as the requester over HTTP; it stays PENDING.
 	private Long create() throws Exception {
@@ -221,7 +322,8 @@ class RequestsReadEndpointsTests {
 	}
 
 	private JsonNode getJson(String path, long user, String role) throws Exception {
-		String body = send(get(path), user, role).andExpect(status().isOk())
+		// a URI, not a template: a template would encode %2B (an offset's +) again
+		String body = send(get(URI.create(path)), user, role).andExpect(status().isOk())
 				.andReturn().getResponse().getContentAsString();
 		return jsonMapper.readTree(body);
 	}

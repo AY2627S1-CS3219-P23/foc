@@ -17,7 +17,8 @@
   bearer-token auth and the ownership rules in the endpoints section;
   then /create's 400 field checks;
   order-e2e.ps1 section. Then request.accepted / request.collected and
-  the expiry and auto-complete timers. Then the read endpoints.
+  the expiry and auto-complete timers. Then the read endpoints, and their
+  filters and sort.
   Reviewed by: Ko-Khan (via pull request).
 -->
 
@@ -122,6 +123,20 @@ supplier listing: `page` (from 0, default 0) and `size` (1-100, default
 "totalPages"}`, each item trimmed to `id`, `status`, `supplierName`,
 `dropoffLocation`, `item`, `creditAmount`, `deadline`, `createdAt`. A bad
 `state`, `role`, `page` or `size` is a 400 with a `message`.
+
+Every list also takes these optional filters, combined with AND:
+
+| Parameter | Matches |
+| --- | --- |
+| `supplierId` | requests from that supplier |
+| `minCredit` / `maxCredit` | reward at least / at most (both inclusive, each at least 1) |
+| `deadlineAfter` / `deadlineBefore` | deadline at or after / before (ISO-8601 instant with an offset, e.g. `Z`; write `+08:00` as `%2B08:00`) |
+| `createdFrom` / `createdTo` | created at or after / before (same format) |
+| `sort` | `createdAt` (newest first, the default) or `deadline` (nearest first) |
+
+A range whose lower bound is not below its upper (`minCredit` above
+`maxCredit`, `deadlineAfter` not before `deadlineBefore`, ...), an unknown
+`sort`, or a value of the wrong type is a 400 naming the parameter.
 
 | Path | Returns | Who may call it |
 | --- | --- | --- |

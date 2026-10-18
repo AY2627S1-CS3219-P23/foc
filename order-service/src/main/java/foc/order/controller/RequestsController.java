@@ -30,11 +30,14 @@
  * Same day: the author's read endpoints - GET /requests (open errands),
  * /requests/{id}, /requests/mine and /users/{id}/requests - through
  * RequestsQueryService.
+ * Same day: the lists take the author's filters and sort (RequestFilter,
+ * bound from the query string); a value of the wrong type is a 400.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order.controller;
 
 import foc.order.InvalidRequestException;
+import foc.order.RequestFilter;
 import foc.order.RequestsQueryService;
 import foc.order.RequestsService;
 import foc.order.dto.PageResponse;
@@ -43,6 +46,8 @@ import foc.order.dto.RequestSummary;
 import foc.order.model.Requests;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.BindException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -85,9 +90,10 @@ public class RequestsController {
     @GetMapping("/requests")
     public PageResponse<RequestSummary> openRequests(
             @RequestParam(required = false) String state,
+            RequestFilter filter,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return PageResponse.of(queries.openRequests(state, page, size), RequestSummary::of);
+        return PageResponse.of(queries.openRequests(state, filter, page, size), RequestSummary::of);
     }
 
     // The caller's requests, as requester or as courier.
@@ -96,9 +102,10 @@ public class RequestsController {
             Authentication caller,
             @RequestParam(required = false) String role,
             @RequestParam(required = false) String state,
+            RequestFilter filter,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return PageResponse.of(queries.mine(callerId(caller), role, state, page, size), RequestSummary::of);
+        return PageResponse.of(queries.mine(callerId(caller), role, state, filter, page, size), RequestSummary::of);
     }
 
     // One request in full: its requester, its courier, or ADMIN / OWNER.
@@ -113,9 +120,10 @@ public class RequestsController {
     public PageResponse<RequestSummary> userRequests(
             @PathVariable Long userId,
             @RequestParam(required = false) String state,
+            RequestFilter filter,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return PageResponse.of(queries.involving(userId, state, page, size), RequestSummary::of);
+        return PageResponse.of(queries.involving(userId, state, filter, page, size), RequestSummary::of);
     }
 
     // --- request steps
@@ -185,6 +193,22 @@ public class RequestsController {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public MessageResponse handleInvalidRequest(InvalidRequestException e) {
         return new MessageResponse(e.getMessage());
+    }
+
+    // A list filter of the wrong type (e.g. minCredit=abc, or an instant
+    // without an offset), named in the message.
+    @ExceptionHandler(BindException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public MessageResponse handleBadFilter(BindException e) {
+        String field = e.getFieldError() == null ? "a query parameter" : e.getFieldError().getField();
+        return new MessageResponse("Invalid value for " + field);
+    }
+
+    // page, size or a path id of the wrong type
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public MessageResponse handleBadParameter(MethodArgumentTypeMismatchException e) {
+        return new MessageResponse("Invalid value for " + e.getName());
     }
 
     // The event is not allowed from the request's current state.

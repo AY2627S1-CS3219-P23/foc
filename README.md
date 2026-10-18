@@ -108,7 +108,7 @@
   for the order-service ownership checks, then for the manual-testing
   scripts, stubs and the gateway order route, then for the /create field
   checks, the accepted / collected events and the expiry and
-  auto-complete timers, then for the read endpoints.
+  auto-complete timers, then for the read endpoints and their filters.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -609,7 +609,9 @@ by the author; and the read endpoints (open errands, a request's
 detail, the caller's requests by role, the admin view), whose paths,
 results and access rules were designed by the author and whose
 remaining details (CREATED-only open list, trimmed lists, newest first,
-page size 20, both roles in the admin view) the author chose.
+page size 20, both roles in the admin view) the author chose; and the
+lists' filters (supplier, reward, deadline and created ranges) and sort,
+chosen by the author.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

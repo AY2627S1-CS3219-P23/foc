@@ -14,6 +14,7 @@ Reads (GET, newest first, paged: page from 0, size 1-100, default 20):
 /requests/{id} (requester, assigned courier, or ADMIN/OWNER; else 404) -> the full request
 /requests/mine?role=requester|courier&state= (the caller) -> the caller's requests on that side
 /users/{id}/requests?state= (ADMIN/OWNER; else 403) -> that user's requests as requester or courier
+Filters on every list (optional, combined): supplierId, minCredit, maxCredit, deadlineAfter, deadlineBefore, createdFrom, createdTo; sort=createdAt (newest first, default) or deadline (nearest first)
 
 Not endpoints (timers inside the service):
 expire: a CREATED or ACCEPTED request past its deadline, checked every 5 min -> publish event for credit service to release funds to the requester

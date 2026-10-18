@@ -26,6 +26,27 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Aung Ko Khant (order-service: list filters and sort)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** new `RequestFilter` (query-string record) and
+  `repository.RequestSpecifications`; `RequestsRepository` now a
+  `JpaSpecificationExecutor` (the four JPQL list queries removed);
+  `RequestsQueryService` combines the base query with the filters,
+  checks the ranges and the sort; `RequestsController` binds the filter
+  on all three lists and answers a wrong-typed value with 400; tests
+  (95 passing); README reads section; `endpoints.txt`.
+- **Prompt(s):** "for our list endpoints, could we add filtering?" The
+  tool listed candidate filters as neutral options; the author chose
+  supplier, reward range, deadline and created ranges, a sort parameter
+  (createdAt / deadline), on all three lists (not a multi-state filter).
+  Range rules (lower bound inclusive, upper exclusive, amounts at least
+  1, an offset on instants) follow credit-service's history filters.
+- **Author review:** `mvn test` in a Maven container: 95 tests, 0
+  failures. Through the gateway: minCredit, sort=deadline and a +08:00
+  createdFrom filtered as expected; minCredit=abc was a 400. To be
+  reviewed via pull request.
+
 ## 2026-10-18 — Aung Ko Khant (order-service: read endpoints)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate
