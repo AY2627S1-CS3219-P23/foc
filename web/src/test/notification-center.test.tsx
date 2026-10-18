@@ -57,7 +57,7 @@ const stomp = vi.hoisted(() => {
 
 // the provider chimes on live pushes; here only the toggle's gating is
 // under test, so the module is a spy
-const chime = vi.hoisted(() => ({ playChime: vi.fn() }))
+const chime = vi.hoisted(() => ({ playChime: vi.fn(), unlockChime: vi.fn() }))
 vi.mock('@/features/notifications/chime', () => chime)
 
 vi.mock('@stomp/stompjs', () => {

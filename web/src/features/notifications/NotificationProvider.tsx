@@ -36,6 +36,14 @@
 // one render chimes once and a reconnect catch-up stays silent. The
 // localStorage-backed toggle (device preference, default on) lives here
 // and is shared through the context.
+// 2026-10-18, Claude Code (Fable 5), PR #215 review (@Sinnez1): the
+// chime keys on an arrival counter bumped before the body parse, so a
+// frame that fails JSON.parse still chimes like it still bumps the
+// badge (same live-only guarantee: the counter moves nowhere else);
+// only the visible tab chimes — every open tab holds its own
+// subscription and the user destination delivers to all; the first
+// pointerdown unlocks the audio context inside a gesture for iOS
+// Safari.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet } from 'react-router'
@@ -44,7 +52,7 @@ import { serviceBaseUrls } from '@/lib/api/config'
 import { useAuth } from '@/features/user/useAuth'
 import { useLocalStorage } from '@/features/user/useLocalStorage'
 import { getUnreadCount } from './api'
-import { playChime } from './chime'
+import { playChime, unlockChime } from './chime'
 import { NotificationsContext } from './useNotifications'
 import { brokerUrl } from './stompUrl'
 import type { NotificationDto } from './types'
@@ -112,22 +120,37 @@ export const NotificationProvider = () => {
   )
   const soundEnabled = storedSound !== false
 
-  // A chime per committed render that delivered new frames. The queue's
-  // reference moves only when the subscribe callback parses a push —
-  // never on the REST count seeds/re-syncs — so this cannot fire on
-  // login or reconnect catch-up; and a burst batched into one render
-  // chimes once, not per frame (the Center's consumed-queue pattern, as
-  // an effect because sound is a side effect).
-  const chimed = useRef(pushedNotifications)
+  // Live frames received, counted before the body parse — a frame that
+  // fails JSON.parse bumps the badge, so it must chime too (PR #215
+  // review). Bumped nowhere else, so REST count seeds/re-syncs cannot
+  // move it, and it never resets — logout changes nothing, so nothing
+  // fires.
+  const [arrivalSeq, setArrivalSeq] = useState(0)
+
+  // A chime per committed render that delivered new frames: a burst
+  // batched into one render moves the counter once per frame but
+  // commits once, and chimes once (an effect because sound is a side
+  // effect, not render output).
+  const chimed = useRef(arrivalSeq)
   useEffect(() => {
-    if (pushedNotifications === chimed.current) return
-    // advance even when the sound is off, so toggling it on later never
-    // replays an old arrival
-    chimed.current = pushedNotifications
-    // length 0 is the logout/re-login reset to NO_PUSHES, not an arrival
-    if (pushedNotifications.length === 0) return
-    if (soundEnabled) playChime()
-  }, [pushedNotifications, soundEnabled])
+    if (arrivalSeq === chimed.current) return
+    // advance even when the chime is skipped, so toggling the sound on
+    // (or focusing the tab) later never replays an old arrival
+    chimed.current = arrivalSeq
+    // only the tab being looked at chimes: every open tab holds its own
+    // subscription and the user destination delivers to all of them
+    // (PR #215 review)
+    if (soundEnabled && document.visibilityState === 'visible') playChime()
+  }, [arrivalSeq, soundEnabled])
+
+  // iOS Safari only unlocks an audio context created or resumed inside
+  // a user gesture — a resume from the push effect above stays
+  // suspended forever. The first pointerdown anywhere is that gesture
+  // (PR #215 review).
+  useEffect(() => {
+    window.addEventListener('pointerdown', unlockChime, { once: true })
+    return () => window.removeEventListener('pointerdown', unlockChime)
+  }, [])
 
   // Only the newest sync may land. Two syncs can overlap (login racing
   // a connect, a write racing either), and a push starts one of its own,
@@ -221,6 +244,9 @@ export const NotificationProvider = () => {
         // the badge up (issue #66)
         refreshUnreadCount()
         client.subscribe('/user/queue/notifications', (message) => {
+          // before the parse: like the count below, the chime must not
+          // depend on the body parsing (PR #215 review)
+          setArrivalSeq((n) => n + 1)
           setSessionCount((prev) => ({
             token: accessToken,
             count: (prev?.token === accessToken ? prev.count : 0) + 1,

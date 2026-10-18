@@ -22,6 +22,10 @@
 // a burst batched into one render, never for REST seeds/reconnects or
 // the logout reset, and the localStorage toggle (default on) gates it.
 // The chime module itself is mocked; its audio has its own unit test.
+// 2026-10-18, Claude Code (Fable 5), PR #215 review (@Sinnez1): cases
+// for the review fixes — a frame that fails to parse still chimes (it
+// still bumps the badge), a hidden tab stays quiet, another tab's mute
+// lands via the storage event without a reload.
 
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -56,7 +60,7 @@ const stomp = vi.hoisted(() => {
 
 // the chime is a side effect the provider must trigger at the right
 // moments; whether it can make sound at all is chime.test.ts's problem
-const chime = vi.hoisted(() => ({ playChime: vi.fn() }))
+const chime = vi.hoisted(() => ({ playChime: vi.fn(), unlockChime: vi.fn() }))
 vi.mock('@/features/notifications/chime', () => chime)
 
 vi.mock('@stomp/stompjs', () => {
@@ -95,6 +99,7 @@ beforeEach(() => {
   stomp.instances.length = 0
   unreadCountOnServer = 0
   chime.playChime.mockClear()
+  chime.unlockChime.mockClear()
   fetchMock.mockReset()
   // dispatch on the URL: AuthProvider asks GET /users/me, the
   // notification provider asks GET /notifications/me/unread-count —
@@ -421,6 +426,62 @@ describe('notification STOMP client', () => {
     expect(localStorage.getItem('notificationSoundEnabled')).toBe('true')
     pushFrame(connectAndSubscribe())
     expect(chime.playChime).toHaveBeenCalledTimes(1)
+  })
+
+  test('a frame that fails to parse still chimes, like it still bumps the badge', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    renderApp(true)
+    const onMessage = connectAndSubscribe()
+
+    act(() => {
+      onMessage({ body: 'not json' } as Parameters<messageCallbackType>[0])
+    })
+
+    expect(
+      screen.getByRole('link', { name: 'Notifications (1 unread)' }),
+    ).toBeInTheDocument()
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+  })
+
+  test('a hidden tab stays quiet — every open tab receives the push', () => {
+    const visibility = vi
+      .spyOn(document, 'visibilityState', 'get')
+      .mockReturnValue('hidden')
+    try {
+      renderApp(true)
+      pushFrame(connectAndSubscribe())
+      expect(chime.playChime).not.toHaveBeenCalled()
+    } finally {
+      visibility.mockRestore()
+    }
+  })
+
+  test("another tab's mute lands via the storage event, no reload needed", () => {
+    renderApp(true)
+    const onMessage = connectAndSubscribe()
+
+    // a storage event only ever fires in the tabs that did NOT write
+    act(() => {
+      localStorage.setItem('notificationSoundEnabled', 'false')
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'notificationSoundEnabled',
+          newValue: 'false',
+        }),
+      )
+    })
+
+    pushFrame(onMessage)
+    expect(chime.playChime).not.toHaveBeenCalled()
+  })
+
+  test('the first pointerdown hands the gesture to the audio unlock', async () => {
+    const user = userEvent.setup()
+    renderApp(true)
+
+    await user.click(screen.getByRole('link', { name: 'Notifications' }))
+
+    expect(chime.unlockChime).toHaveBeenCalled()
   })
 
   test('the bell reports a paused channel when the notification URL is unset', () => {

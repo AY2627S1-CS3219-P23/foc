@@ -39,6 +39,35 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Leong Wei Zhi (PR #215 review fixes)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debug + refactor
+- **Source:** all six items are @Sinnez1's PR #215 review comments.
+- **Scope:**
+  - **`chime.ts`:** a policy-blocked `resume()` is no longer awaited —
+    its promise stays pending until a user gesture, so stacked awaits
+    all released and chimed together on the first click (the blocking
+    item); a context that reached `closed` is replaced, not reused; the
+    context suspends itself ~0.6 s after a chime so the audio thread
+    idles, with an `idled` flag so that self-suspension is woken by the
+    next chime rather than mistaken for an autoplay block; new
+    `unlockChime()` creates/resumes the context inside a gesture for
+    iOS Safari.
+  - **`NotificationProvider.tsx`:** the chime keys on an arrival
+    counter bumped before the body parse (a frame that fails
+    `JSON.parse` bumps the badge, so it chimes too); only the visible
+    tab chimes; the first `pointerdown` hands its gesture to
+    `unlockChime`.
+  - **`useLocalStorage.tsx`:** a `storage` listener adopts another
+    tab's write of the key, so a mute in one tab lands everywhere
+    (noted: this also syncs the `'user'` session across tabs).
+  - Tests follow in `chime.test.ts` (never-settling fake `resume`,
+    no-stack-on-unlock, closed-context replacement, idle/wake,
+    unlockChime) and `notifications.test.tsx` (malformed frame chimes,
+    hidden tab quiet, cross-tab mute, pointerdown unlock).
+- **Author review:** Leong Wei Zhi to review via the PR; `npm test`
+  (271 passing), lint, format:check, build all clean.
+
 ## 2026-10-18 — Leong Wei Zhi (notification sound, follow-up to issue #66)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate

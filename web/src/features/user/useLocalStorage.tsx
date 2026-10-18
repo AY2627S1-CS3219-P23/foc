@@ -16,8 +16,15 @@
 // NotificationProvider now passes it through a useMemo'd context value,
 // which a per-render function identity would defeat. Behaviour
 // unchanged for existing callers.
+// 2026-10-18, Claude Code (Fable 5), PR #215 review (@Sinnez1): the
+// hook now hears another tab's write of its key (storage events fire
+// only in the OTHER tabs), so a device-wide preference like the
+// notification sound lands everywhere without a reload. This also
+// means a session stored under 'user' in one tab reaches the others
+// live — a logout signs every tab out — which is the fitting reading
+// of a shared key.
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 // what the key holds right now, parsed; null when unset or unparseable.
 // Unlike the hook's state this is never stale: setValue below writes
@@ -48,6 +55,21 @@ export const useLocalStorage = <T,>(
       return defaultValue
     }
   })
+
+  // another tab wrote this key: adopt its value. The event never fires
+  // in the tab that wrote, so this cannot loop with setValue below.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== keyName) return
+      try {
+        setStoredValue(e.newValue ? JSON.parse(e.newValue) : defaultValue)
+      } catch {
+        setStoredValue(defaultValue)
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [keyName, defaultValue])
 
   const setValue = useCallback(
     (newValue: T | null) => {
