@@ -824,7 +824,9 @@ team: a redelivered `request.submitted` whose reservation is already
 held or refused sends its recorded reply again, so a lost reply can be
 recovered; the notification-service contract test again requires
 request events to name their parties; and the credit design doc's
-diagram legend states where it differs from `architecture.md`.
+diagram legend states where it differs from `architecture.md`; and,
+at the author's instruction, the Credit F2.1.3 row of that doc reworded
+to the behaviour as implemented.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

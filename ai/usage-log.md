@@ -66,9 +66,18 @@ Entry template:
   - **Diagram legend** in `docs/credit-service.md`: no longer claims
     the same notation as `architecture.md`, and states the two
     differences (`-->` covers JDBC, `---` unused).
+  - **Credit F2.1.3** (the credit half of #165's "Requirements to
+    revise" item): the traceability row in `docs/credit-service.md`
+    reworded to describe what is implemented (refused as `REJECTED`,
+    rejection published, request moves `pending` → `rejected`, same
+    rejection on redelivery), and Credit F2.1.3 dropped from
+    "Requirements to revise". Transcription of the existing saga
+    design; no new behaviour chosen. The Order requirements (F0.1,
+    F1.1, F1.1.4, NFR1.1) left for the Order owner.
 - **Prompt(s):** Asked to fix the duplicate-reply item using the
   reviewer's suggestion and to explain the problem, then to continue
-  with the remaining #165 follow-ups.
+  with the remaining #165 follow-ups, then to update the credit-side
+  requirement to match the implementation and leave the Order ones.
 - **Verification:** credit-service `./mvnw test` with Docker running:
   262 tests, 0 failures, 0 skipped. notification-service
   `DomainEventContractTest`: 2 tests, 0 failures.
