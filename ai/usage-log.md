@@ -39,6 +39,41 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Ryan Ang (issue #165 follow-ups from Leong Wei Zhi's PR #163 re-review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** implementation + tests + docs
+- **Source:** every item below was found by Leong Wei Zhi in the
+  PR #163 re-review and tracked in issue #165; the fixes are the
+  reviewer's suggestions, taken as written by team decision.
+- **Scope:**
+  - **Duplicate `request.submitted` on `HELD` / `REJECTED`:** it
+    answered nothing, so a reply lost after the commit (for example a
+    dead-lettered `credit.reserved`) could never be recovered and the
+    Order Service's give-up timer would cancel a request whose credits
+    had reserved fine. `ReserveResult` gains `ALREADY_RESERVED`,
+    `ALREADY_REJECTED_INSUFFICIENT_CREDITS` and
+    `ALREADY_REJECTED_INVALID_AMOUNT` (the reason rebuilt from the
+    recorded reward, since only a reward below 1 is refused as
+    invalid); `RequestEventHandler` resends `credit.reserved` or
+    `credit.reservation-rejected` for them. `DUPLICATE` now means a
+    settled record (`TRANSFERRED` / `RELEASED`), which owes no reply.
+    Tests: operations, handler and listener integration tests updated
+    or added. `docs/credit-service.md`: the `request.submitted` row of
+    "How each event is handled" and two failure rows.
+  - **`DomainEventContractTest`** (notification-service): `parties`
+    must be non-empty for request events again; only credit events may
+    have none.
+  - **Diagram legend** in `docs/credit-service.md`: no longer claims
+    the same notation as `architecture.md`, and states the two
+    differences (`-->` covers JDBC, `---` unused).
+- **Prompt(s):** Asked to fix the duplicate-reply item using the
+  reviewer's suggestion and to explain the problem, then to continue
+  with the remaining #165 follow-ups.
+- **Verification:** credit-service `./mvnw test` with Docker running:
+  262 tests, 0 failures, 0 skipped. notification-service
+  `DomainEventContractTest`: 2 tests, 0 failures.
+- **Author review:** Ryan Ang, pending pull request review.
+
 ## 2026-10-17 — Leong Wei Zhi (issue #137: purge processed_events past retention)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate

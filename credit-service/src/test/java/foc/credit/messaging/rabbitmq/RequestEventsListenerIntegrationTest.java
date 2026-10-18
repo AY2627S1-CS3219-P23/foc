@@ -14,6 +14,8 @@
  * 2026-10-16, PR #190 review: with the retry queue deleted, a failed
  * event's returned retry copy dead-letters the original at once (team
  * decision), checked against the real broker.
+ * 2026-10-18, issue #165 (reviewer's suggestion): a duplicate delivery
+ * changes no balance but enqueues its recorded reply again.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
@@ -98,7 +100,7 @@ class RequestEventsListenerIntegrationTest extends PostgresTestContainer {
 	}
 
 	@Test
-	void aReservationIsAppliedWithItsReplyAndADuplicateChangesNothing() {
+	void aReservationIsAppliedWithItsReplyAndADuplicateOnlyResendsTheReply() {
 		String requester = user();
 		String request = request();
 		RequestSubmitted submitted = submitted(request, requester, 2);
@@ -112,14 +114,15 @@ class RequestEventsListenerIntegrationTest extends PostgresTestContainer {
 
 		// The same delivery again, then a sentinel: the queue is FIFO and
 		// has one consumer, so once the sentinel's record exists the
-		// duplicate has been fully processed, and must have changed nothing.
+		// duplicate has been fully processed: the balance is unchanged, and
+		// the recorded reply is enqueued again, in case the first was lost.
 		publish(submitted);
 		String sentinel = request();
 		publish(submitted(sentinel, user(), 1));
 		await().atMost(TIMEOUT).until(() -> reservations.existsById(sentinel));
 
 		assertBalance(requester, 3, 2);
-		assertThat(repliesFor(request)).containsExactly("credit.reserved");
+		assertThat(repliesFor(request)).containsExactly("credit.reserved", "credit.reserved");
 		awaitDrained();
 		assertThat(deadLettered()).isZero();
 	}

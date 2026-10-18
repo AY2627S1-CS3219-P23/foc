@@ -24,6 +24,9 @@
  * PR #193 review (Leong Wei Zhi), 2026-10-16: the earned-credit expiry
  * moved to EarnedCreditLifetime, shared with the redistribution, per the
  * reviewer's comment.
+ * 2026-10-18, issue #165 (reviewer's suggestion): a reserve on an
+ * existing HELD or REJECTED record answers what the record holds, so
+ * the recorded reply can be sent again.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -149,8 +152,18 @@ public class CreditOperationsService implements CreditOperations {
     }
 
     private ReserveResult applyReserve(String requestRef, String requesterId, int amount) {
-        if (reservations.findForUpdate(requestRef).isPresent()) {
-            return ReserveResult.DUPLICATE;
+        Optional<Reserved> existing = reservations.findForUpdate(requestRef);
+        if (existing.isPresent()) {
+            Reserved record = existing.get();
+            return switch (record.getStatus()) {
+                case HELD -> ReserveResult.ALREADY_RESERVED;
+                // only a reward below 1 is refused as invalid, and the
+                // record keeps the reward as requested
+                case REJECTED -> record.getAmount() < 1
+                    ? ReserveResult.ALREADY_REJECTED_INVALID_AMOUNT
+                    : ReserveResult.ALREADY_REJECTED_INSUFFICIENT_CREDITS;
+                case TRANSFERRED, RELEASED -> ReserveResult.DUPLICATE;
+            };
         }
         Instant now = Instant.now();
         // a refusal's record references the account too

@@ -15,6 +15,8 @@
  * 2026-10-11, PR #175 review (Leong Wei Zhi), team decision: a
  * completion with no record throws, so it is retried; the settle
  * result is chosen by a switch with no default.
+ * 2026-10-18, issue #165 (reviewer's suggestion): a redelivered
+ * submission already decided enqueues its recorded reply again.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -94,12 +96,13 @@ public class RequestEventHandler {
     private Outcome onSubmitted(RequestSubmitted e) {
         // no default: a new ReserveResult does not compile until it is given a reply
         DomainEvent reply = switch (operations.reserve(e.requestId(), e.requesterId(), e.reward())) {
-            case RESERVED -> new CreditReserved(
+            case RESERVED, ALREADY_RESERVED -> new CreditReserved(
                 newEventId(), Instant.now(), PRODUCER, e.correlationId(), List.of(),
                 e.requestId(), e.requesterId(), e.reward());
-            case REJECTED_INSUFFICIENT_CREDITS -> rejected(e, INSUFFICIENT_CREDITS);
-            case REJECTED_INVALID_AMOUNT -> rejected(e, REWARD_BELOW_ONE);
-            // a record exists: its reply, if one was owed, committed with it
+            case REJECTED_INSUFFICIENT_CREDITS, ALREADY_REJECTED_INSUFFICIENT_CREDITS ->
+                rejected(e, INSUFFICIENT_CREDITS);
+            case REJECTED_INVALID_AMOUNT, ALREADY_REJECTED_INVALID_AMOUNT -> rejected(e, REWARD_BELOW_ONE);
+            // settled: the request has moved past its reservation
             case DUPLICATE -> null;
         };
         if (reply != null) {
