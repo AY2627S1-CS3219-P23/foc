@@ -85,13 +85,17 @@ const httpOrderApi = {
   },
 
   // the pickers on the create form
+  // Every supplier, not just the first page: a supplier past the page
+  // size would otherwise be silently impossible to request from.
   async listSupplierOptions(): Promise<SupplierOption[]> {
-    const page = await listSuppliers({ page: 0, size: 100, sort: 'name,asc' })
-    return page.content.map((s) => ({
-      id: s.id,
-      name: s.name,
-      location: s.location,
-    }))
+    const options: SupplierOption[] = []
+    for (let page = 0; ; page++) {
+      const result = await listSuppliers({ page, size: 100, sort: 'name,asc' })
+      for (const s of result.content) {
+        options.push({ id: s.id, name: s.name, location: s.location })
+      }
+      if (page + 1 >= result.totalPages) return options
+    }
   },
 }
 

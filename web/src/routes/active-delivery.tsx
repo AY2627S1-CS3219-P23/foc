@@ -8,7 +8,7 @@
 // real gate is order-service refusing their calls.
 // Author review: [pending]
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 
 import { orderApi } from '@/features/order/api'
@@ -63,6 +63,19 @@ function ActiveDeliveryView({ orderId }: { orderId: number }) {
     }
   }, [orderId])
 
+  // Orders the view's writes to `order`: every action and every recovery
+  // refetch takes a number, and only the newest one (on a still-mounted
+  // view) may update the screen, so a slow stale response can't revert a
+  // newer result or land after the user has navigated away.
+  const writeSeq = useRef(0)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
   async function act(
     action: (orderId: number) => Promise<Order>,
     success: string,
@@ -72,6 +85,7 @@ function ActiveDeliveryView({ orderId }: { orderId: number }) {
     setError(null)
     try {
       const updated = await action(order.id)
+      writeSeq.current++
       setOrder(updated)
       setNotice(success)
       return updated
@@ -79,7 +93,13 @@ function ActiveDeliveryView({ orderId }: { orderId: number }) {
       setNotice(null)
       setError(errorMessage(err, 'That did not go through. Try again.'))
       // the order may have changed under us (requester cancelled, expired…)
-      orderApi.getOrder(order.id).then(setOrder, () => {})
+      const seq = ++writeSeq.current
+      orderApi.getOrder(order.id).then(
+        (fresh) => {
+          if (mounted.current && seq === writeSeq.current) setOrder(fresh)
+        },
+        () => {},
+      )
     } finally {
       setBusy(false)
     }
