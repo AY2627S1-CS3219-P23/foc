@@ -233,6 +233,40 @@ describe('open requests', () => {
     ).toBeInTheDocument()
   })
 
+  it('still shows the feed when the active-deliveries strip fails to load', async () => {
+    vi.spyOn(orderApi, 'listOpenOrders').mockResolvedValue(
+      pageOf([{ ...base, id: 6, requesterId: 9, requesterUsername: 'other' }]),
+    )
+    vi.mocked(orderApi.listMyOrders).mockRejectedValue(new Error('boom'))
+    renderAt('/requests')
+
+    expect(
+      await screen.findByRole('button', { name: 'Accept' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('clears a load error once a refresh succeeds', async () => {
+    const list = vi
+      .spyOn(orderApi, 'listOpenOrders')
+      .mockRejectedValueOnce(new ApiError(500, { detail: 'Server down.' }))
+      .mockResolvedValue(
+        pageOf([
+          { ...base, id: 6, requesterId: 9, requesterUsername: 'other' },
+        ]),
+      )
+    renderAt('/requests')
+    expect(await screen.findByText('Server down.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+
+    expect(
+      await screen.findByRole('button', { name: 'Accept' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Server down.')).not.toBeInTheDocument()
+    expect(list).toHaveBeenCalledTimes(2)
+  })
+
   it('opens the delivery page after a successful accept', async () => {
     vi.spyOn(orderApi, 'listOpenOrders').mockResolvedValue(
       pageOf([{ ...base, id: 6, requesterId: 9, requesterUsername: 'other' }]),

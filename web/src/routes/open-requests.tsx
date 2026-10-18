@@ -31,7 +31,11 @@ export function OpenRequests() {
   const [page, setPage] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // a failed load clears on the next successful one; an accept failure
+  // (e.g. "already taken") must survive the refetch it triggers, so the
+  // two are kept apart
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [acceptError, setAcceptError] = useState<string | null>(null)
   const [acceptingId, setAcceptingId] = useState<number | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -39,18 +43,18 @@ export function OpenRequests() {
     let cancelled = false
     Promise.all([
       orderApi.listOpenOrders(page, PAGE_SIZE),
-      orderApi.listMyOrders({
-        as: 'courier',
-        scope: 'active',
-        page: 0,
-        size: 20,
-      }),
+      // the active-deliveries strip is secondary: if it fails, the feed
+      // still loads and the strip just stays empty
+      orderApi
+        .listMyOrders({ as: 'courier', scope: 'active', page: 0, size: 20 })
+        .catch(() => null),
     ])
       .then(([open, mine]) => {
         if (cancelled) return
         setOrders(open.content)
         setTotalPages(open.totalPages)
-        setDeliveries(mine.content)
+        setDeliveries(mine?.content ?? [])
+        setLoadError(null)
         // The feed can shrink under us (requests accepted or expired
         // since we last loaded): step back to the last page that still
         // exists instead of staring at an empty, unpageable one. The
@@ -61,7 +65,7 @@ export function OpenRequests() {
       })
       .catch((err) => {
         if (!cancelled)
-          setError(errorMessage(err, 'Could not load requests. Try again.'))
+          setLoadError(errorMessage(err, 'Could not load requests. Try again.'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -74,13 +78,13 @@ export function OpenRequests() {
   const accept = useCallback(
     async (order: Order) => {
       setAcceptingId(order.id)
-      setError(null)
+      setAcceptError(null)
       try {
         await orderApi.acceptOrder(order.id)
         navigate(`/deliveries/${order.id}`)
       } catch (err) {
         // e.g. 409: another courier got there first, or it was cancelled
-        setError(errorMessage(err, 'Could not accept this request.'))
+        setAcceptError(errorMessage(err, 'Could not accept this request.'))
         setAcceptingId(null)
         setRefreshKey((k) => k + 1)
       }
@@ -108,7 +112,8 @@ export function OpenRequests() {
         </button>
       </div>
 
-      {error && <Banner kind="error">{error}</Banner>}
+      {loadError && <Banner kind="error">{loadError}</Banner>}
+      {acceptError && <Banner kind="error">{acceptError}</Banner>}
 
       {deliveries.length > 0 && (
         <section aria-label="Your active deliveries" className="space-y-2">
