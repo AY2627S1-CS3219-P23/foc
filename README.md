@@ -115,6 +115,13 @@
   2026-10-17: AI Use Summary extended for the order-service request
   state machine by Claude Code (Opus 5.5), then for the Requests
   createdAt default (PR review fix).
+  2026-10-17: AI Use Summary extended for the order-service request
+  events (RequestsService, outbox, credit reply listener) by Claude
+  Code (Opus 5.5), then for the RequestsController endpoints, then
+  for the order-service ownership checks, then for the manual-testing
+  scripts, stubs and the gateway order route, then for the /create field
+  checks, the accepted / collected events and the expiry and
+  auto-complete timers.
   2026-10-14: AI Use Summary extended for the credit request event
   listener (issue #171) by Claude Code (Opus 5.5).
   2026-10-14: the #67 clause extended for the PR #185 human-review
@@ -244,7 +251,7 @@ This section is the consolidated AI-use disclosure required by the CS3219
 AI Usage Policy (project document, Appendix 2). The detailed log with
 prompts and timestamps lives in [`ai/usage-log.md`](ai/usage-log.md).
 
-**Tools:** Claude Code (Fable 5, Opus 5, Opus 5.5, Sonnet 4.6, Sonnet 5), Claude (Sonnet 5)
+**Tools:** Claude Code (Fable 5, Opus 5, Opus 5.5, Sonnet 4.6, Sonnet 5, Sonnet 5.5), Claude (Sonnet 5)
 
 **Prohibited phases avoided:** requirements elicitation and
 prioritization; architecture and design decisions. Requirements, service
@@ -665,6 +672,10 @@ restoring the pre-renewal OTP row — both chosen by Leong Wei Zhi via
 neutral options Q&A — plus the reviewer-flagged documentation and
 test-isolation corrections).
 
+The order-service frontend pages (Create Request, My Requests, Open
+Requests, Active Delivery, Request History) were generated in `web/` from
+the committed wireframes, against a placeholder API contract and a
+dev-only in-memory mock; the backend was not touched.
 The order-service Spring Boot
 scaffold — pom, application config, Dockerfile, and application/test
 classes mirroring the supplier-service and notification-service
@@ -682,7 +693,31 @@ and its unit tests over the author's own state and event enums, with
 the DROP target, the no-library form, the PENDING/REJECTED saga
 transitions' names and the ARRIVED step chosen by the author via
 neutral-options Q&A and recorded in `ai/usage-log.md`), and a
-`createdAt` default on the `Requests` entity (PR review fix).
+`createdAt` default on the `Requests` entity (PR review fix); and
+the order-service request events — `RequestsService` applying the state
+machine, a transactional outbox and publisher and a credit reply
+listener with retry and dead-letter queues copied from credit-service
+and notification-service, the pending-timeout sweep, events on
+submit / reserve / reject / timeout / arrive / complete / cancel /
+expire, and `status` as the `OrderStates` enum with a database check —
+with the event names, which transitions publish, the field mapping and
+parties, the copy-not-share choice, the timeout values and the check's
+form chosen by the author via neutral-options Q&A and recorded in
+`ai/usage-log.md`; and the `RequestsController` (seven POST endpoints
+delegating to `RequestsService`, with tests; paths, parameters and
+request/response shapes specified by the author); and order-service's
+bearer-token auth (copied from credit-service) with the ownership rules
+for each step and the self-accept refusal, the rules, the ids-from-token
+choice and the 409 / 404 answers chosen by the author; and the
+`order-event.ps1` / `order-curl.ps1` / `order-e2e.ps1` manual-testing
+helpers, the `credit-stub.ps1` / `stub-users.psd1` stand-ins for the
+Credit and User Services, and the gateway's `/api/order` route
+replacing the reserved stub; and `/create`'s field checks (400 listing
+missing fields, a reward below 1 and a past deadline), the
+`request.accepted` / `request.collected` events and the deadline-expiry
+and auto-complete timers, with the required fields, the 400 answer, the
+events' parties, the 5 min sweeps and the configurable 1 h delay chosen
+by the author.
 
 The issue #67 remaining scope (the server-side STOMP push gateway had
 merged earlier in PR #74): the web notification client

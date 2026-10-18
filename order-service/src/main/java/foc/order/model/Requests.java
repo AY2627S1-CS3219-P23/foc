@@ -6,12 +6,17 @@
  * transcribed from the author's ER diagram (bigint -> Long, text ->
  * String, int -> Integer, timestamptz -> Instant, version -> @Version);
  * no columns added or changed by the tool.
+ * 2026-10-16: status comment lists the current OrderStates.
  * 2026-10-16: createdAt defaults to Instant.now() (PR review fix: a
  * save without setCreatedAt failed the not-null check).
+ * 2026-10-16: status mapped as the OrderStates enum (stored by name),
+ * by the author's decision, with a hand-written check constraint on
+ * the text column (the author's choice over dropping columnDefinition).
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order.model;
 
+import foc.order.OrderStates;
 import jakarta.persistence.*;
 
 import java.time.Instant;
@@ -51,9 +56,14 @@ public class Requests {
     @Column(nullable = false)
     private Integer creditAmount;
 
-    // PENDING/REJECTED/CREATED/ACCEPTED/COLLECTED/ARRIVED/COMPLETED/CANCELLED/EXPIRED (F0.1)
-    @Column(nullable = false, columnDefinition = "text")
-    private String status;
+    // Stored as the constant's name, e.g. "PENDING" (F0.1). The check
+    // lists every OrderStates constant by hand: add a new state here too
+    // (RequestsServiceTests fails if one is missing).
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, columnDefinition = "text check (status in ("
+            + "'PENDING', 'CREATED', 'ACCEPTED', 'COLLECTED', 'ARRIVED', "
+            + "'COMPLETED', 'CANCELLED', 'EXPIRED', 'REJECTED'))")
+    private OrderStates status;
 
     // Must be in the future at creation (F1.1.2)
     @Column(nullable = false)
@@ -142,11 +152,11 @@ public class Requests {
         this.creditAmount = creditAmount;
     }
 
-    public String getStatus() {
+    public OrderStates getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
+    public void setStatus(OrderStates status) {
         this.status = status;
     }
 

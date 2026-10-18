@@ -1,0 +1,14 @@
+All endpoints: POST with a JSON body and a bearer token; the caller is the token's user.
+Answers: 200 success, 400 invalid /create fields, 401 no or invalid token, 404 unknown request or not the caller's step, 409 not allowed from the request's state (or the requester accepting their own request).
+
+/create param: -supplier id -supplier name -item -dropoff location -credit amount -deadline (caller becomes the requester) -> return success message + published event to tell credit service to reserve credits
+/accept param: request id (anyone but the requester; caller becomes the courier) -> return success or error message + publish event to tell the requester
+/collect request id (assigned courier only) -> returns success or error message + publish event to tell the requester
+/arrive request id (assigned courier only) -> returns success or error message + publish event to tell the requester the courier has arrived
+/drop request id (assigned courier only) -> returns success or error message (no event: the credits stay held)
+/cancel request id (requester only) -> returns success or error message + publish event for credit service to release funds to the requester
+/complete request id (requester only) -> returns success or error message + publish event for credit service to pay the courier
+
+Not endpoints (timers inside the service):
+expire: a CREATED or ACCEPTED request past its deadline, checked every 5 min -> publish event for credit service to release funds to the requester
+auto-complete: a request ARRIVED for 1 h without the requester's confirmation, checked every 5 min -> same event as /complete
