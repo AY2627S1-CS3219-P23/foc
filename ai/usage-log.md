@@ -39,6 +39,387 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Aung Ko Khant (order-service: accepted/collected events, expiry and auto-complete)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `RequestsService.accept` / `.collect` write
+  `request.accepted` / `request.collected` (`RequestEvents`, parties =
+  requester and courier); new `DeadlineExpirySweeper` (CREATED / ACCEPTED
+  past the deadline -> EXPIRE, F6.1-F6.2) and `AutoCompleteSweeper`
+  (ARRIVED longer than the delay -> `RequestsService.completeAutomatically`,
+  F7.2), modelled on `PendingTimeoutSweeper`; two repository queries;
+  `order.expiry.*` / `order.auto-complete.*` settings, compose and
+  `.env.example` variables, scheduler pool 2 -> 4; `endpoints.txt`
+  brought up to date with the API; README saga section; tests (82
+  passing). Also committed the earlier `/create` field-check tests.
+- **Prompt(s):** "Can you perform the ones that only require small
+  decisions" (from the remaining-tasks list). The tool asked as neutral
+  options; the author chose: both sweeps every 5 min; auto-complete after
+  1 h, configurable; accepted / collected notify requester and courier;
+  update `endpoints.txt` and push.
+- **Author review:** `mvn test` in a Maven container: 82 tests, 0
+  failures. Live run with the intervals shortened through environment
+  variables: a request past its deadline became EXPIRED and an ARRIVED
+  one COMPLETED within 25 s, with request.accepted / collected / expired /
+  completed all sent; the container was then restarted on the defaults.
+  To be reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: create field checks)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `RequestsService.create` checks a new request before storing
+  it: the NOT NULL columns present (blank text counts as missing;
+  `supplierName` optional), `creditAmount` at least 1 (F1.1.3), `deadline`
+  in the future (F1.1.2); every problem in one `InvalidRequestException`
+  (new), which `RequestsController` answers 400 with the message. Tests
+  (78 passing); README endpoints paragraph. Then `supplierName` made
+  required in the check too ("Can we have suppliername field be required
+  for now?"); its column stays nullable.
+- **Prompt(s):** "When creating a request, can we check that all required
+  fields are there and raise an error explicitly if not instead of
+  silently failing" (a missing field was a bare 500). The tool asked as
+  neutral options; the author chose: required = the database's NOT NULL
+  columns (supplierName optional); 400 listing every missing field; also
+  check the reward and deadline values in the same 400.
+- **Author review:** `mvn test` in a Maven container: 78 tests, 0
+  failures. Rebuilt container through the gateway: missing fields 400 with
+  the list, reward 0 and a past deadline 400, a valid create 200. To be
+  reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: order-e2e.ps1)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** new `order-service/order-e2e.ps1`: logs in a requester and
+  a courier (real user-service accounts, passwords prompted hidden),
+  creates requests through the gateway, gets them reserved (credit-service
+  within 5 s, else `credit-stub.ps1`), and checks 11 steps against the
+  ownership rules (409 self-accept, 404 other party, 401 no token, 200
+  owner); README section.
+- **Prompt(s):** "How can I manually test user verified order service",
+  then "Could we write this as a script".
+- **Author review:** run by the tool against the compose stack with two
+  throwaway accounts it created in the local user-db through sign-up and
+  Mailpit (e2e_requester, e2e_courier): 11 of 11 checks passed. The
+  first run showed this branch's credit-service never reserves (no
+  request-event listener before main's), hence the stub fallback. To be
+  reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: scripts call as users)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** split from the 2026-10-18 ownership-checks entry:
+  `ManualRequestsHarness` acts as each step's party; `order-curl.ps1`
+  signs a bearer token like user-service's (HS256 with `.env`'s
+  `JWT_SECRET`; sub, role, jti, iat, exp) for the step's party, or for
+  `-As`, and no longer sends `requesterId` / `courierId`.
+- **Prompt(s):** part of "I would like to add owner ship checks ..."
+  (the endpoints now need a token).
+- **Author review:** `order-curl.ps1` run through the gateway against the
+  rebuilt container (owners 200, other party 404, self-accept 409). To be
+  reviewed via pull request.
+
+## 2026-10-17 — Aung Ko Khant (order-service: credit and user stubs)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** new `order-service/credit-stub.ps1` (sends `credit.reserved`
+  / `credit.reservation-rejected` for one request to `credit-events`
+  via the RabbitMQ management API, values read from order-db; warns if
+  credit-service is running or the request is not PENDING; prints the
+  resulting status), new `order-service/stub-users.psd1` (alice 1, bob
+  2, carol 3, dave 4), `order-curl.ps1` `-Requester` / `-Courier` take a
+  name or an id (courier default now bob instead of 7), README section.
+- **Prompt(s):** "can we create a stub for credit service and user
+  service?" The tool asked as neutral options; the author chose: for
+  testing order-service alone; the credit stub replies only when told
+  (reserve/reject per call); the user stub is a fixed user list.
+- **Author review:** run against the compose stack with credit-service
+  stopped: reserve moved a request PENDING -> CREATED and accept then
+  succeeded; reject moved one to REJECTED and a later reserve was
+  ignored. A first run failed with RabbitMQ `not_json` (Windows
+  PowerShell piped a BOM); fixed by sending the body from a BOM-less
+  file. To be reviewed via pull request.
+
+---
+
+## 2026-10-17 — Aung Ko Khant (gateway: /api/order route)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug
+- **Scope:** `gateway/nginx.conf` — the reserved `/api/order/` 503 stub
+  replaced with a proxied location identical in form to credit's (auth
+  check, prefix stripped, `order-service:8080`); `docs/gateway.md`
+  routing-table row; `order-service/order-curl.ps1` default `BaseUrl`
+  now `http://localhost:8090/api/order`.
+- **Prompt(s):** `./order-curl create` failed with "Failed to connect to
+  localhost:8088". Cause: order-service lost its host port in the
+  gateway cutover (G3), and the gateway still answered the stub. The
+  stub's own comment and G3 reserved the prefix for this replacement,
+  so no new decision was made.
+- **Author review:** gateway rebuilt with compose; `./order-curl.ps1
+  create` returned 200 "Request 1 created" through the gateway. To be
+  reviewed via pull request.
+
+---
+
+## 2026-10-13 — Aung Ko Khant (order-service: manual-testing scripts)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `order-service/order-event.ps1` and `order-curl.ps1`
+  (new), `ManualRequestsHarness` (interactive mode),
+  `order-service/README.md` manual-testing sections. Later extended:
+  reserve / reject / timeout (2026-10-15) and arrive (2026-10-16).
+- **Prompt(s):** split from the 2026-10-13 RequestsController entry.
+  After asking how to test the transitions against the real database
+  and view the rows in DBeaver, "Can you create a script?": the tool
+  wrote `order-event.ps1`, which runs the existing
+  `ManualRequestsHarness` in a Maven container against the compose
+  `order-db`. Then "is it possible for it to stay on until I am done":
+  the tool added an interactive mode to the harness
+  (`-Dinteractive=true`) and made the script start it when run with no
+  event. Then "Can I test the endpoints using a curl script?": the
+  tool wrote `order-curl.ps1`, which POSTs to one endpoint with curl
+  and prints the status and body.
+- **Author review:** the interactive mode was run in the Maven
+  container against `order-db` with piped commands; `order-curl.ps1`
+  was run against the compose order-service (create, accept, collect,
+  complete, plus a 409 and a 404). To be reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: ownership checks)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service bearer-token auth copied from credit-service
+  (`security.JwtVerifier`, `JwtAuthenticationFilter`,
+  `RestAuthEntryPoint`, `config.SecurityConfig` with per-service CORS
+  allowing POST; `spring-boot-starter-security`, jjwt 0.13.0;
+  `order.jwt.secret` / `order.web-allowed-origin`; `JWT_SECRET` and
+  `WEB_ALLOWED_ORIGIN` passed in compose). `RequestsController` takes
+  the caller from the token: `/create` makes them the requester and
+  `/accept` the courier (`requesterId` / `courierId` removed from the
+  bodies). `RequestsService`: collect, arrive and drop only by the
+  assigned courier; cancel and complete only by the requester; checked
+  before the state, anyone else gets the unknown-request 404. Tests
+  (73 passing) sign tokens with the test secret; README endpoints
+  section. The manual-testing scripts' token support follows in a later
+  commit.
+- **Prompt(s):** "I would like to add owner ship checks. Users should
+  only be able to add requests for themselves. All steps in the
+  lifecycle should only be able to be performed by a single person."
+  The token mechanism follows the existing services (credit-service,
+  supplier-service: shared `JWT_SECRET`, `sub` = user id). The tool
+  asked as neutral options; the author chose: requester = create (for
+  self), cancel, complete; assigned courier = collect, arrive, drop;
+  accept = any user but the requester, no admin override; ids taken
+  from the token instead of the body; a step that is not the caller's
+  answers 404.
+- **Author review:** `mvn test` in a Maven container: 73 tests, 0
+  failures. Run through the gateway against the rebuilt container:
+  self-accept 409, other party's collect / complete 404, the owners'
+  steps 200, no token 401. To be reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: no self-accept)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService.accept` refuses a courier id
+  equal to the request's requester id (IllegalStateException, so the
+  controller answers 409 and the transaction rolls back); tests in
+  `RequestsServiceTests` and `RequestsControllerTests` (67 passing);
+  README endpoints paragraph.
+- **Prompt(s):** "Is there a check for whether courier and requester
+  are the same person?" (there was none). The tool asked how a refusal
+  should answer (409 / 403 / 400) as neutral options; the author chose
+  409 Conflict.
+- **Author review:** `mvn test` in a Maven container: 67 tests, 0
+  failures. To be reviewed via pull request.
+
+## 2026-10-16 — Aung Ko Khant (order-service: ARRIVED state)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService
+  .arrive` (sets `arrivedAt`, writes `request.courier-arrived` to the
+  outbox), `RequestEvents.courierArrived`, `POST /arrive` in
+  `RequestsController`, the `Requests` status comment, `endpoints.txt`,
+  the README, and tests (57 passing). The ARRIVED constant in
+  `OrderStates` was the author's own edit; the state-machine part
+  (ARRIVE, COLLECTED -> ARRIVED -> COMPLETED) was committed on its own
+  earlier, and the harness, `order-curl.ps1` and `order-event.ps1`
+  changes follow in a later commit.
+- **Prompt(s):** "I would like to add an arrived state between
+  collected and completed, the point is to inform requester that
+  courier has arrived". The tool asked the open choices as neutral
+  options; the author chose: COMPLETE only from ARRIVED (no direct
+  COLLECTED -> COMPLETED); ARRIVE publishes `request.courier-arrived`
+  (the existing foc-contracts record) now; `parties` = the requester
+  only. `/arrive` takes the same `{requestId}` body as `/collect`.
+- **Author review:** `mvn test` run in a Maven container: 57 tests,
+  0 failures. Not yet run against a live broker or notification-service.
+  To be reviewed via pull request.
+
+## 2026-10-13 — Aung Ko Khant (order-service: RequestsController)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, explain
+- **Scope:** order-service `foc.order.controller.RequestsController`
+  (new; six POST endpoints) and `RequestsControllerTests` (new);
+  `order-service/README.md`; README AI Use Summary. The same session's
+  `order-event.ps1`, `order-curl.ps1` and harness interactive mode are
+  logged with the manual-testing tools in a later commit.
+- **Prompt(s):** "How can I start adding endpoints", "Treat order
+  service as its own isolated microservice for now" (explanations
+  only; the tool declined to pick routes or request/response shapes
+  and listed them as the author's decisions), then "Can you add a
+  method for each event for me to fill out?". The tool wrote a
+  `@RestController` with one unmapped, empty stub method per
+  `OrderEvents` constant, each commented with the `RequestsService`
+  method it corresponds to. No routes, HTTP methods, parameters,
+  DTOs or status codes were chosen by the tool. Then "For the create
+  event, I would like a row to be added to db based on the
+  parameters supplied to create method, status should be created":
+  the tool filled in `create()` to take the entity's caller-supplied
+  columns as parameters, build a `Requests` and store it through the
+  existing `RequestsService.create` (which sets status `CREATED`).
+  The method is still unmapped. Then "fill out stub methods with
+  corresponding method from request service. Modify method
+  signatures as needed": the tool made `accept`, `collect`,
+  `cancel`, `drop`, `expire` and `complete` each delegate to the
+  `RequestsService` method of the same name, taking that method's
+  parameters and returning its `Requests` result, and fixed the
+  compile errors in the author's in-progress edits (`void` methods
+  returning a value, a `requestService` typo, and a
+  `setStatus('CREATED')` line, removed because
+  `RequestsService.create` already sets the status). Still unmapped.
+  Not compiled or run by the tool (no JDK or Docker available in the
+  session). Then "Can you help me add the endpoints": the
+  tool declined to pick the interface and listed what it needed; the
+  author wrote `endpoints.txt` (paths and parameters for create,
+  accept, collect, drop, cancel, complete) and asked "Can we create
+  these endpoints?". Four points the file left open were put to the
+  author as neutral-options Q&A, and the author chose: POST with a
+  JSON body; `creditAmount` and `deadline` added to `/create` (both
+  are NOT NULL columns); a JSON `{"message": ...}` response with 200
+  / 409 (illegal transition) / 404 (unknown id); endpoints only, no
+  event publishing in this change. The tool mapped the six
+  controller methods accordingly (`expire` left unmapped), added
+  `RequestsControllerTests`, and ran the full order-service suite in
+  a Maven container (25 tests, all passing).
+- **Author review:** Stubs are to be filled out by the author, who
+  decides the interface; reviewed via pull request.
+
+## 2026-10-17 — Aung Ko Khant (order-service: request.cancelled / request.expired)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService.cancel` and `.expire` write
+  `request.cancelled` / `request.expired` to the outbox with the state
+  change; `RequestEvents.expired` (new) and the existing `cancelled`
+  builder; a comment on `drop` that it must not publish (Order F5.2);
+  README saga section; tests (65 passing): each event's fields and
+  parties, and no event from a refused cancel.
+- **Prompt(s):** "Can we add events for expire and cancel, these should
+  release credits back to requester". The Credit Service already
+  releases on both (docs/credit-service.md D9). The tool noted that the
+  foc-contracts `RequestExpired` record has no `courierId` and
+  describes expiry before acceptance, while the state machine also
+  expires ACCEPTED requests, and asked who goes in `parties`. The
+  author chose: expired = requester plus the courier when one had
+  accepted; cancelled = requester only.
+- **Author review:** `mvn test` in a Maven container: 65 tests, 0
+  failures. Not yet run end to end against credit-service. To be
+  reviewed via pull request.
+
+## 2026-10-17 — Aung Ko Khant (order-service: request.completed)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService.complete` writes
+  `request.completed` to the outbox in the same transaction as the
+  COMPLETED status; `RequestEvents.completed` builds it from the
+  existing foc-contracts `RequestCompleted` record; README saga
+  section; tests (62 passing): the event's fields, the event sequence,
+  and no event when COMPLETE is refused.
+- **Prompt(s):** "I would like to publish an event when an order is
+  completed successfully, to signal to credit service to release
+  credits to courier". The Credit Service already transfers on
+  `request.completed` using `requestId` and `courierId`
+  (docs/credit-service.md D9). The tool asked as neutral options who
+  goes in `parties`; the author chose requester and courier.
+- **Author review:** `mvn test` in a Maven container: 62 tests, 0
+  failures. Not yet run end to end against a live broker and
+  credit-service. To be reviewed via pull request.
+
+## 2026-10-16 — Aung Ko Khant (order-service: status enum)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `Requests` (`status` is now `OrderStates` with
+  `@Enumerated(EnumType.STRING)` and a hand-written
+  `check (status in (...))` in its text column definition),
+  `RequestsService`, `CreditReplyHandler`, `PendingTimeoutSweeper`,
+  `RequestsRepository` (enum instead of names), and tests (60 passing):
+  a save without `createdAt`, a bad status rejected by the database,
+  and every `OrderStates` constant accepted by it. The `createdAt`
+  default from the same session was committed on its own earlier.
+- **Prompt(s):** "Is it enforced that status must be one
+  of the enums we defined" (it was not) and "I would like the states to
+  be an enum". `columnDefinition = "text"` stopped Hibernate generating
+  its check constraint; the tool asked as neutral options (drop the
+  column definition / write the check into it / Java-only) and the
+  author chose the hand-written check.
+- **Author review:** `mvn test` in a Maven container: 60 tests, 0
+  failures. Under `ddl-auto: update` an existing order-db `requests`
+  table does not gain the check until it is recreated. To be reviewed
+  via pull request.
+
+## 2026-10-15 — Aung Ko Khant (order-service: saga with the Credit Service)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService` (create starts PENDING; reserve/reject/timeout),
+  new `CreditReplyHandler`, `PendingTimeoutSweeper`, `RequestEvents`,
+  `EventOutbox`, `EventPublisher`, `OutboxPublisher`, `OutboxEvent` +
+  repository, `messaging.rabbitmq` (converter, topology, initializer,
+  `RabbitEventPublisher`, `CreditEventsListener`), configuration,
+  compose/`.env.example` variables, the order-service README, and
+  tests (54 passing). The state-machine part (PENDING, REJECTED and
+  their events) was committed on its own earlier; the harness and
+  `order-event.ps1` changes follow in a later commit.
+- **Prompt(s):** "I think we need to add 2 additional stages pending
+  and rejected to coordinate with credit service. Pending is to check
+  if there are enough credits for requester and to reserve it, rejected
+  is in the event that there are not enough". The saga itself was
+  already the team's design (`docs/credit-service.md` D7–D8, D10, and
+  "What the other services must build"). The tool asked the open
+  order-side choices as neutral options; the author chose: event names
+  RESERVE / REJECT / TIMEOUT; only those leave PENDING; scope including
+  the broker wiring; only the four saga transitions publish; copy
+  credit-service's outbox and retry layout with its values; field
+  mapping pickupLocation = supplierName, note = item; correlationId =
+  the request id; 30 s pending timeout swept every 15 s.
+- **Tool's readings, for the author to confirm:** a reply naming no
+  known request is dead-lettered at once (credit-service D11's rule
+  for events that conflict with the recorded state); queue names
+  `order-service.credit-events[.retry|.dlq]` follow credit-service's
+  consumer-prefixed convention; the listener's retry republish waits
+  on a correlated confirm (the outbox needs correlated confirms on the
+  same connection, where notification-service uses simple ones).
+- **Author review:** `./mvnw test` run in a Maven container: 54 tests,
+  0 failures. Not yet run against a live broker or credit-service. To
+  be reviewed via pull request.
+
+## 2026-10-12 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, explain
+- **Scope:** order-service `foc.order.RequestsService` (body of the
+  author's empty `@Service` stub) and `RequestsServiceTests`;
+  order-service README status paragraph; README AI Use Summary.
+- **Prompt(s):** "So how do we add transitions to this file?", "How do
+  I wire this to db?", "Which existing module's responsibility is it
+  to change the db?" (explanations only), then "Can you populate
+  requestservice". The tool wrote one method per `OrderEvents`
+  constant: load via `RequestsRepository`, ask `OrderStateMachine`
+  for the next state, set the status and the entity's existing
+  courier/timestamp columns. The class was named `RequestsService` to
+  match the author's file name (the stub's class was `RequestService`,
+  which does not compile in `RequestsService.java`). The `status`
+  field was left as a `String`; the tool raised String-vs-enum as the
+  author's choice and changed nothing in the entity. No validation,
+  ownership checks, error mapping or event publishing were added.
+- **Author review:** Integration tests against in-memory H2 (each
+  event's stored status and columns; illegal event leaves the row
+  unchanged); `mvn test` passes (19 tests). Reviewed via pull request.
 ## 2026-10-17 — Leong Wei Zhi (issue #137: purge processed_events past retention)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate
