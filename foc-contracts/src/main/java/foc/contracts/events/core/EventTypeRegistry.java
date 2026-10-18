@@ -16,6 +16,9 @@
  * 2026-10-08, Claude Code (Opus 5.5): four saga event entries added
  * (team design, docs/credit-service.md D7-D8); author review: Ryan Ang,
  * pending pull request review.
+ * 2026-10-18, Claude Code (Fable 5): request.dropped entry for the
+ * courier-withdrawal notification (event name the author's decision,
+ * via options Q&A); pending pull request review.
  */
 package foc.contracts.events.core;
 
@@ -27,6 +30,7 @@ import foc.contracts.events.request.RequestCancelled;
 import foc.contracts.events.request.RequestCollected;
 import foc.contracts.events.request.RequestCompleted;
 import foc.contracts.events.request.RequestCreated;
+import foc.contracts.events.request.RequestDropped;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestRejected;
 import foc.contracts.events.request.RequestSubmitted;
@@ -68,6 +72,7 @@ public final class EventTypeRegistry {
 			new Entry(RequestCollected.class, "request.collected"),
 			new Entry(RequestCompleted.class, "request.completed"),
 			new Entry(RequestCancelled.class, "request.cancelled"),
+			new Entry(RequestDropped.class, "request.dropped"),
 			new Entry(RequestExpired.class, "request.expired"),
 			new Entry(CourierArrived.class, "request.courier-arrived"),
 			new Entry(RequestSubmitted.class, "request.submitted"),

@@ -17,6 +17,19 @@
 // with the /users/me body); a seed test covers the REST-seeded badge
 // composing with pushed frames.
 // Reviewed by: Leong Wei Zhi (via pull request).
+// 2026-10-18, Claude Code (Fable 5), notification sound (follow-up to
+// issue #66, no issue yet): chime cases — once per live frame, once for
+// a burst batched into one render, never for REST seeds/reconnects or
+// the logout reset, and the localStorage toggle (default on) gates it.
+// The chime module itself is mocked; its audio has its own unit test.
+// 2026-10-18, Claude Code (Fable 5), PR #215 review (@Sinnez1): cases
+// for the review fixes — a frame that fails to parse still chimes (it
+// still bumps the badge), a hidden tab stays quiet, another tab's mute
+// lands via the storage event without a reload.
+// 2026-10-18, Claude Code (Fable 5), PR #215 review (@claude bot): the
+// cross-tab sync became opt-in, so a case pins the session key's
+// unchanged behaviour — another tab's write of 'user' must not touch
+// this tab's session.
 
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -48,6 +61,11 @@ const stomp = vi.hoisted(() => {
   }> = []
   return { instances }
 })
+
+// the chime is a side effect the provider must trigger at the right
+// moments; whether it can make sound at all is chime.test.ts's problem
+const chime = vi.hoisted(() => ({ playChime: vi.fn(), unlockChime: vi.fn() }))
+vi.mock('@/features/notifications/chime', () => chime)
 
 vi.mock('@stomp/stompjs', () => {
   class Client {
@@ -84,6 +102,8 @@ beforeEach(() => {
   localStorage.clear()
   stomp.instances.length = 0
   unreadCountOnServer = 0
+  chime.playChime.mockClear()
+  chime.unlockChime.mockClear()
   fetchMock.mockReset()
   // dispatch on the URL: AuthProvider asks GET /users/me, the
   // notification provider asks GET /notifications/me/unread-count —
@@ -347,6 +367,148 @@ describe('notification STOMP client', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  test('a live frame chimes once; a burst batched into one render chimes once', () => {
+    renderApp(true)
+    const onMessage = connectAndSubscribe()
+
+    pushFrame(onMessage)
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+
+    // two frames delivered in a single WebSocket message run their
+    // callbacks in one task — one committed render, one chime
+    act(() => {
+      for (const id of [2, 3]) {
+        onMessage({
+          body: JSON.stringify({
+            id,
+            eventType: 'request.accepted',
+            payload: { requestId: `ord-${id}` },
+            occurredAt: '2026-10-12T08:30:00Z',
+            read: false,
+            createdAt: '2026-10-12T08:30:01Z',
+          }),
+        } as Parameters<messageCallbackType>[0])
+      }
+    })
+    expect(chime.playChime).toHaveBeenCalledTimes(2)
+  })
+
+  test('no chime for the REST seed, the reconnect catch-up, or the logout reset', async () => {
+    const user = userEvent.setup()
+    unreadCountOnServer = 5
+    renderApp(true)
+    // the login seed lands on the badge without a sound
+    await screen.findByRole('link', { name: 'Notifications (5 unread)' })
+
+    const onMessage = connectAndSubscribe()
+    await act(async () => {}) // connect re-sync settles
+    // a reconnect catch-up can jump the count; it must stay silent too
+    act(() => client().config.onConnect?.(undefined as never))
+    await act(async () => {})
+    expect(chime.playChime).not.toHaveBeenCalled()
+
+    pushFrame(onMessage)
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+
+    // logout empties the pushed queue — a reset, not an arrival
+    await user.click(await screen.findByRole('button', { name: 'Logout' }))
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+  })
+
+  test('the stored toggle gates the chime and defaults to on', () => {
+    localStorage.setItem('notificationSoundEnabled', 'false')
+    renderApp(true)
+    pushFrame(connectAndSubscribe())
+    expect(chime.playChime).not.toHaveBeenCalled()
+  })
+
+  test('an unset toggle means on, and the default is written back', () => {
+    renderApp(true)
+    // the hook makes the default explicit on first read
+    expect(localStorage.getItem('notificationSoundEnabled')).toBe('true')
+    pushFrame(connectAndSubscribe())
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+  })
+
+  test('a frame that fails to parse still chimes, like it still bumps the badge', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    renderApp(true)
+    const onMessage = connectAndSubscribe()
+
+    act(() => {
+      onMessage({ body: 'not json' } as Parameters<messageCallbackType>[0])
+    })
+
+    expect(
+      screen.getByRole('link', { name: 'Notifications (1 unread)' }),
+    ).toBeInTheDocument()
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+  })
+
+  test('a hidden tab stays quiet — every open tab receives the push', () => {
+    const visibility = vi
+      .spyOn(document, 'visibilityState', 'get')
+      .mockReturnValue('hidden')
+    try {
+      renderApp(true)
+      pushFrame(connectAndSubscribe())
+      expect(chime.playChime).not.toHaveBeenCalled()
+    } finally {
+      visibility.mockRestore()
+    }
+  })
+
+  test("another tab's mute lands via the storage event, no reload needed", () => {
+    renderApp(true)
+    const onMessage = connectAndSubscribe()
+
+    // a storage event only ever fires in the tabs that did NOT write
+    act(() => {
+      localStorage.setItem('notificationSoundEnabled', 'false')
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'notificationSoundEnabled',
+          newValue: 'false',
+        }),
+      )
+    })
+
+    pushFrame(onMessage)
+    expect(chime.playChime).not.toHaveBeenCalled()
+  })
+
+  test("another tab's write of the session key is NOT adopted (sync is opt-in)", async () => {
+    renderApp(true)
+    const onMessage = connectAndSubscribe()
+    pushFrame(onMessage)
+    expect(
+      screen.getByRole('link', { name: 'Notifications (1 unread)' }),
+    ).toBeInTheDocument()
+
+    // another tab logs out (clears 'user'): this tab's session must not
+    // follow — only keys that opted into sync may (PR #215 review)
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', { key: 'user', newValue: null }),
+      )
+    })
+
+    // still signed in, badge and socket untouched
+    expect(
+      screen.getByRole('link', { name: 'Notifications (1 unread)' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Logout' })).toBeVisible()
+  })
+
+  test('the first pointerdown hands the gesture to the audio unlock', async () => {
+    const user = userEvent.setup()
+    renderApp(true)
+
+    await user.click(screen.getByRole('link', { name: 'Notifications' }))
+
+    expect(chime.unlockChime).toHaveBeenCalled()
   })
 
   test('the bell reports a paused channel when the notification URL is unset', () => {

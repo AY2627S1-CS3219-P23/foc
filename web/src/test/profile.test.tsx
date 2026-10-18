@@ -37,6 +37,10 @@
 // running one refuses the test token with a 401, which signs the session
 // out), and the details case checks the live Credit Status.
 // Author review: Leong Wei Zhi (via PR #149).
+// 2026-10-18, Claude Code (Fable 5), notification sound (follow-up to
+// issue #66, no issue yet): Preferences-card cases — the sound switch
+// defaults on (and writes the default back), flips and persists under
+// the same key the Notification Center's header toggle uses.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -967,5 +971,42 @@ describe('delete account', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('boom')
     expect(dialog).toBeInTheDocument()
     expect(JSON.parse(localStorage.getItem('user')!)).not.toBeNull()
+  })
+})
+
+describe('preferences', () => {
+  // the same key the Notification Center's header toggle writes — one
+  // device-wide preference, two surfaces
+  const SOUND_KEY = 'notificationSoundEnabled'
+
+  it('offers the notification sound switch, on by default', async () => {
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+
+    const toggle = screen.getByRole('switch', { name: 'Notification sound' })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    // the default is written back on first read, pinning default-ON
+    expect(localStorage.getItem(SOUND_KEY)).toBe('true')
+  })
+
+  it('flips and persists the preference', async () => {
+    const user = userEvent.setup()
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+
+    const toggle = screen.getByRole('switch', { name: 'Notification sound' })
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(localStorage.getItem(SOUND_KEY)).toBe('false')
+  })
+
+  it('renders a stored "false" as off', async () => {
+    localStorage.setItem(SOUND_KEY, 'false')
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+
+    expect(
+      screen.getByRole('switch', { name: 'Notification sound' }),
+    ).toHaveAttribute('aria-checked', 'false')
   })
 })

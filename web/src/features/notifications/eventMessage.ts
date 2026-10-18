@@ -11,6 +11,9 @@
 // break. Unknown event types render a safe fallback: new types can
 // appear without web changes (D18). Decisions the author's via options
 // Q&A.
+// 2026-10-18: request.dropped template (courier withdrew; same
+// degrade-without-name pattern as request.accepted); pending pull
+// request review.
 // Reviewed by: Leong Wei Zhi (via pull request).
 
 import type { NotificationDto } from './types'
@@ -81,6 +84,15 @@ const templates: Record<
     icon: '✔️',
     title: `${requestLabel(p)} marked as completed`,
   }),
+  'request.dropped': (p) => {
+    const courier = text(p, 'courierName')
+    return {
+      icon: '↩️',
+      title: courier
+        ? `${requestLabel(p)} dropped by ${courier}`
+        : `${requestLabel(p)} was dropped by its courier`,
+    }
+  },
   'request.cancelled': (p) => ({
     icon: '🚫',
     title: `${requestLabel(p)} cancelled`,
