@@ -33,6 +33,10 @@
  * 2026-10-18: accept and collect write request.accepted and
  * request.collected (the author's decision); completeAutomatically for
  * the auto-complete sweep.
+ * Same day, Claude Code (Fable 5): drop writes request.dropped so the
+ * requester is told (new event type, not request.cancelled — the
+ * reward stays held, F5.2; the author's decision via options Q&A);
+ * pending pull request review.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -139,11 +143,14 @@ public class RequestsService {
     }
 
     // Back to CREATED, so the courier fields go back to their
-    // "null until accepted" state. No request.cancelled here: the reward
-    // must stay held for the next courier (Order F5.2).
+    // "null until accepted" state. request.dropped tells the requester,
+    // not request.cancelled: the reward must stay held for the next
+    // courier (Order F5.2). Enqueued before the courier fields are
+    // cleared — the event names the courier who dropped.
     @Transactional
     public Requests drop(Long requestId, Long callerId) {
         Requests request = transition(asCourier(requestId, callerId), OrderEvents.DROP);
+        outbox.enqueue(RequestEvents.dropped(request));
         request.setCourierId(null);
         request.setAcceptedAt(null);
         return request;

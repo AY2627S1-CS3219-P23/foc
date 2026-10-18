@@ -16,6 +16,9 @@
  * plus the courier when one had accepted; the author's decisions).
  * 2026-10-18: request.accepted and request.collected, parties = the
  * requester and the courier (the author's decision).
+ * Same day, Claude Code (Fable 5): request.dropped for the DROP
+ * transition (parties = the requester only, the author's decision via
+ * options Q&A); pending pull request review.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -26,6 +29,7 @@ import foc.contracts.events.request.RequestCancelled;
 import foc.contracts.events.request.RequestCollected;
 import foc.contracts.events.request.RequestCompleted;
 import foc.contracts.events.request.RequestCreated;
+import foc.contracts.events.request.RequestDropped;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestRejected;
 import foc.contracts.events.request.RequestSubmitted;
@@ -82,6 +86,15 @@ final class RequestEvents {
     // request.collected: the courier has the item from the supplier
     static RequestCollected collected(Requests r) {
         return new RequestCollected(newEventId(), Instant.now(), PRODUCER, correlationId(r), requesterAndCourier(r),
+                id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
+                r.getDropoffLocation(), r.getItem());
+    }
+
+    // request.dropped: the courier withdrew after accepting; the request
+    // reopens and the reward stays held (F5.2), so only the requester is
+    // told. Built while the courier fields are still set.
+    static RequestDropped dropped(Requests r) {
+        return new RequestDropped(newEventId(), Instant.now(), PRODUCER, correlationId(r), parties(r),
                 id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
                 r.getDropoffLocation(), r.getItem());
     }
