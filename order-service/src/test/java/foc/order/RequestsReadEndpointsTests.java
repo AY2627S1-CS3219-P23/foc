@@ -8,7 +8,8 @@
  * parameter errors. Each test uses its own user ids, since the H2
  * database is shared by every test in the run.
  * Same day: the filters (supplier, reward range, deadline and created
- * ranges), the sort parameter, and their 400s.
+ * ranges), the sort parameter, and their 400s. Then: the open list hides
+ * requests past their deadline, and accepting one is a 409.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -95,6 +96,26 @@ class RequestsReadEndpointsTests {
 		assertEquals(3, item.get("creditAmount").intValue());
 		assertNull(item.get("requesterId"), "lists are trimmed");
 		assertNull(item.get("courierId"), "lists are trimmed");
+	}
+
+	@Test
+	void openRequestsHideThosePastTheirDeadline() throws Exception {
+		Long current = createdRequest();
+		Long overdue = createdRequest();
+		var stored = requestsRepository.findById(overdue).orElseThrow();
+		stored.setDeadline(Instant.now().minusSeconds(60));
+		requestsRepository.save(stored);
+
+		List<Long> ids = ids(getJson("/requests?size=100", stranger));
+
+		assertTrue(ids.contains(current));
+		assertFalse(ids.contains(overdue), "past its deadline, though still CREATED until the sweep runs");
+		// the requester still sees it in their own list
+		assertTrue(ids(getJson("/requests/mine?role=requester", requester)).contains(overdue));
+		// and accepting it is refused
+		send(post("/accept").contentType(MediaType.APPLICATION_JSON).content("{\"requestId\": " + overdue + "}"), courier)
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value("The request's deadline has passed"));
 	}
 
 	@Test

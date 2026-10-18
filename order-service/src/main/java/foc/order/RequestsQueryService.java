@@ -11,6 +11,7 @@
  * range, deadline and created ranges) and a sort parameter (createdAt,
  * newest first, or deadline, nearest first), through
  * RequestSpecifications; ranges checked as credit-service's history.
+ * Same day: the open list hides requests past their deadline.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -57,13 +58,15 @@ public class RequestsQueryService {
     }
 
     // Open errands for couriers (F2.1): CREATED only, so PENDING requests
-    // (reward not yet reserved) and everyone's later states stay hidden.
+    // (reward not yet reserved) and everyone's later states stay hidden;
+    // and only those whose deadline is still ahead, since the expiry
+    // sweep may not have run yet (the author's decision).
     public Page<Requests> openRequests(String state, RequestFilter filter, int page, int size) {
         OrderStates status = parseState(state);
         if (status != null && status != OrderStates.CREATED) {
             throw new InvalidRequestException("state must be CREATED");
         }
-        return find(status(OrderStates.CREATED), filter, page, size);
+        return find(allOf(status(OrderStates.CREATED), after("deadline", Instant.now())), filter, page, size);
     }
 
     // One request, if the caller is its requester, its courier or an

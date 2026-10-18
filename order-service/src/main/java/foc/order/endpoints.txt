@@ -2,7 +2,7 @@ All endpoints: POST with a JSON body and a bearer token; the caller is the token
 Answers: 200 success, 400 invalid /create fields, 401 no or invalid token, 404 unknown request or not the caller's step, 409 not allowed from the request's state (or the requester accepting their own request).
 
 /create param: -supplier id -supplier name -item -dropoff location -credit amount -deadline (caller becomes the requester) -> return success message + published event to tell credit service to reserve credits
-/accept param: request id (anyone but the requester; caller becomes the courier) -> return success or error message + publish event to tell the requester
+/accept param: request id (anyone but the requester; caller becomes the courier; 409 once the deadline has passed) -> return success or error message + publish event to tell the requester
 /collect request id (assigned courier only) -> returns success or error message + publish event to tell the requester
 /arrive request id (assigned courier only) -> returns success or error message + publish event to tell the requester the courier has arrived
 /drop request id (assigned courier only) -> returns success or error message (no event: the credits stay held)
@@ -10,7 +10,7 @@ Answers: 200 success, 400 invalid /create fields, 401 no or invalid token, 404 u
 /complete request id (requester only) -> returns success or error message + publish event for credit service to pay the courier
 
 Reads (GET, newest first, paged: page from 0, size 1-100, default 20):
-/requests?state=CREATED (any logged-in user) -> open errands for couriers, trimmed items; only CREATED
+/requests?state=CREATED (any logged-in user) -> open errands for couriers, trimmed items; only CREATED, deadline still ahead
 /requests/{id} (requester, assigned courier, or ADMIN/OWNER; else 404) -> the full request
 /requests/mine?role=requester|courier&state= (the caller) -> the caller's requests on that side
 /users/{id}/requests?state= (ADMIN/OWNER; else 403) -> that user's requests as requester or courier

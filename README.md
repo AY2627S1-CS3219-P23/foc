@@ -720,7 +720,8 @@ results and access rules were designed by the author and whose
 remaining details (CREATED-only open list, trimmed lists, newest first,
 page size 20, both roles in the admin view) the author chose; and the
 lists' filters (supplier, reward, deadline and created ranges) and sort,
-chosen by the author.
+chosen by the author; and past-deadline requests hidden from the open list
+and refused on accept (409), as the author chose.
 
 The issue #67 remaining scope (the server-side STOMP push gateway had
 merged earlier in PR #74): the web notification client

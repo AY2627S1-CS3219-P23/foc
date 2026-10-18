@@ -4,6 +4,7 @@
  * Scope: the read endpoints' query pieces as JPA Specifications, so the
  * optional filters (RequestFilter) combine into one paged query. Each
  * returns null when its value is absent, and null pieces are skipped.
+ * Same day: after(), for hiding past-deadline requests from the open list.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order.repository;
@@ -61,6 +62,11 @@ public final class RequestSpecifications {
     /** {@code field} at or after the instant. */
     public static Specification<Requests> notBefore(String field, Instant from) {
         return from == null ? null : (root, query, cb) -> cb.greaterThanOrEqualTo(root.get(field), from);
+    }
+
+    /** {@code field} strictly after the instant. */
+    public static Specification<Requests> after(String field, Instant instant) {
+        return (root, query, cb) -> cb.greaterThan(root.get(field), instant);
     }
 
     /** {@code field} strictly before the instant. */

@@ -39,6 +39,21 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Aung Ko Khant (order-service: hide past-deadline requests)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `GET /requests` lists only CREATED requests whose deadline
+  is still ahead (`RequestSpecifications.after`); `RequestsService.accept`
+  refuses a request past its deadline with 409 "The request's deadline
+  has passed"; tests (97 passing); README, `endpoints.txt`.
+- **Prompt(s):** "For read endpoints, can we hide requests that are
+  already past their deadline from couriers?" The expiry sweep runs
+  every 5 min, so such requests stay CREATED until it does. The tool
+  asked as neutral options; the author chose: the open-errands list only
+  (a courier's own deliveries unchanged), and accept refused with 409.
+- **Author review:** `mvn test` in a Maven container: 97 tests, 0
+  failures. To be reviewed via pull request.
+
 ## 2026-10-18 — Aung Ko Khant (order-service: list filters and sort)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate
