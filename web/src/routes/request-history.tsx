@@ -1,9 +1,14 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Sonnet 5.5), 2026-10-16.
-// Scope: Request History — finished (completed / cancelled / expired)
-// errands, as requester or as courier, paged, per
+// Scope: Request History — errands as requester or as courier, paged, per
 // web/docs/wireframes/order-history.png: a table on wide screens, cards on
-// mobile. Shows the credit effect for the viewer's side of each order.
+// mobile. Shows the credit effect for the viewer's side of each request.
+// 2026-10-18, Claude Code (Opus 5.5), Aung Ko Khant: on order-service's real
+// API (GET /requests/mine?role=&state=). A state filter (default Completed,
+// the author's choice) replaces the "history" scope; a courier's list
+// offers only the states a courier's request can end in. The backend has
+// no completion or cancellation time, so each row shows when it was
+// created (and an expiry its deadline).
 // Author review: [pending]
 
 import { useEffect, useState } from 'react'
@@ -11,38 +16,51 @@ import { Link } from 'react-router'
 
 import { orderApi } from '@/features/order/api'
 import { Banner } from '@/features/order/components/Banner'
+import { StateFilter } from '@/features/order/components/StateFilter'
 import { StatusChip } from '@/features/order/components/StatusChip'
-import { formatDateTime } from '@/features/order/status'
-import type { Order, OrderRole } from '@/features/order/types'
+import { formatDateTime, statusLabels } from '@/features/order/status'
+import type {
+  RequestRole,
+  RequestStatus,
+  RequestSummary,
+} from '@/features/order/types'
 import { errorMessage } from '@/lib/api/http'
 import { Pagination } from '@/shared/components/Pagination'
 
 const PAGE_SIZE = 10
 
-const tabs: { role: OrderRole; label: string }[] = [
+const tabs: { role: RequestRole; label: string }[] = [
   { role: 'requester', label: 'As Requester (My requests)' },
   { role: 'courier', label: 'As Courier (Deliveries)' },
 ]
 
-function finishedLine(o: Order): string {
-  const created = `Created ${formatDateTime(o.createdAt)}`
-  if (o.status === 'COMPLETED')
-    return `${created} | Completed ${formatDateTime(o.updatedAt)}`
-  if (o.status === 'CANCELLED')
-    return `${created} | Cancelled ${formatDateTime(o.updatedAt)}`
-  return `${created} | Expired ${formatDateTime(o.deadline)}`
+// A courier is only on a request from acceptance on: theirs can't be
+// cancelled (only an unaccepted request can) or rejected.
+const filters: Record<RequestRole, (RequestStatus | undefined)[]> = {
+  requester: ['COMPLETED', 'CANCELLED', 'EXPIRED', 'REJECTED', undefined],
+  courier: ['COMPLETED', 'EXPIRED', undefined],
 }
 
-// What this order did to the viewer's balance, e.g. "+3" for a courier.
-function creditEffect(o: Order, role: OrderRole): string {
-  if (o.status !== 'COMPLETED') return `${o.reward} credits`
-  return role === 'courier' ? `+${o.reward} credits` : `−${o.reward} credits`
+function dateLine(r: RequestSummary): string {
+  const created = `Created ${formatDateTime(r.createdAt)}`
+  if (r.status === 'EXPIRED')
+    return `${created} | Expired ${formatDateTime(r.deadline)}`
+  return created
+}
+
+// What this request did to the viewer's balance, e.g. "+3" for a courier.
+function creditEffect(r: RequestSummary, role: RequestRole): string {
+  if (r.status !== 'COMPLETED') return `${r.creditAmount} credits`
+  return role === 'courier'
+    ? `+${r.creditAmount} credits`
+    : `−${r.creditAmount} credits`
 }
 
 export function RequestHistory() {
-  const [role, setRole] = useState<OrderRole>('requester')
+  const [role, setRole] = useState<RequestRole>('requester')
+  const [state, setState] = useState<RequestStatus | undefined>('COMPLETED')
   const [page, setPage] = useState(0)
-  const [orders, setOrders] = useState<Order[]>([])
+  const [requests, setRequests] = useState<RequestSummary[]>([])
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
@@ -51,16 +69,16 @@ export function RequestHistory() {
   useEffect(() => {
     let cancelled = false
     orderApi
-      .listMyOrders({ as: role, scope: 'history', page, size: PAGE_SIZE })
+      .listMyRequests({ role, state, page, size: PAGE_SIZE })
       .then((result) => {
         if (cancelled) return
-        setOrders(result.content)
+        setRequests(result.content)
         setTotal(result.totalElements)
         setTotalPages(result.totalPages)
         setError(null)
         // Defensive: if the page we asked for no longer exists, step back to
         // the last one that does instead of showing an empty, unpageable
-        // list. (History only grows today, so this should not fire.)
+        // list.
         if (page > 0 && page >= result.totalPages) {
           setPage(Math.max(0, result.totalPages - 1))
         }
@@ -75,17 +93,26 @@ export function RequestHistory() {
     return () => {
       cancelled = true
     }
-  }, [role, page])
+  }, [role, state, page])
 
-  function selectRole(next: OrderRole) {
+  function selectRole(next: RequestRole) {
     if (next === role) return
     setLoading(true)
     setRole(next)
+    // keep the state if the other side offers it, else back to Completed
+    if (!filters[next].includes(state)) setState('COMPLETED')
+    setPage(0)
+  }
+
+  function selectState(next: RequestStatus | undefined) {
+    if (next === state) return
+    setLoading(true)
+    setState(next)
     setPage(0)
   }
 
   const from = total === 0 ? 0 : page * PAGE_SIZE + 1
-  const to = page * PAGE_SIZE + orders.length
+  const to = page * PAGE_SIZE + requests.length
 
   return (
     <div className="space-y-6">
@@ -127,16 +154,24 @@ export function RequestHistory() {
         ))}
       </div>
 
+      <StateFilter
+        label="Filter by state"
+        options={filters[role]}
+        value={state}
+        onChange={selectState}
+      />
+
       {error && <Banner kind="error">{error}</Banner>}
 
       {loading ? (
         <p className="text-sm text-gray-500">Loading history…</p>
-      ) : orders.length === 0 ? (
+      ) : requests.length === 0 ? (
         <div className="rounded-lg border border-gray-200 bg-white py-10 text-center">
           <p className="font-medium text-gray-900">Nothing here yet.</p>
           <p className="mt-1 text-sm text-gray-500">
-            Finished {role === 'requester' ? 'requests' : 'deliveries'} will
-            show up here.
+            {state
+              ? `${statusLabels[state]} ${role === 'requester' ? 'requests' : 'deliveries'} will show up here.`
+              : `Your ${role === 'requester' ? 'requests' : 'deliveries'} will show up here.`}
           </p>
         </div>
       ) : (
@@ -147,7 +182,7 @@ export function RequestHistory() {
               <thead className="border-b border-gray-200 text-xs tracking-wide text-gray-500 uppercase">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Request ID</th>
-                  <th className="px-4 py-3 font-semibold">Description</th>
+                  <th className="px-4 py-3 font-semibold">Item</th>
                   <th className="px-4 py-3 font-semibold">Pickup</th>
                   <th className="px-4 py-3 font-semibold">Drop-off</th>
                   <th className="px-4 py-3 font-semibold">Reward</th>
@@ -155,30 +190,28 @@ export function RequestHistory() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {orders.map((o) => (
-                  <tr key={o.id}>
+                {requests.map((r) => (
+                  <tr key={r.id}>
                     <td className="px-4 py-3 font-semibold text-gray-900">
-                      #{o.id}
+                      #{r.id}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="block text-gray-900">
-                        {o.description}
-                      </span>
+                      <span className="block text-gray-900">{r.item}</span>
                       <span className="block text-xs text-gray-400">
-                        {finishedLine(o)}
+                        {dateLine(r)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-700">
-                      {o.supplierName}
+                      {r.supplierName}
                     </td>
                     <td className="px-4 py-3 text-gray-700">
-                      {o.dropoffLocation}
+                      {r.dropoffLocation}
                     </td>
                     <td className="px-4 py-3 font-semibold whitespace-nowrap text-gray-900">
-                      {creditEffect(o, role)}
+                      {creditEffect(r, role)}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusChip status={o.status} />
+                      <StatusChip status={r.status} />
                     </td>
                   </tr>
                 ))}
@@ -188,31 +221,29 @@ export function RequestHistory() {
 
           {/* Mobile: cards */}
           <ul className="space-y-3 md:hidden">
-            {orders.map((o) => (
+            {requests.map((r) => (
               <li
-                key={o.id}
+                key={r.id}
                 className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-gray-900">
-                    Request #{o.id}
+                    Request #{r.id}
                   </span>
-                  <StatusChip status={o.status} />
+                  <StatusChip status={r.status} />
                 </div>
-                <p className="mt-1 font-medium text-gray-900">
-                  {o.description}
-                </p>
+                <p className="mt-1 font-medium text-gray-900">{r.item}</p>
                 <p className="mt-2 text-sm text-gray-600">
-                  <span className="font-semibold">Pick:</span> {o.supplierName}
+                  <span className="font-semibold">Pick:</span> {r.supplierName}
                 </p>
                 <p className="text-sm text-gray-600">
                   <span className="font-semibold">Drop:</span>{' '}
-                  {o.dropoffLocation}
+                  {r.dropoffLocation}
                 </p>
                 <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-2 text-xs text-gray-400">
-                  <span>{formatDateTime(o.updatedAt)}</span>
+                  <span>{formatDateTime(r.createdAt)}</span>
                   <span className="text-sm font-semibold text-gray-900">
-                    {creditEffect(o, role)}
+                    {creditEffect(r, role)}
                   </span>
                 </div>
               </li>

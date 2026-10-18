@@ -5,6 +5,10 @@
 // deadline, with the insufficient-credits / past-deadline checks listed
 // before submit. These checks are a convenience: order-service and
 // credit-service re-check on submit, and their refusal is shown as-is.
+// 2026-10-18, Claude Code (Opus 5.5), Aung Ko Khant: posts order-service's
+// real /create body — item, creditAmount, the supplier's id (as a number)
+// and name, dropoffLocation, deadline. The request starts PENDING while
+// credit-service reserves the reward, so the notice says so.
 // Author review: [pending]
 
 import { useEffect, useState } from 'react'
@@ -38,7 +42,7 @@ export function CreateRequest() {
 
   const [supplierId, setSupplierId] = useState('')
   const [dropoff, setDropoff] = useState('')
-  const [description, setDescription] = useState('')
+  const [item, setItem] = useState('')
   const [reward, setReward] = useState(DEFAULT_REWARD)
   const [deadline, setDeadline] = useState(() =>
     toLocalInput(new Date(Date.now() + DEFAULT_LEAD_MS)),
@@ -100,33 +104,30 @@ export function CreateRequest() {
   const missing = {
     supplier: attempted && !supplierId,
     dropoff: attempted && !dropoff.trim(),
-    description: attempted && !description.trim(),
+    item: attempted && !item.trim(),
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setAttempted(true)
     setSubmitError(null)
-    if (
-      !supplierId ||
-      !dropoff.trim() ||
-      !description.trim() ||
-      issues.length > 0
-    )
+    if (!supplierId || !dropoff.trim() || !item.trim() || issues.length > 0)
       return
 
     setSubmitting(true)
     try {
-      const order = await orderApi.createOrder({
-        supplierId,
+      const supplier = suppliers.find((s) => s.id === supplierId)
+      const created = await orderApi.createRequest({
+        supplierId: Number(supplierId),
+        supplierName: supplier?.name ?? '',
         dropoffLocation: dropoff.trim(),
-        description: description.trim(),
-        reward,
+        item: item.trim(),
+        creditAmount: reward,
         deadline: new Date(deadline).toISOString(),
       })
       navigate('/my-requests', {
         state: {
-          notice: `Request #${order.id} created — ${credits(order.reward)} reserved.`,
+          notice: `Request #${created.id} created — reserving ${credits(reward)} from your balance.`,
         },
       })
     } catch (err) {
@@ -211,22 +212,22 @@ export function CreateRequest() {
 
           <div>
             <label
-              htmlFor="description"
+              htmlFor="item"
               className="mb-1 block text-sm font-medium text-gray-700"
             >
-              Item description
+              Item
             </label>
             <textarea
-              id="description"
+              id="item"
               rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              value={item}
+              onChange={(e) => setItem(e.target.value)}
               placeholder="e.g. 1x Iced Latte, 1x Croissant"
               maxLength={500}
-              aria-invalid={missing.description}
+              aria-invalid={missing.item}
               className={fieldClass}
             />
-            {missing.description && (
+            {missing.item && (
               <p className="mt-1 text-xs text-red-600">
                 Describe what to collect.
               </p>

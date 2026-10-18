@@ -2,53 +2,71 @@
 // Tool: Claude Code (Sonnet 5.5), 2026-10-16.
 // Scope: status labels/colours, the five-step progress tracker and the
 // date/credit formatting shared by the order pages.
+// 2026-10-18, Claude Code (Opus 5.5), Aung Ko Khant: order-service's states
+// (PENDING and REJECTED added; OPEN / PICKED_UP / DELIVERED renamed
+// CREATED / COLLECTED / ARRIVED; DISPUTED removed), and the date lines use
+// the fields the backend has (no updatedAt).
 // Author review: [pending]
 
-import type { Order, OrderStatus } from './types'
+import type { RequestDetail, RequestStatus, RequestSummary } from './types'
 
 export const AUTO_COMPLETE_MS = 60 * 60 * 1000 // 1 hour after courier arrival
 
-export const statusLabels: Record<OrderStatus, string> = {
-  OPEN: 'Open',
+export const statusLabels: Record<RequestStatus, string> = {
+  PENDING: 'Reserving credits',
+  CREATED: 'Open',
   ACCEPTED: 'Accepted',
-  PICKED_UP: 'Collected',
-  DELIVERED: 'Delivered',
+  COLLECTED: 'Collected',
+  ARRIVED: 'Arrived',
   COMPLETED: 'Completed',
   CANCELLED: 'Cancelled',
   EXPIRED: 'Expired',
-  DISPUTED: 'In dispute',
+  REJECTED: 'Rejected',
 }
 
-export const statusChipClasses: Record<OrderStatus, string> = {
-  OPEN: 'bg-blue-50 text-blue-700',
+export const statusChipClasses: Record<RequestStatus, string> = {
+  PENDING: 'bg-yellow-50 text-yellow-700',
+  CREATED: 'bg-blue-50 text-blue-700',
   ACCEPTED: 'bg-gray-100 text-gray-700',
-  PICKED_UP: 'bg-amber-50 text-amber-700',
-  DELIVERED: 'bg-purple-50 text-purple-700',
+  COLLECTED: 'bg-amber-50 text-amber-700',
+  ARRIVED: 'bg-purple-50 text-purple-700',
   COMPLETED: 'bg-green-50 text-green-700',
   CANCELLED: 'bg-gray-100 text-gray-500',
   EXPIRED: 'bg-gray-100 text-gray-500',
-  DISPUTED: 'bg-red-50 text-red-700',
+  REJECTED: 'bg-red-50 text-red-700',
 }
+
+// every state, in lifecycle order, for the filter chips
+export const allStatuses: RequestStatus[] = [
+  'PENDING',
+  'CREATED',
+  'ACCEPTED',
+  'COLLECTED',
+  'ARRIVED',
+  'COMPLETED',
+  'CANCELLED',
+  'EXPIRED',
+  'REJECTED',
+]
 
 export const progressSteps = [
   'Created',
   'Accepted',
   'Collected',
-  'Delivered',
+  'Arrived',
   'Completed',
 ] as const
 
-// How many steps of progressSteps are reached (1 = just created).
-export function progressOf(status: OrderStatus): number {
+// How many progress steps the request has reached (0: not yet created).
+export function progressOf(status: RequestStatus): number {
   switch (status) {
-    case 'OPEN':
+    case 'CREATED':
       return 1
     case 'ACCEPTED':
       return 2
-    case 'PICKED_UP':
+    case 'COLLECTED':
       return 3
-    case 'DELIVERED':
-    case 'DISPUTED':
+    case 'ARRIVED':
       return 4
     case 'COMPLETED':
       return 5
@@ -57,9 +75,12 @@ export function progressOf(status: OrderStatus): number {
   }
 }
 
-export function isTerminal(status: OrderStatus): boolean {
+export function isTerminal(status: RequestStatus): boolean {
   return (
-    status === 'COMPLETED' || status === 'CANCELLED' || status === 'EXPIRED'
+    status === 'COMPLETED' ||
+    status === 'CANCELLED' ||
+    status === 'EXPIRED' ||
+    status === 'REJECTED'
   )
 }
 
@@ -97,24 +118,21 @@ export function relativeTime(iso: string, now = Date.now()): string {
   return diffMs >= 0 ? `in ${text}` : `${text} ago`
 }
 
-// The line shown under an order's deadline, depending on where it ended up.
-export function deadlineLine(order: Order): string {
-  switch (order.status) {
-    case 'OPEN':
-      return `${formatDateTime(order.deadline)} (${relativeTime(order.deadline)})`
-    case 'COMPLETED':
-      return `Completed ${formatDateTime(order.updatedAt)}`
-    case 'CANCELLED':
-      return `Cancelled ${formatDateTime(order.updatedAt)}`
+// The line shown under a request's deadline, depending on where it ended up.
+export function deadlineLine(request: RequestSummary): string {
+  switch (request.status) {
+    case 'PENDING':
+    case 'CREATED':
+      return `${formatDateTime(request.deadline)} (${relativeTime(request.deadline)})`
     case 'EXPIRED':
-      return `Expired ${formatDateTime(order.deadline)}`
+      return `Expired ${formatDateTime(request.deadline)}`
     default:
-      return `${formatDateTime(order.deadline)}`
+      return formatDateTime(request.deadline)
   }
 }
 
-// When a DELIVERED order completes by itself, or null if it isn't waiting.
-export function autoCompleteAt(order: Order): Date | null {
-  if (order.status !== 'DELIVERED' || !order.deliveredAt) return null
-  return new Date(new Date(order.deliveredAt).getTime() + AUTO_COMPLETE_MS)
+// When an ARRIVED request completes by itself, or null if it isn't waiting.
+export function autoCompleteAt(request: RequestDetail): Date | null {
+  if (request.status !== 'ARRIVED' || !request.arrivedAt) return null
+  return new Date(new Date(request.arrivedAt).getTime() + AUTO_COMPLETE_MS)
 }

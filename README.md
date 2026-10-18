@@ -121,7 +121,8 @@
   for the order-service ownership checks, then for the manual-testing
   scripts, stubs and the gateway order route, then for the /create field
   checks, the accepted / collected events and the expiry and
-  auto-complete timers, then for the read endpoints and their filters.
+  auto-complete timers, then for the read endpoints and their filters,
+  then for the web order pages on the real order API.
   2026-10-14: AI Use Summary extended for the credit request event
   listener (issue #171) by Claude Code (Opus 5.5).
   2026-10-14: the #67 clause extended for the PR #185 human-review
@@ -724,7 +725,10 @@ remaining details (CREATED-only open list, trimmed lists, newest first,
 page size 20, both roles in the admin view) the author chose; and the
 lists' filters (supplier, reward, deadline and created ranges) and sort,
 chosen by the author; and past-deadline requests hidden from the open list
-and refused on accept (409), as the author chose.
+and refused on accept (409), as the author chose; and the order pages in `web/` moved onto
+order-service's real API (types, calls, states, the dev mock and tests
+rewritten; dispute and re-release removed), with the username lookup, the
+state filters and keeping the mock chosen by the author.
 
 The issue #67 remaining scope (the server-side STOMP push gateway had
 merged earlier in PR #74): the web notification client

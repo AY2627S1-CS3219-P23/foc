@@ -4,11 +4,17 @@
 // request (mark picked up, mark arrived at drop-off, cancel before pickup,
 // which reopens it), per web/docs/wireframes/active-delivery.png. The
 // wireframe's chat panel belongs to a separate nice-to-have and is not
-// built here. Anyone who isn't the courier sees the details read-only; the
-// real gate is order-service refusing their calls.
+// built here. The requester sees the details read-only; the real gate is
+// order-service refusing their calls.
+// 2026-10-18, Claude Code (Opus 5.5), Aung Ko Khant: on order-service's real
+// API — GET /requests/{id} (requester, courier or admin only; anyone else
+// 404) and POST /collect, /arrive, /drop. Steps answer a message, so the
+// request is reloaded after each; after a drop the courier can no longer
+// read it, so the page goes back to the feed. The requester's name comes
+// from user-service. States renamed (COLLECTED, ARRIVED); DISPUTED gone.
 // Author review: [pending]
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 
 import { orderApi } from '@/features/order/api'
@@ -19,55 +25,37 @@ import {
   credits,
   formatDateTime,
 } from '@/features/order/status'
-import type { Order } from '@/features/order/types'
+import type { RequestDetail } from '@/features/order/types'
 import { useCurrentUserId } from '@/features/order/useCurrentUserId'
+import { useUsername } from '@/features/order/useUsername'
 import { errorMessage } from '@/lib/api/http'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
 
 // React Router keeps this component mounted when only :id changes (back/
 // forward between two deliveries). Keying the view on the id remounts it,
-// so the previous order's details, buttons, notices and errors can never
+// so the previous request's details, buttons, notices and errors can never
 // show under the new URL.
 export function ActiveDelivery() {
   const { id } = useParams()
-  return <ActiveDeliveryView key={id} orderId={Number(id)} />
+  return <ActiveDeliveryView key={id} requestId={Number(id)} />
 }
 
-function ActiveDeliveryView({ orderId }: { orderId: number }) {
+function ActiveDeliveryView({ requestId }: { requestId: number }) {
   const navigate = useNavigate()
   const userId = useCurrentUserId()
-  const [order, setOrder] = useState<Order | null>(null)
+  const [request, setRequest] = useState<RequestDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [confirmingCancel, setConfirmingCancel] = useState(false)
+  const [confirmingDrop, setConfirmingDrop] = useState(false)
+  const requester = useUsername(request?.requesterId ?? null)
 
-  useEffect(() => {
-    let cancelled = false
-    if (!Number.isInteger(orderId)) return
-    orderApi
-      .getOrder(orderId)
-      .then((o) => {
-        if (!cancelled) setOrder(o)
-      })
-      .catch((err) => {
-        if (!cancelled)
-          setError(errorMessage(err, 'Could not load this request. Try again.'))
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [orderId])
-
-  // Orders the view's writes to `order`: every action and every recovery
-  // refetch takes a number, and only the newest one (on a still-mounted
-  // view) may update the screen, so a slow stale response can't revert a
-  // newer result or land after the user has navigated away.
-  const writeSeq = useRef(0)
+  // Orders the view's writes to `request`: every load takes a number, and
+  // only the newest one (on a still-mounted view) may update the screen,
+  // so a slow stale response can't revert a newer result or land after
+  // the user has navigated away.
+  const loadSeq = useRef(0)
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
@@ -76,39 +64,57 @@ function ActiveDeliveryView({ orderId }: { orderId: number }) {
     }
   }, [])
 
+  const reload = useCallback(() => {
+    const seq = ++loadSeq.current
+    return orderApi.getRequest(requestId).then(
+      (fresh) => {
+        if (mounted.current && seq === loadSeq.current) setRequest(fresh)
+      },
+      (err) => {
+        if (mounted.current && seq === loadSeq.current) {
+          setRequest(null)
+          setError(errorMessage(err, 'Could not load this request. Try again.'))
+        }
+      },
+    )
+  }, [requestId])
+
+  useEffect(() => {
+    if (!Number.isInteger(requestId)) return
+    reload().finally(() => {
+      if (mounted.current) setLoading(false)
+    })
+  }, [requestId, reload])
+
+  // Runs a step, then reloads the request: the step answers only a
+  // message, and after a failure the request may have changed under us
+  // (requester cancelled, deadline passed…).
   async function act(
-    action: (orderId: number) => Promise<Order>,
+    action: (id: number) => Promise<unknown>,
     success: string,
-  ) {
-    if (!order) return
+  ): Promise<boolean> {
+    if (!request) return false
     setBusy(true)
     setError(null)
+    let ok = false
     try {
-      const updated = await action(order.id)
-      writeSeq.current++
-      setOrder(updated)
+      await action(request.id)
       setNotice(success)
-      return updated
+      ok = true
     } catch (err) {
       setNotice(null)
       setError(errorMessage(err, 'That did not go through. Try again.'))
-      // the order may have changed under us (requester cancelled, expired…)
-      const seq = ++writeSeq.current
-      orderApi.getOrder(order.id).then(
-        (fresh) => {
-          if (mounted.current && seq === writeSeq.current) setOrder(fresh)
-        },
-        () => {},
-      )
     } finally {
       setBusy(false)
     }
+    await reload()
+    return ok
   }
 
-  if (loading && Number.isInteger(orderId)) {
+  if (loading && Number.isInteger(requestId)) {
     return <p className="text-sm text-gray-500">Loading delivery…</p>
   }
-  if (!order) {
+  if (!request) {
     return (
       <div className="space-y-4">
         <Banner kind="error">{error ?? 'That request does not exist.'}</Banner>
@@ -122,8 +128,8 @@ function ActiveDeliveryView({ orderId }: { orderId: number }) {
     )
   }
 
-  const isCourier = userId !== null && order.courierId === userId
-  const autoAt = autoCompleteAt(order)
+  const isCourier = userId !== null && request.courierId === userId
+  const autoAt = autoCompleteAt(request)
   const primary =
     'rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50'
   const outline =
@@ -140,11 +146,11 @@ function ActiveDeliveryView({ orderId }: { orderId: number }) {
 
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">
-          Active Delivery — Request #{order.id}
+          Active Delivery — Request #{request.id}
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           {isCourier
-            ? 'Please pick up the items and deliver them to the student.'
+            ? 'Please pick up the item and deliver it to the student.'
             : 'You are viewing this request read-only.'}
         </p>
       </div>
@@ -155,40 +161,43 @@ function ActiveDeliveryView({ orderId }: { orderId: number }) {
       <section className="max-w-3xl rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <h2 className="font-semibold text-gray-900">Request details</h2>
-          <StatusChip status={order.status} />
+          <StatusChip status={request.status} />
         </div>
 
         <dl className="mt-4 grid grid-cols-[6rem_1fr] gap-x-4 gap-y-3 text-sm">
           <dt className="text-xs font-medium tracking-wide text-gray-400 uppercase">
             Item
           </dt>
-          <dd className="text-gray-900">{order.description}</dd>
+          <dd className="text-gray-900">{request.item}</dd>
           <dt className="text-xs font-medium tracking-wide text-gray-400 uppercase">
             Reward
           </dt>
           <dd className="font-semibold text-gray-900">
-            {credits(order.reward)}
+            {credits(request.creditAmount)}
           </dd>
           <dt className="text-xs font-medium tracking-wide text-gray-400 uppercase">
             Requester
           </dt>
-          <dd className="text-gray-900">{order.requesterUsername}</dd>
+          <dd className="text-gray-900">{requester}</dd>
           <dt className="text-xs font-medium tracking-wide text-gray-400 uppercase">
             Pickup from
           </dt>
-          <dd className="text-gray-900">
-            <span className="font-medium">{order.supplierName}</span>
-            <span className="block text-gray-500">{order.pickupLocation}</span>
-          </dd>
+          <dd className="font-medium text-gray-900">{request.supplierName}</dd>
           <dt className="text-xs font-medium tracking-wide text-gray-400 uppercase">
             Drop off to
           </dt>
-          <dd className="font-medium text-gray-900">{order.dropoffLocation}</dd>
+          <dd className="font-medium text-gray-900">
+            {request.dropoffLocation}
+          </dd>
+          <dt className="text-xs font-medium tracking-wide text-gray-400 uppercase">
+            Deadline
+          </dt>
+          <dd className="text-gray-900">{formatDateTime(request.deadline)}</dd>
         </dl>
 
         {isCourier && (
           <div className="mt-6 space-y-4 border-t border-gray-100 pt-5">
-            {order.status === 'ACCEPTED' && (
+            {request.status === 'ACCEPTED' && (
               <>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -196,7 +205,7 @@ function ActiveDeliveryView({ orderId }: { orderId: number }) {
                     disabled={busy}
                     onClick={() =>
                       act(
-                        orderApi.markPickedUp,
+                        orderApi.collect,
                         'Marked as picked up. Head to the drop-off.',
                       )
                     }
@@ -207,7 +216,7 @@ function ActiveDeliveryView({ orderId }: { orderId: number }) {
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => setConfirmingCancel(true)}
+                    onClick={() => setConfirmingDrop(true)}
                     className={outline}
                   >
                     Cancel delivery
@@ -220,7 +229,7 @@ function ActiveDeliveryView({ orderId }: { orderId: number }) {
               </>
             )}
 
-            {order.status === 'PICKED_UP' && (
+            {request.status === 'COLLECTED' && (
               <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="font-semibold text-gray-900">
@@ -239,7 +248,7 @@ function ActiveDeliveryView({ orderId }: { orderId: number }) {
                   disabled={busy}
                   onClick={() =>
                     act(
-                      orderApi.markArrived,
+                      orderApi.arrive,
                       'Marked as arrived. Waiting for the requester to confirm.',
                     )
                   }
@@ -250,55 +259,56 @@ function ActiveDeliveryView({ orderId }: { orderId: number }) {
               </div>
             )}
 
-            {order.status === 'DELIVERED' && (
+            {request.status === 'ARRIVED' && (
               <p className="text-sm text-gray-600">
                 Waiting for the requester to confirm delivery.
                 {autoAt &&
                   ` If they don’t respond, it completes automatically at ${formatDateTime(autoAt.toISOString())}.`}
               </p>
             )}
-            {order.status === 'COMPLETED' && (
+            {request.status === 'COMPLETED' && (
               <p className="text-sm font-medium text-green-700">
-                Delivery complete — {credits(order.reward)} added to your
-                balance.
+                Delivery complete — {credits(request.creditAmount)} added to
+                your balance.
               </p>
             )}
-            {order.status === 'DISPUTED' && (
-              <p className="text-sm text-red-700">
-                The requester disputed this delivery. An admin will review it.
-              </p>
-            )}
-            {(order.status === 'OPEN' ||
-              order.status === 'CANCELLED' ||
-              order.status === 'EXPIRED') && (
+            {request.status === 'EXPIRED' && (
               <p className="text-sm text-gray-500">
-                This delivery is no longer assigned to you.
+                The deadline passed before pickup, so this request expired.
               </p>
             )}
           </div>
         )}
       </section>
 
-      {confirmingCancel && (
+      {confirmingDrop && (
         <ConfirmModal
           title="Cancel this delivery?"
           confirmLabel="Cancel delivery"
           busyLabel="Cancelling…"
           busy={busy}
           danger
-          onCancel={() => setConfirmingCancel(false)}
+          onCancel={() => setConfirmingDrop(false)}
           onConfirm={async () => {
-            const updated = await act(
-              orderApi.courierCancel,
-              `You cancelled Request #${order.id}.`,
-            )
-            setConfirmingCancel(false)
-            if (updated) navigate('/requests', { replace: true })
+            setBusy(true)
+            setError(null)
+            try {
+              await orderApi.drop(request.id)
+              setConfirmingDrop(false)
+              // no longer the courier, so the request can't be read here
+              navigate('/requests', { replace: true })
+            } catch (err) {
+              setConfirmingDrop(false)
+              setError(errorMessage(err, 'That did not go through. Try again.'))
+              await reload()
+            } finally {
+              if (mounted.current) setBusy(false)
+            }
           }}
         >
           <p className="text-sm text-gray-600">
-            Request #{order.id} returns to the open feed and you will no longer
-            be assigned to it.
+            Request #{request.id} returns to the open feed and you will no
+            longer be assigned to it.
           </p>
         </ConfirmModal>
       )}

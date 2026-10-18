@@ -1,333 +1,349 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Sonnet 5.5), 2026-10-16.
 // Scope: in-memory stand-in for order-service (and the credit balance), so
-// the requester/courier pages can be used in the browser before the
-// backend exists. Same signatures as the real orderApi. It enforces the
-// rules the real service must (nobody accepts their own request; only one
-// courier wins an accept; transitions only from valid states; deadlines
-// expire open orders; a delivered order auto-completes after an hour) so
-// the pages' error handling can be exercised, but it is NOT a spec for the
-// backend. It starts with NO orders (only a supplier list and a balance),
-// so create some through the UI. State lives in module memory: a page
-// reload resets it.
+// the requester/courier pages can be used in the browser without the
+// backend. Same signatures as the real orderApi. State lives in module
+// memory: a page reload resets it. It starts with NO requests (only a
+// supplier list and a balance), so create some through the UI.
 // The mock's signed-in user is whoever GET /users/me says (the real
 // user-service, or adminApiMock.ts under VITE_MOCK_ADMIN_API=true), read at
 // the start of every call — so it always agrees with the pages' own idea of
 // who is signed in, and fails loudly if /users/me does.
-//
-// TEMPORARY: delete with the switch in api.ts once order-service is live.
+// 2026-10-18, Claude Code (Opus 5.5), Aung Ko Khant: rewritten to
+// order-service's real contract (the author kept the mock rather than
+// deleting it) and its rules, so the pages behave the same against either:
+// a new request is PENDING and is reserved (CREATED) or REJECTED a moment
+// later, standing in for credit-service; steps answer {"message"}; collect /
+// arrive / drop are the assigned courier's and cancel / complete the
+// requester's, anyone else gets a 404; a self-accept or an accept past the
+// deadline is a 409; the open list is CREATED with the deadline ahead; and
+// the expiry and 1-hour auto-complete timers run on every call. It is NOT a
+// spec for the backend: order-service is.
 // Author review: [pending]
 
 import { adminUserApi } from '@/features/user/adminApi'
 import { ApiError } from '@/lib/api/http'
 import type { CreditBalance } from '@/features/credit/types'
 import type { PagedResponse } from '@/features/supplier/types'
-import { AUTO_COMPLETE_MS, isTerminal } from './status'
+import { AUTO_COMPLETE_MS } from './status'
 import type {
-  CreateOrderInput,
-  DisputeInput,
-  ListOrdersParams,
-  Order,
-  OrderStatus,
+  CreateRequestInput,
+  ListMineParams,
+  ListOpenParams,
+  MessageResponse,
+  RequestDetail,
+  RequestStatus,
+  RequestSummary,
   SupplierOption,
 } from './types'
 
 // the signed-in user, refreshed by enter() at the start of every call
 let meId = 0
-let meName = ''
+const names = new Map<number, string>()
 const STARTING_CREDITS = 42
-
-const MIN = 60_000
-const HOUR = 60 * MIN
+// how long the stand-in credit-service takes to reserve a reward
+const RESERVE_DELAY_MS = 1500
 
 const suppliers: SupplierOption[] = [
-  { id: 's1', name: 'CoffeeBean@Com3', location: 'COM3 Level 1' },
-  { id: 's2', name: 'Printers@PCCommons', location: 'PC Commons, UTown' },
-  { id: 's3', name: 'Fine Foods UTown', location: 'Stephen Riady Centre' },
-  { id: 's4', name: 'Science Library Counter', location: 'Science Library' },
-  { id: 's5', name: 'Yusof Ishak House Coop', location: 'YIH Level 1' },
-  { id: 's6', name: 'UTown POPStation', location: 'UTown Plaza' },
-  { id: 's7', name: 'Mochtar Riady Building Cafe', location: 'BIZ 2, Level 4' },
-  { id: 's8', name: 'PGP Mailroom', location: 'Prince George’s Park' },
+  { id: '1', name: 'CoffeeBean@Com3', location: 'COM3 Level 1' },
+  { id: '2', name: 'Printers@PCCommons', location: 'PC Commons, UTown' },
+  { id: '3', name: 'Fine Foods UTown', location: 'Stephen Riady Centre' },
+  { id: '4', name: 'Science Library Counter', location: 'Science Library' },
+  { id: '5', name: 'Yusof Ishak House Coop', location: 'YIH Level 1' },
+  { id: '6', name: 'UTown POPStation', location: 'UTown Plaza' },
+  { id: '7', name: 'Mochtar Riady Building Cafe', location: 'BIZ 2, Level 4' },
+  { id: '8', name: 'PGP Mailroom', location: 'Prince George’s Park' },
 ]
 
-const iso = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString()
-
 let nextId = 1
-const orders: Order[] = []
+const requests: RequestDetail[] = []
+// requests waiting for the stand-in credit-service, with when they arrived
+const pendingSince = new Map<number, number>()
+let myTotal = STARTING_CREDITS
 
 // ---- rules ----
 
-// Simulated latency, then the identity the call runs as. A failing
-// /users/me rejects the call, so a mismatched setup shows up as an error
-// on the page instead of orders quietly belonging to someone else.
+// Simulated latency, then the identity the call runs as.
 async function enter() {
   await new Promise<void>((resolve) => setTimeout(resolve, 250))
   const user = await adminUserApi.getCurrentUser()
   meId = user.id
-  meName = user.username
+  names.set(user.id, user.username)
+  sweep()
 }
 
-function fail(status: number, title: string, detail: string): never {
-  throw new ApiError(status, { status, title, detail })
+// order-service's error body is {"message"}; api.ts turns it into this
+function fail(status: number, message: string): never {
+  throw new ApiError(status, { status, detail: message })
 }
 
-// Time-driven transitions (the real service would do these in the
-// background): unaccepted orders past their deadline expire, and a
-// delivered order the requester never answered completes itself.
+function heldBy(userId: number) {
+  return requests
+    .filter(
+      (r) =>
+        r.requesterId === userId &&
+        ['CREATED', 'ACCEPTED', 'COLLECTED', 'ARRIVED'].includes(r.status),
+    )
+    .reduce((sum, r) => sum + r.creditAmount, 0)
+}
+
+// What would run in the background: credit-service answering a new
+// request, the expiry sweep, and the 1-hour auto-complete.
 function sweep() {
   const now = Date.now()
-  for (const o of orders) {
-    if (o.status === 'OPEN' && new Date(o.deadline).getTime() <= now) {
-      o.status = 'EXPIRED'
-      o.updatedAt = new Date(now).toISOString()
-    } else if (
-      o.status === 'DELIVERED' &&
-      o.deliveredAt &&
-      new Date(o.deliveredAt).getTime() + AUTO_COMPLETE_MS <= now
+  for (const r of requests) {
+    const since = pendingSince.get(r.id)
+    if (
+      r.status === 'PENDING' &&
+      since !== undefined &&
+      now - since >= RESERVE_DELAY_MS
     ) {
-      complete(o)
+      pendingSince.delete(r.id)
+      const available = myTotal - heldBy(r.requesterId)
+      r.status =
+        r.requesterId !== meId || r.creditAmount <= available
+          ? 'CREATED'
+          : 'REJECTED'
+    }
+    if (
+      (r.status === 'CREATED' || r.status === 'ACCEPTED') &&
+      new Date(r.deadline).getTime() <= now
+    ) {
+      r.status = 'EXPIRED'
+    }
+    if (
+      r.status === 'ARRIVED' &&
+      r.arrivedAt &&
+      now - new Date(r.arrivedAt).getTime() >= AUTO_COMPLETE_MS
+    ) {
+      finish(r)
     }
   }
 }
 
-let myTotal = STARTING_CREDITS
-
-function complete(o: Order) {
-  o.status = 'COMPLETED'
-  o.updatedAt = new Date().toISOString()
-  if (o.requesterId === meId) myTotal -= o.reward
-  if (o.courierId === meId) myTotal += o.reward
+function finish(r: RequestDetail) {
+  r.status = 'COMPLETED'
+  // the requester pays; the courier is paid
+  if (r.requesterId === meId) myTotal -= r.creditAmount
+  if (r.courierId === meId) myTotal += r.creditAmount
 }
 
-// Credits stay reserved while an order of mine is still unsettled.
-function myReserved() {
-  return orders
-    .filter((o) => o.requesterId === meId && !isTerminal(o.status))
-    .reduce((sum, o) => sum + o.reward, 0)
+function find(id: number): RequestDetail {
+  const r = requests.find((x) => x.id === id)
+  if (!r) fail(404, 'Request not found')
+  return r
 }
 
-function find(id: number): Order {
-  sweep()
-  const order = orders.find((o) => o.id === id)
-  if (!order) fail(404, 'Not found', `Request #${id} does not exist.`)
-  if (
-    order.requesterId !== meId &&
-    order.courierId !== meId &&
-    order.status !== 'OPEN'
-  ) {
-    fail(403, 'Forbidden', 'You are not part of this request.')
-  }
-  return order
+// another party's step looks like an unknown request, as in order-service
+function asRequester(id: number): RequestDetail {
+  const r = find(id)
+  if (r.requesterId !== meId) fail(404, 'Request not found')
+  return r
 }
 
-function touch(o: Order, status: OrderStatus) {
-  o.status = status
-  o.updatedAt = new Date().toISOString()
-  return { ...o }
+function asCourier(id: number): RequestDetail {
+  const r = find(id)
+  if (r.courierId !== meId) fail(404, 'Request not found')
+  return r
 }
 
-function requireRequester(o: Order) {
-  if (o.requesterId !== meId) {
-    fail(403, 'Forbidden', 'Only the requester can do this.')
-  }
+function move(
+  r: RequestDetail,
+  event: string,
+  from: RequestStatus[],
+  to: RequestStatus,
+) {
+  if (!from.includes(r.status))
+    fail(409, `Cannot ${event} a request that is ${r.status}`)
+  r.status = to
 }
 
-function requireCourier(o: Order) {
-  if (o.courierId !== meId) {
-    fail(403, 'Forbidden', 'Only the assigned courier can do this.')
-  }
-}
-
-function requireStatus(o: Order, ...allowed: OrderStatus[]) {
-  if (!allowed.includes(o.status)) {
-    fail(
-      409,
-      'Invalid state',
-      `This request is ${o.status.toLowerCase().replace('_', ' ')} — that action is no longer possible.`,
-    )
-  }
-}
-
-function paged(all: Order[], page: number, size: number): PagedResponse<Order> {
+function summary(r: RequestDetail): RequestSummary {
+  const {
+    id,
+    status,
+    supplierName,
+    dropoffLocation,
+    item,
+    creditAmount,
+    deadline,
+    createdAt,
+  } = r
   return {
-    content: all.slice(page * size, page * size + size).map((o) => ({ ...o })),
-    page,
-    size,
-    totalElements: all.length,
-    totalPages: Math.max(1, Math.ceil(all.length / size)),
+    id,
+    status,
+    supplierName,
+    dropoffLocation,
+    item,
+    creditAmount,
+    deadline,
+    createdAt,
   }
 }
+
+function paged(
+  all: RequestDetail[],
+  params: ListOpenParams,
+): PagedResponse<RequestSummary> {
+  const sorted = [...all].sort((a, b) =>
+    params.sort === 'deadline'
+      ? a.deadline.localeCompare(b.deadline) || a.id - b.id
+      : b.createdAt.localeCompare(a.createdAt) || b.id - a.id,
+  )
+  const start = params.page * params.size
+  return {
+    content: sorted.slice(start, start + params.size).map(summary),
+    page: params.page,
+    size: params.size,
+    totalElements: sorted.length,
+    totalPages: Math.max(1, Math.ceil(sorted.length / params.size)),
+  }
+}
+
+const ok = (r: RequestDetail, outcome: string): MessageResponse => ({
+  message: `Request ${r.id} ${outcome}`,
+})
 
 export const mockOrderApi = {
-  async createOrder(input: CreateOrderInput): Promise<Order> {
+  async createRequest(
+    input: CreateRequestInput,
+  ): Promise<{ id: number; message: string }> {
     await enter()
-    sweep()
-    const supplier = suppliers.find((s) => s.id === input.supplierId)
-    if (!supplier) fail(400, 'Bad request', 'Pick a supplier.')
-    if (input.reward < 1)
-      fail(400, 'Bad request', 'Reward must be at least 1 credit.')
-    if (new Date(input.deadline).getTime() <= Date.now()) {
-      fail(400, 'Bad request', 'Deadline must be in the future.')
-    }
-    if (input.reward > myTotal - myReserved()) {
-      fail(
-        409,
-        'Insufficient credits',
-        `Insufficient credits. Need ${input.reward}, you have ${myTotal - myReserved()}.`,
-      )
-    }
+    const missing = (
+      ['supplierName', 'dropoffLocation', 'item'] as const
+    ).filter((k) => !input[k]?.trim())
+    const problems: string[] = []
+    if (missing.length)
+      problems.push(`Missing required fields: ${missing.join(', ')}`)
+    if (input.creditAmount < 1) problems.push('creditAmount must be at least 1')
+    if (new Date(input.deadline).getTime() <= Date.now())
+      problems.push('deadline must be in the future')
+    if (problems.length) fail(400, problems.join('; '))
     const now = new Date().toISOString()
-    const order: Order = {
+    const r: RequestDetail = {
       id: nextId++,
-      status: 'OPEN',
-      description: input.description,
-      reward: input.reward,
-      supplierId: supplier.id,
-      supplierName: supplier.name,
-      pickupLocation: supplier.location,
+      status: 'PENDING',
+      requesterId: meId,
+      courierId: null,
+      supplierId: input.supplierId,
+      supplierName: input.supplierName,
       dropoffLocation: input.dropoffLocation,
+      item: input.item,
+      creditAmount: input.creditAmount,
       deadline: input.deadline,
       createdAt: now,
-      updatedAt: now,
-      deliveredAt: null,
-      requesterId: meId,
-      requesterUsername: meName,
-      courierId: null,
-      courierUsername: null,
+      acceptedAt: null,
+      collectedAt: null,
+      arrivedAt: null,
     }
-    orders.unshift(order)
-    return { ...order }
+    requests.push(r)
+    pendingSince.set(r.id, Date.now())
+    return { id: r.id, message: `Request ${r.id} created` }
   },
 
-  async listOpenOrders(page: number, size: number) {
+  async listOpenRequests(params: ListOpenParams) {
     await enter()
-    sweep()
-    const open = orders
-      .filter((o) => o.status === 'OPEN')
-      .sort((a, b) => a.deadline.localeCompare(b.deadline))
-    return paged(open, page, size)
+    const now = Date.now()
+    return paged(
+      requests.filter(
+        (r) => r.status === 'CREATED' && new Date(r.deadline).getTime() > now,
+      ),
+      params,
+    )
   },
 
-  async listMyOrders(params: ListOrdersParams) {
+  async listMyRequests(params: ListMineParams) {
     await enter()
-    sweep()
-    const mine = orders
-      .filter((o) =>
-        params.as === 'requester'
-          ? o.requesterId === meId
-          : o.courierId === meId,
-      )
-      .filter((o) =>
-        params.scope === 'all'
-          ? true
-          : params.scope === 'current'
-            ? o.status !== 'COMPLETED'
-            : params.scope === 'active'
-              ? !isTerminal(o.status)
-              : isTerminal(o.status),
-      )
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    return paged(mine, params.page, params.size)
+    return paged(
+      requests.filter(
+        (r) =>
+          (params.role === 'requester' ? r.requesterId : r.courierId) ===
+            meId &&
+          (params.state === undefined || r.status === params.state),
+      ),
+      params,
+    )
   },
 
-  async getOrder(id: number): Promise<Order> {
+  async getRequest(id: number): Promise<RequestDetail> {
     await enter()
-    return { ...find(id) }
+    const r = find(id)
+    if (r.requesterId !== meId && r.courierId !== meId)
+      fail(404, 'Request not found')
+    return { ...r }
   },
 
-  async acceptOrder(id: number): Promise<Order> {
+  async accept(id: number) {
     await enter()
-    const o = find(id)
-    if (o.requesterId === meId) {
-      fail(403, 'Forbidden', 'You cannot accept your own request.')
+    const r = find(id)
+    move(r, 'ACCEPT', ['CREATED'], 'ACCEPTED')
+    if (r.requesterId === meId) {
+      r.status = 'CREATED'
+      fail(409, 'A requester cannot accept their own request')
     }
-    requireStatus(o, 'OPEN')
-    o.courierId = meId
-    o.courierUsername = meName
-    return touch(o, 'ACCEPTED')
-  },
-
-  async markPickedUp(id: number): Promise<Order> {
-    await enter()
-    const o = find(id)
-    requireCourier(o)
-    requireStatus(o, 'ACCEPTED')
-    return touch(o, 'PICKED_UP')
-  },
-
-  async markArrived(id: number): Promise<Order> {
-    await enter()
-    const o = find(id)
-    requireCourier(o)
-    requireStatus(o, 'PICKED_UP')
-    o.deliveredAt = new Date().toISOString()
-    return touch(o, 'DELIVERED')
-  },
-
-  // before pickup only: the request goes back to the open feed
-  async courierCancel(id: number): Promise<Order> {
-    await enter()
-    const o = find(id)
-    requireCourier(o)
-    requireStatus(o, 'ACCEPTED')
-    o.courierId = null
-    o.courierUsername = null
-    return touch(o, 'OPEN')
-  },
-
-  async cancelOrder(id: number): Promise<Order> {
-    await enter()
-    const o = find(id)
-    requireRequester(o)
-    requireStatus(o, 'OPEN')
-    return touch(o, 'CANCELLED')
-  },
-
-  async confirmDelivery(id: number): Promise<Order> {
-    await enter()
-    const o = find(id)
-    requireRequester(o)
-    requireStatus(o, 'DELIVERED')
-    complete(o)
-    return { ...o }
-  },
-
-  async disputeOrder(id: number, input: DisputeInput): Promise<Order> {
-    await enter()
-    const o = find(id)
-    requireRequester(o)
-    requireStatus(o, 'DELIVERED')
-    if (!input.description.trim()) {
-      fail(400, 'Bad request', 'Describe what went wrong.')
+    if (new Date(r.deadline).getTime() <= Date.now()) {
+      r.status = 'CREATED'
+      fail(409, "The request's deadline has passed")
     }
-    return touch(o, 'DISPUTED')
+    r.courierId = meId
+    r.acceptedAt = new Date().toISOString()
+    return ok(r, 'accepted')
   },
 
-  // a copy of an expired/cancelled order, open again with a fresh deadline
-  async reReleaseOrder(id: number): Promise<Order> {
+  async collect(id: number) {
     await enter()
-    const o = find(id)
-    requireRequester(o)
-    requireStatus(o, 'EXPIRED', 'CANCELLED')
-    return this.createOrder({
-      supplierId: o.supplierId,
-      dropoffLocation: o.dropoffLocation,
-      description: o.description,
-      reward: o.reward,
-      deadline: iso(4 * HOUR),
-    })
+    const r = asCourier(id)
+    move(r, 'COLLECT', ['ACCEPTED'], 'COLLECTED')
+    r.collectedAt = new Date().toISOString()
+    return ok(r, 'collected')
+  },
+
+  async arrive(id: number) {
+    await enter()
+    const r = asCourier(id)
+    move(r, 'ARRIVE', ['COLLECTED'], 'ARRIVED')
+    r.arrivedAt = new Date().toISOString()
+    return ok(r, 'arrived')
+  },
+
+  async drop(id: number) {
+    await enter()
+    const r = asCourier(id)
+    move(r, 'DROP', ['ACCEPTED'], 'CREATED')
+    r.courierId = null
+    r.acceptedAt = null
+    return ok(r, 'dropped')
+  },
+
+  async cancel(id: number) {
+    await enter()
+    const r = asRequester(id)
+    move(r, 'CANCEL', ['CREATED'], 'CANCELLED')
+    return ok(r, 'cancelled')
+  },
+
+  async complete(id: number) {
+    await enter()
+    const r = asRequester(id)
+    if (r.status !== 'ARRIVED')
+      fail(409, `Cannot COMPLETE a request that is ${r.status}`)
+    finish(r)
+    return ok(r, 'completed')
+  },
+
+  async getUsername(userId: number): Promise<string> {
+    await enter()
+    return names.get(userId) ?? `user${userId}`
   },
 
   async listSupplierOptions(): Promise<SupplierOption[]> {
     await enter()
-    return suppliers.map((s) => ({ ...s }))
+    return suppliers
   },
 
   async getBalance(): Promise<CreditBalance> {
     await enter()
-    sweep()
-    const reserved = myReserved()
+    const reserved = heldBy(meId)
     return { available: myTotal - reserved, reserved, total: myTotal }
   },
 }
