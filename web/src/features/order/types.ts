@@ -51,7 +51,10 @@ export interface CreateOrderInput {
 export type OrderRole = 'requester' | 'courier'
 
 // active = not yet finished; history = completed, cancelled or expired
-export type OrderScope = 'active' | 'history' | 'all'
+// current = everything except COMPLETED (open, in progress, disputed,
+// cancelled, expired): what My Requests needs, so finished orders never
+// crowd out one the requester can still act on
+export type OrderScope = 'active' | 'history' | 'current' | 'all'
 
 export interface ListOrdersParams {
   as: OrderRole
@@ -69,10 +72,4 @@ export interface SupplierOption {
   id: string
   name: string
   location: string
-}
-
-export interface CreditBalance {
-  available: number
-  reserved: number
-  total: number
 }

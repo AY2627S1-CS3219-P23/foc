@@ -17,11 +17,11 @@
 // Author review: [pending]
 
 import { ApiError } from '@/lib/api/http'
+import type { CreditBalance } from '@/features/credit/types'
 import type { PagedResponse } from '@/features/supplier/types'
 import { AUTO_COMPLETE_MS, isTerminal } from './status'
 import type {
   CreateOrderInput,
-  CreditBalance,
   DisputeInput,
   ListOrdersParams,
   Order,
@@ -211,9 +211,11 @@ export const mockOrderApi = {
       .filter((o) =>
         params.scope === 'all'
           ? true
-          : params.scope === 'active'
-            ? !isTerminal(o.status)
-            : isTerminal(o.status),
+          : params.scope === 'current'
+            ? o.status !== 'COMPLETED'
+            : params.scope === 'active'
+              ? !isTerminal(o.status)
+              : isTerminal(o.status),
       )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     return paged(mine, params.page, params.size)

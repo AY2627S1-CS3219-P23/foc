@@ -21,9 +21,6 @@ import { OpenRequests } from '@/routes/open-requests'
 vi.mock('@/features/order/useCurrentUserId', () => ({
   useCurrentUserId: () => 3,
 }))
-vi.mock('@/features/credit/api', () => ({
-  getBalance: () => Promise.resolve({ available: 10, reserved: 0, total: 10 }),
-}))
 
 const base: Order = {
   id: 1,
@@ -71,6 +68,11 @@ const pageOf = (content: Order[]) => ({
 })
 
 beforeEach(() => {
+  vi.spyOn(orderApi, 'getBalance').mockResolvedValue({
+    available: 10,
+    reserved: 0,
+    total: 10,
+  })
   vi.spyOn(orderApi, 'listSupplierOptions').mockResolvedValue([
     { id: 's1', name: 'CoffeeBean@Com3', location: 'COM3' },
   ])
@@ -229,6 +231,26 @@ describe('my requests', () => {
 
     await waitFor(() => expect(confirm).toHaveBeenCalledWith(1))
     expect(await screen.findByText(/Delivery confirmed/)).toBeInTheDocument()
+  })
+
+  it('asks the server for non-completed orders and pages through them', async () => {
+    const list = vi.spyOn(orderApi, 'listMyOrders').mockResolvedValue({
+      ...pageOf([{ ...base, id: 2 }]),
+      totalPages: 3,
+    })
+    renderAt('/my-requests')
+
+    await screen.findByText('Request #2')
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({ as: 'requester', scope: 'current', page: 0 }),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: /2/ }))
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ scope: 'current', page: 1 }),
+      ),
+    )
   })
 
   it('offers re-release on an expired request and not on an open one', async () => {

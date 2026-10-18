@@ -10,11 +10,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 
-import { getBalance } from '@/features/credit/api'
+import type { CreditBalance } from '@/features/credit/types'
 import { orderApi } from '@/features/order/api'
 import { Banner } from '@/features/order/components/Banner'
 import { credits } from '@/features/order/status'
-import type { CreditBalance, SupplierOption } from '@/features/order/types'
+import type { SupplierOption } from '@/features/order/types'
 import { errorMessage } from '@/lib/api/http'
 
 const MIN_REWARD = 1
@@ -62,7 +62,8 @@ export function CreateRequest() {
       })
     // Non-fatal: without a balance the form just skips its own check and
     // lets credit-service refuse an unaffordable reward.
-    getBalance()
+    orderApi
+      .getBalance()
       .then((b) => {
         if (!cancelled) setBalance(b)
       })

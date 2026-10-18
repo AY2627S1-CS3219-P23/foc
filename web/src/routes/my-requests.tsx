@@ -25,6 +25,9 @@ import {
 import type { DisputeInput, Order } from '@/features/order/types'
 import { errorMessage } from '@/lib/api/http'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
+import { Pagination } from '@/shared/components/Pagination'
+
+const PAGE_SIZE = 10
 
 export function MyRequests() {
   const location = useLocation()
@@ -39,14 +42,25 @@ export function MyRequests() {
   const [disputing, setDisputing] = useState<Order | null>(null)
   const [disputeError, setDisputeError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [page, setPage] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
 
   useEffect(() => {
     let cancelled = false
     orderApi
-      .listMyOrders({ as: 'requester', scope: 'all', page: 0, size: 50 })
-      .then((page) => {
+      .listMyOrders({
+        as: 'requester',
+        scope: 'current',
+        page,
+        size: PAGE_SIZE,
+      })
+      .then((result) => {
         if (cancelled) return
-        setOrders(page.content.filter((o) => o.status !== 'COMPLETED'))
+        setOrders(result.content)
+        setTotalPages(result.totalPages)
+        // an action can empty the last page (e.g. a completion leaves
+        // the list); step back instead of showing a blank page
+        if (result.content.length === 0 && page > 0) setPage(page - 1)
       })
       .catch((err) => {
         if (!cancelled)
@@ -60,7 +74,7 @@ export function MyRequests() {
     return () => {
       cancelled = true
     }
-  }, [refreshKey])
+  }, [page, refreshKey])
 
   // Runs one transition, then refetches: the list can gain, lose or
   // reorder rows (a completed order leaves this page), and after a
@@ -169,6 +183,16 @@ export function MyRequests() {
             />
           ))}
         </ul>
+      )}
+
+      {!loading && totalPages > 1 && (
+        <div className="flex justify-end">
+          <Pagination
+            page={page + 1}
+            totalPages={totalPages}
+            onPageChange={(p) => setPage(p - 1)}
+          />
+        </div>
       )}
 
       {pendingCancel && (

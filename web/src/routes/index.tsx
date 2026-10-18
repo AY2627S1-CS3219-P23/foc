@@ -57,7 +57,6 @@ import { NotFound } from '@/shared/shell/NotFound'
 import { ActiveDelivery } from './active-delivery'
 import { Admin } from './admin'
 import { CreateRequest } from './create-request'
-import { Home } from './home'
 import { MyRequests } from './my-requests'
 import { OpenRequests } from './open-requests'
 import { Credits } from './credits'
@@ -96,13 +95,6 @@ export const routes: RouteObject[] = [
           {
             Component: CreditBalanceProvider,
             children: [
-              { path: 'suppliers', element: <Suppliers /> },
-              { path: 'profile', element: <Profile /> },
-              { path: 'my-requests', element: <MyRequests /> },
-              { path: 'my-requests/new', element: <CreateRequest /> },
-              { path: 'requests', element: <OpenRequests /> },
-              { path: 'deliveries/:id', element: <ActiveDelivery /> },
-              { path: 'history', element: <RequestHistory /> },
               {
                 element: <AppShell />,
                 children: [
@@ -122,6 +114,11 @@ export const routes: RouteObject[] = [
                         element: <AccountRecovery />,
                       },
                       { path: 'credits', element: <Credits /> },
+                      { path: 'my-requests', element: <MyRequests /> },
+                      { path: 'my-requests/new', element: <CreateRequest /> },
+                      { path: 'requests', element: <OpenRequests /> },
+                      { path: 'deliveries/:id', element: <ActiveDelivery /> },
+                      { path: 'history', element: <RequestHistory /> },
                       {
                         Component: AdminRoute,
                         children: [{ path: 'admin', element: <Admin /> }],

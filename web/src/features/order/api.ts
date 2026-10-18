@@ -12,6 +12,7 @@
 // calls, and the mock is imported lazily so it is left out of the bundle.
 // Author review: [pending]
 
+import { creditApi } from '@/features/credit/api'
 import { apiFetch } from '@/lib/api/http'
 import { listSuppliers } from '@/features/supplier/api'
 import type { PagedResponse } from '@/features/supplier/types'
@@ -58,6 +59,9 @@ const httpOrderApi = {
   getOrder(id: number): Promise<Order> {
     return apiFetch<Order>('order', `/orders/${id}`)
   },
+
+  // the create form's affordability check; credit-service's own endpoint
+  getBalance: () => creditApi.getBalance(),
 
   // courier
   acceptOrder: (id: number) => transition(id, 'accept'),
@@ -110,6 +114,7 @@ const devMockOrderApi: typeof httpOrderApi = {
   reReleaseOrder: async (id) => (await loadMock()).reReleaseOrder(id),
   disputeOrder: async (id, input) => (await loadMock()).disputeOrder(id, input),
   listSupplierOptions: async () => (await loadMock()).listSupplierOptions(),
+  getBalance: async () => (await loadMock()).getBalance(),
 }
 
 export const orderApi: typeof httpOrderApi =
