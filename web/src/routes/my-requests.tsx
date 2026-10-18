@@ -7,7 +7,7 @@
 // will accept. Completed requests live on the history page.
 // Author review: [pending]
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 
 import { Banner } from '@/features/order/components/Banner'
@@ -76,38 +76,55 @@ export function MyRequests() {
     }
   }, [page, refreshKey])
 
-  // Runs one transition, then refetches: the list can gain, lose or
-  // reorder rows (a completed order leaves this page), and after a
-  // conflict the refetch shows what the order really is now.
-  const run = useCallback(
-    async (order: Order, action: () => Promise<unknown>, success: string) => {
-      setBusyId(order.id)
-      setError(null)
-      try {
-        await action()
-        setNotice(success)
-      } catch (err) {
-        setNotice(null)
-        setError(errorMessage(err, 'That did not go through. Try again.'))
-      } finally {
-        setBusyId(null)
-        setRefreshKey((k) => k + 1)
-      }
-    },
-    [],
-  )
+  // The transition endpoints return the updated order, so a success patches
+  // that row in place (a COMPLETED one leaves this page, which lists
+  // everything but completed). Only the paths where the list's shape is
+  // unknown refetch it: a failure ("see what the order really is now") and
+  // re-release, which adds a new row.
+  function applyUpdated(updated: Order) {
+    const gone = updated.status === 'COMPLETED'
+    setOrders((current) =>
+      gone
+        ? current.filter((o) => o.id !== updated.id)
+        : current.map((o) => (o.id === updated.id ? updated : o)),
+    )
+    // that was the last row of a later page: step back, which refetches
+    if (gone && page > 0 && orders.length === 1) setPage(page - 1)
+  }
+
+  async function run(
+    order: Order,
+    action: () => Promise<Order>,
+    success: string,
+    refetchOnSuccess = false,
+  ) {
+    setBusyId(order.id)
+    setError(null)
+    try {
+      const updated = await action()
+      setNotice(success)
+      if (refetchOnSuccess) setRefreshKey((k) => k + 1)
+      else applyUpdated(updated)
+    } catch (err) {
+      setNotice(null)
+      setError(errorMessage(err, 'That did not go through. Try again.'))
+      setRefreshKey((k) => k + 1)
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   async function handleDispute(input: DisputeInput) {
     if (!disputing) return
     setBusyId(disputing.id)
     setDisputeError(null)
     try {
-      await orderApi.disputeOrder(disputing.id, input)
+      const updated = await orderApi.disputeOrder(disputing.id, input)
+      applyUpdated(updated)
       setNotice(
         `Dispute filed for Request #${disputing.id}. An admin will review it.`,
       )
       setDisputing(null)
-      setRefreshKey((k) => k + 1)
     } catch (err) {
       setDisputeError(errorMessage(err, 'Could not file the dispute.'))
     } finally {
@@ -178,6 +195,7 @@ export function MyRequests() {
                   order,
                   () => orderApi.reReleaseOrder(order.id),
                   `Request #${order.id} re-released as a new request.`,
+                  true,
                 )
               }
             />

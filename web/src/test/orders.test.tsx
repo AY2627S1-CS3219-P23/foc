@@ -336,6 +336,95 @@ describe('my requests', () => {
     )
   })
 
+  describe('refetching after an action', () => {
+    const delivered: Order = {
+      ...base,
+      status: 'DELIVERED',
+      courierId: 8,
+      courierUsername: 'fast_courier',
+      deliveredAt: new Date().toISOString(),
+    }
+
+    it('patches the returned order in place without refetching the list', async () => {
+      const list = vi
+        .spyOn(orderApi, 'listMyOrders')
+        .mockResolvedValue(pageOf([delivered]))
+      vi.spyOn(orderApi, 'disputeOrder').mockResolvedValue({
+        ...delivered,
+        status: 'DISPUTED',
+      })
+      renderAt('/my-requests')
+
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Dispute' }),
+      )
+      await userEvent.type(
+        screen.getByLabelText('Describe the issue'),
+        'wrong drink',
+      )
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Submit dispute' }),
+      )
+
+      expect(await screen.findByText(/Under dispute/)).toBeInTheDocument()
+      expect(list).toHaveBeenCalledTimes(1)
+    })
+
+    it('drops a completed order from the list without refetching', async () => {
+      const list = vi
+        .spyOn(orderApi, 'listMyOrders')
+        .mockResolvedValue(pageOf([delivered]))
+      vi.spyOn(orderApi, 'confirmDelivery').mockResolvedValue({
+        ...delivered,
+        status: 'COMPLETED',
+      })
+      renderAt('/my-requests')
+
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Confirm delivery' }),
+      )
+
+      await waitFor(() =>
+        expect(screen.queryByText('Request #1')).not.toBeInTheDocument(),
+      )
+      expect(list).toHaveBeenCalledTimes(1)
+    })
+
+    it('refetches after a failure to show what the order really is', async () => {
+      const list = vi
+        .spyOn(orderApi, 'listMyOrders')
+        .mockResolvedValue(pageOf([delivered]))
+      vi.spyOn(orderApi, 'confirmDelivery').mockRejectedValue(
+        new ApiError(409, { detail: 'Already completed.' }),
+      )
+      renderAt('/my-requests')
+
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Confirm delivery' }),
+      )
+
+      expect(await screen.findByText('Already completed.')).toBeInTheDocument()
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+    })
+
+    it('refetches after a re-release, which adds a new row', async () => {
+      const expired: Order = { ...base, id: 2, status: 'EXPIRED' }
+      const list = vi
+        .spyOn(orderApi, 'listMyOrders')
+        .mockResolvedValue(pageOf([expired]))
+      vi.spyOn(orderApi, 'reReleaseOrder').mockResolvedValue({ ...base, id: 9 })
+      renderAt('/my-requests')
+
+      await userEvent.click(
+        await screen.findByRole('button', {
+          name: 'Re-release as new request',
+        }),
+      )
+
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+    })
+  })
+
   it('offers re-release on an expired request and not on an open one', async () => {
     vi.spyOn(orderApi, 'listMyOrders').mockResolvedValue(
       pageOf([
