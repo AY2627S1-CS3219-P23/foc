@@ -4,6 +4,9 @@
  * Scope: the two reads behind the REST API (docs/credit-service.md
  * "Read API contract"): the balance, and a page of history filtered
  * with a JPA Specification (D5) in the contract's fixed order.
+ * 2026-10-17, Claude Code (Opus 5.5), issue #196: the caller's upcoming
+ * expiries, read from the lots in spend order; which credits count is
+ * the team's decision (reserved and sign-up credits left out).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -19,7 +22,9 @@ import org.springframework.stereotype.Service;
 
 import foc.credit.entity.CreditAccount;
 import foc.credit.entity.CreditHistoryEntry;
+import foc.credit.entity.CreditLot;
 import foc.credit.repository.CreditHistoryEntryRepository;
+import foc.credit.repository.CreditLotRepository;
 import jakarta.persistence.criteria.Predicate;
 
 /**
@@ -36,14 +41,31 @@ public class CreditQueryService {
 
     private final CreditOperations operations;
     private final CreditHistoryEntryRepository history;
+    private final CreditLotRepository lots;
 
-    public CreditQueryService(CreditOperations operations, CreditHistoryEntryRepository history) {
+    public CreditQueryService(CreditOperations operations, CreditHistoryEntryRepository history,
+            CreditLotRepository lots) {
         this.operations = operations;
         this.history = history;
+        this.lots = lots;
     }
 
     public CreditAccount balance(String userId) {
         return operations.getOrCreate(userId);
+    }
+
+    /**
+     * The lots that will expire, soonest first and by ID within the same
+     * instant. The spend order is exactly that with the never-expiring
+     * sign-up lot last, so it is dropped here. Drained lots are already
+     * left out, and reserved credits are in no lot's {@code remaining}.
+     * A lot past its expiry stays in until the next expiry run moves it.
+     */
+    public List<CreditLot> upcomingExpiries(String userId) {
+        operations.getOrCreate(userId);
+        return lots.findInSpendOrder(userId).stream()
+            .filter(lot -> lot.getExpiresAt() != null)
+            .toList();
     }
 
     /** A page past the last one is an empty page, not an error. */

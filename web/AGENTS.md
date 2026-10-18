@@ -16,6 +16,17 @@
   for a new email address. Both were the author's call via options Q&A.
   Author review: Leong Wei Zhi to review via PR #150 — which also closes
   the pending marker the 2026-09-27 entry above was left with.
+  2026-10-17, Claude Code (Opus 5.5), issue #174: the credit-history.png
+  row records where the credits page departs from the wireframe; the
+  deviations are team decisions via options Q&A.
+  2026-10-17, Claude Code (Opus 5.5), issue #196: the same row notes the
+  upcoming-expiry line and notice, which the wireframe doesn't draw
+  (team decisions).
+  Author review: Ryan Ang, pending pull request review.
+  2026-10-17, Claude Code (Fable 5), issue #66: the
+  notification-center.png row records the shipped Center and its three
+  beyond-the-wireframe controls (author decisions via options Q&A).
+  Author review: Leong Wei Zhi to review via PR #199.
 -->
 
 # web/ — Frontend Agent Guide
@@ -54,7 +65,7 @@ first**; they cost nothing to read, unlike Figma MCP calls:
 | `docs/wireframes/dashboard.png` | Dashboard — credit balance, requester/courier mode toggle, quick actions, active requests with status chips, recent activity |
 | `docs/wireframes/suppliers.png` | Suppliers — search and category filters, supplier detail panel, empty state (wireframe image still shows a campus-zone filter; team dropped the zone feature, see `docs/supplier-service.md` D4 — the image is directional, not a spec, per this file's own note above) |
 | `docs/wireframes/profile.png` | Profile — account details, edit flows, delete-account modal (built in PR #149; two deviations the shipped #92 endpoints force, same convention as the signup.png note above: **Change Password has no Current Password field** — `POST /users/me/password` takes `{newPassword, confirmPassword, otp}` and the code emailed to the current address *is* the authentication, so the card ends in a code step instead; and a **second code step** the wireframe doesn't draw confirms a new email address from that address before it replaces the old one, F2.1.3) |
-| `docs/wireframes/credit-history.png` | Credit history — balances and transaction list |
+| `docs/wireframes/credit-history.png` | Credit history — balances and transaction list (built for issue #174 at `/credits`, reached from the top-bar credits badge and the profile card rather than a nav item; three deviations the read API forces or the team chose, same convention as the signup.png note above: the **"Total lifetime earned" card shows Total** (available + reserved) and there is **no running-balance column**, since `GET /credits/me` and the history rows carry neither; and the **"Amount: All" dropdown is two fields, minimum and maximum**, mapping straight to the API's `minAmount`/`maxAmount`. Not drawn, added for issue #196: the **Available card says when the soonest credits expire** ("5 credits expire by 12 Jan 2027", Singapore dates) and a **notice above the transactions** warns when they expire within 7 days; neither appears on the badge or the profile card) |
 | `docs/wireframes/order-history.png` | Order history — past/current orders |
 | `docs/wireframes/create-request.png` | Create request — new errand form |
 | `docs/wireframes/my-requests.png` | My requests — requester's view of own requests |
@@ -63,7 +74,7 @@ first**; they cost nothing to read, unlike Figma MCP calls:
 | `docs/wireframes/admin-dashboard.png` | Admin dashboard — user/vendor management |
 | `docs/wireframes/forgot-password.png` | Forgot/reset password — email step + reset form |
 | `docs/wireframes/account-recovery.png` | Account recovery — restore a deleted account within 30 days |
-| `docs/wireframes/notification-center.png` | Notification center — bell with unread badge, read/unread list, empty state |
+| `docs/wireframes/notification-center.png` | Notification center — bell with unread badge, read/unread list, empty state (built in the web half of issue #66: rows, blue unread dot, grayed read rows, "Mark all as read", empty-state copy as drawn; three additions the wireframe doesn't show, each an author decision via options Q&A — an **All/Unread filter toggle**, a **"Load more"** button (the wireframe draws no paging control; the REST list is paged), and **clicking an unread row marks it read** (no per-row control is drawn; mark-unread exists in the API but has no UI affordance)) |
 | `docs/wireframes/add-edit-supplier.png` | Add/edit supplier (admin) — form modal + delete confirmation |
 | `docs/wireframes/public-profile.png` | Public profile — another user's minimal profile view |
 | `docs/wireframes/rating-review.png` | Rating & review — post-completion star rating, write-up, report user |

@@ -72,6 +72,11 @@
   by Claude Code (Opus 5).
   2026-10-10: AI Use Summary extended for the PR #168 review fixes by
   Claude Code (Opus 5.5).
+  2026-10-10: AI Use Summary extended for the order-service Spring Boot
+  scaffold and its compose.yaml/AGENTS.md/.env.example wiring by
+  Claude Code (Opus 5.5).
+  2026-10-11: AI Use Summary extended for the order-service Requests
+  entity/repository skeleton by Claude Code (Opus 5.5).
   2026-10-11: AI Use Summary extended for the credit operations (issue
   #169) by Claude Code (Opus 5.5); the conflict markers the PR #168
   merge left in this header were removed, keeping both sides. Same day:
@@ -88,10 +93,18 @@
   round (@Sinnez1), by Claude Code (Fable 5).
   2026-10-12: AI Use Summary extended for the credit reply outbox and
   outbox publisher (issue #170) by Claude Code (Opus 5.5).
+  2026-10-12: AI Use Summary extended for the issue #67 remaining scope
+  (web STOMP client + CONNECT-time denylist, D23) by Claude Code
+  (Fable 5), on PR #185 Copilot review (the summary had missed the
+  change).
+  2026-10-12: AI Use Summary extended for the web revoked-session
+  sign-out (issue #178, PR #182) by Claude Code (Fable 5).
   2026-10-13: the #170 clause extended for the PR #188 review round
   (Leong Wei Zhi), by Claude Code (Opus 5.5).
   2026-10-13: AI Use Summary extended for the credit read API
   (issue #172) by Claude Code (Opus 5.5).
+  2026-10-13: the #178 clause extended for the PR #182 human-review
+  round (@Sinnez1), by Claude Code (Opus 5).
   2026-10-14: the #172 clause extended for the PR #189 review
   follow-ups, by Claude Code (Opus 5.5).
   2026-10-10: AI Use Summary extended for the order-service Spring Boot
@@ -109,7 +122,67 @@
   scripts, stubs and the gateway order route, then for the /create field
   checks, the accepted / collected events and the expiry and
   auto-complete timers.
+  2026-10-14: AI Use Summary extended for the credit request event
+  listener (issue #171) by Claude Code (Opus 5.5).
+  2026-10-14: the #67 clause extended for the PR #185 human-review
+  round (@Sinnez1), by Claude Code (Fable 5).
+  2026-10-14: that #178 clause extended again for the PR #182 second
+  review round, by Claude Code (Opus 5).
+  2026-10-16: the #171 clause extended for the PR #190 review round
+  (Leong Wei Zhi), by Claude Code (Opus 5.5); same day, again for its
+  re-review.
+  2026-10-16: the #67 clause extended for the PR #185 re-review rounds
+  (@Sinnez1) by Claude Code (Opus 5) — the STOMP frame policing round
+  the 2026-10-14 line claims but never wrote into the clause, and the
+  client's ERROR-frame policy.
+  2026-10-16: PR #185 rebased onto main twice the same day (PRs #187
+  and #190 landed) — the conflicts this header, the AI Use Summary,
+  `.env.example` and `compose.yaml` carried resolved by keeping both
+  sides with nothing reworded or removed; in the second pass the two
+  order-service lines main had meanwhile moved into date order were
+  left to main's copy rather than re-added here, and this branch's #67
+  lines take their own date positions, by Claude Code (Opus 5).
+  2026-10-16: PR #182 rebased onto main twice the same day (first with
+  PRs #187/#188/#189 landed, then with #190/#185) — the conflicts this
+  header, the AI Use Summary and `ai/usage-log.md` carried resolved by
+  keeping both sides in date order, no clause reworded; in the second
+  pass `web/src/routes/index.tsx` also conflicted with #185's
+  NotificationProvider layout route, resolved by keeping that route and
+  moving this branch's `handle: { requiresSession: true }` onto the
+  nested ProtectedRoute it gates, by Claude Code (Opus 5).
+  2026-10-16: AI Use Summary extended for the credit expiry and
+  redistribution scheduler (issue #173) by Claude Code (Opus 5.5);
+  same day, extended for the PR #193 review fixes.
+  2026-10-16: AI Use Summary extended for the server half of issue #178
+  (PR #183) by Claude Code (Opus 5) — the summary covered the web half
+  only.
+  2026-10-16: PR #183 rebased onto main now that its base PR #179 has
+  merged — the conflicts `docs/gateway.md`, `AdminService.java` and
+  `AdminServiceTest.java` carried resolved by keeping both sides, and
+  the one claim #179's approval follow-up left stale (a removed admin's
+  token keeping ADMIN until its exp) corrected, by Claude Code
+  (Opus 5).
+  2026-10-17: AI Use Summary extended for the web credit balance and
+  history (issue #174) by Claude Code (Opus 5.5); same day, extended
+  for the admin dashboard's Common Pool box.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-10-17: the #178 clause extended for the PR #183 human-review
+  round (@Sinnez1) and the branch rebased again for #180's merge, by
+  Claude Code (Opus 5).
+  2026-10-17, Codex (GPT-6), PR #180 review: added the web #94
+  disclosure and the missing 2026-10-16 main-sync coverage.
+  Author review: Leong Wei Zhi to review via PR #180.
+  2026-10-17, Codex (GPT-6.1 Sol), issue #98: disclosed the user-service
+  Docker-unavailable test skips and verification documentation.
+  PR #197 review: disclosed CI's rejection of skipped user-service tests.
+  2026-10-17, Claude Code (Opus 5), PR #199 review: AI Use Summary
+  extended for the web half of issue #66 (the Notification Center) and
+  that PR's review round — the summary had the backend half only.
+  Author review: Leong Wei Zhi to review via pull request.
+  2026-10-17: AI Use Summary extended for the upcoming credit expiries
+  (issue #196: the route and the credits page) by Claude Code
+  (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -518,12 +591,44 @@ that PR's review fixes (#188: a returned reply waits 30 s before its
 next attempt, on a new `next_attempt_at` column, so that unroutable
 replies cannot fill every batch; the reply row inserted, not saved; no
 returns callback on the shared template; a second scheduler thread),
-the approach to each decided by the team; and the read API (issue #172:
+the approach to each decided by the team; the read API (issue #172:
 the balance and history routes, the history filters as a JPA
 Specification, the 400 problem+json mapping, and their tests),
 transcribed from the "Read API contract" the team wrote in
 `docs/credit-service.md`, with its PR #189 review follow-ups made as
-the reviewer suggested.
+the reviewer suggested; and the request event
+listener (issue #171: manual acknowledgement after the handler's
+commit, a conflicting event dead-lettered, failures retried through
+the retry queue up to the attempt cap, and its unit and broker
+integration tests), written to D11 of `docs/credit-service.md` and
+following notification-service's listener, with the team's review
+decisions (a retry copy the broker refuses requeues the original;
+dead-letters logged at ERROR) recorded in that doc's failure table,
+and its PR #190 review fixes (a returned retry copy dead-letters the
+original, a nacked or unconfirmed one requeues it after a 5 s pause,
+and a timed-out confirm documented as possibly running the event
+twice), the approach to each decided by the team, and its re-review
+follow-ups (the confirm timeout's environment variable, an
+unresolvable broker host in the test profile, and doc wording);
+and the expiry and redistribution scheduler
+(issue #173: the daily expiry into the common pool and the monthly
+redistribution, their locking queries, and their unit and Postgres
+tests), written to D2, D4 and D12 of `docs/credit-service.md`, with the
+run times and zone, the per-account expiry transaction, the empty
+month recorded and the startup catch-up decided by the team and
+recorded there, and its PR #193 review fixes (one routine, daily and
+at startup, that sweeps then redistributes a missing month, so a
+failed run is retried the next day; the earned-credit expiry shared;
+a test made independent of test order), the approach decided by the
+team; and the upcoming-expiry route (issue #196:
+`GET /credits/me/expiries`, read from the lots in spend order, and its
+controller tests), written to the design doc's Read API contract, with
+the route, the response shape, the order, which credits count, no
+window and how often the web app reads it decided by the team and
+recorded there, and its web half (the Available card's line for the
+soonest credits to expire and a notice when they expire within 7
+days, in Singapore dates, with their tests), where they are shown and
+the wording also decided by the team.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their
@@ -606,6 +711,140 @@ missing fields, a reward below 1 and a past deadline), the
 and auto-complete timers, with the required fields, the 400 answer, the
 events' parties, the 5 min sweeps and the configurable 1 h delay chosen
 by the author.
+
+The issue #67 remaining scope (the server-side STOMP push gateway had
+merged earlier in PR #74): the web notification client
+(`web/src/features/notifications/` — the app's single STOMP client with
+reconnect/backoff, and the bell's unread badge), the notification-service
+JWT verifier's missing-expiry fix, and the D23 CONNECT-time Redis
+denylist read (port + adapter, interceptor check, ArchUnit rule,
+compose/.env wiring) with the matching doc updates
+(`docs/notification-service.md` D23, `docs/gateway.md` known-limit
+retirement).
+The scope decisions (badge-only UI, native WebSocket without
+sockjs-client, folding the expiry fix in, service-side denylist read as
+a narrow G4 exception) were made by Leong Wei Zhi via neutral options
+Q&A, recorded in `docs/notification-service.md` and `ai/usage-log.md`.
+The PR #185 review round (@Sinnez1) extended that denylist read to the
+G11 per-user reset cutoff (the jti lookup alone let a pre-reset token
+still open a socket), recorded the CONNECT-only timing as an accepted
+limit in both design docs, and switched off the Redis starter's
+repository scan; the Copilot round before it fixed the bell's
+accessible name. The re-review rounds that followed added the
+interceptor's frame policing (a STOMP-command session authenticated
+like CONNECT, every client SEND refused, SUBSCRIBE confined to the one
+destination — together they had let an untokened client push a spoofed
+notification to any user ID) and the client's ERROR-frame policy: three
+retries 30 s apart, then a stop the bell reports as paused updates
+rather than a frozen count. That policy was chosen by Leong Wei Zhi
+from four options via neutral options Q&A; the rest were mechanical
+fixes to reviewer-identified gaps.
+
+The web revoked-session sign-out (issue #178, PR #182): the shared
+fetch wrapper's unauthorized handler (a 401 on a token-bearing request
+forces a sign-out to /login with a one-time notice; the login call
+itself opts out of the token injection so its wrong-credentials 401
+stays an inline error) and its tests. The mechanism (any token-bearing
+401, no detail matching), the sign-out UX and the scope were decided
+by Leong Wei Zhi via neutral options Q&A, recorded in
+`ai/usage-log.md`. The PR #182 human-review round (@Sinnez1) added two
+defect fixes with no new design decisions: the handler is given the
+token the refused request carried, so a 401 answering a replaced token
+no longer ends the session the user has just started; and the notice
+is published to the login page rather than read at mount only, so a
+401 arriving while that page is open shows it there instead of saving
+it for a later visit. The second review round (@Sinnez1) added four
+more defect fixes — the refused token is compared with what
+localStorage holds rather than with the last rendered session (so
+neither another tab's newer session nor one stored a render ago is
+cleared), the handler and token source are unregistered when the
+provider unmounts, a failing handler no longer replaces the ApiError
+callers match on, and the bearer scheme is matched case-insensitively
+as the gateway matches it — plus one behaviour question put to Leong
+Wei Zhi via neutral options Q&A (2026-10-14): on a page that needs no
+session the dead token is now dropped in place, with no redirect and
+no notice, and the redirect for a session-gated page is
+ProtectedRoute's own bounce.
+
+The server half of the same issue (#178, PR #183): `AdminService`
+writes the per-user revocation stamp after an admin role change (any
+actual change) or an admin removal, so the target's outstanding tokens
+are refused at the gateway on their next request instead of lasting to
+their `exp`; its service and controller tests; and decision G12 in
+`docs/gateway.md`, which needed no gateway code because PR #179's G11
+check already enforces the stamp. The mechanism (option A of the
+issue's options table, a Redis epoch stamp over a per-request role
+lookup or refresh tokens) and the scope (those two paths only) were
+decided by Leong Wei Zhi via neutral options Q&A, recorded in
+`ai/usage-log.md`. Rebasing that branch onto the merged #179 also
+corrected a sentence #179's own follow-up had added — that a token
+minted before a removal keeps ADMIN until it expires — in
+`user-service/README.md` and the `AdminService` comment. The PR #183
+human-review round (@Sinnez1) added one defect fix with no new design
+decision: the reviewer showed the stamp being written inside the
+caller's transaction, before the role change or removal committed, so a
+login in that gap could still mint a token carrying the old role —
+every stamp now runs after the commit, including the identical call
+site in the password reset from #179. Which of the two mechanisms the
+review named to use, and whether to extend the fix to that reset call
+site, were decided by Leong Wei Zhi via neutral options Q&A
+(2026-10-17).
+
+The web half of issue #94 (PR #180), generated with Claude Code
+(Fable 5; main sync with Opus 5), adds the forgot-password and explicit
+account-recovery screens, login link and arrival notice, recovery session
+flag handling, and support for bodyless 202 reset responses. The
+2026-10-16 sync reconciled the routes with #182/#185, opted both reset
+calls out of bearer authentication, and added local session clearing on
+successful reset with regression coverage. The PR #180 review fixes
+(Codex, GPT-6, 2026-10-17) extend the recovery hold to public routes,
+reject malformed nonempty 202 bodies, move the recovery request into
+profileApi, remove the duplicate home redirect, reuse the six-box
+CodeInput, and require the reset email field. The reset API returns no
+cooldown or expiry timings; the screen does not display those values.
+
+Issue #98's user-service test fix (Codex, GPT-6.1 Sol, 2026-10-17) adds
+inherited automatic skips when Docker is unavailable and guards shared PostgreSQL
+container startup. Unit tests still run without Docker; integration tests
+retain their existing shared container when Docker is available. The
+service README documents both modes and their coverage. The PR #197 review
+follow-up adds a CI check that rejects skipped user-service tests and
+missing test reports, enforcing the full suite on the runner.
+
+The web credit balance and history (issue #174): the credit feature
+folder (`web/src/features/credit/`: the read API calls, a
+`CreditBalanceProvider` layout route that polls the balance for the
+whole app, the `/credits` page with its balance cards, amount and
+date-range filters and paged transaction list), the live top-bar badge
+and the profile card's Credit Status, and their tests. Written to the
+"Read API contract" in `docs/credit-service.md` and the
+`credit-history.png` wireframe; the deviations from the wireframe (no
+lifetime-earned card or running-balance column, which the API does not
+provide, and min/max amount fields in place of the amount dropdown),
+the page's route and how it is reached, and the 30 s poll that pauses
+in a hidden tab were decided by the team via options Q&A, recorded in
+`web/AGENTS.md` and `ai/usage-log.md`. On the same branch, the admin
+dashboard's Common Pool box and the credit service's two admin routes
+behind it (`/credits/admin/pool` and `/credits/admin/redistributions`,
+`ADMIN` and `OWNER` only) with their tests, added to the design doc's
+Read API contract; the routes' shape, access, the share preview and
+the branch were decided by the team via options Q&A.
+
+Claude Code (Fable 5 and Opus 5) wrote the web half of issue #66, the
+Notification Center: the `/notifications` page and its feature folder
+(`web/src/features/notifications/`: the REST calls, one display
+template per cataloged request event, the paged list with its All and
+Unread filters, click-to-mark-read and "Mark all as read"), the bell
+badge seeded and re-synced from `GET /notifications/me/unread-count`,
+and frames pushed over STOMP joining the open list live, with their
+tests. Written to the `notification-center.png` wireframe and the REST
+contract in `docs/notification-service.md`; the interactions the
+wireframe does not draw (the filter toggle, the "Load more" pager, a
+click marking a row read, and — after the PR #199 review — a read row
+leaving the Unread view) were decided by the author via options Q&A and
+recorded in `web/AGENTS.md` and `ai/usage-log.md`. The same tool
+addressed that review's bot findings, including the paging and
+count-sync races it and a live browser run surfaced.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

@@ -49,7 +49,10 @@ function toQuery(params: SupplierSearchParams): string {
 }
 
 export function listSuppliers(params: SupplierSearchParams = {}) {
-  return apiFetch<PagedResponse<Supplier>>('supplier', `/suppliers${toQuery(params)}`)
+  return apiFetch<PagedResponse<Supplier>>(
+    'supplier',
+    `/suppliers${toQuery(params)}`,
+  )
 }
 
 export function getSupplier(id: string) {

@@ -11,6 +11,16 @@
 // so a page that changes the account (the profile page's edit flows) can
 // refresh the session's shared copy instead of leaving every other
 // consumer — the nav bar, the /admin guard — on the pre-edit values.
+// 2026-10-11, Claude Code (Fable 5), issue #94: restored(), the
+// account-recovery screen's exit — strips deletionScheduledFor from the
+// stored session (without that the recovery guard would bounce the user
+// straight back) and seeds `me` with the restored account.
+// 2026-10-16, Claude Code (Opus 5), PR #180 main sync: endSession(),
+// the local-only sign-out the password-reset page needs — a reset
+// revokes the account's sessions server-side (G11), so landing on
+// /login still holding the token left a dead session in localStorage
+// whose next 401 would raise #178's "session ended" notice on top of
+// the reset one.
 // 2026-09-29, Claude Code (Opus 5.5), issue #147: Prettier formatting;
 // `me`, the signed-in
 // user's account from GET /users/me, shared by the /admin guard and the
@@ -45,6 +55,15 @@ export interface AuthData {
   // replaces the session's `me` with an account just saved, so the rest
   // of the app stops showing the values it had before the edit
   updateMe(user: AdminUser): void
+  // the account was just brought back by POST /users/me/recover: drops
+  // deletionScheduledFor from the stored session (ending the recovery
+  // guard's redirect) and seeds `me` with the restored account
+  restored(user: AdminUser): void
+  // clears the stored session and nothing else — no POST /auth/logout,
+  // no navigation. For a caller that already knows the token is dead
+  // and is navigating itself (the password-reset page, whose reset the
+  // server answered by evicting the account's sessions).
+  endSession(): void
 }
 
 export const AuthContext = createContext<AuthData | null>(null)

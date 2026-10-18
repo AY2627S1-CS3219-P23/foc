@@ -14,6 +14,9 @@
  * 2026-10-14, Claude Code (Opus 5.5), PR #189 review (Leong Wei Zhi):
  * the CORS comment updated for the gateway cutover (issue #151), per
  * the reviewer's comment.
+ * 2026-10-17, Claude Code (Opus 5.5), issue #174: the first role gate,
+ * /credits/admin/** for ADMIN and OWNER (team decision), the roles
+ * user-service's admin routes allow.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.config;
@@ -75,6 +78,10 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         // health checks (compose depends_on / probes) carry no credentials
                         .requestMatchers("/actuator/health").permitAll()
+                        // the pool and its redistributions, for the admin
+                        // dashboard; the role is the token's, read by
+                        // JwtAuthenticationFilter
+                        .requestMatchers("/credits/admin/**").hasAnyRole("ADMIN", "OWNER")
                         // everything else is the caller's own credit data
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
