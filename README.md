@@ -105,7 +105,8 @@
   2026-10-17: AI Use Summary extended for the order-service request
   events (RequestsService, outbox, credit reply listener) by Claude
   Code (Opus 5.5), then for the RequestsController endpoints, then
-  for the order-service ownership checks.
+  for the order-service ownership checks, then for the manual-testing
+  scripts, stubs and the gateway order route.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -593,7 +594,11 @@ delegating to `RequestsService`, with tests; paths, parameters and
 request/response shapes specified by the author); and order-service's
 bearer-token auth (copied from credit-service) with the ownership rules
 for each step and the self-accept refusal, the rules, the ids-from-token
-choice and the 409 / 404 answers chosen by the author.
+choice and the 409 / 404 answers chosen by the author; and the
+`order-event.ps1` / `order-curl.ps1` / `order-e2e.ps1` manual-testing
+helpers, the `credit-stub.ps1` / `stub-users.psd1` stand-ins for the
+Credit and User Services, and the gateway's `/api/order` route
+replacing the reserved stub.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

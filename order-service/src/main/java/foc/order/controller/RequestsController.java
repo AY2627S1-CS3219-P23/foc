@@ -25,10 +25,13 @@
  * requesterId and courierId left the bodies (the author's decision);
  * the other routes pass the caller to RequestsService's ownership
  * checks.
+ * Same day: InvalidRequestException (missing or invalid /create fields)
+ * answered 400 with its message (the author's decision).
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order.controller;
 
+import foc.order.InvalidRequestException;
 import foc.order.RequestsService;
 import foc.order.model.Requests;
 import org.springframework.http.HttpStatus;
@@ -121,6 +124,14 @@ public class RequestsController {
     @PostMapping("/complete")
     public MessageResponse complete(@RequestBody RequestIdBody body, Authentication caller) {
         return message(requestsService.complete(body.requestId(), callerId(caller)), "completed");
+    }
+
+    // A new request with missing fields or invalid values; the message
+    // lists every problem.
+    @ExceptionHandler(InvalidRequestException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public MessageResponse handleInvalidRequest(InvalidRequestException e) {
+        return new MessageResponse(e.getMessage());
     }
 
     // The event is not allowed from the request's current state.

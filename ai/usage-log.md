@@ -26,6 +26,123 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Aung Ko Khant (order-service: create field checks)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `RequestsService.create` checks a new request before storing
+  it: the NOT NULL columns present (blank text counts as missing;
+  `supplierName` optional), `creditAmount` at least 1 (F1.1.3), `deadline`
+  in the future (F1.1.2); every problem in one `InvalidRequestException`
+  (new), which `RequestsController` answers 400 with the message. Tests
+  (78 passing); README endpoints paragraph.
+- **Prompt(s):** "When creating a request, can we check that all required
+  fields are there and raise an error explicitly if not instead of
+  silently failing" (a missing field was a bare 500). The tool asked as
+  neutral options; the author chose: required = the database's NOT NULL
+  columns (supplierName optional); 400 listing every missing field; also
+  check the reward and deadline values in the same 400.
+- **Author review:** `mvn test` in a Maven container: 78 tests, 0
+  failures. Rebuilt container through the gateway: missing fields 400 with
+  the list, reward 0 and a past deadline 400, a valid create 200. To be
+  reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: order-e2e.ps1)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** new `order-service/order-e2e.ps1`: logs in a requester and
+  a courier (real user-service accounts, passwords prompted hidden),
+  creates requests through the gateway, gets them reserved (credit-service
+  within 5 s, else `credit-stub.ps1`), and checks 11 steps against the
+  ownership rules (409 self-accept, 404 other party, 401 no token, 200
+  owner); README section.
+- **Prompt(s):** "How can I manually test user verified order service",
+  then "Could we write this as a script".
+- **Author review:** run by the tool against the compose stack with two
+  throwaway accounts it created in the local user-db through sign-up and
+  Mailpit (e2e_requester, e2e_courier): 11 of 11 checks passed. The
+  first run showed this branch's credit-service never reserves (no
+  request-event listener before main's), hence the stub fallback. To be
+  reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: scripts call as users)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** split from the 2026-10-18 ownership-checks entry:
+  `ManualRequestsHarness` acts as each step's party; `order-curl.ps1`
+  signs a bearer token like user-service's (HS256 with `.env`'s
+  `JWT_SECRET`; sub, role, jti, iat, exp) for the step's party, or for
+  `-As`, and no longer sends `requesterId` / `courierId`.
+- **Prompt(s):** part of "I would like to add owner ship checks ..."
+  (the endpoints now need a token).
+- **Author review:** `order-curl.ps1` run through the gateway against the
+  rebuilt container (owners 200, other party 404, self-accept 409). To be
+  reviewed via pull request.
+
+## 2026-10-17 — Aung Ko Khant (order-service: credit and user stubs)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** new `order-service/credit-stub.ps1` (sends `credit.reserved`
+  / `credit.reservation-rejected` for one request to `credit-events`
+  via the RabbitMQ management API, values read from order-db; warns if
+  credit-service is running or the request is not PENDING; prints the
+  resulting status), new `order-service/stub-users.psd1` (alice 1, bob
+  2, carol 3, dave 4), `order-curl.ps1` `-Requester` / `-Courier` take a
+  name or an id (courier default now bob instead of 7), README section.
+- **Prompt(s):** "can we create a stub for credit service and user
+  service?" The tool asked as neutral options; the author chose: for
+  testing order-service alone; the credit stub replies only when told
+  (reserve/reject per call); the user stub is a fixed user list.
+- **Author review:** run against the compose stack with credit-service
+  stopped: reserve moved a request PENDING -> CREATED and accept then
+  succeeded; reject moved one to REJECTED and a later reserve was
+  ignored. A first run failed with RabbitMQ `not_json` (Windows
+  PowerShell piped a BOM); fixed by sending the body from a BOM-less
+  file. To be reviewed via pull request.
+
+---
+
+## 2026-10-17 — Aung Ko Khant (gateway: /api/order route)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug
+- **Scope:** `gateway/nginx.conf` — the reserved `/api/order/` 503 stub
+  replaced with a proxied location identical in form to credit's (auth
+  check, prefix stripped, `order-service:8080`); `docs/gateway.md`
+  routing-table row; `order-service/order-curl.ps1` default `BaseUrl`
+  now `http://localhost:8090/api/order`.
+- **Prompt(s):** `./order-curl create` failed with "Failed to connect to
+  localhost:8088". Cause: order-service lost its host port in the
+  gateway cutover (G3), and the gateway still answered the stub. The
+  stub's own comment and G3 reserved the prefix for this replacement,
+  so no new decision was made.
+- **Author review:** gateway rebuilt with compose; `./order-curl.ps1
+  create` returned 200 "Request 1 created" through the gateway. To be
+  reviewed via pull request.
+
+---
+
+## 2026-10-13 — Aung Ko Khant (order-service: manual-testing scripts)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `order-service/order-event.ps1` and `order-curl.ps1`
+  (new), `ManualRequestsHarness` (interactive mode),
+  `order-service/README.md` manual-testing sections. Later extended:
+  reserve / reject / timeout (2026-10-15) and arrive (2026-10-16).
+- **Prompt(s):** split from the 2026-10-13 RequestsController entry.
+  After asking how to test the transitions against the real database
+  and view the rows in DBeaver, "Can you create a script?": the tool
+  wrote `order-event.ps1`, which runs the existing
+  `ManualRequestsHarness` in a Maven container against the compose
+  `order-db`. Then "is it possible for it to stay on until I am done":
+  the tool added an interactive mode to the harness
+  (`-Dinteractive=true`) and made the script start it when run with no
+  event. Then "Can I test the endpoints using a curl script?": the
+  tool wrote `order-curl.ps1`, which POSTs to one endpoint with curl
+  and prints the status and body.
+- **Author review:** the interactive mode was run in the Maven
+  container against `order-db` with piped commands; `order-curl.ps1`
+  was run against the compose order-service (create, accept, collect,
+  complete, plus a 409 and a 404). To be reviewed via pull request.
+
 ## 2026-10-18 — Aung Ko Khant (order-service: ownership checks)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate

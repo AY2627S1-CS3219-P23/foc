@@ -25,6 +25,10 @@
  * Same day: ownership checks (the author's rules): collect, arrive and
  * drop only by the assigned courier, cancel and complete only by the
  * requester; anyone else is told the request does not exist (404).
+ * Same day: create checks its fields first (the author's rules): every
+ * NOT NULL column present, text not blank, creditAmount at least 1
+ * (F1.1.3) and deadline in the future (F1.1.2), all problems reported
+ * at once as an InvalidRequestException (400).
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -35,6 +39,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.NoSuchElementException;
 
 @Service
@@ -53,6 +59,7 @@ public class RequestsService {
     // Credit Service answers request.submitted.
     @Transactional
     public Requests create(Requests request) {
+        validateNew(request);
         request.setStatus(OrderStateMachine.INITIAL_STATE);
         request.setCreatedAt(Instant.now());
         Requests saved = requestsRepository.save(request);
@@ -152,6 +159,39 @@ public class RequestsService {
         Requests request = transition(asRequester(requestId, callerId), OrderEvents.COMPLETE);
         outbox.enqueue(RequestEvents.completed(request));
         return request;
+    }
+
+    // The caller-supplied fields of a new request: the NOT NULL columns
+    // must be present (blank text counts as missing), the reward at least
+    // 1 credit (F1.1.3) and the deadline in the future (F1.1.2). Every
+    // problem is reported in one message; supplierName is optional, as
+    // its column is.
+    private static void validateNew(Requests request) {
+        List<String> missing = new ArrayList<>();
+        if (request.getRequesterId() == null) missing.add("requesterId");
+        if (request.getSupplierId() == null) missing.add("supplierId");
+        if (isBlank(request.getDropoffLocation())) missing.add("dropoffLocation");
+        if (isBlank(request.getItem())) missing.add("item");
+        if (request.getCreditAmount() == null) missing.add("creditAmount");
+        if (request.getDeadline() == null) missing.add("deadline");
+
+        List<String> problems = new ArrayList<>();
+        if (!missing.isEmpty()) {
+            problems.add("Missing required fields: " + String.join(", ", missing));
+        }
+        if (request.getCreditAmount() != null && request.getCreditAmount() < 1) {
+            problems.add("creditAmount must be at least 1");
+        }
+        if (request.getDeadline() != null && !request.getDeadline().isAfter(Instant.now())) {
+            problems.add("deadline must be in the future");
+        }
+        if (!problems.isEmpty()) {
+            throw new InvalidRequestException(String.join("; ", problems));
+        }
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     // Loads the request and moves it to the state the event leads to.
