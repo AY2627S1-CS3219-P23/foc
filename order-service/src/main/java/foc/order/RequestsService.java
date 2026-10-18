@@ -19,7 +19,8 @@
  * Credit Service pays the courier (the author's decision).
  * Same day: cancel and expire write request.cancelled and
  * request.expired, so the Credit Service releases the reward to the
- * requester (the author's decision). DROP still publishes nothing.
+ * requester (the author's decision). DROP still publishes nothing
+ * (until request.dropped, below).
  * 2026-10-18: accept refuses a courier who is the request's own
  * requester, answered 409 (the author's decision).
  * Same day: ownership checks (the author's rules): collect, arrive and
@@ -37,6 +38,9 @@
  * requester is told (new event type, not request.cancelled — the
  * reward stays held, F5.2; the author's decision via options Q&A);
  * pending pull request review.
+ * PR #214 review (@Sinnez1): the dropping courier passed to the event
+ * factory explicitly, so the enqueue no longer has to precede the
+ * field clear.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -145,14 +149,15 @@ public class RequestsService {
     // Back to CREATED, so the courier fields go back to their
     // "null until accepted" state. request.dropped tells the requester,
     // not request.cancelled: the reward must stay held for the next
-    // courier (Order F5.2). Enqueued before the courier fields are
-    // cleared — the event names the courier who dropped.
+    // courier (Order F5.2). The event names the courier who dropped, so
+    // they are captured before the clear and passed in explicitly.
     @Transactional
     public Requests drop(Long requestId, Long callerId) {
         Requests request = transition(asCourier(requestId, callerId), OrderEvents.DROP);
-        outbox.enqueue(RequestEvents.dropped(request));
+        Long courierId = request.getCourierId();
         request.setCourierId(null);
         request.setAcceptedAt(null);
+        outbox.enqueue(RequestEvents.dropped(request, courierId));
         return request;
     }
 

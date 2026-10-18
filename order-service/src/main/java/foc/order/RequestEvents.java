@@ -19,6 +19,8 @@
  * Same day, Claude Code (Fable 5): request.dropped for the DROP
  * transition (parties = the requester only, the author's decision via
  * options Q&A); pending pull request review.
+ * PR #214 review (@Sinnez1): dropped() takes the courier explicitly
+ * instead of reading the entity field the caller is about to clear.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -92,10 +94,11 @@ final class RequestEvents {
 
     // request.dropped: the courier withdrew after accepting; the request
     // reopens and the reward stays held (F5.2), so only the requester is
-    // told. Built while the courier fields are still set.
-    static RequestDropped dropped(Requests r) {
+    // told. The dropping courier is a parameter: the caller has already
+    // cleared the entity's courier fields.
+    static RequestDropped dropped(Requests r, Long droppedCourierId) {
         return new RequestDropped(newEventId(), Instant.now(), PRODUCER, correlationId(r), parties(r),
-                id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
+                id(r.getId()), id(r.getRequesterId()), id(droppedCourierId), r.getSupplierName(),
                 r.getDropoffLocation(), r.getItem());
     }
 

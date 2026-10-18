@@ -39,6 +39,22 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Leong Wei Zhi (PR #214 review round)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor + docs
+- **Scope:** all three findings of @Sinnez1's PR #214 review:
+  `order-service/README.md`'s "DROP publishes nothing" line updated to
+  `request.dropped` (blocking); the `RequestsService` header's older
+  "DROP still publishes nothing" line marked "(until request.dropped,
+  below)"; `RequestEvents.dropped` now takes the dropping courier as a
+  parameter (the reviewer's snippet), so the enqueue no longer depends
+  on running before the courier fields are cleared.
+- **Prompt(s):** "address pr comments and reply to each comment
+  individually".
+- **Author review:** to review via PR #214. `RequestsServiceTests`
+  rerun 36/36.
+
+---
 ## 2026-10-18 — Leong Wei Zhi (request.dropped notification)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate
