@@ -58,6 +58,12 @@ export function RequestHistory() {
         setTotal(result.totalElements)
         setTotalPages(result.totalPages)
         setError(null)
+        // Defensive: if the page we asked for no longer exists, step back to
+        // the last one that does instead of showing an empty, unpageable
+        // list. (History only grows today, so this should not fire.)
+        if (page > 0 && page >= result.totalPages) {
+          setPage(Math.max(0, result.totalPages - 1))
+        }
       })
       .catch((err) => {
         if (!cancelled)

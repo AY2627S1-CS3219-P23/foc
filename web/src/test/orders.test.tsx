@@ -18,6 +18,7 @@ import { CreateRequest } from '@/routes/create-request'
 import { MyRequests } from '@/routes/my-requests'
 import { ActiveDelivery } from '@/routes/active-delivery'
 import { OpenRequests } from '@/routes/open-requests'
+import { RequestHistory } from '@/routes/request-history'
 
 const session = vi.hoisted(() => ({ userId: 3 as number | null }))
 vi.mock('@/features/order/useCurrentUserId', () => ({
@@ -50,6 +51,7 @@ function renderAt(path: string) {
         <Route path="/my-requests/new" element={<CreateRequest />} />
         <Route path="/my-requests" element={<MyRequests />} />
         <Route path="/requests" element={<OpenRequests />} />
+        <Route path="/history" element={<RequestHistory />} />
         <Route path="/deliveries/:id" element={<ActiveDelivery />} />
       </Routes>
     </MemoryRouter>,
@@ -290,6 +292,29 @@ describe('active delivery', () => {
     expect(
       screen.queryByRole('button', { name: 'Mark as picked up' }),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('request history', () => {
+  it('steps back a page when the requested page no longer exists', async () => {
+    const done: Order = { ...base, id: 4, status: 'COMPLETED' }
+    const list = vi
+      .spyOn(orderApi, 'listMyOrders')
+      .mockResolvedValueOnce({ ...pageOf([done]), totalPages: 2 })
+      // page 2 has vanished: only one page is left
+      .mockResolvedValueOnce({ ...pageOf([]), totalPages: 1 })
+      .mockResolvedValue({ ...pageOf([done]), totalPages: 1 })
+    renderAt('/history')
+    await screen.findAllByText('#4')
+
+    await userEvent.click(screen.getByRole('button', { name: /2/ }))
+
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 0 }),
+      ),
+    )
+    expect((await screen.findAllByText('#4')).length).toBeGreaterThan(0)
   })
 })
 
