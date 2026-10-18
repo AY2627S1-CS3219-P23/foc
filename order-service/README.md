@@ -5,14 +5,18 @@
   skeleton. 2026-10-11: status paragraph updated for the Requests
   entity/repository skeleton, then for the state machine skeleton.
   2026-10-12: status paragraph updated for RequestsService.
-  2026-10-13: endpoints section for the RequestsController mappings.
+  2026-10-13: manual testing section for order-event.ps1; endpoints
+  section for the RequestsController mappings; order-curl.ps1 section.
   2026-10-15: status paragraph and a "Saga with the Credit Service"
   section for PENDING/REJECTED, the outbox and the reply listener.
   2026-10-16: the ARRIVED state and /arrive.
   2026-10-17: request.completed on COMPLETE; request.cancelled and
-  request.expired on CANCEL and EXPIRE.
+  request.expired on CANCEL and EXPIRE. Same day: section on testing
+  without the Credit and User Services (credit-stub.ps1, stub-users.psd1).
   2026-10-18: 409 when the requester accepts their own request; then
-  bearer-token auth and the ownership rules in the endpoints section.
+  bearer-token auth and the ownership rules in the endpoints section;
+  then /create's 400 field checks;
+  order-e2e.ps1 section.
   Reviewed by: Ko-Khan (via pull request).
 -->
 
@@ -72,7 +76,10 @@ The team's design is in [`docs/credit-service.md`](../docs/credit-service.md)
   noted above).
 
 Without the Credit Service running, a new request stays PENDING and
-is cancelled after 30 s.
+is cancelled after 30 s. To move one on by hand, use
+`./order-event.ps1 reserve <id>` (or `reject`, `timeout`) — the
+harness runs with the broker off, so the events it writes stay unsent
+in the outbox.
 
 ## Endpoints
 
@@ -84,7 +91,11 @@ state (including a courier action on a still-PENDING request) or the
 requester tries to accept their own request; 404 if no request has that
 id **or the step is not the caller's** (the same answer, so a stranger
 cannot tell the request exists). A missing or invalid token is a 401
-problem+json.
+problem+json. `/create` answers 400 listing every problem at once:
+missing fields (blank text counts as missing; `supplierName` is
+optional), `creditAmount` below 1, or a `deadline` not in the future —
+e.g. `{"message": "Missing required fields: item, deadline; creditAmount
+must be at least 1"}`.
 
 | Path | Body | Who may call it |
 | --- | --- | --- |
@@ -116,3 +127,83 @@ docker compose up --build order-service
 # No host port since the gateway cutover (issue #151): the service is
 # reached through the gateway at /api/order/** (docs/gateway.md).
 ```
+
+## Manual testing over HTTP
+
+`order-curl.ps1` calls one endpoint of a running order-service with
+curl and prints the HTTP status and response body. `create` sends a
+sample request.
+
+```powershell
+docker compose up --build -d order-service   # from the repo root
+./order-curl.ps1 create                      # -> Request 1 created (PENDING)
+# wait for credit-service to reserve the reward (request becomes CREATED)
+./order-curl.ps1 accept 1 -Courier bob
+./order-curl.ps1 collect 1
+./order-curl.ps1 arrive 1
+./order-curl.ps1 complete 1
+```
+
+## End-to-end check with real accounts
+
+`order-e2e.ps1` logs in two verified user-service accounts through the
+gateway and walks requests through the lifecycle with their tokens,
+trying each step as the wrong person first: it prints PASS / FAIL per
+step (11 checks). Passwords are prompted for, hidden. The reward is
+reserved by credit-service if it does so within 5 s, otherwise by
+`credit-stub.ps1`.
+
+```powershell
+docker compose up --build -d order-service gateway user-service   # from the repo root
+./order-e2e.ps1 -Requester <username or email> -Courier <another account>
+```
+
+## Testing without the Credit and User Services
+
+`credit-stub.ps1` stands in for the Credit Service: it sends the reply
+you choose for one request to the `credit-events` exchange (through the
+RabbitMQ management API), with the requester and reward read from
+`order-db`. `stub-users.psd1` is a fixed user list (alice = 1, bob = 2,
+carol = 3, dave = 4) standing in for the User Service; `order-curl.ps1`
+takes those names, or ids, for `-Requester` and `-Courier`.
+
+```powershell
+docker compose stop credit-service           # from the repo root, or it answers first
+./order-curl.ps1 create -Requester carol     # -> Request 1 created (PENDING)
+./credit-stub.ps1 reserve 1                  # -> request 1 is now CREATED
+./order-curl.ps1 accept 1 -Courier dave
+./credit-stub.ps1 reject 2 -Reason 'insufficient available credits'   # -> REJECTED
+```
+
+Needs `rabbitmq`, `order-db`, `order-service` and `gateway` running.
+
+## Manual testing against order-db
+
+`order-event.ps1` fires order events at one request in the compose
+`order-db` by running `ManualRequestsHarness` in a Maven container (no
+local JDK needed; needs Docker and a root `.env`). It prints the stored
+row after each event; inspect the `requests` table with any client on
+`localhost:${ORDER_DB_HOST_PORT:-5437}`.
+
+```powershell
+./order-event.ps1 create               # inserts a sample request (PENDING), prints its id
+./order-event.ps1 reserve 1            # PENDING -> CREATED, standing in for credit.reserved
+./order-event.ps1 accept 1 -Courier 7  # fires accept at request 1
+./order-event.ps1 collect,arrive,complete 1   # several events in order
+```
+
+Run it with no event to start a session that stays up, so each event
+takes effect immediately instead of restarting the container:
+
+```text
+./order-event.ps1          # or ./order-event.ps1 -Id 1 to continue request 1
+create
+reserve
+accept
+courier 9                  # courier id used by later accepts
+id 3                       # switch to request 3
+collect,complete
+quit
+```
+
+A rejected event is reported and the session carries on.
