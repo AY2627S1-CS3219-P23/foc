@@ -24,12 +24,19 @@ import type {
   SupplierOption,
 } from './types'
 
-function pageQuery(page: number, size: number, extra?: Record<string, string>) {
-  const query = new URLSearchParams({
-    ...extra,
-    page: String(page),
-    size: String(size),
-  })
+// Optional filters are left out when undefined: URLSearchParams would send
+// them as the literal string "undefined".
+function pageQuery(
+  page: number,
+  size: number,
+  extra: Record<string, string | undefined> = {},
+) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(extra)) {
+    if (value !== undefined) query.set(key, value)
+  }
+  query.set('page', String(page))
+  query.set('size', String(size))
   return `?${query}`
 }
 
