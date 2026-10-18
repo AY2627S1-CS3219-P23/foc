@@ -34,6 +34,9 @@
   self-deletion writes no stamp, so the paragraph's scope (the
   admin-initiated paths) is explicit. Accepted as-is (option C) by
   Leong Wei Zhi via options Q&A. No gateway code changed.
+  2026-10-17, Claude Code (Opus 5.5), Aung Ko Khant: `/api/order/**` row
+  updated, the reserved stub replaced with the real route (no new
+  decision: G3 reserved the prefix for it).
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -138,10 +141,10 @@ fresh ones its logins keep minting for 30 days — stay valid.
 | `/api/supplier/**` | `supplier-service:8080` | prefix stripped |
 | `/api/credit/**` | `credit-service:8080` | prefix stripped |
 | `/api/notification/**` | `notification-service:8080` | prefix stripped; WebSocket upgrade + SockJS streaming enabled for `/ws/**` |
-| `/api/order/**` | — | reserved: same auth check as real routes, then a CORS-readable 503 problem+json (incl. answering the preflight itself) until order-service exists |
+| `/api/order/**` | `order-service:8080` | prefix stripped (the reserved 503 stub was replaced on 2026-10-17 once order-service existed) |
 | anything else | — | 404 problem+json |
 
-Every gateway-origin response — the Lua 401s, the order stub, the 404,
+Every gateway-origin response — the Lua 401s, the 404,
 and the 502/504 a briefly-restarting backend produces — is problem+json
 with `Access-Control-Allow-Origin`, so the SPA reads a status instead
 of a blocked response (PR #176 review).
