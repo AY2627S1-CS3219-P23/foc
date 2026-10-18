@@ -9,6 +9,8 @@
 // problem+json error banner, and the logged-out redirect. Interaction
 // shapes are the author's options-Q&A decisions (see
 // features/notifications/NotificationCenter.tsx).
+// 2026-10-18: request.dropped template cases (with and without the
+// enriched courierName); pending pull request review.
 // Reviewed by: Leong Wei Zhi (via pull request).
 // 2026-10-18, Claude Code (Fable 5), notification sound (follow-up to
 // issue #66, no issue yet): header sound-toggle cases — default on,
@@ -345,6 +347,35 @@ describe('notification center page', () => {
     })
     expect(readRow).toBeDisabled()
     expect(readRow).toHaveTextContent('3h ago')
+  })
+
+  test('a dropped request names the courier, and degrades without a name', async () => {
+    pages = [
+      pageOf(
+        [
+          notification(
+            2,
+            'request.dropped',
+            { requestId: '1051', courierName: 'courier_maya' },
+            false,
+          ),
+          // enrichment can fail (D30): the copy degrades, never breaks
+          notification(1, 'request.dropped', { requestId: '1052' }, false),
+        ],
+        0,
+        1,
+        2,
+      ),
+    ]
+    unreadCountOnServer = 2
+    await renderCenter()
+
+    screen.getByRole('button', {
+      name: 'Request #1051 dropped by courier_maya — unread, select to mark read',
+    })
+    screen.getByRole('button', {
+      name: 'Request #1052 was dropped by its courier — unread, select to mark read',
+    })
   })
 
   test("shows the wireframe's empty state when there is nothing", async () => {

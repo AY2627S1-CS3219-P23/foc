@@ -16,6 +16,11 @@
  * plus the courier when one had accepted; the author's decisions).
  * 2026-10-18: request.accepted and request.collected, parties = the
  * requester and the courier (the author's decision).
+ * Same day, Claude Code (Fable 5): request.dropped for the DROP
+ * transition (parties = the requester only, the author's decision via
+ * options Q&A); pending pull request review.
+ * PR #214 review (@Sinnez1): dropped() takes the courier explicitly
+ * instead of reading the entity field the caller is about to clear.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -26,6 +31,7 @@ import foc.contracts.events.request.RequestCancelled;
 import foc.contracts.events.request.RequestCollected;
 import foc.contracts.events.request.RequestCompleted;
 import foc.contracts.events.request.RequestCreated;
+import foc.contracts.events.request.RequestDropped;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestRejected;
 import foc.contracts.events.request.RequestSubmitted;
@@ -83,6 +89,16 @@ final class RequestEvents {
     static RequestCollected collected(Requests r) {
         return new RequestCollected(newEventId(), Instant.now(), PRODUCER, correlationId(r), requesterAndCourier(r),
                 id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
+                r.getDropoffLocation(), r.getItem());
+    }
+
+    // request.dropped: the courier withdrew after accepting; the request
+    // reopens and the reward stays held (F5.2), so only the requester is
+    // told. The dropping courier is a parameter: the caller has already
+    // cleared the entity's courier fields.
+    static RequestDropped dropped(Requests r, Long droppedCourierId) {
+        return new RequestDropped(newEventId(), Instant.now(), PRODUCER, correlationId(r), parties(r),
+                id(r.getId()), id(r.getRequesterId()), id(droppedCourierId), r.getSupplierName(),
                 r.getDropoffLocation(), r.getItem());
     }
 

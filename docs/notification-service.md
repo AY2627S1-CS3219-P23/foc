@@ -175,9 +175,15 @@ contract change ships as a new event type** (e.g.
 The cataloged request events (Order F0.2 state transitions plus the
 courier-arrival update, F4.1.1–F4.1.2): `request.created`,
 `request.accepted`, `request.collected`, `request.completed`,
-`request.cancelled`, `request.expired`, `request.courier-arrived`, and
-the Credit saga's `request.submitted` and `request.rejected`
-([`credit-service.md`](credit-service.md) D7–D8). All request events
+`request.cancelled`, `request.dropped`, `request.expired`,
+`request.courier-arrived`, and the Credit saga's `request.submitted`
+and `request.rejected`
+([`credit-service.md`](credit-service.md) D7–D8). `request.dropped` is
+the courier withdrawing after an accept (Order F5.2): the request
+returns to the open feed and the reward stays held, so it is a
+distinct type — never `request.cancelled`, which would release the
+reward — with `parties` = the requester only and a non-null
+`courierId` (the courier who dropped). All request events
 carry `requestId`, `requesterId`, `pickupLocation`, `dropoffLocation`,
 and `note` (nullable: a request may have none); the post-acceptance events add `courierId` (nullable on
 `request.cancelled` — a pre-acceptance cancel has no courier),
