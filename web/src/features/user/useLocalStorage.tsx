@@ -11,8 +11,13 @@
 // render, or by another tab's write (the key is shared). The hook itself
 // is unchanged.
 // Author review: Leong Wei Zhi to review via the PR.
+// 2026-10-18, Claude Code (Fable 5), notification sound (follow-up to
+// issue #66, no issue yet): setValue memoized with useCallback —
+// NotificationProvider now passes it through a useMemo'd context value,
+// which a per-render function identity would defeat. Behaviour
+// unchanged for existing callers.
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 
 // what the key holds right now, parsed; null when unset or unparseable.
 // Unlike the hook's state this is never stale: setValue below writes
@@ -44,14 +49,17 @@ export const useLocalStorage = <T,>(
     }
   })
 
-  const setValue = (newValue: T | null) => {
-    try {
-      window.localStorage.setItem(keyName, JSON.stringify(newValue))
-    } catch (err) {
-      console.log(err)
-    }
-    setStoredValue(newValue)
-  }
+  const setValue = useCallback(
+    (newValue: T | null) => {
+      try {
+        window.localStorage.setItem(keyName, JSON.stringify(newValue))
+      } catch (err) {
+        console.log(err)
+      }
+      setStoredValue(newValue)
+    },
+    [keyName],
+  )
 
   return [storedValue, setValue]
 }

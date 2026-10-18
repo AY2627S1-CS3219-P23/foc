@@ -17,6 +17,11 @@
 // with the /users/me body); a seed test covers the REST-seeded badge
 // composing with pushed frames.
 // Reviewed by: Leong Wei Zhi (via pull request).
+// 2026-10-18, Claude Code (Fable 5), notification sound (follow-up to
+// issue #66, no issue yet): chime cases — once per live frame, once for
+// a burst batched into one render, never for REST seeds/reconnects or
+// the logout reset, and the localStorage toggle (default on) gates it.
+// The chime module itself is mocked; its audio has its own unit test.
 
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -48,6 +53,11 @@ const stomp = vi.hoisted(() => {
   }> = []
   return { instances }
 })
+
+// the chime is a side effect the provider must trigger at the right
+// moments; whether it can make sound at all is chime.test.ts's problem
+const chime = vi.hoisted(() => ({ playChime: vi.fn() }))
+vi.mock('@/features/notifications/chime', () => chime)
 
 vi.mock('@stomp/stompjs', () => {
   class Client {
@@ -84,6 +94,7 @@ beforeEach(() => {
   localStorage.clear()
   stomp.instances.length = 0
   unreadCountOnServer = 0
+  chime.playChime.mockClear()
   fetchMock.mockReset()
   // dispatch on the URL: AuthProvider asks GET /users/me, the
   // notification provider asks GET /notifications/me/unread-count —
@@ -347,6 +358,69 @@ describe('notification STOMP client', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  test('a live frame chimes once; a burst batched into one render chimes once', () => {
+    renderApp(true)
+    const onMessage = connectAndSubscribe()
+
+    pushFrame(onMessage)
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+
+    // two frames delivered in a single WebSocket message run their
+    // callbacks in one task — one committed render, one chime
+    act(() => {
+      for (const id of [2, 3]) {
+        onMessage({
+          body: JSON.stringify({
+            id,
+            eventType: 'request.accepted',
+            payload: { requestId: `ord-${id}` },
+            occurredAt: '2026-10-12T08:30:00Z',
+            read: false,
+            createdAt: '2026-10-12T08:30:01Z',
+          }),
+        } as Parameters<messageCallbackType>[0])
+      }
+    })
+    expect(chime.playChime).toHaveBeenCalledTimes(2)
+  })
+
+  test('no chime for the REST seed, the reconnect catch-up, or the logout reset', async () => {
+    const user = userEvent.setup()
+    unreadCountOnServer = 5
+    renderApp(true)
+    // the login seed lands on the badge without a sound
+    await screen.findByRole('link', { name: 'Notifications (5 unread)' })
+
+    const onMessage = connectAndSubscribe()
+    await act(async () => {}) // connect re-sync settles
+    // a reconnect catch-up can jump the count; it must stay silent too
+    act(() => client().config.onConnect?.(undefined as never))
+    await act(async () => {})
+    expect(chime.playChime).not.toHaveBeenCalled()
+
+    pushFrame(onMessage)
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+
+    // logout empties the pushed queue — a reset, not an arrival
+    await user.click(await screen.findByRole('button', { name: 'Logout' }))
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+  })
+
+  test('the stored toggle gates the chime and defaults to on', () => {
+    localStorage.setItem('notificationSoundEnabled', 'false')
+    renderApp(true)
+    pushFrame(connectAndSubscribe())
+    expect(chime.playChime).not.toHaveBeenCalled()
+  })
+
+  test('an unset toggle means on, and the default is written back', () => {
+    renderApp(true)
+    // the hook makes the default explicit on first read
+    expect(localStorage.getItem('notificationSoundEnabled')).toBe('true')
+    pushFrame(connectAndSubscribe())
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
   })
 
   test('the bell reports a paused channel when the notification URL is unset', () => {

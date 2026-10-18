@@ -39,6 +39,36 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Leong Wei Zhi (notification sound, follow-up to issue #66)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `web/` — a bell chime on live STOMP notification arrivals
+  with a client-stored mute: new `features/notifications/chime.ts` (Web
+  Audio two-tone synth, every blocked/muted path silent);
+  `NotificationProvider` keys the chime on the pushed queue's identity
+  (live arrivals only — REST seeds, reconnect catch-ups and the logout
+  reset stay silent; a burst batched into one render chimes once) and
+  holds the localStorage-backed toggle (`notificationSoundEnabled`,
+  default on) in the context; toggle surfaces in the Notification
+  Center header (`aria-pressed` icon button) and a new profile
+  Preferences card (`role="switch"`); `useLocalStorage.setValue`
+  memoized so the context `useMemo` holds; tests in `chime.test.ts`
+  plus new cases in `notifications.test.tsx`,
+  `notification-center.test.tsx`, `profile.test.tsx`; wireframe
+  deviation rows in `web/AGENTS.md`.
+- **Prompt(s):** "i want to have a bell sound on the web everytime a
+  notification is arrived, the sound can be disabled by the client (the
+  setting should be stored on the client), also if the external system
+  like os or web browser tab disables sound, then the notification
+  should be silent" — surface (both toggles) and sound source (Web
+  Audio synthesis, no binary asset) chosen by the author via options
+  Q&A.
+- **Author review:** Leong Wei Zhi to review via the PR; `npm test`
+  (263 passing), `npm run lint`, `npm run format:check`, `npm run
+  build` all clean. Known limit flagged in the PR: a push arriving
+  before the first user gesture after a cold page load may be silent
+  (browser autoplay policy; accepted, no workaround added).
+
 ## 2026-10-18 — Ryan Ang (PR #212 review follow-ups)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** docs + code comments

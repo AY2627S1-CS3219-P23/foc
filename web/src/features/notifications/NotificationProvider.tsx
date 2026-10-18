@@ -29,13 +29,22 @@
 // guard, and a push triggers its own sync), and pushes queue instead
 // of a single replaceable value, so two frames delivered in one
 // WebSocket message both reach the open Center.
+// 2026-10-18, Claude Code (Fable 5), notification sound (follow-up to
+// issue #66, no issue yet): a live push now plays a chime, keyed on the
+// pushed queue's identity — the one signal that moves only on live
+// arrivals, never on the REST seeds/re-syncs — so a burst batched into
+// one render chimes once and a reconnect catch-up stays silent. The
+// localStorage-backed toggle (device preference, default on) lives here
+// and is shared through the context.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet } from 'react-router'
 import { Client, ReconnectionTimeMode } from '@stomp/stompjs'
 import { serviceBaseUrls } from '@/lib/api/config'
 import { useAuth } from '@/features/user/useAuth'
+import { useLocalStorage } from '@/features/user/useLocalStorage'
 import { getUnreadCount } from './api'
+import { playChime } from './chime'
 import { NotificationsContext } from './useNotifications'
 import { brokerUrl } from './stompUrl'
 import type { NotificationDto } from './types'
@@ -57,6 +66,11 @@ const PUSH_BUFFER = 20
 // one frozen empty array, so a session with no pushes keeps a stable
 // reference and the Center's render-phase pickup does not re-run
 const NO_PUSHES: NotificationDto[] = []
+
+// whether a live push plays the chime — a device preference (the same
+// browser profile regardless of account), unlike the per-account keys
+// AuthProvider and ProfileSection keep
+const SOUND_KEY = 'notificationSoundEnabled'
 
 // the count stamped with the session that produced it, so a logout or
 // re-login starts over without a reset write (the same derive-by-token
@@ -90,6 +104,30 @@ export const NotificationProvider = () => {
     accessToken !== null && pushed?.token === accessToken
       ? pushed.items
       : NO_PUSHES
+
+  // null (unset) and corrupt values both land on the default: on
+  const [storedSound, setStoredSound] = useLocalStorage<boolean>(
+    SOUND_KEY,
+    true,
+  )
+  const soundEnabled = storedSound !== false
+
+  // A chime per committed render that delivered new frames. The queue's
+  // reference moves only when the subscribe callback parses a push —
+  // never on the REST count seeds/re-syncs — so this cannot fire on
+  // login or reconnect catch-up; and a burst batched into one render
+  // chimes once, not per frame (the Center's consumed-queue pattern, as
+  // an effect because sound is a side effect).
+  const chimed = useRef(pushedNotifications)
+  useEffect(() => {
+    if (pushedNotifications === chimed.current) return
+    // advance even when the sound is off, so toggling it on later never
+    // replays an old arrival
+    chimed.current = pushedNotifications
+    // length 0 is the logout/re-login reset to NO_PUSHES, not an arrival
+    if (pushedNotifications.length === 0) return
+    if (soundEnabled) playChime()
+  }, [pushedNotifications, soundEnabled])
 
   // Only the newest sync may land. Two syncs can overlap (login racing
   // a connect, a write racing either), and a push starts one of its own,
@@ -250,8 +288,17 @@ export const NotificationProvider = () => {
       pushStopped,
       pushedNotifications,
       refreshUnreadCount,
+      soundEnabled,
+      setSoundEnabled: setStoredSound,
     }),
-    [unreadCount, pushStopped, pushedNotifications, refreshUnreadCount],
+    [
+      unreadCount,
+      pushStopped,
+      pushedNotifications,
+      refreshUnreadCount,
+      soundEnabled,
+      setStoredSound,
+    ],
   )
 
   return (
