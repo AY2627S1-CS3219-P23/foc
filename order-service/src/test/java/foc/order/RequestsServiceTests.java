@@ -15,6 +15,9 @@
  * 2026-10-17: complete writes request.completed (courier, both parties);
  * a refused complete writes none. cancel writes request.cancelled and
  * expire request.expired (courier in parties when one had accepted).
+ * 2026-10-18: a requester accepting their own request is refused.
+ * Same day: ownership checks (requester-only, courier-only steps; a
+ * stranger is told the request does not exist).
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -41,7 +44,9 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest
 class RequestsServiceTests {
 
+	private static final Long REQUESTER_ID = 1L;
 	private static final Long COURIER_ID = 7L;
+	private static final Long STRANGER_ID = 9L;
 
 	@Autowired
 	private RequestsService requestsService;
@@ -164,7 +169,7 @@ class RequestsServiceTests {
 		Long id = newRequest();
 
 		assertThrows(IllegalStateException.class, () -> requestsService.accept(id, COURIER_ID));
-		assertThrows(IllegalStateException.class, () -> requestsService.cancel(id));
+		assertThrows(IllegalStateException.class, () -> requestsService.cancel(id, REQUESTER_ID));
 		assertThrows(IllegalStateException.class, () -> requestsService.expire(id));
 
 		assertEquals(OrderStates.PENDING, stored(id).getStatus());
@@ -175,11 +180,11 @@ class RequestsServiceTests {
 	void onlyTheSagaArriveAndCompleteWriteEvents() {
 		Long id = newCreatedRequest();
 		requestsService.accept(id, COURIER_ID);
-		requestsService.drop(id);
+		requestsService.drop(id, COURIER_ID);
 		requestsService.accept(id, COURIER_ID);
-		requestsService.collect(id);
-		requestsService.arrive(id);
-		requestsService.complete(id);
+		requestsService.collect(id, COURIER_ID);
+		requestsService.arrive(id, COURIER_ID);
+		requestsService.complete(id, REQUESTER_ID);
 
 		assertEquals(List.of("request.submitted", "request.created", "request.courier-arrived",
 				"request.completed"), eventTypes(id));
@@ -189,10 +194,10 @@ class RequestsServiceTests {
 	void completeWritesRequestCompletedForTheCreditService() {
 		Long id = newCreatedRequest();
 		requestsService.accept(id, COURIER_ID);
-		requestsService.collect(id);
-		requestsService.arrive(id);
+		requestsService.collect(id, COURIER_ID);
+		requestsService.arrive(id, COURIER_ID);
 
-		requestsService.complete(id);
+		requestsService.complete(id, REQUESTER_ID);
 
 		JsonNode completed = eventsFor(id).get(3);
 		assertEquals("request.completed", completed.get("eventType").stringValue());
@@ -213,9 +218,9 @@ class RequestsServiceTests {
 	void failedCompleteWritesNoEvent() {
 		Long id = newCreatedRequest();
 		requestsService.accept(id, COURIER_ID);
-		requestsService.collect(id);
+		requestsService.collect(id, COURIER_ID);
 
-		assertThrows(IllegalStateException.class, () -> requestsService.complete(id));
+		assertThrows(IllegalStateException.class, () -> requestsService.complete(id, REQUESTER_ID));
 
 		assertFalse(eventTypes(id).contains("request.completed"));
 	}
@@ -233,19 +238,32 @@ class RequestsServiceTests {
 	}
 
 	@Test
+	void requesterCannotAcceptTheirOwnRequest() {
+		Long id = newCreatedRequest();
+
+		IllegalStateException e = assertThrows(IllegalStateException.class, () -> requestsService.accept(id, 1L));
+
+		assertEquals("A requester cannot accept their own request", e.getMessage());
+		Requests stored = stored(id);
+		assertEquals(OrderStates.CREATED, stored.getStatus());
+		assertNull(stored.getCourierId());
+		assertNull(stored.getAcceptedAt());
+	}
+
+	@Test
 	void collectArriveCompleteStoresTimestampsAndCompleted() {
 		Long id = newCreatedRequest();
 		requestsService.accept(id, COURIER_ID);
 
-		requestsService.collect(id);
+		requestsService.collect(id, COURIER_ID);
 		assertEquals(OrderStates.COLLECTED, stored(id).getStatus());
 		assertNotNull(stored(id).getCollectedAt());
 
-		requestsService.arrive(id);
+		requestsService.arrive(id, COURIER_ID);
 		assertEquals(OrderStates.ARRIVED, stored(id).getStatus());
 		assertNotNull(stored(id).getArrivedAt());
 
-		requestsService.complete(id);
+		requestsService.complete(id, REQUESTER_ID);
 		assertEquals(OrderStates.COMPLETED, stored(id).getStatus());
 	}
 
@@ -253,9 +271,9 @@ class RequestsServiceTests {
 	void arriveWritesCourierArrivedForTheRequester() {
 		Long id = newCreatedRequest();
 		requestsService.accept(id, COURIER_ID);
-		requestsService.collect(id);
+		requestsService.collect(id, COURIER_ID);
 
-		requestsService.arrive(id);
+		requestsService.arrive(id, COURIER_ID);
 
 		JsonNode arrived = eventsFor(id).get(2);
 		assertEquals("request.courier-arrived", arrived.get("eventType").stringValue());
@@ -272,9 +290,9 @@ class RequestsServiceTests {
 	void collectedRequestCannotBeCompletedBeforeArriving() {
 		Long id = newCreatedRequest();
 		requestsService.accept(id, COURIER_ID);
-		requestsService.collect(id);
+		requestsService.collect(id, COURIER_ID);
 
-		assertThrows(IllegalStateException.class, () -> requestsService.complete(id));
+		assertThrows(IllegalStateException.class, () -> requestsService.complete(id, REQUESTER_ID));
 
 		assertEquals(OrderStates.COLLECTED, stored(id).getStatus());
 	}
@@ -284,7 +302,7 @@ class RequestsServiceTests {
 		Long id = newCreatedRequest();
 		requestsService.accept(id, COURIER_ID);
 
-		requestsService.drop(id);
+		requestsService.drop(id, COURIER_ID);
 
 		Requests stored = stored(id);
 		assertEquals(OrderStates.CREATED, stored.getStatus());
@@ -296,7 +314,7 @@ class RequestsServiceTests {
 	void cancelStoresCancelled() {
 		Long id = newCreatedRequest();
 
-		requestsService.cancel(id);
+		requestsService.cancel(id, REQUESTER_ID);
 
 		assertEquals(OrderStates.CANCELLED, stored(id).getStatus());
 	}
@@ -305,7 +323,7 @@ class RequestsServiceTests {
 	void cancelWritesRequestCancelledForTheRequester() {
 		Long id = newCreatedRequest();
 
-		requestsService.cancel(id);
+		requestsService.cancel(id, REQUESTER_ID);
 
 		JsonNode cancelled = eventsFor(id).get(2);
 		assertEquals("request.cancelled", cancelled.get("eventType").stringValue());
@@ -360,7 +378,7 @@ class RequestsServiceTests {
 		Long id = newCreatedRequest();
 		requestsService.accept(id, COURIER_ID);
 
-		assertThrows(IllegalStateException.class, () -> requestsService.cancel(id));
+		assertThrows(IllegalStateException.class, () -> requestsService.cancel(id, REQUESTER_ID));
 		assertThrows(IllegalStateException.class, () -> requestsService.accept(id, 8L));
 		assertThrows(IllegalStateException.class, () -> requestsService.reserve(id));
 
@@ -372,8 +390,62 @@ class RequestsServiceTests {
 	}
 
 	@Test
+	void onlyTheRequesterCanCancelOrComplete() {
+		Long cancellable = newCreatedRequest();
+		assertThrows(NoSuchElementException.class, () -> requestsService.cancel(cancellable, COURIER_ID));
+		assertEquals(OrderStates.CREATED, stored(cancellable).getStatus());
+
+		Long arrived = newCreatedRequest();
+		requestsService.accept(arrived, COURIER_ID);
+		requestsService.collect(arrived, COURIER_ID);
+		requestsService.arrive(arrived, COURIER_ID);
+		assertThrows(NoSuchElementException.class, () -> requestsService.complete(arrived, COURIER_ID));
+		assertThrows(NoSuchElementException.class, () -> requestsService.complete(arrived, STRANGER_ID));
+		assertEquals(OrderStates.ARRIVED, stored(arrived).getStatus());
+	}
+
+	@Test
+	void onlyTheAssignedCourierCanCollectArriveOrDrop() {
+		Long id = newCreatedRequest();
+		requestsService.accept(id, COURIER_ID);
+
+		for (Long notTheCourier : List.of(REQUESTER_ID, STRANGER_ID)) {
+			assertThrows(NoSuchElementException.class, () -> requestsService.collect(id, notTheCourier));
+			assertThrows(NoSuchElementException.class, () -> requestsService.drop(id, notTheCourier));
+		}
+		requestsService.collect(id, COURIER_ID);
+		assertThrows(NoSuchElementException.class, () -> requestsService.arrive(id, REQUESTER_ID));
+		assertThrows(NoSuchElementException.class, () -> requestsService.arrive(id, STRANGER_ID));
+
+		Requests stored = stored(id);
+		assertEquals(OrderStates.COLLECTED, stored.getStatus());
+		assertEquals(COURIER_ID, stored.getCourierId());
+	}
+
+	@Test
+	void nobodyIsTheCourierBeforeAcceptance() {
+		Long id = newCreatedRequest();
+
+		assertThrows(NoSuchElementException.class, () -> requestsService.collect(id, COURIER_ID));
+		assertThrows(NoSuchElementException.class, () -> requestsService.drop(id, REQUESTER_ID));
+	}
+
+	// A stranger gets 404 whatever the state, so the answer reveals neither
+	// that the request exists nor where it is in its life.
+	@Test
+	void ownershipIsCheckedBeforeTheState() {
+		Long id = newCreatedRequest();
+		requestsService.accept(id, COURIER_ID);
+
+		assertThrows(NoSuchElementException.class, () -> requestsService.cancel(id, STRANGER_ID));
+		assertThrows(NoSuchElementException.class, () -> requestsService.complete(id, STRANGER_ID));
+		// the requester, for whom the state is what refuses it
+		assertThrows(IllegalStateException.class, () -> requestsService.cancel(id, REQUESTER_ID));
+	}
+
+	@Test
 	void unknownRequestThrows() {
-		assertThrows(NoSuchElementException.class, () -> requestsService.cancel(-1L));
+		assertThrows(NoSuchElementException.class, () -> requestsService.cancel(-1L, REQUESTER_ID));
 	}
 
 	private Long newRequest() {

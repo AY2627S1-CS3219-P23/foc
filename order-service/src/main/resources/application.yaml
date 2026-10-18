@@ -10,6 +10,8 @@
 # order.* settings: outbox publisher and retry values copied from
 # credit-service (D10, D11), and the 30 s pending timeout swept every
 # 15 s (author decisions).
+# 2026-10-18: order.jwt.secret and order.web-allowed-origin for the
+# ownership checks, as in credit-service.
 # Reviewed by: Ko-Khan (via pull request).
 
 spring:
@@ -49,6 +51,13 @@ spring:
       mandatory: true
 
 order:
+  # the SPA's origin, for CORS (SecurityConfig)
+  web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
+  jwt:
+    # Shared platform secret (HS256). Empty default so the yaml stays
+    # parseable; JwtVerifier turns a missing/short value into a clear
+    # startup failure.
+    secret: ${JWT_SECRET:}
   pending:
     # How long a request may wait for the Credit Service's reply before
     # it is cancelled (TIMEOUT).

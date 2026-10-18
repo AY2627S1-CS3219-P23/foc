@@ -11,6 +11,8 @@
   2026-10-16: the ARRIVED state and /arrive.
   2026-10-17: request.completed on COMPLETE; request.cancelled and
   request.expired on CANCEL and EXPIRE.
+  2026-10-18: 409 when the requester accepts their own request; then
+  bearer-token auth and the ownership rules in the endpoints section.
   Reviewed by: Ko-Khan (via pull request).
 -->
 
@@ -74,20 +76,25 @@ is cancelled after 30 s.
 
 ## Endpoints
 
-All are `POST` with a JSON body and answer `{"message": "..."}`:
-200 on success, 409 if the event is not allowed from the request's
-current state (including a courier action on a still-PENDING
-request), 404 if no request has that id.
+All are `POST` with a JSON body and need a bearer token (the platform
+JWT from user-service's login, verified with the shared `JWT_SECRET`);
+the caller is the token's user. They answer `{"message": "..."}`: 200
+on success; 409 if the event is not allowed from the request's current
+state (including a courier action on a still-PENDING request) or the
+requester tries to accept their own request; 404 if no request has that
+id **or the step is not the caller's** (the same answer, so a stranger
+cannot tell the request exists). A missing or invalid token is a 401
+problem+json.
 
-| Path | Body |
-| --- | --- |
-| `/create` | `requesterId`, `supplierId`, `supplierName`, `dropoffLocation`, `item`, `creditAmount`, `deadline` (ISO-8601 instant) |
-| `/accept` | `requestId`, `courierId` |
-| `/collect` | `requestId` |
-| `/arrive` | `requestId` |
-| `/drop` | `requestId` |
-| `/cancel` | `requestId` |
-| `/complete` | `requestId` |
+| Path | Body | Who may call it |
+| --- | --- | --- |
+| `/create` | `supplierId`, `supplierName`, `dropoffLocation`, `item`, `creditAmount`, `deadline` (ISO-8601 instant) | anyone; the caller becomes the requester |
+| `/accept` | `requestId` | anyone but the requester; the caller becomes the courier |
+| `/collect` | `requestId` | the assigned courier |
+| `/arrive` | `requestId` | the assigned courier |
+| `/drop` | `requestId` | the assigned courier |
+| `/cancel` | `requestId` | the requester |
+| `/complete` | `requestId` | the requester |
 
 ## Run
 

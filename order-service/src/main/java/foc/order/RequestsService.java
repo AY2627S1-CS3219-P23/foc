@@ -22,6 +22,9 @@
  * requester (the author's decision). DROP still publishes nothing.
  * 2026-10-18: accept refuses a courier who is the request's own
  * requester, answered 409 (the author's decision).
+ * Same day: ownership checks (the author's rules): collect, arrive and
+ * drop only by the assigned courier, cancel and complete only by the
+ * requester; anyone else is told the request does not exist (404).
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -32,6 +35,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.NoSuchElementException;
 
 @Service
 public class RequestsService {
@@ -96,8 +100,8 @@ public class RequestsService {
     }
 
     @Transactional
-    public Requests collect(Long requestId) {
-        Requests request = transition(requestId, OrderEvents.COLLECT);
+    public Requests collect(Long requestId, Long callerId) {
+        Requests request = transition(asCourier(requestId, callerId), OrderEvents.COLLECT);
         request.setCollectedAt(Instant.now());
         return request;
     }
@@ -105,8 +109,8 @@ public class RequestsService {
     // ARRIVE: the courier is at the drop-off location; the requester is
     // told through request.courier-arrived.
     @Transactional
-    public Requests arrive(Long requestId) {
-        Requests request = transition(requestId, OrderEvents.ARRIVE);
+    public Requests arrive(Long requestId, Long callerId) {
+        Requests request = transition(asCourier(requestId, callerId), OrderEvents.ARRIVE);
         request.setArrivedAt(Instant.now());
         outbox.enqueue(RequestEvents.courierArrived(request));
         return request;
@@ -115,8 +119,8 @@ public class RequestsService {
     // CANCEL: the requester withdraws before any courier accepted;
     // request.cancelled releases the held reward to them.
     @Transactional
-    public Requests cancel(Long requestId) {
-        Requests request = transition(requestId, OrderEvents.CANCEL);
+    public Requests cancel(Long requestId, Long callerId) {
+        Requests request = transition(asRequester(requestId, callerId), OrderEvents.CANCEL);
         outbox.enqueue(RequestEvents.cancelled(request));
         return request;
     }
@@ -125,8 +129,8 @@ public class RequestsService {
     // "null until accepted" state. No request.cancelled here: the reward
     // must stay held for the next courier (Order F5.2).
     @Transactional
-    public Requests drop(Long requestId) {
-        Requests request = transition(requestId, OrderEvents.DROP);
+    public Requests drop(Long requestId, Long callerId) {
+        Requests request = transition(asCourier(requestId, callerId), OrderEvents.DROP);
         request.setCourierId(null);
         request.setAcceptedAt(null);
         return request;
@@ -144,19 +148,45 @@ public class RequestsService {
     // COMPLETE: the item was handed over; request.completed tells the
     // Credit Service to transfer the held reward to the courier.
     @Transactional
-    public Requests complete(Long requestId) {
-        Requests request = transition(requestId, OrderEvents.COMPLETE);
+    public Requests complete(Long requestId, Long callerId) {
+        Requests request = transition(asRequester(requestId, callerId), OrderEvents.COMPLETE);
         outbox.enqueue(RequestEvents.completed(request));
         return request;
     }
 
-    // Loads the request and moves it to the state the event leads to;
-    // throws IllegalStateException if the event is not allowed from its
-    // current state. The change is written when the transaction commits,
-    // guarded by the entity's @Version column.
+    // Loads the request and moves it to the state the event leads to.
     private Requests transition(Long requestId, OrderEvents event) {
-        Requests request = requestsRepository.findById(requestId).orElseThrow();
+        return transition(requestsRepository.findById(requestId).orElseThrow(), event);
+    }
+
+    // Moves a loaded request to the state the event leads to; throws
+    // IllegalStateException if the event is not allowed from its current
+    // state. The change is written when the transaction commits, guarded
+    // by the entity's @Version column.
+    private static Requests transition(Requests request, OrderEvents event) {
         request.setStatus(OrderStateMachine.next(request.getStatus(), event));
+        return request;
+    }
+
+    // The request, if the caller is its requester. Anyone else gets the
+    // same NoSuchElementException as for an unknown id (404), so the
+    // request's existence is not revealed. Checked before the state, so
+    // the answer does not depend on where the request is in its life.
+    private Requests asRequester(Long requestId, Long callerId) {
+        Requests request = requestsRepository.findById(requestId).orElseThrow();
+        if (!request.getRequesterId().equals(callerId)) {
+            throw new NoSuchElementException();
+        }
+        return request;
+    }
+
+    // The request, if the caller is its assigned courier (none until
+    // accepted, so nobody qualifies before that); otherwise as above.
+    private Requests asCourier(Long requestId, Long callerId) {
+        Requests request = requestsRepository.findById(requestId).orElseThrow();
+        if (request.getCourierId() == null || !request.getCourierId().equals(callerId)) {
+            throw new NoSuchElementException();
+        }
         return request;
     }
 

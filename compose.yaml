@@ -89,6 +89,8 @@
 # passed to the order service for the saga with the Credit Service
 # (30 s pending timeout swept every 15 s, and credit-service's 2 s / 5
 # attempts retry values; Ko-Khan via options Q&A).
+# 2026-10-18, Claude Code (Opus 5.5): JWT_SECRET and WEB_ALLOWED_ORIGIN
+# passed to the order service for its ownership checks and CORS.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -456,6 +458,10 @@ services:
       # retry delay and attempts for a failed credit reply
       ORDER_RETRY_TTL_MS: ${ORDER_RETRY_TTL_MS:-2000}
       ORDER_RETRY_MAX_ATTEMPTS: ${ORDER_RETRY_MAX_ATTEMPTS:-5}
+      # verifies the caller's bearer token for the ownership checks
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
+      # the SPA's origin, for CORS
+      WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
     depends_on:
       order-db:
         condition: service_healthy

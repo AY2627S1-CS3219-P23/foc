@@ -26,6 +26,53 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Aung Ko Khant (order-service: ownership checks)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service bearer-token auth copied from credit-service
+  (`security.JwtVerifier`, `JwtAuthenticationFilter`,
+  `RestAuthEntryPoint`, `config.SecurityConfig` with per-service CORS
+  allowing POST; `spring-boot-starter-security`, jjwt 0.13.0;
+  `order.jwt.secret` / `order.web-allowed-origin`; `JWT_SECRET` and
+  `WEB_ALLOWED_ORIGIN` passed in compose). `RequestsController` takes
+  the caller from the token: `/create` makes them the requester and
+  `/accept` the courier (`requesterId` / `courierId` removed from the
+  bodies). `RequestsService`: collect, arrive and drop only by the
+  assigned courier; cancel and complete only by the requester; checked
+  before the state, anyone else gets the unknown-request 404. Tests
+  (73 passing) sign tokens with the test secret; README endpoints
+  section. The manual-testing scripts' token support follows in a later
+  commit.
+- **Prompt(s):** "I would like to add owner ship checks. Users should
+  only be able to add requests for themselves. All steps in the
+  lifecycle should only be able to be performed by a single person."
+  The token mechanism follows the existing services (credit-service,
+  supplier-service: shared `JWT_SECRET`, `sub` = user id). The tool
+  asked as neutral options; the author chose: requester = create (for
+  self), cancel, complete; assigned courier = collect, arrive, drop;
+  accept = any user but the requester, no admin override; ids taken
+  from the token instead of the body; a step that is not the caller's
+  answers 404.
+- **Author review:** `mvn test` in a Maven container: 73 tests, 0
+  failures. Run through the gateway against the rebuilt container:
+  self-accept 409, other party's collect / complete 404, the owners'
+  steps 200, no token 401. To be reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: no self-accept)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService.accept` refuses a courier id
+  equal to the request's requester id (IllegalStateException, so the
+  controller answers 409 and the transaction rolls back); tests in
+  `RequestsServiceTests` and `RequestsControllerTests` (67 passing);
+  README endpoints paragraph.
+- **Prompt(s):** "Is there a check for whether courier and requester
+  are the same person?" (there was none). The tool asked how a refusal
+  should answer (409 / 403 / 400) as neutral options; the author chose
+  409 Conflict.
+- **Author review:** `mvn test` in a Maven container: 67 tests, 0
+  failures. To be reviewed via pull request.
+
 ## 2026-10-16 — Aung Ko Khant (order-service: ARRIVED state)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate

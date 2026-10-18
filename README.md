@@ -104,7 +104,8 @@
   createdAt default (PR review fix).
   2026-10-17: AI Use Summary extended for the order-service request
   events (RequestsService, outbox, credit reply listener) by Claude
-  Code (Opus 5.5), then for the RequestsController endpoints.
+  Code (Opus 5.5), then for the RequestsController endpoints, then
+  for the order-service ownership checks.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -589,7 +590,10 @@ parties, the copy-not-share choice, the timeout values and the check's
 form chosen by the author via neutral-options Q&A and recorded in
 `ai/usage-log.md`; and the `RequestsController` (seven POST endpoints
 delegating to `RequestsService`, with tests; paths, parameters and
-request/response shapes specified by the author).
+request/response shapes specified by the author); and order-service's
+bearer-token auth (copied from credit-service) with the ownership rules
+for each step and the self-accept refusal, the rules, the ids-from-token
+choice and the 409 / 404 answers chosen by the author.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

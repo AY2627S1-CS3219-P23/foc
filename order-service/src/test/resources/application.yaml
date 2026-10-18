@@ -7,6 +7,8 @@
 # pending-timeout sweep off, following credit-service's test config, so
 # the context still loads without a running RabbitMQ; the tests drive
 # the publisher and the sweep themselves.
+# 2026-10-18: a test JWT secret, since the main yaml's default is empty,
+# and the SPA origin (this file replaces the main yaml in tests).
 # Reviewed by: Ko-Khan (via pull request).
 
 spring:
@@ -27,6 +29,10 @@ spring:
 # (same name), so every order.* setting the beans read is repeated here
 # with the main file's defaults.
 order:
+  web-allowed-origin: http://localhost:5173
+  jwt:
+    # the main yaml's default is empty, which fails startup
+    secret: test-jwt-secret-that-is-at-least-32-bytes-long
   rabbitmq:
     # no broker in the tests: nothing is declared at startup
     provision-on-startup: false
