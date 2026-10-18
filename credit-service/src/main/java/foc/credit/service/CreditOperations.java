@@ -11,6 +11,8 @@
  * reward-below-1 rule and the two refusals its result tells apart.
  * PR #175 review (Leong Wei Zhi): transfer's comment states the
  * no-record result (team decision).
+ * PR #212 review (Leong Wei Zhi): reserve's comment states its result
+ * per existing record status (reviewer's suggestion).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -37,6 +39,15 @@ public interface CreditOperations {
      * reservation of 0. An amount above the available balance is
      * {@link ReserveResult#REJECTED_INSUFFICIENT_CREDITS}. Both record
      * the request as {@code REJECTED}.
+     *
+     * <p>With a record already there, nothing is written and the result
+     * is what the record holds: {@code HELD} is
+     * {@link ReserveResult#ALREADY_RESERVED}; {@code REJECTED} is
+     * {@link ReserveResult#ALREADY_REJECTED_INVALID_AMOUNT} for a recorded
+     * amount below 1, otherwise
+     * {@link ReserveResult#ALREADY_REJECTED_INSUFFICIENT_CREDITS};
+     * {@code TRANSFERRED} or {@code RELEASED} is
+     * {@link ReserveResult#DUPLICATE}.
      */
     ReserveResult reserve(String requestRef, String requesterId, int amount);
 

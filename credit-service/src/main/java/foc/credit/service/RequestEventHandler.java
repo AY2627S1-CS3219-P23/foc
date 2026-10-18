@@ -16,7 +16,9 @@
  * completion with no record throws, so it is retried; the settle
  * result is chosen by a switch with no default.
  * 2026-10-18, issue #165 (reviewer's suggestion): a redelivered
- * submission already decided enqueues its recorded reply again.
+ * submission already decided enqueues its reply again.
+ * PR #212 review (Leong Wei Zhi), reviewer's suggestion: that reply is
+ * described as rebuilt from the event, with the record's decision.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -93,6 +95,8 @@ public class RequestEventHandler {
         };
     }
 
+    // The reply is rebuilt from the event, an ALREADY_* one too: only the
+    // decision comes from the record, not its fields.
     private Outcome onSubmitted(RequestSubmitted e) {
         // no default: a new ReserveResult does not compile until it is given a reply
         DomainEvent reply = switch (operations.reserve(e.requestId(), e.requesterId(), e.reward())) {

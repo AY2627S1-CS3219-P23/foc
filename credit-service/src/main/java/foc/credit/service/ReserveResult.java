@@ -8,6 +8,8 @@
  * (team decision among the reviewer's options).
  * 2026-10-18, issue #165 (reviewer's suggestion): the ALREADY_* values
  * name what an existing record holds, so its reply can be sent again.
+ * PR #212 review (Leong Wei Zhi): the comment says the reply is rebuilt
+ * from the event, with the record's decision (reviewer's suggestion).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -21,8 +23,8 @@ public enum ReserveResult {
     // a reward below 1 (Credit F1.2.1)
     REJECTED_INVALID_AMOUNT,
     // a redelivery of a request already decided: nothing changes, and the
-    // recorded answer is sent again, so a lost reply can be recovered
-    // (issue #165, reviewer's suggestion)
+    // reply is sent again, rebuilt from the event with the decision the
+    // record holds (issue #165, reviewer's suggestion)
     ALREADY_RESERVED,
     ALREADY_REJECTED_INSUFFICIENT_CREDITS,
     ALREADY_REJECTED_INVALID_AMOUNT,

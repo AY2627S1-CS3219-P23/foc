@@ -11,7 +11,7 @@
  * 2026-10-11, PR #175 review (Leong Wei Zhi): a completion with no
  * record throws (team decision).
  * 2026-10-18, issue #165 (reviewer's suggestion): a redelivered
- * submission already decided enqueues its recorded reply again.
+ * submission already decided enqueues its reply again.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;

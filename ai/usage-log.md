@@ -39,6 +39,44 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Ryan Ang (PR #212 review follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** docs + code comments
+- **Source:** every item below is a suggestion from 
+  PR #212 review.
+- **Scope:**
+  - **Credit F2.1.3** (`docs/credit-service.md`): the traceability
+    row's left column restored to the requirement as stated ("reject
+    creation when available < reward"), keeping the reworded
+    implementation column; Credit F2.1.3 put back next to Order F1.1.4
+    in "Requirements to revise", and the "has been revised" sentence
+    removed. The requirement itself is left for the team.
+  - **Resent reply wording:** comments in `ReserveResult`,
+    `RequestEventHandler`, `CreditOperationsService` and two test
+    headers, the `request.submitted` handler row and the README now say
+    the reply is rebuilt from the event with the record's decision,
+    not "the recorded reply"; the rejection reason is described as
+    worked out from the recorded reward.
+  - **Redelivery failure row:** names the two cases in which the
+    resend comes into play (a crash between commit and ack, an operator
+    replaying the submission), since the outbox never drops a reply.
+  - **Comments:** `CreditOperations.reserve` javadoc states its result
+    per existing record status; the `REJECTED` case in
+    `applyReserve` points at the `V1__baseline.sql` invariant;
+    `DomainEvent.parties()` (foc-contracts) states that only credit
+    events may name no one.
+  - README AI Use Summary paragraph updated and its grammar fixed.
+  - Not done: storing the rejection reason on the row (a migration the
+    reviewer left optional; a team decision), and the PR body's
+    "Closes" line (author's choice).
+- **Prompt(s):** Asked to read the PR #212 review comments, then to
+  review the blocking item and all notes except the PR-body one.
+- **Verification:** comment and doc changes only. foc-contracts
+  `./mvnw install` (with its tests), credit-service main and test
+  compile, and notification-service `DomainEventContractTest` all pass;
+  `git diff --check` clean.
+- **Author review:** Ryan Ang, pending pull request review.
+
 ## 2026-10-18 — Ryan Ang (issue #165 follow-ups from Leong Wei Zhi's PR #163 re-review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** implementation + tests + docs

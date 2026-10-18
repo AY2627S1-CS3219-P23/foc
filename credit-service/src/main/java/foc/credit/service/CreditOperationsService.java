@@ -26,7 +26,9 @@
  * reviewer's comment.
  * 2026-10-18, issue #165 (reviewer's suggestion): a reserve on an
  * existing HELD or REJECTED record answers what the record holds, so
- * the recorded reply can be sent again.
+ * its reply can be sent again.
+ * PR #212 review (Leong Wei Zhi), reviewer's suggestion: the REJECTED
+ * case's comment names the V1__baseline.sql invariant it relies on.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -158,7 +160,9 @@ public class CreditOperationsService implements CreditOperations {
             return switch (record.getStatus()) {
                 case HELD -> ReserveResult.ALREADY_RESERVED;
                 // only a reward below 1 is refused as invalid, and the
-                // record keeps the reward as requested
+                // record keeps the reward as requested (V1__baseline.sql);
+                // a new refusal reason with a reward of 1 or more would be
+                // reported here as insufficient credits
                 case REJECTED -> record.getAmount() < 1
                     ? ReserveResult.ALREADY_REJECTED_INVALID_AMOUNT
                     : ReserveResult.ALREADY_REJECTED_INSUFFICIENT_CREDITS;

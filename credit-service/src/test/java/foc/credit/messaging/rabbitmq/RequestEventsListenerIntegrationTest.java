@@ -15,7 +15,7 @@
  * event's returned retry copy dead-letters the original at once (team
  * decision), checked against the real broker.
  * 2026-10-18, issue #165 (reviewer's suggestion): a duplicate delivery
- * changes no balance but enqueues its recorded reply again.
+ * changes no balance but enqueues its reply again.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
@@ -115,7 +115,7 @@ class RequestEventsListenerIntegrationTest extends PostgresTestContainer {
 		// The same delivery again, then a sentinel: the queue is FIFO and
 		// has one consumer, so once the sentinel's record exists the
 		// duplicate has been fully processed: the balance is unchanged, and
-		// the recorded reply is enqueued again, in case the first was lost.
+		// the reply is enqueued again, in case the first was lost.
 		publish(submitted);
 		String sentinel = request();
 		publish(submitted(sentinel, user(), 1));
