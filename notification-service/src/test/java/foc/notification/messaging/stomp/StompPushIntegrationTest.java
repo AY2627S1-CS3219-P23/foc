@@ -9,7 +9,22 @@
  * events; entity/stale assertions removed with the mechanism (D19).
  * 2026-09-20: order→request event vocabulary rename applied (author
  * decision D22, docs/notification-service.md).
+ * 2026-10-12, issue #67: D23 denylist cases added against a fake
+ * in-memory TokenDenylist (the Redis mechanics have their own unit
+ * test; this context stays Docker- and Redis-free).
+ * 2026-10-14, PR #185 review (@Sinnez1): per-user reset-cutoff CONNECT
+ * cases added (G11), driven through the same fake.
+ * 2026-10-16, PR #185 re-review (@Sinnez1): raw-frame cases added for
+ * the two auth gaps the reviewer demonstrated — a STOMP 1.2 STOMP
+ * frame must be authenticated like CONNECT, client SEND frames must
+ * be rejected, and SUBSCRIBE is limited to the one destination.
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-17, Claude Code (Fable 5), issue #66: fixtures updated for
+ * the display-name fields added to the request event records (D29);
+ * no behavior change in this test. Same day, D29 superseded by the
+ * author's D30 (options Q&A): the fields left the records again, and
+ * the pushed frame's names now prove the ingest-time UserDirectory
+ * enrichment (stubbed, like the denylist) reaches the live push.
  */
 package foc.notification.messaging.stomp;
 
@@ -19,8 +34,10 @@ import static org.awaitility.Awaitility.await;
 
 import foc.contracts.events.request.RequestAccepted;
 import foc.contracts.events.request.RequestCollected;
+import foc.notification.security.TokenDenylist;
 import foc.notification.service.EventProcessor;
 import foc.notification.service.NotificationDto;
+import foc.notification.service.UserDirectory;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.lang.reflect.Type;
@@ -30,13 +47,19 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
@@ -44,7 +67,10 @@ import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 import org.springframework.messaging.simp.user.SimpUserRegistry;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 import org.springframework.web.socket.sockjs.client.RestTemplateXhrTransport;
 import org.springframework.web.socket.sockjs.client.SockJsClient;
@@ -67,6 +93,55 @@ class StompPushIntegrationTest {
 	private static final String TEST_SECRET = "test-secret-0123456789abcdef0123456789abcdef";
 	private static final Instant OCCURRED_AT = Instant.parse("2026-09-19T08:30:00Z");
 
+	/** Revoked jtis for the fake denylist; cleared after each test. */
+	private static final Set<String> REVOKED_JTIS = ConcurrentHashMap.newKeySet();
+
+	/** Per-user reset cutoffs (G11) for the fake denylist. */
+	private static final ConcurrentMap<String, Instant> USER_CUTOFFS = new ConcurrentHashMap<>();
+
+	/**
+	 * Replaces the Redis adapter so the D23 interceptor path is
+	 * exercised without a running Redis — the key shapes, the strict
+	 * iat comparison and the fail-open mechanics are covered by
+	 * RedisTokenDenylistTest.
+	 */
+	@TestConfiguration
+	static class FakeDenylistConfig {
+		@Bean
+		@Primary
+		TokenDenylist fakeTokenDenylist() {
+			return new TokenDenylist() {
+				@Override
+				public boolean isRevoked(String jti) {
+					return REVOKED_JTIS.contains(jti);
+				}
+
+				@Override
+				public boolean isUserRevokedSince(String subject, Instant issuedAt) {
+					Instant cutoff = USER_CUTOFFS.get(subject);
+					return cutoff != null && issuedAt.isBefore(cutoff);
+				}
+			};
+		}
+	}
+
+	/**
+	 * Stubs the D30 ingest-time username lookup (the REST adapter has
+	 * its own unit test): the frame assertions prove enriched names
+	 * reach the pushed payload.
+	 */
+	@TestConfiguration
+	static class StubUserDirectoryConfig {
+		@Bean
+		@Primary
+		UserDirectory stubUserDirectory() {
+			Map<String, String> names = Map.of(
+					"usr-req-1001", "maya",
+					"usr-cou-2002", "marcus");
+			return userId -> java.util.Optional.ofNullable(names.get(userId));
+		}
+	}
+
 	@LocalServerPort
 	private int port;
 
@@ -86,11 +161,23 @@ class StompPushIntegrationTest {
 			}
 		});
 		sessions.clear();
+		REVOKED_JTIS.clear();
+		USER_CUTOFFS.clear();
 	}
 
 	private static String token(String userId) {
+		return token(userId, null);
+	}
+
+	private static String token(String userId, String jti) {
+		return token(userId, jti, Instant.now());
+	}
+
+	private static String token(String userId, String jti, Instant issuedAt) {
 		return Jwts.builder()
 				.subject(userId)
+				.id(jti)
+				.issuedAt(issuedAt == null ? null : Date.from(issuedAt))
 				.expiration(new Date(System.currentTimeMillis() + 60_000))
 				.signWith(Keys.hmacShaKeyFor(TEST_SECRET.getBytes(StandardCharsets.UTF_8)))
 				.compact();
@@ -171,7 +258,9 @@ class StompPushIntegrationTest {
 		assertThat(frame.payload()).isEqualTo(Map.of(
 				"requestId", "ord-push-1",
 				"requesterId", "usr-req-1001",
+				"requesterName", "maya",
 				"courierId", "usr-cou-2002",
+				"courierName", "marcus",
 				"pickupLocation", "Techno Edge",
 				"dropoffLocation", "COM3-01-19",
 				"note", "push"));
@@ -240,6 +329,165 @@ class StompPushIntegrationTest {
 		assertThatThrownBy(() -> connect(rawWebSocketClient(),
 				"ws://localhost:" + port + "/ws/websocket", "Bearer " + expired))
 				.isInstanceOf(Exception.class);
+	}
+
+	@Test
+	void rejectsConnectWithRevokedToken() {
+		REVOKED_JTIS.add("revoked-jti");
+
+		assertThatThrownBy(() -> connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket",
+				"Bearer " + token("usr-rev-1", "revoked-jti")))
+				.isInstanceOf(Exception.class);
+	}
+
+	@Test
+	void connectsWhenJtiIsNotRevoked() throws Exception {
+		REVOKED_JTIS.add("someone-elses-jti");
+
+		StompSession session = connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket",
+				"Bearer " + token("usr-rev-2", "live-jti"));
+
+		assertThat(session.isConnected()).isTrue();
+	}
+
+	@Test
+	void connectsWithTokenCarryingNoJti() throws Exception {
+		// Parity with the gateway's auth.lua: no jti means nothing to
+		// look up, not a reason to refuse the session.
+		StompSession session = connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket", "Bearer " + token("usr-rev-3"));
+
+		assertThat(session.isConnected()).isTrue();
+	}
+
+	@Test
+	void rejectsConnectWithTokenIssuedBeforeThePasswordResetCutoff() {
+		// G11 (PR #185 review): a reset stamps the account's cutoff
+		// instead of each outstanding jti, so the jti lookup alone would
+		// let this token open a session until its own exp.
+		Instant issuedAt = Instant.now().minusSeconds(600);
+		USER_CUTOFFS.put("usr-cut-1", issuedAt.plusSeconds(1));
+
+		assertThatThrownBy(() -> connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket",
+				"Bearer " + token("usr-cut-1", "live-jti", issuedAt)))
+				.isInstanceOf(Exception.class);
+	}
+
+	@Test
+	void connectsWithTokenIssuedAfterThePasswordResetCutoff() throws Exception {
+		Instant cutoff = Instant.now().minusSeconds(600);
+		USER_CUTOFFS.put("usr-cut-2", cutoff);
+
+		StompSession session = connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket",
+				"Bearer " + token("usr-cut-2", "live-jti", cutoff.plusSeconds(1)));
+
+		assertThat(session.isConnected()).isTrue();
+	}
+
+	@Test
+	void connectsWithTokenCarryingNoIssuedAt() throws Exception {
+		// Parity with auth.lua: a missing iat skips the cutoff lookup
+		// rather than refusing the session.
+		USER_CUTOFFS.put("usr-cut-3", Instant.now());
+
+		StompSession session = connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket",
+				"Bearer " + token("usr-cut-3", "live-jti", null));
+
+		assertThat(session.isConnected()).isTrue();
+	}
+
+	/**
+	 * Opens a bare WebSocket (no STOMP client) to {@code /ws/websocket},
+	 * sends one raw frame and returns the first text the server replies
+	 * with — for the frames Spring's StompSession cannot be made to send.
+	 */
+	private String sendRawFrame(String frame) throws Exception {
+		BlockingQueue<String> replies = new LinkedBlockingQueue<>();
+		WebSocketSession wsSession = new StandardWebSocketClient()
+				.execute(new TextWebSocketHandler() {
+					@Override
+					protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+						replies.add(message.getPayload());
+					}
+				}, "ws://localhost:" + port + "/ws/websocket")
+				.get(5, TimeUnit.SECONDS);
+		try {
+			wsSession.sendMessage(new TextMessage(frame));
+			String reply = replies.poll(5, TimeUnit.SECONDS);
+			assertThat(reply).isNotNull();
+			return reply;
+		} finally {
+			wsSession.close();
+		}
+	}
+
+	@Test
+	void rejectsStompFrameWithoutToken() throws Exception {
+		// STOMP 1.2 lets a client open the session with a STOMP frame
+		// instead of CONNECT; Spring treats it as a connect, so it must
+		// pass the same checks (PR #185 review — this got CONNECTED).
+		String reply = sendRawFrame("STOMP\naccept-version:1.2\nhost:localhost\n\n\0");
+
+		assertThat(reply).startsWith("ERROR");
+	}
+
+	@Test
+	void authenticatesStompFrameLikeConnect() throws Exception {
+		String reply = sendRawFrame("STOMP\naccept-version:1.2\nhost:localhost\n"
+				+ "Authorization:Bearer " + token("usr-stomp-frame-1") + "\n\n\0");
+
+		assertThat(reply).startsWith("CONNECTED");
+	}
+
+	@Test
+	void rejectsClientSendToAnotherUsersQueue() throws Exception {
+		// PR #185 review: with no application destination prefix, a SEND
+		// to /user/{id}/queue/notifications was resolved and delivered to
+		// that user — a tokenless spoofed badge bump. Clients never SEND
+		// here, so every SEND is refused.
+		BlockingQueue<NotificationDto> victim = subscribeAsUser("usr-spoof-victim");
+		StompSession attacker = connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket",
+				"Bearer " + token("usr-spoof-attacker"));
+
+		attacker.send("/user/usr-spoof-victim/queue/notifications",
+				Map.of("eventType", "request.accepted"));
+
+		// The refusal is an ERROR frame, which closes the sender's session.
+		await().atMost(Duration.ofSeconds(5)).until(() -> !attacker.isConnected());
+
+		// Sentinel: a real push still arrives, and arrives alone — the
+		// spoofed frame would have been queued ahead of it.
+		eventProcessor.process(accepted("spoof-e1", "ord-spoof-1", List.of("usr-spoof-victim")));
+		NotificationDto sentinel = victim.poll(5, TimeUnit.SECONDS);
+		assertThat(sentinel).isNotNull();
+		assertThat(sentinel.eventType()).isEqualTo("request.accepted");
+		assertThat(victim).isEmpty();
+	}
+
+	@Test
+	void rejectsSubscriptionOutsideTheNotificationsDestination() throws Exception {
+		StompSession session = connect(rawWebSocketClient(),
+				"ws://localhost:" + port + "/ws/websocket", "Bearer " + token("usr-sub-stray"));
+
+		// Straight at the broker, bypassing user-destination resolution.
+		session.subscribe("/queue/notifications-userstolen", new StompFrameHandler() {
+			@Override
+			public Type getPayloadType(StompHeaders headers) {
+				return NotificationDto.class;
+			}
+
+			@Override
+			public void handleFrame(StompHeaders headers, Object payload) {
+			}
+		});
+
+		await().atMost(Duration.ofSeconds(5)).until(() -> !session.isConnected());
 	}
 
 	@Test

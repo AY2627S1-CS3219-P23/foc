@@ -14,6 +14,10 @@
 # cap and confirm wait (the values are the team's).
 # 2026-10-13, PR #188 review (Leong Wei Zhi): the delay before a returned
 # reply is due again (the team's value), and a second scheduler thread.
+# 2026-10-16, PR #190 review (Leong Wei Zhi): the retry copy's confirm
+# timeout, also the pause before a requeue (the team's value); the
+# max-attempts comment updated now that the listener reads it. Re-review:
+# the confirm timeout takes CREDIT_RETRY_CONFIRM_TIMEOUT_MS.
 # Author review: Ryan Ang, pending pull request review.
 
 spring:
@@ -74,10 +78,13 @@ credit:
       # against a broker that already holds the queue fails
       # PRECONDITION_FAILED until the queue is deleted.
       ttl-ms: ${CREDIT_RETRY_TTL_MS:2000}
-      # Total attempts before an event dead-letters (D11). Nothing reads
-      # this yet: the listener that counts attempts is a later change and
-      # must bind this property name. Until then no cap is applied.
+      # Total attempts before an event dead-letters (D11), counted by the
+      # request event listener.
       max-attempts: ${CREDIT_RETRY_MAX_ATTEMPTS:5}
+      # Longest wait for the broker to confirm a failed event's retry
+      # copy. A nacked or unconfirmed copy requeues the original after a
+      # pause of the same length (PR #190, team decision).
+      confirm-timeout-ms: ${CREDIT_RETRY_CONFIRM_TIMEOUT_MS:5000}
   outbox:
     publisher:
       # Delay between the end of one outbox poll and the start of the

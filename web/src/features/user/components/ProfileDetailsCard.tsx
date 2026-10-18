@@ -8,8 +8,15 @@
 // way back into its code dialog — the dialog can be dismissed without
 // discarding the change, so there has to be a way to reopen it
 // (register.tsx's "Enter your code" link, same reasoning).
+// 2026-10-16, Claude Code (Opus 5.5), issue #174: Credit Status reads
+// the live balance from the shared poll (credit domain's
+// useCreditBalance), with a link to the credits page; cross-domain
+// change flagged in the PR.
 // Author review: Leong Wei Zhi (via PR #149).
 
+import { Link } from 'react-router'
+
+import { useCreditBalance } from '@/features/credit/useCreditBalance'
 import type { AdminUser } from '../types'
 
 // Every non-staff account can both request and run errands.
@@ -35,6 +42,14 @@ export function ProfileDetailsCard({
   pendingEmail,
   onEnterCode,
 }: ProfileDetailsCardProps) {
+  const { state: credits } = useCreditBalance()
+  const creditStatus =
+    credits?.status === 'ready'
+      ? `Available: ${credits.balance.available} | Reserved: ${credits.balance.reserved}`
+      : credits?.status === 'error'
+        ? 'Unavailable right now'
+        : 'Available: — | Reserved: —'
+
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <h2 className="text-lg font-semibold text-gray-900">Profile Details</h2>
@@ -75,10 +90,11 @@ export function ProfileDetailsCard({
           <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
             Credit Status
           </dt>
-          {/* Placeholder until credit-service has an API — same status as
-              the navbar's CreditsBadge. */}
-          <dd className="mt-0.5 text-sm text-gray-900">
-            Available: — | Reserved: —
+          <dd className="mt-0.5 text-sm text-gray-900">{creditStatus}</dd>
+          <dd className="mt-1 text-xs">
+            <Link to="/credits" className="font-medium text-gray-900 underline">
+              View credit transactions
+            </Link>
           </dd>
         </div>
       </dl>

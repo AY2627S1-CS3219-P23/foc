@@ -94,6 +94,26 @@ class RequestEventRecordsTest {
 		}
 	}
 
+	/**
+	 * Events carry party IDs only (D30, docs/notification-service.md):
+	 * display names are a notification concern, resolved by
+	 * notification-service at ingest, and must not creep into the
+	 * producers' contract.
+	 */
+	@Test
+	void noRequestRecordCarriesDisplayNames() {
+		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
+			if (!RequestEvent.class.isAssignableFrom(entry.eventClass())) {
+				continue;
+			}
+			for (RecordComponent component : entry.eventClass().getRecordComponents()) {
+				assertFalse(component.getName().endsWith("Name"),
+						entry.eventClass() + "." + component.getName()
+								+ " looks like a display name — events carry IDs only (D30)");
+			}
+		}
+	}
+
 	private static Set<String> componentNames(Class<?> recordClass) {
 		Set<String> names = new HashSet<>();
 		for (RecordComponent component : recordClass.getRecordComponents()) {

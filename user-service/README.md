@@ -69,6 +69,25 @@
   send restores the pre-renewal OTP row, and the stale old-JWT
   sentence (pre-G11) was corrected to the Redis-failure and
   same-second exceptions. Decisions by Leong Wei Zhi via options Q&A.
+  2026-10-16, Claude Code (Opus 5), issue #178: the admin-endpoint and
+  token sections record the per-user stamp a role change or removal
+  writes (G12), and the follow-up's "keeps ADMIN until its exp"
+  sentence is corrected — the removal now revokes that token, with the
+  demotion left as the Redis-failure fallback. Mechanism and scope
+  decided by Leong Wei Zhi via options Q&A (2026-10-12).
+  2026-10-17, Claude Code (Opus 5), PR #183 review (@Sinnez1): the
+  token section records that all three stamps are written after their
+  transaction commits — the reviewer showed the pre-commit write
+  leaving a gap a login could pass through.
+  2026-10-17, Codex (GPT-6.1 Sol), issue #98: documented automatic skips
+  for Docker-dependent tests and the integration coverage requirement.
+  PR #197 review: documented CI's rejection of skipped test suites.
+  2026-10-17, Claude Code (Opus 5), issue #203: the login and
+  soft-delete sections now state what self-deletion does to the role
+  (nothing), next to what admin removal does — the login section's
+  "no admin powers ride along" claim was true only of removal.
+  Accepted as-is (option C) by Leong Wei Zhi via options Q&A.
+  Author review: Leong Wei Zhi to review via pull request.
 -->
 
 # User Service
@@ -92,7 +111,9 @@ below), and the admin endpoints
 `GET /users` (list, search, role filter, sort, 20/50/100 page sizes,
 `includeDeleted=true` to list removed accounts with their `deletedAt`),
 `PATCH /users/{id}` (promote/demote) and `DELETE /users/{id}` (soft
-delete) for ADMIN/OWNER callers (#96), backed by Postgres via
+delete) for ADMIN/OWNER callers (#96) — both evict the target's
+outstanding sessions (#178), so a demoted admin loses the admin API at
+once rather than at their token's `exp` — backed by Postgres via
 Spring Data JPA, with the schema managed by Flyway (see below). The root `compose.yaml` runs it with its own `user-db`; since the
 gateway cutover (#151) the service has no published host port — it is
 reached through the gateway at
@@ -185,10 +206,14 @@ sign-up never reserves an email or username.
   keep using the other services for the whole 30-day window, not just
   one token's hour (PR #179 review, @Sinnez1). Accepted, owner
   decision: the same user can restore with one click at any moment, so
-  the deleted state withholds nothing but the profile routes — and no
-  admin powers ride along, because admin removal demotes to USER
-  first (below); only a pre-removal ADMIN token keeps them, for its
-  ≤ 1 h `exp`.
+  the deleted state withholds nothing but the profile routes. Whether
+  admin powers ride along depends on *how* the account was deleted
+  (#203): admin removal demotes the target to USER first (below), so
+  only a pre-removal ADMIN token keeps them, for its ≤ 1 h `exp` —
+  self-deletion leaves the role untouched, so an admin who deletes
+  their own account keeps the admin routes for the whole window, every
+  fresh login included, and restores as ADMIN (owner decision, #203:
+  accepted, see below).
   Login therefore tells a caller whether an account exists — the author
   chose that over the non-revealing failures of #89, as sign-up's
   "already taken" 400s reveal the same thing.
@@ -219,6 +244,17 @@ sign-up never reserves an email or username.
   denylists the caller's `jti` in Redis (`denylist:<jti>`, expiring with
   the token) via `TokenDenylist`, best-effort: a failed Redis write is
   logged, and the response is 204 either way.
+- Three more routes write the other `TokenDenylist` key, the per-user
+  cutoff stamp `denylist:user:<id>` that outlaws every token the account
+  was issued before it: a password reset (#94, G11 — see below), and an
+  admin role change or removal (#178, G12 — `PATCH /users/{id}` when the
+  role actually changes, and `DELETE /users/{id}`). All best-effort like
+  logout, and all enforced by the gateway, not here. All three are
+  written once their transaction has committed (`AfterCommit`, PR #183
+  review): a cutoff stamped before the commit outlaws the tokens issued
+  before a change that is not yet visible, so a login in that gap would
+  mint one carrying the old role or password and an `iat` the stamp
+  accepts.
 - No sessions: each request stands on its own token. This service does
   **not** check the denylist — the API gateway rejects revoked tokens
   platform-wide before they reach any service (team decision:
@@ -466,11 +502,27 @@ restored the same accounts. Removal does demote the target to USER
 (owner decision, PR #179 approval follow-up: a removed admin could
 otherwise keep using the admin endpoints while deleted — they trust
 the token's role — and restore itself as an admin), so later logins
-and a self-restored account carry no admin powers until re-promoted;
-a token minted before the removal keeps ADMIN until its ≤ 1 h `exp`. A daily scheduler
-(`AccountPurgeScheduler`, default 03:00) hard-deletes accounts whose
-`deleted_at` is older than the retention window, together with their
-`password_reset_otps` rows — that purge is what frees the identifiers. The
+and a self-restored account carry no admin powers until re-promoted.
+A token the target already held does not outlive the removal either
+(#178): removal writes the same `denylist:user:<id>` stamp the password
+reset does, so the gateway answers that token 401 "Token has been
+revoked" on its next request instead of honouring it until its ≤ 1 h
+`exp` — the demotion is what still holds if that best-effort write
+fails (G9) against a gateway failing open (G6).
+Self-deletion does neither (#203): `deleteOwnAccount` stamps
+`deleted_at` and nothing else — no demotion, no denylist stamp — so an
+ADMIN who deletes their own account keeps the role, and because the
+admin routes authorize on the token's claim alone, every fresh login
+inside the 30-day window reaches them; the self-restore brings the
+account back as ADMIN. Owner decision (issue #203, option C): accepted
+rather than closed, since nobody but the account's owner can put it in
+that state and the same owner can leave it with one click.
+`JwtAuthenticationTest.selfDeletedAdminKeepsAdminRoutes` pins the
+behaviour.
+A daily scheduler (`AccountPurgeScheduler`, default 03:00) hard-deletes
+accounts whose `deleted_at` is older than the retention window,
+together with their `password_reset_otps` rows — that purge is what
+frees the identifiers. The
 same daily run sweeps expired `pending_signups`, `account_update_otps`,
 `pending_email_changes` and `password_reset_otps` rows (hygiene only: every
 flow rejects an expired row on sight; the by-user sweeps run before the
@@ -481,7 +533,7 @@ Configure via `USER_RETENTION_DAYS` (default 30) and `USER_PURGE_CRON`
 ## Run
 
 ```sh
-# Tests (need a running Docker daemon: Testcontainers starts Postgres)
+# Tests (unit tests always run; PostgreSQL integration tests need Docker)
 ./mvnw test
 
 # Run locally
@@ -491,3 +543,13 @@ curl localhost:8080/actuator/health
 # Container (from the repo root — build context is the repo root)
 docker build -f user-service/Dockerfile .
 ```
+
+With Docker running, Testcontainers starts one shared PostgreSQL container
+and the full suite runs. When Docker is unavailable, PostgreSQL-dependent
+integration tests are automatically reported as skipped; unit tests still
+run. A successful run without Docker does not verify integration coverage.
+CI requires every user-service test to run and fails if Surefire reports
+any skipped tests or produces no reports, so Docker must be available on
+the runner. Run the full suite with Docker available before merging.
+Container startup, migration, and application failures with Docker
+available still fail the build.

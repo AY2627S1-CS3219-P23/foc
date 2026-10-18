@@ -1,0 +1,16 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-10-10.
+# Scope: test configuration scaffolded following the supplier-service
+# pattern (in-memory H2 so `./mvnw test` needs no running PostgreSQL).
+# No broker settings: nothing declares or listens on the broker yet, so
+# the context loads without a running RabbitMQ.
+# Reviewed by: Ko-Khan (via pull request).
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:order;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop

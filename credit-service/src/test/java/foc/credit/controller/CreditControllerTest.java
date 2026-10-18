@@ -5,6 +5,10 @@
  * Postgres, row by row of docs/credit-service.md "Read API contract":
  * the balance, the history page, its order, filters and paging, each
  * row of "Errors", and both instant formats.
+ * 2026-10-17, Claude Code (Opus 5.5), issue #196: the expiries route,
+ * case by case of its contract rows.
+ * PR #210 review (Leong Wei Zhi): a first expiries read that commits
+ * outside the test transaction, like the balance and history ones.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.controller;
@@ -39,8 +43,10 @@ import org.springframework.transaction.annotation.Transactional;
 import foc.credit.PostgresTestContainer;
 import foc.credit.entity.CreditHistoryEntry;
 import foc.credit.entity.CreditHistoryType;
+import foc.credit.entity.CreditLot;
 import foc.credit.repository.CreditAccountRepository;
 import foc.credit.repository.CreditHistoryEntryRepository;
+import foc.credit.repository.CreditLotRepository;
 import foc.credit.service.CreditOperations;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -52,7 +58,7 @@ import io.jsonwebtoken.security.Keys;
 //
 // That would also hide a read that cannot write outside a test: a
 // read-only transaction of its own would join this one and pass. So the
-// two first-read cases marked NOT_SUPPORTED run with no test
+// three first-read cases marked NOT_SUPPORTED run with no test
 // transaction and commit, as a real first request does. What they
 // commit is a provisioned account, which keeps every invariant.
 //
@@ -81,6 +87,9 @@ class CreditControllerTest extends PostgresTestContainer {
 
     @Autowired
     private CreditHistoryEntryRepository history;
+
+    @Autowired
+    private CreditLotRepository lots;
 
     // ---- GET /credits/me
 
@@ -132,6 +141,16 @@ class CreditControllerTest extends PostgresTestContainer {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.content[*].type", contains("PROVISION")))
             .andExpect(jsonPath("$.totalElements").value(1));
+
+        assertThat(accounts.existsById(caller)).isTrue();
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void aFirstExpiriesReadCommitsTheAccountOutsideAnyTestTransaction() throws Exception {
+        expiries()
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items", empty()));
 
         assertThat(accounts.existsById(caller)).isTrue();
     }
@@ -357,7 +376,94 @@ class CreditControllerTest extends PostgresTestContainer {
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
     }
 
+    // ---- GET /credits/me/expiries
+
+    @Test
+    void aFirstReadCreatesTheAccountAndListsNothing() throws Exception {
+        // the sign-up credits never expire, so they are not an expiry
+        expiries()
+            .andExpect(status().isOk())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+            .andExpect(jsonPath("$.items", empty()));
+
+        assertThat(accounts.existsById(caller)).isTrue();
+    }
+
+    @Test
+    void anItemCarriesOnlyTheAmountAndTheExpiry() throws Exception {
+        lot(caller, 3, DAY);
+
+        expiries()
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].length()").value(2))
+            .andExpect(jsonPath("$.items[0].amount").value(3))
+            .andExpect(jsonPath("$.items[0].expiresAt").value("2026-10-10T08:00:00Z"));
+    }
+
+    @Test
+    void itemsComeSoonestFirstAndTheIdSettlesLotsOfOneInstant() throws Exception {
+        lot(caller, 4, DAY.plusSeconds(60));
+        lot(caller, 1, DAY);
+        lot(caller, 2, DAY);
+
+        expiries().andExpect(jsonPath("$.items[*].amount", contains(1, 2, 4)));
+    }
+
+    @Test
+    void aDrainedLotIsLeftOut() throws Exception {
+        lot(caller, 0, DAY);
+        lot(caller, 2, DAY.plusSeconds(60));
+
+        expiries().andExpect(jsonPath("$.items[*].amount", contains(2)));
+    }
+
+    @Test
+    void creditsHeldByAReservationAreLeftOut() throws Exception {
+        lot(caller, 4, DAY);
+        // spent soonest expiry first (D4), so 3 of the 4 are now held
+        operations.reserve("r-" + UUID.randomUUID(), caller, 3);
+
+        expiries().andExpect(jsonPath("$.items[*].amount", contains(1)));
+    }
+
+    @Test
+    void aLotPastItsExpiryStaysUntilTheExpiryRunMovesIt() throws Exception {
+        Instant yesterday = Instant.now().minusSeconds(86_400);
+        lot(caller, 2, yesterday);
+
+        expiries()
+            .andExpect(jsonPath("$.items[*].amount", contains(2)))
+            .andExpect(jsonPath("$.items[0].expiresAt").value(yesterday.toString()));
+    }
+
+    @Test
+    void anotherUsersLotsAreNeverShown() throws Exception {
+        lot("u-" + UUID.randomUUID(), 5, DAY);
+        lot(caller, 1, DAY);
+
+        expiries().andExpect(jsonPath("$.items[*].amount", contains(1)));
+    }
+
+    @Test
+    void theExpiriesNeedAToken() throws Exception {
+        mockMvc.perform(get("/credits/me/expiries"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
     // ---- helpers
+
+    private ResultActions expiries() throws Exception {
+        return mockMvc.perform(get("/credits/me/expiries").header("Authorization", "Bearer " + token(caller)));
+    }
+
+    // an earned lot; rolled back with the test, so the balance it leaves
+    // out of step never commits
+    private void lot(String owner, int remaining, Instant expiresAt) {
+        operations.getOrCreate(owner);
+        lots.save(new CreditLot(owner, remaining, expiresAt.minusSeconds(86_400), expiresAt));
+    }
 
     private ResultActions balance() throws Exception {
         return mockMvc.perform(get("/credits/me").header("Authorization", "Bearer " + token(caller)));

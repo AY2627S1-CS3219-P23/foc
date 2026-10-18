@@ -16,6 +16,10 @@
 // a second wrapper here only bought the profile page a duplicate request
 // and a private copy that drifted from everyone else's.
 // Author review: Leong Wei Zhi (via PR #149).
+// 2026-10-17, Codex (GPT-6), PR #180 review, issue #94:
+// AI-generated (edited by Codex; Leong Wei Zhi review pending).
+// Keep the existing recovery request alongside the other own-account calls.
+// Author review: Leong Wei Zhi to review via PR #180.
 
 import { apiFetch } from '@/lib/api/http'
 import type { AdminUser, EmailChangeAccepted, OtpTimings } from './types'
@@ -44,6 +48,10 @@ function isEmailPending(
 }
 
 export const profileApi = {
+  recoverAccount(): Promise<AdminUser> {
+    return apiFetch<AdminUser>('user', '/users/me/recover', { method: 'POST' })
+  },
+
   deleteAccount(): Promise<void> {
     return apiFetch<void>('user', '/users/me', { method: 'DELETE' })
   },
