@@ -5,6 +5,16 @@
 # datasource bound to the service-owned order-db, JPA
 # schema-from-entities, spring.rabbitmq connection settings (team
 # decision D1), and the actuator health endpoint.
+# 2026-10-15: the saga with the Credit Service — manual acks, correlated
+# publisher confirms with returns, a second scheduler thread, and the
+# order.* settings: outbox publisher and retry values copied from
+# credit-service (D10, D11), and the 30 s pending timeout swept every
+# 15 s (author decisions).
+# 2026-10-18: order.jwt.secret and order.web-allowed-origin for the
+# ownership checks, as in credit-service.
+# Same day: order.expiry.* and order.auto-complete.* for the deadline
+# expiry and auto-complete sweeps (5 min interval, 1 h delay: the
+# author's decisions), and a scheduler thread for each.
 # Reviewed by: Ko-Khan (via pull request).
 
 spring:
@@ -18,11 +28,82 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
+  task:
+    scheduling:
+      pool:
+        # One thread per @Scheduled job (the default is a single thread
+        # for all of them). The outbox poll can block on a confirm (up to
+        # confirm-timeout-ms), and must not hold up the pending-timeout,
+        # expiry or auto-complete sweeps.
+        size: 4
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:foc}
     password: ${RABBITMQ_PASSWORD:}
+    listener:
+      simple:
+        # The listener acks or nacks itself, after the handler's
+        # transaction commits.
+        acknowledge-mode: manual
+    # Correlated confirms with returns: a publish is confirmed by the
+    # broker AND reported back if no queue took it, so an event is marked
+    # sent only when it was confirmed and not returned.
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+
+order:
+  # the SPA's origin, for CORS (SecurityConfig)
+  web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
+  jwt:
+    # Shared platform secret (HS256). Empty default so the yaml stays
+    # parseable; JwtVerifier turns a missing/short value into a clear
+    # startup failure.
+    secret: ${JWT_SECRET:}
+  pending:
+    # How long a request may wait for the Credit Service's reply before
+    # it is cancelled (TIMEOUT).
+    timeout-ms: ${ORDER_PENDING_TIMEOUT_MS:30000}
+    sweep:
+      # Delay between the end of one pending-timeout sweep and the next.
+      interval-ms: ${ORDER_PENDING_SWEEP_INTERVAL_MS:15000}
+  expiry:
+    sweep:
+      # Delay between deadline-expiry sweeps (CREATED / ACCEPTED requests
+      # past their deadline become EXPIRED).
+      interval-ms: ${ORDER_EXPIRY_SWEEP_INTERVAL_MS:300000}
+  auto-complete:
+    # How long a request may stay ARRIVED without the requester's
+    # confirmation before it is completed for them (F7.2).
+    after-ms: ${ORDER_AUTO_COMPLETE_AFTER_MS:3600000}
+    sweep:
+      # Delay between auto-complete sweeps.
+      interval-ms: ${ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS:300000}
+  rabbitmq:
+    retry:
+      # Delay before a failed reply is tried again. Baked into the retry
+      # queue's x-message-ttl when it is declared: changing it against a
+      # broker that already holds the queue fails PRECONDITION_FAILED
+      # until the queue is deleted.
+      ttl-ms: ${ORDER_RETRY_TTL_MS:2000}
+      # Total attempts before a reply dead-letters.
+      max-attempts: ${ORDER_RETRY_MAX_ATTEMPTS:5}
+  outbox:
+    publisher:
+      # Delay between the end of one outbox poll and the start of the
+      # next. A delay, not a rate, so polls never overlap.
+      poll-interval-ms: 1000
+      # Most events published in one poll, so a backlog after an outage
+      # drains over several polls.
+      batch-size: 100
+      # Longest wait for the broker to confirm one event; after it the
+      # poll stops, and the next poll tries the event again.
+      confirm-timeout-ms: 5000
+      # How long an event the broker returned as unroutable waits before
+      # it is due again.
+      unroutable-retry-delay-ms: 30000
 
 management:
   endpoints:
