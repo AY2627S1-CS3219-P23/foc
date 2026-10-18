@@ -39,6 +39,50 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Leong Wei Zhi (PR #214 review round)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor + docs
+- **Scope:** all three findings of @Sinnez1's PR #214 review:
+  `order-service/README.md`'s "DROP publishes nothing" line updated to
+  `request.dropped` (blocking); the `RequestsService` header's older
+  "DROP still publishes nothing" line marked "(until request.dropped,
+  below)"; `RequestEvents.dropped` now takes the dropping courier as a
+  parameter (the reviewer's snippet), so the enqueue no longer depends
+  on running before the courier fields are cleared.
+- **Prompt(s):** "address pr comments and reply to each comment
+  individually".
+- **Author review:** to review via PR #214. `RequestsServiceTests`
+  rerun 36/36.
+
+---
+## 2026-10-18 — Leong Wei Zhi (request.dropped notification)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** a courier dropping an accepted request now notifies the
+  requester. New `request.dropped` contract (`RequestDropped` record,
+  registry entry, `request-dropped.example.json` fixture, count test
+  bumped to 12); `RequestsService.drop` enqueues
+  `RequestEvents.dropped` before clearing the courier fields;
+  order-service tests (`everyStepWritesItsEvent` renamed and extended,
+  new `dropWritesRequestDroppedForTheRequester`); web template in
+  `eventMessage.ts` + Notification Center test cases; event-catalog
+  paragraph in `docs/notification-service.md` and the F5.2 row in
+  `docs/credit-service.md`. Notification- and credit-service code
+  untouched (`request.#` binding and field-driven name enrichment pick
+  the type up; credit-service binds explicit keys and never sees it).
+- **Prompt(s):** "we dont have a notif if courier drops a request
+  after accepting. make one"; decisions via options Q&A: event name
+  `request.dropped`, parties = the requester only, one PR across
+  contracts + order-service + web.
+- **Author review:** to review via pull request. Verified:
+  foc-contracts 11/11, order-service `RequestsServiceTests` 36/36,
+  notification-service 94 tests with `DomainEventContractTest`
+  validating the new fixture, web vitest suite. The 5 order-service /
+  1 notification-service `internalRabbitListenerEndpointRegistry`
+  context-restart errors reproduce on a clean `origin/main` worktree
+  under local Java 26 (known environmental issue, not this change).
+
+---
 ## 2026-10-18 — Ryan Ang (PR #212 review follow-ups)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** docs + code comments
