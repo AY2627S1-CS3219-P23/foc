@@ -18,7 +18,7 @@
   then /create's 400 field checks;
   order-e2e.ps1 section. Then request.accepted / request.collected and
   the expiry and auto-complete timers. Then the read endpoints, and their
-  filters and sort.
+  filters and sort; past-deadline requests hidden from the open list.
   Reviewed by: Ko-Khan (via pull request).
 -->
 
@@ -95,8 +95,9 @@ All are `POST` with a JSON body and need a bearer token (the platform
 JWT from user-service's login, verified with the shared `JWT_SECRET`);
 the caller is the token's user. They answer `{"message": "..."}`: 200
 on success; 409 if the event is not allowed from the request's current
-state (including a courier action on a still-PENDING request) or the
-requester tries to accept their own request; 404 if no request has that
+state (including a courier action on a still-PENDING request), the
+requester tries to accept their own request, or `/accept` comes after
+the deadline (before the expiry sweep has run); 404 if no request has that
 id **or the step is not the caller's** (the same answer, so a stranger
 cannot tell the request exists). A missing or invalid token is a 401
 problem+json. `/create` answers 400 listing every problem at once:
@@ -140,7 +141,7 @@ A range whose lower bound is not below its upper (`minCredit` above
 
 | Path | Returns | Who may call it |
 | --- | --- | --- |
-| `GET /requests?state=CREATED&page=&size=` | open errands for couriers (F2.1); `state` may only be `CREATED` (the default) | any logged-in user |
+| `GET /requests?state=CREATED&page=&size=` | open errands for couriers (F2.1): CREATED requests whose deadline is still ahead; `state` may only be `CREATED` (the default) | any logged-in user |
 | `GET /requests/{id}` | the request in full (every column, incl. `requesterId`, `courierId` and the step timestamps) | its requester, its assigned courier, or ADMIN / OWNER; anyone else 404 |
 | `GET /requests/mine?role=requester&state=` | the caller's requests as requester, optionally in one state | the caller |
 | `GET /requests/mine?role=courier&state=` | the caller's assigned deliveries | the caller |
