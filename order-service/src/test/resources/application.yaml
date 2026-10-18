@@ -9,6 +9,7 @@
 # the publisher and the sweep themselves.
 # 2026-10-18: a test JWT secret, since the main yaml's default is empty,
 # and the SPA origin (this file replaces the main yaml in tests).
+# Same day: the expiry and auto-complete sweeps off, like the pending one.
 # Reviewed by: Ko-Khan (via pull request).
 
 spring:
@@ -47,6 +48,17 @@ order:
       batch-size: 100
       confirm-timeout-ms: 5000
       unroutable-retry-delay-ms: 30000
+  expiry:
+    sweep:
+      # the tests call DeadlineExpirySweeper.expireOverdue() themselves
+      enabled: false
+      interval-ms: 300000
+  auto-complete:
+    after-ms: 3600000
+    sweep:
+      # the tests call AutoCompleteSweeper.completeOverdue() themselves
+      enabled: false
+      interval-ms: 300000
   pending:
     timeout-ms: 30000
     sweep:

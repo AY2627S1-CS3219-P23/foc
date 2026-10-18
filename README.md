@@ -106,7 +106,9 @@
   events (RequestsService, outbox, credit reply listener) by Claude
   Code (Opus 5.5), then for the RequestsController endpoints, then
   for the order-service ownership checks, then for the manual-testing
-  scripts, stubs and the gateway order route.
+  scripts, stubs and the gateway order route, then for the /create field
+  checks, the accepted / collected events and the expiry and
+  auto-complete timers.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -598,7 +600,12 @@ choice and the 409 / 404 answers chosen by the author; and the
 `order-event.ps1` / `order-curl.ps1` / `order-e2e.ps1` manual-testing
 helpers, the `credit-stub.ps1` / `stub-users.psd1` stand-ins for the
 Credit and User Services, and the gateway's `/api/order` route
-replacing the reserved stub.
+replacing the reserved stub; and `/create`'s field checks (400 listing
+missing fields, a reward below 1 and a past deadline), the
+`request.accepted` / `request.collected` events and the deadline-expiry
+and auto-complete timers, with the required fields, the 400 answer, the
+events' parties, the 5 min sweeps and the configurable 1 h delay chosen
+by the author.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

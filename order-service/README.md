@@ -16,7 +16,8 @@
   2026-10-18: 409 when the requester accepts their own request; then
   bearer-token auth and the ownership rules in the endpoints section;
   then /create's 400 field checks;
-  order-e2e.ps1 section.
+  order-e2e.ps1 section. Then request.accepted / request.collected and
+  the expiry and auto-complete timers.
   Reviewed by: Ko-Khan (via pull request).
 -->
 
@@ -60,9 +61,15 @@ The team's design is in [`docs/credit-service.md`](../docs/credit-service.md)
   CANCEL publishes `request.cancelled` and EXPIRE `request.expired`,
   on which the Credit Service releases the held reward to the requester
   (`parties` = requester, plus the courier on an expiry after
-  acceptance). DROP publishes nothing, so the reward stays held; ACCEPT
-  and COLLECT publish nothing yet. Nothing fires EXPIRE yet (no
-  deadline sweep).
+  acceptance). ACCEPT and COLLECT publish `request.accepted` and
+  `request.collected` (`parties` = requester and courier). DROP publishes
+  nothing, so the reward stays held.
+- **Timers** (every `ORDER_EXPIRY_SWEEP_INTERVAL_MS` /
+  `ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS`, default 5 min): a CREATED or
+  ACCEPTED request past its deadline is EXPIRED (F6.1); a request
+  ARRIVED for `ORDER_AUTO_COMPLETE_AFTER_MS` (default 1 h) without the
+  requester's confirmation is COMPLETED for them, with the same
+  `request.completed` (F7.2).
 - **Publishing:** a transactional outbox (`outbox_event` table), sent to
   the `request-events` exchange by a poller with publisher confirms —
   a copy of credit-service's (D10).

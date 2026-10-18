@@ -26,6 +26,31 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Aung Ko Khant (order-service: accepted/collected events, expiry and auto-complete)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `RequestsService.accept` / `.collect` write
+  `request.accepted` / `request.collected` (`RequestEvents`, parties =
+  requester and courier); new `DeadlineExpirySweeper` (CREATED / ACCEPTED
+  past the deadline -> EXPIRE, F6.1-F6.2) and `AutoCompleteSweeper`
+  (ARRIVED longer than the delay -> `RequestsService.completeAutomatically`,
+  F7.2), modelled on `PendingTimeoutSweeper`; two repository queries;
+  `order.expiry.*` / `order.auto-complete.*` settings, compose and
+  `.env.example` variables, scheduler pool 2 -> 4; `endpoints.txt`
+  brought up to date with the API; README saga section; tests (82
+  passing). Also committed the earlier `/create` field-check tests.
+- **Prompt(s):** "Can you perform the ones that only require small
+  decisions" (from the remaining-tasks list). The tool asked as neutral
+  options; the author chose: both sweeps every 5 min; auto-complete after
+  1 h, configurable; accepted / collected notify requester and courier;
+  update `endpoints.txt` and push.
+- **Author review:** `mvn test` in a Maven container: 82 tests, 0
+  failures. Live run with the intervals shortened through environment
+  variables: a request past its deadline became EXPIRED and an ARRIVED
+  one COMPLETED within 25 s, with request.accepted / collected / expired /
+  completed all sent; the container was then restarted on the defaults.
+  To be reviewed via pull request.
+
 ## 2026-10-18 — Aung Ko Khant (order-service: create field checks)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate

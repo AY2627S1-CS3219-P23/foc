@@ -30,6 +30,9 @@
  * (F1.1.3) and deadline in the future (F1.1.2), all problems reported
  * at once as an InvalidRequestException (400). Then supplierName
  * required as well (the author's decision; the column stays nullable).
+ * 2026-10-18: accept and collect write request.accepted and
+ * request.collected (the author's decision); completeAutomatically for
+ * the auto-complete sweep.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -104,6 +107,7 @@ public class RequestsService {
         }
         request.setCourierId(courierId);
         request.setAcceptedAt(Instant.now());
+        outbox.enqueue(RequestEvents.accepted(request));
         return request;
     }
 
@@ -111,6 +115,7 @@ public class RequestsService {
     public Requests collect(Long requestId, Long callerId) {
         Requests request = transition(asCourier(requestId, callerId), OrderEvents.COLLECT);
         request.setCollectedAt(Instant.now());
+        outbox.enqueue(RequestEvents.collected(request));
         return request;
     }
 
@@ -157,7 +162,18 @@ public class RequestsService {
     // Credit Service to transfer the held reward to the courier.
     @Transactional
     public Requests complete(Long requestId, Long callerId) {
-        Requests request = transition(asRequester(requestId, callerId), OrderEvents.COMPLETE);
+        return completed(transition(asRequester(requestId, callerId), OrderEvents.COMPLETE));
+    }
+
+    // COMPLETE without the requester: the auto-complete sweep, an hour
+    // after the courier arrived (F7.2). The same request.completed as a
+    // manual confirmation, so the Credit Service pays the courier.
+    @Transactional
+    public Requests completeAutomatically(Long requestId) {
+        return completed(transition(requestId, OrderEvents.COMPLETE));
+    }
+
+    private Requests completed(Requests request) {
         outbox.enqueue(RequestEvents.completed(request));
         return request;
     }

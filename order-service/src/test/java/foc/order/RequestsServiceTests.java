@@ -20,6 +20,8 @@
  * stranger is told the request does not exist).
  * Same day: create's field checks (all missing fields listed, reward
  * at least 1, deadline in the future); supplierName then made required.
+ * Same day: request.accepted / request.collected (requester and courier
+ * in parties), completeAutomatically; events looked up by type.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -227,7 +229,7 @@ class RequestsServiceTests {
 	}
 
 	@Test
-	void onlyTheSagaArriveAndCompleteWriteEvents() {
+	void everyStepButDropWritesItsEvent() {
 		Long id = newCreatedRequest();
 		requestsService.accept(id, COURIER_ID);
 		requestsService.drop(id, COURIER_ID);
@@ -236,8 +238,9 @@ class RequestsServiceTests {
 		requestsService.arrive(id, COURIER_ID);
 		requestsService.complete(id, REQUESTER_ID);
 
-		assertEquals(List.of("request.submitted", "request.created", "request.courier-arrived",
-				"request.completed"), eventTypes(id));
+		// the drop between the two accepts writes nothing (Order F5.2)
+		assertEquals(List.of("request.submitted", "request.created", "request.accepted", "request.accepted",
+				"request.collected", "request.courier-arrived", "request.completed"), eventTypes(id));
 	}
 
 	@Test
@@ -249,7 +252,7 @@ class RequestsServiceTests {
 
 		requestsService.complete(id, REQUESTER_ID);
 
-		JsonNode completed = eventsFor(id).get(3);
+		JsonNode completed = event(id, "request.completed");
 		assertEquals("request.completed", completed.get("eventType").stringValue());
 		assertEquals(id.toString(), completed.get("requestId").stringValue());
 		assertEquals(id.toString(), completed.get("correlationId").stringValue());
@@ -301,6 +304,37 @@ class RequestsServiceTests {
 	}
 
 	@Test
+	void acceptAndCollectWriteTheirEventsForRequesterAndCourier() {
+		Long id = newCreatedRequest();
+
+		requestsService.accept(id, COURIER_ID);
+		requestsService.collect(id, COURIER_ID);
+
+		for (String type : List.of("request.accepted", "request.collected")) {
+			JsonNode e = event(id, type);
+			assertEquals(id.toString(), e.get("requestId").stringValue(), type);
+			assertEquals("1", e.get("requesterId").stringValue(), type);
+			assertEquals(COURIER_ID.toString(), e.get("courierId").stringValue(), type);
+			assertEquals(List.of("1", COURIER_ID.toString()), parties(e), type);
+			assertEquals("The Deck", e.get("pickupLocation").stringValue(), type);
+			assertEquals("Chicken rice", e.get("note").stringValue(), type);
+		}
+	}
+
+	@Test
+	void completeAutomaticallyCompletesWithoutTheRequesterAndPaysTheCourier() {
+		Long id = newCreatedRequest();
+		requestsService.accept(id, COURIER_ID);
+		requestsService.collect(id, COURIER_ID);
+		requestsService.arrive(id, COURIER_ID);
+
+		requestsService.completeAutomatically(id);
+
+		assertEquals(OrderStates.COMPLETED, stored(id).getStatus());
+		assertEquals(COURIER_ID.toString(), event(id, "request.completed").get("courierId").stringValue());
+	}
+
+	@Test
 	void collectArriveCompleteStoresTimestampsAndCompleted() {
 		Long id = newCreatedRequest();
 		requestsService.accept(id, COURIER_ID);
@@ -325,7 +359,7 @@ class RequestsServiceTests {
 
 		requestsService.arrive(id, COURIER_ID);
 
-		JsonNode arrived = eventsFor(id).get(2);
+		JsonNode arrived = event(id, "request.courier-arrived");
 		assertEquals("request.courier-arrived", arrived.get("eventType").stringValue());
 		assertEquals(1, arrived.get("parties").size());
 		assertEquals("1", arrived.get("parties").get(0).stringValue());
@@ -375,7 +409,7 @@ class RequestsServiceTests {
 
 		requestsService.cancel(id, REQUESTER_ID);
 
-		JsonNode cancelled = eventsFor(id).get(2);
+		JsonNode cancelled = event(id, "request.cancelled");
 		assertEquals("request.cancelled", cancelled.get("eventType").stringValue());
 		assertEquals(id.toString(), cancelled.get("requestId").stringValue());
 		// the Credit Service releases the reward to this requester
@@ -403,7 +437,7 @@ class RequestsServiceTests {
 
 		requestsService.expire(id);
 
-		JsonNode expired = eventsFor(id).get(2);
+		JsonNode expired = event(id, "request.expired");
 		assertEquals("request.expired", expired.get("eventType").stringValue());
 		assertEquals(id.toString(), expired.get("requestId").stringValue());
 		assertEquals("1", expired.get("requesterId").stringValue());
@@ -417,7 +451,7 @@ class RequestsServiceTests {
 
 		requestsService.expire(id);
 
-		JsonNode expired = eventsFor(id).get(2);
+		JsonNode expired = event(id, "request.expired");
 		assertEquals("request.expired", expired.get("eventType").stringValue());
 		assertEquals("1", expired.get("requesterId").stringValue());
 		assertEquals(List.of("1", COURIER_ID.toString()), parties(expired));
@@ -435,8 +469,8 @@ class RequestsServiceTests {
 		Requests stored = stored(id);
 		assertEquals(OrderStates.ACCEPTED, stored.getStatus());
 		assertEquals(COURIER_ID, stored.getCourierId());
-		// the refused cancel wrote no request.cancelled
-		assertEquals(List.of("request.submitted", "request.created"), eventTypes(id));
+		// the refused events wrote nothing after the accept
+		assertEquals(List.of("request.submitted", "request.created", "request.accepted"), eventTypes(id));
 	}
 
 	@Test
@@ -539,6 +573,14 @@ class RequestsServiceTests {
 		List<String> parties = new ArrayList<>();
 		event.get("parties").forEach(p -> parties.add(p.stringValue()));
 		return parties;
+	}
+
+	// The one event of this type for the request.
+	private JsonNode event(Long id, String type) {
+		List<JsonNode> matching = eventsFor(id).stream()
+				.filter(e -> type.equals(e.get("eventType").stringValue())).toList();
+		assertEquals(1, matching.size(), type);
+		return matching.get(0);
 	}
 
 	private List<String> eventTypes(Long id) {

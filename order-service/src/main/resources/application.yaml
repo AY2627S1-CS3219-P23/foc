@@ -12,6 +12,9 @@
 # 15 s (author decisions).
 # 2026-10-18: order.jwt.secret and order.web-allowed-origin for the
 # ownership checks, as in credit-service.
+# Same day: order.expiry.* and order.auto-complete.* for the deadline
+# expiry and auto-complete sweeps (5 min interval, 1 h delay: the
+# author's decisions), and a scheduler thread for each.
 # Reviewed by: Ko-Khan (via pull request).
 
 spring:
@@ -28,10 +31,11 @@ spring:
   task:
     scheduling:
       pool:
-        # The default is one thread for every @Scheduled job. The outbox
-        # poll can block on a confirm (up to confirm-timeout-ms), and must
-        # not hold up the pending-timeout sweep.
-        size: 2
+        # One thread per @Scheduled job (the default is a single thread
+        # for all of them). The outbox poll can block on a confirm (up to
+        # confirm-timeout-ms), and must not hold up the pending-timeout,
+        # expiry or auto-complete sweeps.
+        size: 4
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -65,6 +69,18 @@ order:
     sweep:
       # Delay between the end of one pending-timeout sweep and the next.
       interval-ms: ${ORDER_PENDING_SWEEP_INTERVAL_MS:15000}
+  expiry:
+    sweep:
+      # Delay between deadline-expiry sweeps (CREATED / ACCEPTED requests
+      # past their deadline become EXPIRED).
+      interval-ms: ${ORDER_EXPIRY_SWEEP_INTERVAL_MS:300000}
+  auto-complete:
+    # How long a request may stay ARRIVED without the requester's
+    # confirmation before it is completed for them (F7.2).
+    after-ms: ${ORDER_AUTO_COMPLETE_AFTER_MS:3600000}
+    sweep:
+      # Delay between auto-complete sweeps.
+      interval-ms: ${ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS:300000}
   rabbitmq:
     retry:
       # Delay before a failed reply is tried again. Baked into the retry

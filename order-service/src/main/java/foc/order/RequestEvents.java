@@ -14,12 +14,16 @@
  * Same day: request.cancelled reused for CANCEL (parties = the
  * requester), and request.expired for EXPIRE (parties = the requester,
  * plus the courier when one had accepted; the author's decisions).
+ * 2026-10-18: request.accepted and request.collected, parties = the
+ * requester and the courier (the author's decision).
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
 
 import foc.contracts.events.request.CourierArrived;
+import foc.contracts.events.request.RequestAccepted;
 import foc.contracts.events.request.RequestCancelled;
+import foc.contracts.events.request.RequestCollected;
 import foc.contracts.events.request.RequestCompleted;
 import foc.contracts.events.request.RequestCreated;
 import foc.contracts.events.request.RequestExpired;
@@ -68,6 +72,20 @@ final class RequestEvents {
                 r.getDropoffLocation(), r.getItem());
     }
 
+    // request.accepted: a courier took the request
+    static RequestAccepted accepted(Requests r) {
+        return new RequestAccepted(newEventId(), Instant.now(), PRODUCER, correlationId(r), requesterAndCourier(r),
+                id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
+                r.getDropoffLocation(), r.getItem());
+    }
+
+    // request.collected: the courier has the item from the supplier
+    static RequestCollected collected(Requests r) {
+        return new RequestCollected(newEventId(), Instant.now(), PRODUCER, correlationId(r), requesterAndCourier(r),
+                id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
+                r.getDropoffLocation(), r.getItem());
+    }
+
     // request.courier-arrived: the courier is at the drop-off location,
     // so the requester can come and collect the item
     static CourierArrived courierArrived(Requests r) {
@@ -80,7 +98,7 @@ final class RequestEvents {
     // the courier. Both users are told, unlike the other events.
     static RequestCompleted completed(Requests r) {
         return new RequestCompleted(newEventId(), Instant.now(), PRODUCER, correlationId(r),
-                List.of(id(r.getRequesterId()), id(r.getCourierId())),
+                requesterAndCourier(r),
                 id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
                 r.getDropoffLocation(), r.getItem());
     }
@@ -98,6 +116,10 @@ final class RequestEvents {
 
     private static String correlationId(Requests r) {
         return id(r.getId());
+    }
+
+    private static List<String> requesterAndCourier(Requests r) {
+        return List.of(id(r.getRequesterId()), id(r.getCourierId()));
     }
 
     private static List<String> parties(Requests r) {

@@ -90,7 +90,8 @@
 # (30 s pending timeout swept every 15 s, and credit-service's 2 s / 5
 # attempts retry values; Ko-Khan via options Q&A).
 # 2026-10-18, Claude Code (Opus 5.5): JWT_SECRET and WEB_ALLOWED_ORIGIN
-# passed to the order service for its ownership checks and CORS.
+# passed to the order service for its ownership checks and CORS; then
+# ORDER_EXPIRY_* and ORDER_AUTO_COMPLETE_* for its two new sweeps.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -458,6 +459,10 @@ services:
       # retry delay and attempts for a failed credit reply
       ORDER_RETRY_TTL_MS: ${ORDER_RETRY_TTL_MS:-2000}
       ORDER_RETRY_MAX_ATTEMPTS: ${ORDER_RETRY_MAX_ATTEMPTS:-5}
+      # deadline-expiry and auto-complete sweeps (F6.1, F7.2)
+      ORDER_EXPIRY_SWEEP_INTERVAL_MS: ${ORDER_EXPIRY_SWEEP_INTERVAL_MS:-300000}
+      ORDER_AUTO_COMPLETE_AFTER_MS: ${ORDER_AUTO_COMPLETE_AFTER_MS:-3600000}
+      ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS: ${ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS:-300000}
       # verifies the caller's bearer token for the ownership checks
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       # the SPA's origin, for CORS
