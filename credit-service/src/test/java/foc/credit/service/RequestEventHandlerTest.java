@@ -10,6 +10,8 @@
  * refusals are told apart by the result, not by the reward.
  * 2026-10-11, PR #175 review (Leong Wei Zhi): a completion with no
  * record throws (team decision).
+ * 2026-10-18, issue #165 (reviewer's suggestion): a redelivered
+ * submission already decided enqueues its reply again.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -124,6 +126,34 @@ class RequestEventHandlerTest {
 
         assertThat(enqueuedReply()).isInstanceOfSatisfying(CreditReservationRejected.class,
             reply -> assertThat(reply.reason()).isEqualTo(RequestEventHandler.INSUFFICIENT_CREDITS));
+    }
+
+    @Test
+    void redeliveredReservedSubmissionEnqueuesCreditReservedAgain() {
+        when(operations.reserve("r-1", "u-req", 3)).thenReturn(ReserveResult.ALREADY_RESERVED);
+
+        assertThat(handler.handle(submitted(3))).isEqualTo(Outcome.HANDLED);
+
+        assertThat(enqueuedReply()).isInstanceOfSatisfying(CreditReserved.class, reply -> {
+            assertThat(reply.requestId()).isEqualTo("r-1");
+            assertThat(reply.amount()).isEqualTo(3);
+            assertThat(reply.correlationId()).isEqualTo("corr-1");
+        });
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "ALREADY_REJECTED_INSUFFICIENT_CREDITS, " + RequestEventHandler.INSUFFICIENT_CREDITS,
+        "ALREADY_REJECTED_INVALID_AMOUNT, " + RequestEventHandler.REWARD_BELOW_ONE })
+    void redeliveredRefusedSubmissionEnqueuesTheRejectionAgain(ReserveResult result, String reason) {
+        when(operations.reserve("r-1", "u-req", 9)).thenReturn(result);
+
+        assertThat(handler.handle(submitted(9))).isEqualTo(Outcome.HANDLED);
+
+        assertThat(enqueuedReply()).isInstanceOfSatisfying(CreditReservationRejected.class, reply -> {
+            assertThat(reply.requestId()).isEqualTo("r-1");
+            assertThat(reply.reason()).isEqualTo(reason);
+        });
     }
 
     @Test
