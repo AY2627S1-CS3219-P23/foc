@@ -55,6 +55,36 @@
   only the unsent replies that are due, so replies no queue takes
   cannot fill every batch and hold back the ones behind them. Still no
   cap on attempts.
+  2026-10-14, issue #171, team decision transcribed: when the broker
+  does not accept a failed event's retry copy, the original is
+  requeued at once instead of being left unacknowledged.
+  2026-10-16, PR #190 review (Leong Wei Zhi), team decisions
+  transcribed: a returned retry copy dead-letters the original; a
+  nacked or unconfirmed one requeues it after a 5 s pause; a confirm
+  timeout may leave the event as two copies (new failure-table row).
+  Same day, re-review: the returned-copy row notes that a missing
+  dead-letter queue discards the event.
+  2026-10-16, issue #173, team decisions transcribed: the expiry runs
+  daily at 00:00 and the redistribution on the 1st at 00:10, both in
+  Asia/Singapore, which also decides the month a run counts as; the
+  expiry is one transaction per account; a month with an empty pool is
+  still recorded; a redistribution missed while the service was down
+  runs at startup, after an expiry run, the order of a normal night.
+  2026-10-16, PR #193 review (Leong Wei Zhi), team decision transcribed:
+  one routine, daily at 00:00 and at startup, sweeps then redistributes
+  a month with no recorded run; the 00:10 job is dropped, so a failed
+  redistribution is retried the next day (D12, failure-table rows).
+  2026-10-17, issue #174, team decisions transcribed: the admin routes
+  in the Read API contract (a pool summary with a share preview and the
+  next run, and the paged runs), for ADMIN and OWNER.
+  2026-10-17, issue #196, team decisions transcribed: GET
+  /credits/me/expiries in the Read API contract (its route, response
+  shape, order, which credits count, and how often the web app reads
+  it), and the REST API component row.
+  2026-10-17, PR #210 review (Leong Wei Zhi), team decision transcribed:
+  the web app reads the expiries on every balance poll, since reading
+  them only on a balance change missed changes that cancel out; and the
+  "No window" bullet states the real upper bound on the list.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -80,7 +110,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D9 | Transfer and release | Saga endings. `request.completed` transfers the held credits. `request.cancelled` and `request.expired` release them, with release being the compensation for a reservation. | F2.1.1, F3.1, NFR1.1 |
 | D10 | Reply publishing | **Transactional outbox.** The reply is written to an outbox table in the same transaction as the balance change, and a publisher sends it to the broker with publisher confirms and the mandatory flag: a reply is marked sent only when the broker confirmed it and did not return it as unroutable. The publisher polls every 1 s, as a fixed delay so that one poll never overlaps the next, publishes at most 100 replies in a poll and waits up to 5 s for each confirm. A reply returned as unroutable is not due again for 30 s, and a poll reads only the unsent replies that are due, so replies no queue takes cannot fill every batch and hold back the ones behind them. | NFR2.1 |
 | D11 | Event failure handling | Transient failures go to a retry queue and are redelivered after a short delay, up to a fixed number of attempts, then to a dead-letter queue. Events that conflict with the recorded state go straight to the dead-letter queue. A `request.completed` with no record is not such a conflict: its reservation may not have been applied yet, so it is retried like a transient failure. The queue layout is the Notification Service's (a work, a retry and a dead-letter queue), with two differences: the four consumed routing keys are bound one by one instead of `request.#`, and the retry delay is 2 s with up to 5 attempts (`CREDIT_RETRY_TTL_MS`, `CREDIT_RETRY_MAX_ATTEMPTS`). The service declares both the `request-events` and `credit-events` exchanges, so it starts without the Order Service. | F5.1.1, NFR2.1 |
-| D12 | Scheduler | Done by a **cron job** through use of `@Scheduled`. The expiry run is daily; redistribution is monthly. | F6.1.1, F6.1.2 |
+| D12 | Scheduler | Done by a **cron job** through use of `@Scheduled`. One routine runs daily at 00:00 Asia/Singapore time and once at startup: the expiry sweep, then, if the current Singapore month has no `redistribution_run` row, that month's redistribution. The order inside the routine puts what expired into the pool before it is shared out, so the redistribution happens at 00:00 on the 1st, straight after that night's sweep. A month that is missed (the service down) or whose run fails is completed by the next run, at startup or the next day. The expiry is one transaction per account. A month is recorded in `redistribution_run` even when the pool is empty. | F6.1.1, F6.1.2 |
 
 ## The saga
  
@@ -113,14 +143,14 @@ Web App; every balance change arrives as a request event. Its state lives only i
 
 | Component | Responsibility |
 | --- | --- |
-| **Credit account REST API** (Spring Boot) | For the Web App, authenticated by the user's JWT: returns the caller's available and reserved balance (F4.1) and their transaction history with amount and date-range filters (F4.1.2, F4.1.3). The routes and shapes are in "Read API contract". |
+| **Credit account REST API** (Spring Boot) | For the Web App, authenticated by the user's JWT: returns the caller's available and reserved balance (F4.1) and their transaction history with amount and date-range filters (F4.1.2, F4.1.3), and the caller's credits that will expire, with their dates (F6.1, issue #196). The routes and shapes are in "Read API contract". |
 | **Request event listener** (Spring AMQP) | Consumes `request.submitted`, `request.completed`, `request.cancelled` and `request.expired` from the Credit Service's own queue, hands each to the request event handler, and settles the delivery on its answer: acknowledge after the commit, dead-letter an event that conflicts with the request's record, and send any failure to the retry queue (D11). |
 | **Request event handler** (Spring Boot, `@Transactional`) | Owns the transaction for one event. Turns it into a reserve (F2.1), transfer (F3.1) or release (F2.1.1) operation and, for a reservation, writes the reply to the outbox in the same transaction (D10). Imports no broker types. |
 | **Error mapping** (Spring Boot, `@RestControllerAdvice`) | Maps invalid query parameters on the read API (for example the history's amount and date-range filters) to HTTP error responses. Event-path failures never reach it: they are refused with a reply or dead-lettered (see "How each event is handled"). |
 | **Idempotent credit operations service** (Spring Boot, `@Transactional`) | Core logic: provisions accounts with 5 available / 0 reserved, once per user (F1.1.1, F1.1.2). It reserves only if available credit >= amount needed (F2.1, F2.1.2, F2.1.3) and releases or transfers each request's held credits at most once (F2.1.1, F3.1.1, F3.1.2, NFR2.2.1). It spends lots in soonest-expiry order, with the never-expiring sign-up lot last, returns released credits to the lots they came from (D4), and commits balance change, held-credits status, lots, history rows and the outgoing reply in one transaction (F5.1, NFR2.1). It logs one line per operation that changes credits (the request, the users affected, the amount and the outcome) and one per account created, each written after the transaction commits. |
 | **Credit history** (Spring Boot) | Appends one immutable row per transaction such as account provision, reservation, release, transfer, expiry, redistribution, with timestamps and request reference (F4.1.1). It will also serve the filtered history queries (F4.1.2, F4.1.3). |
 | **Outbox publisher** (Spring Boot, `@Scheduled`) | Reads the unsent replies that are due from the outbox table, publishes them to the `credit-events` exchange with the mandatory flag, and marks each one sent once the broker confirms it without returning it. A returned reply stays unsent and is due again 30 s later (D10); until then no poll reads it. It is logged with its event ID and the poll goes on to the next reply, since a return is the one failure that is about a single reply. Any other failure stops the poll: the broker cannot be reached, the connection is lost, the broker nacks the reply, or no confirm arrives within 5 s. Each means the broker is in trouble, so every other reply would fail the same way. The replies not yet sent stay unsent for the next poll. There is no cap on attempts. |
-| **Expiry and redistribution scheduler** (Spring Boot, `@Scheduled`) | Once a day, moves earned credits past their expiry into the common pool (F6.1). At the start of each month, it shares the pool equally in integer amounts (F6.1.1) and gives the remainder to random users (F6.1.2). |
+| **Expiry and redistribution scheduler** (Spring Boot, `@Scheduled`) | Once a day, moves earned credits past their expiry into the common pool (F6.1), one account per transaction. At the start of each month, it shares the pool equally in integer amounts (F6.1.1) and gives the remainder to random users (F6.1.2), in one transaction. Times and zone in D12. |
 | **Credit Database** (PostgreSQL) | Holds credit accounts, held credits records, credit lots, common pool and history. |
 
 ## Database
@@ -315,9 +345,12 @@ Same notation as [`architecture.md`](architecture.md):
 
 ## Read API contract
 
-Both routes return the caller's own data, identified by the JWT; there
-is no route for another user's. Either one creates the caller's account
-on first use (D6), so a balance always exists and neither answers 404.
+The three `/credits/me` routes return the caller's own data,
+identified by the JWT; there is no route for another user's. Each one
+creates the caller's account on first use (D6), so a balance always
+exists and none answers 404. The admin routes ("Admin routes" below)
+read only the common pool and its redistributions, never a user's
+data, and only for `ADMIN` and `OWNER`.
 
 ### `GET /credits/me`
 
@@ -386,12 +419,98 @@ For the web page:
   offset must be encoded as `%2B08:00` in the query string, or the `+`
   arrives as a space and the request is a 400.
 
+### `GET /credits/me/expiries`
+
+The caller's credits that will expire, one item per lot still holding
+some, soonest first (F6.1, D4). The web app reads it when the credits
+page opens and again on every balance poll. Reading it only when the
+balance changed would miss changes that cancel out between two polls,
+such as the midnight expiry run followed by a redistribution share of
+the same size.
+
+```json
+{
+  "items": [
+    { "amount": 3, "expiresAt": "2027-01-12T07:41:09.123456Z" },
+    { "amount": 2, "expiresAt": "2027-01-20T02:05:44Z" }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `items` | One item per lot still holding credits that will expire |
+| `items[].amount` | The credits left in that lot; at least 1 |
+| `items[].expiresAt` | When they expire: the lot's `expires_at` as stored, in the format of `occurredAt` |
+
+- **Order:** `expiresAt` ascending, then the lot's ID, so the order is
+  stable. Lot IDs are not returned; two items with the same `expiresAt`
+  are expected, and the web app groups items by Singapore date.
+- **Left out:** the sign-up credits, which never expire; drained lots;
+  and credits held by a reservation, which are in no lot's `remaining`
+  until released and cannot expire while held.
+- **No window:** every lot still holding credits is listed. A user has
+  one lot per transfer received or redistribution share in the last
+  three months, so a busy courier can hold hundreds: about 450 at five
+  completed errands a day. The web app chooses what to highlight (the
+  next 7 days); a window or limit, if ever needed, would be a query
+  parameter.
+- **Past dates:** an item's `expiresAt` may already have passed while
+  its lot waits for that night's expiry run, for example after a
+  release returned credits to it. The web app shows it as "expires
+  tonight".
+- **The list is an object**, so fields such as a total can be added
+  without breaking clients.
+
+Nothing expiring is 200 with `"items": []`. The route takes no
+parameters, so its only error is the 401 below.
+
+### Admin routes
+
+For the admin dashboard; the token's `role` must be `ADMIN` or `OWNER`.
+Neither route writes anything.
+
+#### `GET /credits/admin/pool`
+
+```json
+{
+  "poolBalance": 37, "accounts": 10, "share": 3, "remainder": 7,
+  "lastRun": { "period": "2026-10", "distributed": 12, "remainder": 2, "ranAt": "2026-09-30T16:00:00Z" },
+  "nextRunAt": "2026-10-31T16:00:00Z"
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `poolBalance` | The common pool's balance |
+| `accounts` | Every credit account, which is who a redistribution shares the pool among. A user has one from their first credit read or event, so it can be fewer than the registered users |
+| `share`, `remainder` | A preview of a redistribution now (F6.1.1, F6.1.2): `share` = `floor(poolBalance / accounts)` each, and 1 more to `remainder` accounts chosen at random. Both 0 when there are no accounts. The run itself counts again under its locks |
+| `lastRun` | The latest recorded month, as in the route below; null before the first |
+| `nextRunAt` | When the scheduler next redistributes (D12): the 1st of next month at 00:00 Asia/Singapore once this Singapore month is recorded, otherwise the next 00:00, when the daily routine finds it missing |
+
+#### `GET /credits/admin/redistributions`
+
+A page of recorded months, newest `period` first, in the `PageResponse`
+shape, with `page` (from 0) and `size` (1 to 100, default 20) as on the
+history route. No other parameters.
+
+```json
+{
+  "content": [ { "period": "2026-10", "distributed": 12, "remainder": 2, "ranAt": "2026-09-30T16:00:00Z" } ],
+  "page": 0, "size": 20, "totalElements": 1, "totalPages": 1
+}
+```
+
+`distributed` counts every credit taken from the pool, the remainder
+included.
+
 ### Errors
 
 | Status | When |
 | --- | --- |
 | 400 problem+json | An amount that is not an integer or is below 1; `minAmount` above `maxAmount`; `from` or `to` not a full instant with an offset; `from` not before `to`; `page` below 0; `size` outside 1 to 100 |
 | 401 problem+json | A missing or invalid token |
+| 403 problem+json | An admin route called with a role other than `ADMIN` or `OWNER` |
 
 No history is an empty page, not an error, and so is a `page` past the
 last one: 200 with empty `content`.
@@ -589,8 +708,16 @@ tests.
 | A `request.completed` arrives before its reservation (its `request.submitted` is still in the retry queue) | Retried, then dead-lettered after the attempt cap. A retry that finds the `HELD` record transfers it as usual |
 | Credit Service is down when delivery is confirmed | The Order Service completes the request regardless. The transfer runs when the Credit Service is back. |
 | Database is briefly unavailable while an event is processed | The event goes to the retry queue and is redelivered after the retry delay (2 s); after the maximum attempts (5) it is dead-lettered for inspection |
+| An event failed, and the broker returns its copy for the retry queue as unroutable (the retry queue does not exist) | The original is dead-lettered at once. No retry can succeed while the queue is missing, so nothing loops on it. If the dead-letter queue is missing too, the broker discards the event, as it would for any other dead-letter |
+| An event failed, and the broker nacks its copy for the retry queue or does not confirm it within 5 s | The original is requeued after a 5 s pause (up to 10 s after a timeout: the 5 s wait for the confirm, then the pause), without using up an attempt, rather than left unacknowledged and invisible until the service restarts. With one consumer the pause holds up the events behind it, which would fail the same way while the broker is in trouble. It repeats once every 5 s and stops when the broker recovers |
+| A retry copy's confirm times out | The original is requeued, so the event may run as two copies, each with its own attempt count. Balances are unaffected (idempotent handler); the dead-letter queue may hold the same event twice |
 | A user's lot expires while its credits are held | Nothing happens to the held credits. If the request is released later, the slice returns to its lot, which is past its expiry, and the next expiry run moves it to the pool. |
 | Scheduler runs twice for one month (restart, overlap, or more than one instance) | The unique `period` key lets only one run commit |
+| The startup run and the 00:00 run overlap (the service starts at midnight) | Both sweep, but each account's lots are read again under its lock, so a lot is moved once; the redistribution checks the month's row again after its locks, and the key stops a second insert |
+| The service is down at 00:00 on the 1st | The routine runs at startup: the sweep moves what expired meanwhile into the pool, then the month, which has no `redistribution_run` row, is redistributed. The sweep runs at every startup; with nothing past expiry it reads one query and locks nothing |
+| The redistribution fails while the service is up (the database briefly unavailable, a lock timeout) | It rolls back, so the month has no `redistribution_run` row and the next day's run redistributes it. The failure is logged at ERROR on each day it repeats |
+| The redistribution fails every day until the month ends | That month is never recorded. No credits are lost: they stay in the pool and are shared out with the next month's redistribution |
+| One account's expiry fails (a lock timeout, the database briefly unavailable) | Only that account's transaction rolls back; the others commit. Its lots are still past their expiry, so the next day's run moves them |
 
 ## Closed-economy
 
