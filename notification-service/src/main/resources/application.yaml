@@ -17,6 +17,18 @@
 # the retention purge scheduler (team decision D9: NOTIF_RETENTION_DAYS,
 # default 30 days; author decision: a second env var, NOTIF_PURGE_CRON,
 # controls how often the sweep runs).
+# 2026-10-12, issue #67: spring.data.redis connection for the D23
+# denylist read at STOMP CONNECT (author decision via options Q&A);
+# stale "no API gateway" origin comment refreshed (gateway merged,
+# issue #151).
+# 2026-10-14, PR #185 review (@Sinnez1): Redis repository scanning
+# switched off — the starter's scan logged a store-assignment warning
+# per JPA repository on every start.
+# 2026-10-17, issue #66: web-allowed-origin binding for the REST API's
+# CORS, same property shape as credit-service's.
+# 2026-10-17, issue #66: notification.user-service bindings for the
+# ingest-time username lookups (author decisions D30/D31 via options
+# Q&A: IDs-only events, zero-trust internal token).
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -46,6 +58,23 @@ spring:
     # republish waits for broker acceptance before acking the original
     # delivery, so a lost publish can never lose the event (issue #65).
     publisher-confirm-type: simple
+  data:
+    redis:
+      # Platform Redis holding the token denylist (D23): two lookups
+      # per STOMP CONNECT (the jti key, then the user cutoff stamp);
+      # the adapter fails open on errors. Finite timeouts so an outage
+      # costs a CONNECT at most ~4 s on the STOMP inbound channel —
+      # each lookup waits out its own ~2 s — not Lettuce's default 60 s
+      # (same rationale as user-service's logout write).
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: 2s
+      timeout: 2s
+      repositories:
+        # Only StringRedisTemplate is used here. Left on, Spring Data
+        # scans the JPA repositories for a Redis store and logs
+        # "Could not safely identify store assignment" for each.
+        enabled: false
 
 notification:
   rabbitmq:
@@ -58,15 +87,33 @@ notification:
       # Total attempts before an event dead-letters (D6/D7); read by
       # the listener, so a change only needs a service restart.
       max-attempts: ${NOTIFICATION_RETRY_MAX_ATTEMPTS:3}
+  user-service:
+    # Where the ingest-time username lookups go (D30): user-service's
+    # GET /users/{id} public-profile route. Empty default disables the
+    # enrichment — rows store IDs-only and the web renders actor-less
+    # copy, so a missing binding degrades instead of failing startup.
+    base-url: ${USER_SERVICE_BASE_URL:}
+    # Shared secret presented as X-Internal-Token (D31 — zero trust:
+    # the route stays credentialed inside the compose network). Must
+    # match user-service's INTERNAL_SERVICE_TOKEN. Empty also disables
+    # the enrichment.
+    internal-token: ${INTERNAL_SERVICE_TOKEN:}
+    # Per-user cache lifetime for resolved names: bounds lookup volume
+    # from a busy queue and how long a rename shows the old name.
+    name-cache-ttl: ${NOTIF_NAME_CACHE_TTL:10m}
   jwt:
     # Shared platform secret (HS256). Empty default so the yaml stays
     # parseable; JwtVerifier turns a missing/short value into a clear
     # startup failure.
     secret: ${JWT_SECRET:}
   websocket:
-    # Comma-separated Origin patterns allowed at the WS handshake.
-    # No API gateway exists, so the browser connects cross-origin.
+    # Comma-separated Origin patterns allowed at the WS handshake. The
+    # browser's Origin header passes through the API gateway unchanged
+    # (docs/gateway.md), so the patterns name the SPA origin(s).
     allowed-origins: ${NOTIFICATION_WS_ALLOWED_ORIGINS:http://localhost:*}
+  # The SPA origin the REST API's CORS headers allow (docs/gateway.md,
+  # "CORS stays per-service"); the WS handshake has its own list above.
+  web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
   retention:
     # Retention window for stored notifications (D9); the purge
     # scheduler hard-deletes rows once created_at is older than this
@@ -81,3 +128,9 @@ management:
     web:
       exposure:
         include: health
+  health:
+    redis:
+      # The D23 denylist check fails open by design — an unreachable
+      # Redis must not mark the whole service down (same stance as
+      # user-service).
+      enabled: false

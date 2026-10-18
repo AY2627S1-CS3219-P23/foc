@@ -5,6 +5,7 @@
  * decision D9, docs/notification-service.md), exercising the purge
  * method directly rather than waiting on the cron trigger, per the
  * design doc's "testing follows the port" style (D11).
+ * 2026-10-17, issue #137: processed_events sweep covered.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification.service;
@@ -12,7 +13,9 @@ package foc.notification.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import foc.notification.entity.Notification;
+import foc.notification.entity.ProcessedEvent;
 import foc.notification.repository.NotificationRepository;
+import foc.notification.repository.ProcessedEventRepository;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -41,11 +44,15 @@ class RetentionPurgeSchedulerTest {
 	private NotificationRepository notifications;
 
 	@Autowired
+	private ProcessedEventRepository processedEvents;
+
+	@Autowired
 	private EntityManager entityManager;
 
 	@BeforeEach
 	void clearDatabase() {
 		notifications.deleteAll();
+		processedEvents.deleteAll();
 	}
 
 	@Test
@@ -63,10 +70,32 @@ class RetentionPurgeSchedulerTest {
 				.containsExactly(recent.getId());
 	}
 
+	@Test
+	void purgesOnlyDedupeRowsRecordedBeyondTheRetentionWindow() {
+		ProcessedEvent expired = processedEvents.save(new ProcessedEvent("e-old"));
+		ProcessedEvent recent = processedEvents.save(new ProcessedEvent("e-new"));
+		backdateProcessedEvent(expired.getEventId(), Instant.now().minus(31, ChronoUnit.DAYS));
+		backdateProcessedEvent(recent.getEventId(), Instant.now().minus(29, ChronoUnit.DAYS));
+
+		scheduler.purgeExpiredNotifications();
+
+		assertThat(processedEvents.findAll()).extracting(ProcessedEvent::getEventId)
+				.containsExactly(recent.getEventId());
+	}
+
 	private void backdate(Long id, Instant createdAt) {
 		entityManager.createQuery("update Notification n set n.createdAt = :createdAt where n.id = :id")
 				.setParameter("createdAt", createdAt)
 				.setParameter("id", id)
+				.executeUpdate();
+		entityManager.flush();
+		entityManager.clear();
+	}
+
+	private void backdateProcessedEvent(String eventId, Instant processedAt) {
+		entityManager.createQuery("update ProcessedEvent p set p.processedAt = :processedAt where p.eventId = :id")
+				.setParameter("processedAt", processedAt)
+				.setParameter("id", eventId)
 				.executeUpdate();
 		entityManager.flush();
 		entityManager.clear();

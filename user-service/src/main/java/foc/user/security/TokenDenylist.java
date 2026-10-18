@@ -6,6 +6,8 @@ Scope: Redis denylist writer for POST /auth/logout (issue #151), per the
        Q&A): Redis-only store with TTL keys the API gateway checks, and
        best-effort semantics — a failed write is logged, never surfaced,
        mirroring the gateway's fail-open stance.
+       2026-10-12, Claude Code (Fable 5), issue #67: javadoc updated for
+       notification-service's D23 read at STOMP CONNECT.
 Author review: Leong Wei Zhi to review via the PR.
 2026-10-12 (Claude Code, Fable 5), PR #179 review (@Sinnez1):
 revokeUserSessions added — a password reset stamps denylist:user:<id>
@@ -15,6 +17,9 @@ Leong Wei Zhi via options Q&A).
 (@Sinnez1): the javadoc records the reviewer-reproduced same-second
 survivor and the login-racing-the-reset gap as the same accepted
 leak; no behaviour change.
+2026-10-17 (Claude Code, Opus 5), PR #183 review (@Sinnez1): the
+javadoc states the stamp-after-commit requirement the review's
+finding established; no behaviour change here.
 */
 
 package foc.user.security;
@@ -38,7 +43,9 @@ import org.springframework.stereotype.Component;
  * password reset ends the old password's sessions). The API gateway
  * rejects a bearer token whose jti has a live key here or whose iat
  * predates its subject's stamp; no backend service reads the denylist
- * (team decision: gateway-only enforcement).
+ * (team decision: gateway-only enforcement), except
+ * notification-service at STOMP CONNECT (D23, issue #67) — the
+ * CONNECT-frame token is the one bearer the gateway can never see.
  */
 @Component
 public class TokenDenylist {
@@ -101,6 +108,13 @@ public class TokenDenylist {
      * reset landing in that gap stamps before the mint and the token
      * passes with {@code iat >= stamp}. Best-effort like
      * {@link #revoke} (G9).
+     *
+     * <p>Callers inside a transaction must stamp only once it has
+     * committed — see {@code AfterCommit} in {@code foc.user.service}.
+     * A cutoff written before the commit outlaws tokens minted before
+     * a change that is not yet visible, which lets a login in that gap
+     * mint one carrying the old state and an {@code iat} the stamp
+     * accepts (PR #183 review, @Sinnez1).
      */
     public void revokeUserSessions(Long userId) {
         String cutoff = String.valueOf(clock.instant().getEpochSecond());

@@ -10,6 +10,13 @@
  * 2026-09-20: order→request event vocabulary rename applied (author
  * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-17, Claude Code (Fable 5), issue #66: fixtures updated for
+ * the display-name fields added to the request event records (D29);
+ * no behavior change in this test. Same day, D29 superseded by the
+ * author's D30 (options Q&A): the name fields left the records again,
+ * and the names now come from the ingest-time UserDirectory lookup —
+ * stubbed here per D11, with cases for the enriched payload and for
+ * the unknown-user degradation (no name keys stored).
  */
 package foc.notification.service;
 
@@ -23,10 +30,14 @@ import foc.notification.repository.ProcessedEventRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -67,6 +78,20 @@ class IdempotentEventProcessorTest {
 				requestId, "usr-req-1001", "Techno Edge", "COM3-01-19", "hi");
 	}
 
+	/** The D11 stub: the two fixture parties resolve, anyone else doesn't. */
+	@TestConfiguration
+	static class StubUserDirectoryConfig {
+
+		@Bean
+		@Primary
+		UserDirectory stubUserDirectory() {
+			Map<String, String> names = Map.of(
+					"usr-req-1001", "maya",
+					"usr-cou-2002", "marcus");
+			return userId -> Optional.ofNullable(names.get(userId));
+		}
+	}
+
 	@Test
 	void createsOneNotificationPerParty() {
 		eventProcessor.process(accepted("e-1", "req-1", List.of("usr-req-1001", "usr-cou-2002")));
@@ -93,12 +118,26 @@ class IdempotentEventProcessorTest {
 		assertThat(payload).containsExactlyInAnyOrderEntriesOf(Map.of(
 				"requestId", "req-1",
 				"requesterId", "usr-req-1001",
+				"requesterName", "maya",
 				"pickupLocation", "Techno Edge",
 				"dropoffLocation", "COM3-01-19",
 				"note", "hi"));
 		// Transport metadata never leaks into the client-facing payload.
 		assertThat(payload).doesNotContainKeys("eventId", "eventType", "parties",
 				"producer", "correlationId", "occurredAt");
+	}
+
+	@Test
+	void unknownPartyStoresNoNameKey() {
+		eventProcessor.process(new RequestCreated("e-unknown", OCCURRED_AT, "order-service", "c-1",
+				List.of("usr-ghost"), "req-9", "usr-ghost", "Techno Edge", "COM3-01-19", null));
+
+		String stored = notifications.findAll().get(0).getPayload();
+		Map<String, Object> payload = objectMapper.readValue(stored, Map.class);
+		// an unresolvable party degrades to an absent key (never a null):
+		// the web's templates fall back to actor-less copy
+		assertThat(payload).doesNotContainKey("requesterName");
+		assertThat(payload).containsEntry("requesterId", "usr-ghost");
 	}
 
 	@Test

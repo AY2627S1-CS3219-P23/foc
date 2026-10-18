@@ -6,6 +6,10 @@
 # 2026-10-11, PR #175 review (Leong Wei Zhi): the sign-up amount and
 # the earned-credit lifetime pinned.
 # 2026-10-12, issue #170: the outbox publisher off.
+# 2026-10-16, PR #190 re-review (Leong Wei Zhi): the broker host made
+# unresolvable, the reviewer's suggestion.
+# 2026-10-16, issue #173: the expiry and redistribution scheduler off.
+# Same day, PR #193 review: its comment reworded for the startup routine.
 # Author review: Ryan Ang, pending pull request review.
 
 credit:
@@ -25,9 +29,20 @@ credit:
       # no broker in the tests: the publisher does not poll. The tests
       # that need it turn it on against a Testcontainers broker
       enabled: false
+  scheduler:
+    # a test context neither runs the routine at startup nor fires on
+    # the clock; the tests call the expiry and redistribution
+    # services with their own instants and periods
+    enabled: false
 
 spring:
   rabbitmq:
+    # The test context cache restarts a paused context by starting every
+    # Lifecycle bean, auto-startup: false included, so the listener must
+    # not be able to reach a developer's own broker: an authentication
+    # failure against one is fatal, a host that does not resolve is not.
+    # The broker-backed tests get theirs from @ServiceConnection.
+    host: broker.invalid
     listener:
       simple:
         # no broker in the tests: a listener must not try to connect
