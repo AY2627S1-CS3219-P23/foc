@@ -108,7 +108,7 @@
   for the order-service ownership checks, then for the manual-testing
   scripts, stubs and the gateway order route, then for the /create field
   checks, the accepted / collected events and the expiry and
-  auto-complete timers.
+  auto-complete timers, then for the read endpoints.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -605,7 +605,11 @@ missing fields, a reward below 1 and a past deadline), the
 `request.accepted` / `request.collected` events and the deadline-expiry
 and auto-complete timers, with the required fields, the 400 answer, the
 events' parties, the 5 min sweeps and the configurable 1 h delay chosen
-by the author.
+by the author; and the read endpoints (open errands, a request's
+detail, the caller's requests by role, the admin view), whose paths,
+results and access rules were designed by the author and whose
+remaining details (CREATED-only open list, trimmed lists, newest first,
+page size 20, both roles in the admin view) the author chose.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

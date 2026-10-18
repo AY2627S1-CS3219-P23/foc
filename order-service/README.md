@@ -17,7 +17,7 @@
   bearer-token auth and the ownership rules in the endpoints section;
   then /create's 400 field checks;
   order-e2e.ps1 section. Then request.accepted / request.collected and
-  the expiry and auto-complete timers.
+  the expiry and auto-complete timers. Then the read endpoints.
   Reviewed by: Ko-Khan (via pull request).
 -->
 
@@ -113,6 +113,23 @@ must be at least 1"}`.
 | `/drop` | `requestId` | the assigned courier |
 | `/cancel` | `requestId` | the requester |
 | `/complete` | `requestId` | the requester |
+
+### Reads
+
+All need a bearer token. Lists are newest first and paged like the
+supplier listing: `page` (from 0, default 0) and `size` (1-100, default
+20), answered as `{"content": [...], "page", "size", "totalElements",
+"totalPages"}`, each item trimmed to `id`, `status`, `supplierName`,
+`dropoffLocation`, `item`, `creditAmount`, `deadline`, `createdAt`. A bad
+`state`, `role`, `page` or `size` is a 400 with a `message`.
+
+| Path | Returns | Who may call it |
+| --- | --- | --- |
+| `GET /requests?state=CREATED&page=&size=` | open errands for couriers (F2.1); `state` may only be `CREATED` (the default) | any logged-in user |
+| `GET /requests/{id}` | the request in full (every column, incl. `requesterId`, `courierId` and the step timestamps) | its requester, its assigned courier, or ADMIN / OWNER; anyone else 404 |
+| `GET /requests/mine?role=requester&state=` | the caller's requests as requester, optionally in one state | the caller |
+| `GET /requests/mine?role=courier&state=` | the caller's assigned deliveries | the caller |
+| `GET /users/{id}/requests?state=` | that user's requests as requester or courier (admin view) | ADMIN / OWNER; anyone else 403 |
 
 ## Run
 

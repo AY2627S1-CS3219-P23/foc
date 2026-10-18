@@ -26,6 +26,33 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Aung Ko Khant (order-service: read endpoints)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `GET /requests`, `/requests/{id}`, `/requests/mine`,
+  `/users/{id}/requests` in `RequestsController`; new
+  `RequestsQueryService` (read-only), `dto.RequestSummary`,
+  `dto.RequestDetail`, `dto.PageResponse` (copied from credit-service),
+  four paged repository queries; `SecurityConfig` limits the admin view
+  to ADMIN / OWNER with `RestAccessDeniedHandler` (copied from
+  credit-service) for the 403; tests `RequestsReadEndpointsTests` (90
+  passing in all); README reads section; `endpoints.txt`.
+- **Prompt(s):** "How should we set up read endpoints?" — the tool
+  declined to design the interface, listed the requirements, the other
+  services' conventions and the open decisions. The author then gave the
+  design (paths, what each returns, who may call it: open errands for
+  any user, detail for the requester / assigned courier / ADMIN / OWNER,
+  /mine by role, the admin view for ADMIN / OWNER). The tool asked the
+  remaining details as neutral options; the author chose: GET /requests
+  is CREATED only (any other state 400); lists trimmed, the detail full;
+  newest first, page size 20; the admin view covers both roles. The
+  page / size limits (0+, 1-100) follow credit-service's history.
+- **Author review:** `mvn test` in a Maven container: 90 tests, 0
+  failures. Through the gateway with the rebuilt container: open
+  errands, /mine with a state, the requester's detail 200, a
+  non-party's detail 404, the admin view 403 for an ordinary user. To be
+  reviewed via pull request.
+
 ## 2026-10-18 — Aung Ko Khant (order-service: accepted/collected events, expiry and auto-complete)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate

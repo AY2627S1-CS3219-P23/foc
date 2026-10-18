@@ -27,18 +27,28 @@
  * checks.
  * Same day: InvalidRequestException (missing or invalid /create fields)
  * answered 400 with its message (the author's decision).
+ * Same day: the author's read endpoints - GET /requests (open errands),
+ * /requests/{id}, /requests/mine and /users/{id}/requests - through
+ * RequestsQueryService.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order.controller;
 
 import foc.order.InvalidRequestException;
+import foc.order.RequestsQueryService;
 import foc.order.RequestsService;
+import foc.order.dto.PageResponse;
+import foc.order.dto.RequestDetail;
+import foc.order.dto.RequestSummary;
 import foc.order.model.Requests;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -62,10 +72,53 @@ public class RequestsController {
     }
 
     private final RequestsService requestsService;
+    private final RequestsQueryService queries;
 
-    public RequestsController(RequestsService requestsService) {
+    public RequestsController(RequestsService requestsService, RequestsQueryService queries) {
         this.requestsService = requestsService;
+        this.queries = queries;
     }
+
+    // --- reads (newest first, page/size as in the supplier listing)
+
+    // Open errands for couriers (F2.1): CREATED requests only.
+    @GetMapping("/requests")
+    public PageResponse<RequestSummary> openRequests(
+            @RequestParam(required = false) String state,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return PageResponse.of(queries.openRequests(state, page, size), RequestSummary::of);
+    }
+
+    // The caller's requests, as requester or as courier.
+    @GetMapping("/requests/mine")
+    public PageResponse<RequestSummary> mine(
+            Authentication caller,
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) String state,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return PageResponse.of(queries.mine(callerId(caller), role, state, page, size), RequestSummary::of);
+    }
+
+    // One request in full: its requester, its courier, or ADMIN / OWNER.
+    @GetMapping("/requests/{id}")
+    public RequestDetail detail(@PathVariable Long id, Authentication caller) {
+        return RequestDetail.of(queries.detail(id, callerId(caller), isAdmin(caller)));
+    }
+
+    // Any user's requests, as requester or courier: ADMIN / OWNER only
+    // (enforced in SecurityConfig).
+    @GetMapping("/users/{userId}/requests")
+    public PageResponse<RequestSummary> userRequests(
+            @PathVariable Long userId,
+            @RequestParam(required = false) String state,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return PageResponse.of(queries.involving(userId, state, page, size), RequestSummary::of);
+    }
+
+    // --- request steps
 
     // OrderEvents.CREATE: adds one row built from the body, with the
     // caller as its requester. The service sets status (PENDING) and
@@ -147,6 +200,11 @@ public class RequestsController {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public MessageResponse handleUnknownRequest(NoSuchElementException e) {
         return new MessageResponse("Request not found");
+    }
+
+    private static boolean isAdmin(Authentication caller) {
+        return caller.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_OWNER"));
     }
 
     // The caller's user id: the verified token's subject.

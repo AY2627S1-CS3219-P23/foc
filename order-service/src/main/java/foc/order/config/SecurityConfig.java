@@ -6,17 +6,21 @@
  * /actuator/health authenticated, 401s from RestAuthEntryPoint, and
  * per-service CORS for the SPA (docs/gateway.md, "CORS stays
  * per-service") with POST allowed, since every order route is a POST.
+ * Same day: GET /users/{id}/requests limited to ADMIN / OWNER, with
+ * credit-service's RestAccessDeniedHandler for the 403.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order.config;
 
 import foc.order.security.JwtAuthenticationFilter;
 import foc.order.security.JwtVerifier;
+import foc.order.security.RestAccessDeniedHandler;
 import foc.order.security.RestAuthEntryPoint;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -49,7 +53,8 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             JwtVerifier jwtVerifier,
-            RestAuthEntryPoint restAuthEntryPoint) throws Exception {
+            RestAuthEntryPoint restAuthEntryPoint,
+            RestAccessDeniedHandler restAccessDeniedHandler) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 // uses the corsConfigurationSource bean; answers preflights
@@ -63,9 +68,13 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         // health checks (compose depends_on / probes) carry no credentials
                         .requestMatchers("/actuator/health").permitAll()
+                        // any user's requests: the admin view
+                        .requestMatchers(HttpMethod.GET, "/users/*/requests").hasAnyRole("ADMIN", "OWNER")
                         // every request route acts as the caller
                         .anyRequest().authenticated())
-                .exceptionHandling(handling -> handling.authenticationEntryPoint(restAuthEntryPoint))
+                .exceptionHandling(handling -> handling
+                        .authenticationEntryPoint(restAuthEntryPoint)
+                        .accessDeniedHandler(restAccessDeniedHandler))
                 // built here, not a bean: a Filter bean is also registered with
                 // the servlet container and would run outside this chain
                 .addFilterBefore(new JwtAuthenticationFilter(jwtVerifier),
