@@ -18,6 +18,8 @@
  * 2026-10-18: a requester accepting their own request is refused.
  * Same day: ownership checks (requester-only, courier-only steps; a
  * stranger is told the request does not exist).
+ * Same day: create's field checks (all missing fields listed, reward
+ * at least 1, deadline in the future); supplierName then made required.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -108,6 +110,54 @@ class RequestsServiceTests {
 			jdbcTemplate.update("update requests set status = ? where id = ?", state.name(), id);
 			assertEquals(state, stored(id).getStatus());
 		}
+	}
+
+	@Test
+	void createWithMissingFieldsListsThemAllAndStoresNothing() {
+		long before = requestsRepository.count();
+		long eventsBefore = outboxEvents.count();
+		Requests request = new Requests();
+		request.setSupplierId(2L);
+		request.setItem("   ");
+
+		InvalidRequestException e = assertThrows(InvalidRequestException.class, () -> requestsService.create(request));
+
+		assertEquals("Missing required fields: requesterId, supplierName, dropoffLocation, item, creditAmount, deadline",
+				e.getMessage());
+		assertEquals(before, requestsRepository.count());
+		assertEquals(eventsBefore, outboxEvents.count());
+	}
+
+	@Test
+	void createRejectsARewardBelowOneAndADeadlineNotInTheFuture() {
+		Requests request = validRequest();
+		request.setCreditAmount(0);
+		request.setDeadline(Instant.now().minusSeconds(60));
+
+		InvalidRequestException e = assertThrows(InvalidRequestException.class, () -> requestsService.create(request));
+
+		assertEquals("creditAmount must be at least 1; deadline must be in the future", e.getMessage());
+	}
+
+	@Test
+	void createReportsMissingAndInvalidFieldsTogether() {
+		Requests request = validRequest();
+		request.setItem(null);
+		request.setCreditAmount(-2);
+
+		InvalidRequestException e = assertThrows(InvalidRequestException.class, () -> requestsService.create(request));
+
+		assertEquals("Missing required fields: item; creditAmount must be at least 1", e.getMessage());
+	}
+
+	@Test
+	void supplierNameIsRequired() {
+		Requests request = validRequest();
+		request.setSupplierName(" ");
+
+		InvalidRequestException e = assertThrows(InvalidRequestException.class, () -> requestsService.create(request));
+
+		assertEquals("Missing required fields: supplierName", e.getMessage());
 	}
 
 	@Test
@@ -449,6 +499,11 @@ class RequestsServiceTests {
 	}
 
 	private Long newRequest() {
+		return requestsService.create(validRequest()).getId();
+	}
+
+	// A new request with every field set and valid, not yet stored.
+	private static Requests validRequest() {
 		Requests request = new Requests();
 		request.setRequesterId(1L);
 		request.setSupplierId(2L);
@@ -457,7 +512,7 @@ class RequestsServiceTests {
 		request.setItem("Chicken rice");
 		request.setCreditAmount(3);
 		request.setDeadline(Instant.now().plus(1, ChronoUnit.HOURS));
-		return requestsService.create(request).getId();
+		return request;
 	}
 
 	// A request whose reward the Credit Service has reserved.

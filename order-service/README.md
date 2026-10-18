@@ -92,8 +92,8 @@ requester tries to accept their own request; 404 if no request has that
 id **or the step is not the caller's** (the same answer, so a stranger
 cannot tell the request exists). A missing or invalid token is a 401
 problem+json. `/create` answers 400 listing every problem at once:
-missing fields (blank text counts as missing; `supplierName` is
-optional), `creditAmount` below 1, or a `deadline` not in the future —
+missing fields (all six body fields are required; blank text counts as
+missing), `creditAmount` below 1, or a `deadline` not in the future —
 e.g. `{"message": "Missing required fields: item, deadline; creditAmount
 must be at least 1"}`.
 

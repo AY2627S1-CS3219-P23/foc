@@ -13,6 +13,7 @@
  * secret (credit-service's test pattern); the requester and courier come
  * from it, a missing token is 401, and a step that is not the caller's
  * is 404.
+ * Same day: a /create with missing or invalid fields is 400 listing them.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -71,6 +72,18 @@ class RequestsControllerTests {
 		assertEquals("Chicken rice", stored.getItem());
 		assertEquals(3, stored.getCreditAmount());
 		assertNotNull(stored.getDeadline());
+	}
+
+	@Test
+	void createWithMissingOrInvalidFieldsIsBadRequestListingThem() throws Exception {
+		long before = requestsRepository.count();
+
+		send("/create", "{\"supplierId\": 2, \"creditAmount\": 0}", REQUESTER)
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(
+						"Missing required fields: supplierName, dropoffLocation, item, deadline; creditAmount must be at least 1"));
+
+		assertEquals(before, requestsRepository.count());
 	}
 
 	@Test
