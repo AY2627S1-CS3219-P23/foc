@@ -10,12 +10,15 @@
 // backend. It starts with NO orders (only a supplier list and a balance),
 // so create some through the UI. State lives in module memory: a page
 // reload resets it.
-// The mock's signed-in user is user 3, nus_courier_99, to match
-// adminApiMock.ts (VITE_MOCK_ADMIN_API=true supplies GET /users/me).
+// The mock's signed-in user is whoever GET /users/me says (the real
+// user-service, or adminApiMock.ts under VITE_MOCK_ADMIN_API=true), read at
+// the start of every call — so it always agrees with the pages' own idea of
+// who is signed in, and fails loudly if /users/me does.
 //
 // TEMPORARY: delete with the switch in api.ts once order-service is live.
 // Author review: [pending]
 
+import { adminUserApi } from '@/features/user/adminApi'
 import { ApiError } from '@/lib/api/http'
 import type { CreditBalance } from '@/features/credit/types'
 import type { PagedResponse } from '@/features/supplier/types'
@@ -29,8 +32,9 @@ import type {
   SupplierOption,
 } from './types'
 
-const ME_ID = 3
-const ME_NAME = 'nus_courier_99'
+// the signed-in user, refreshed by enter() at the start of every call
+let meId = 0
+let meName = ''
 const STARTING_CREDITS = 42
 
 const MIN = 60_000
@@ -54,8 +58,14 @@ const orders: Order[] = []
 
 // ---- rules ----
 
-function delay() {
-  return new Promise<void>((resolve) => setTimeout(resolve, 250))
+// Simulated latency, then the identity the call runs as. A failing
+// /users/me rejects the call, so a mismatched setup shows up as an error
+// on the page instead of orders quietly belonging to someone else.
+async function enter() {
+  await new Promise<void>((resolve) => setTimeout(resolve, 250))
+  const user = await adminUserApi.getCurrentUser()
+  meId = user.id
+  meName = user.username
 }
 
 function fail(status: number, title: string, detail: string): never {
@@ -86,14 +96,14 @@ let myTotal = STARTING_CREDITS
 function complete(o: Order) {
   o.status = 'COMPLETED'
   o.updatedAt = new Date().toISOString()
-  if (o.requesterId === ME_ID) myTotal -= o.reward
-  if (o.courierId === ME_ID) myTotal += o.reward
+  if (o.requesterId === meId) myTotal -= o.reward
+  if (o.courierId === meId) myTotal += o.reward
 }
 
 // Credits stay reserved while an order of mine is still unsettled.
 function myReserved() {
   return orders
-    .filter((o) => o.requesterId === ME_ID && !isTerminal(o.status))
+    .filter((o) => o.requesterId === meId && !isTerminal(o.status))
     .reduce((sum, o) => sum + o.reward, 0)
 }
 
@@ -102,8 +112,8 @@ function find(id: number): Order {
   const order = orders.find((o) => o.id === id)
   if (!order) fail(404, 'Not found', `Request #${id} does not exist.`)
   if (
-    order.requesterId !== ME_ID &&
-    order.courierId !== ME_ID &&
+    order.requesterId !== meId &&
+    order.courierId !== meId &&
     order.status !== 'OPEN'
   ) {
     fail(403, 'Forbidden', 'You are not part of this request.')
@@ -118,13 +128,13 @@ function touch(o: Order, status: OrderStatus) {
 }
 
 function requireRequester(o: Order) {
-  if (o.requesterId !== ME_ID) {
+  if (o.requesterId !== meId) {
     fail(403, 'Forbidden', 'Only the requester can do this.')
   }
 }
 
 function requireCourier(o: Order) {
-  if (o.courierId !== ME_ID) {
+  if (o.courierId !== meId) {
     fail(403, 'Forbidden', 'Only the assigned courier can do this.')
   }
 }
@@ -151,7 +161,7 @@ function paged(all: Order[], page: number, size: number): PagedResponse<Order> {
 
 export const mockOrderApi = {
   async createOrder(input: CreateOrderInput): Promise<Order> {
-    await delay()
+    await enter()
     sweep()
     const supplier = suppliers.find((s) => s.id === input.supplierId)
     if (!supplier) fail(400, 'Bad request', 'Pick a supplier.')
@@ -181,8 +191,8 @@ export const mockOrderApi = {
       createdAt: now,
       updatedAt: now,
       deliveredAt: null,
-      requesterId: ME_ID,
-      requesterUsername: ME_NAME,
+      requesterId: meId,
+      requesterUsername: meName,
       courierId: null,
       courierUsername: null,
     }
@@ -191,7 +201,7 @@ export const mockOrderApi = {
   },
 
   async listOpenOrders(page: number, size: number) {
-    await delay()
+    await enter()
     sweep()
     const open = orders
       .filter((o) => o.status === 'OPEN')
@@ -200,13 +210,13 @@ export const mockOrderApi = {
   },
 
   async listMyOrders(params: ListOrdersParams) {
-    await delay()
+    await enter()
     sweep()
     const mine = orders
       .filter((o) =>
         params.as === 'requester'
-          ? o.requesterId === ME_ID
-          : o.courierId === ME_ID,
+          ? o.requesterId === meId
+          : o.courierId === meId,
       )
       .filter((o) =>
         params.scope === 'all'
@@ -222,24 +232,24 @@ export const mockOrderApi = {
   },
 
   async getOrder(id: number): Promise<Order> {
-    await delay()
+    await enter()
     return { ...find(id) }
   },
 
   async acceptOrder(id: number): Promise<Order> {
-    await delay()
+    await enter()
     const o = find(id)
-    if (o.requesterId === ME_ID) {
+    if (o.requesterId === meId) {
       fail(403, 'Forbidden', 'You cannot accept your own request.')
     }
     requireStatus(o, 'OPEN')
-    o.courierId = ME_ID
-    o.courierUsername = ME_NAME
+    o.courierId = meId
+    o.courierUsername = meName
     return touch(o, 'ACCEPTED')
   },
 
   async markPickedUp(id: number): Promise<Order> {
-    await delay()
+    await enter()
     const o = find(id)
     requireCourier(o)
     requireStatus(o, 'ACCEPTED')
@@ -247,7 +257,7 @@ export const mockOrderApi = {
   },
 
   async markArrived(id: number): Promise<Order> {
-    await delay()
+    await enter()
     const o = find(id)
     requireCourier(o)
     requireStatus(o, 'PICKED_UP')
@@ -257,7 +267,7 @@ export const mockOrderApi = {
 
   // before pickup only: the request goes back to the open feed
   async courierCancel(id: number): Promise<Order> {
-    await delay()
+    await enter()
     const o = find(id)
     requireCourier(o)
     requireStatus(o, 'ACCEPTED')
@@ -267,7 +277,7 @@ export const mockOrderApi = {
   },
 
   async cancelOrder(id: number): Promise<Order> {
-    await delay()
+    await enter()
     const o = find(id)
     requireRequester(o)
     requireStatus(o, 'OPEN')
@@ -275,7 +285,7 @@ export const mockOrderApi = {
   },
 
   async confirmDelivery(id: number): Promise<Order> {
-    await delay()
+    await enter()
     const o = find(id)
     requireRequester(o)
     requireStatus(o, 'DELIVERED')
@@ -284,7 +294,7 @@ export const mockOrderApi = {
   },
 
   async disputeOrder(id: number, input: DisputeInput): Promise<Order> {
-    await delay()
+    await enter()
     const o = find(id)
     requireRequester(o)
     requireStatus(o, 'DELIVERED')
@@ -296,7 +306,7 @@ export const mockOrderApi = {
 
   // a copy of an expired/cancelled order, open again with a fresh deadline
   async reReleaseOrder(id: number): Promise<Order> {
-    await delay()
+    await enter()
     const o = find(id)
     requireRequester(o)
     requireStatus(o, 'EXPIRED', 'CANCELLED')
@@ -310,12 +320,12 @@ export const mockOrderApi = {
   },
 
   async listSupplierOptions(): Promise<SupplierOption[]> {
-    await delay()
+    await enter()
     return suppliers.map((s) => ({ ...s }))
   },
 
   async getBalance(): Promise<CreditBalance> {
-    await delay()
+    await enter()
     sweep()
     const reserved = myReserved()
     return { available: myTotal - reserved, reserved, total: myTotal }
