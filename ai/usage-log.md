@@ -34,7 +34,9 @@ Entry template:
   `supplierName` optional), `creditAmount` at least 1 (F1.1.3), `deadline`
   in the future (F1.1.2); every problem in one `InvalidRequestException`
   (new), which `RequestsController` answers 400 with the message. Tests
-  (78 passing); README endpoints paragraph.
+  (78 passing); README endpoints paragraph. Then `supplierName` made
+  required in the check too ("Can we have suppliername field be required
+  for now?"); its column stays nullable.
 - **Prompt(s):** "When creating a request, can we check that all required
   fields are there and raise an error explicitly if not instead of
   silently failing" (a missing field was a bare 500). The tool asked as

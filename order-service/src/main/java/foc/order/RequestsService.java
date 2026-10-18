@@ -28,7 +28,8 @@
  * Same day: create checks its fields first (the author's rules): every
  * NOT NULL column present, text not blank, creditAmount at least 1
  * (F1.1.3) and deadline in the future (F1.1.2), all problems reported
- * at once as an InvalidRequestException (400).
+ * at once as an InvalidRequestException (400). Then supplierName
+ * required as well (the author's decision; the column stays nullable).
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -164,12 +165,13 @@ public class RequestsService {
     // The caller-supplied fields of a new request: the NOT NULL columns
     // must be present (blank text counts as missing), the reward at least
     // 1 credit (F1.1.3) and the deadline in the future (F1.1.2). Every
-    // problem is reported in one message; supplierName is optional, as
-    // its column is.
+    // problem is reported in one message. supplierName is required here
+    // too, though its column stays nullable (the author's decision).
     private static void validateNew(Requests request) {
         List<String> missing = new ArrayList<>();
         if (request.getRequesterId() == null) missing.add("requesterId");
         if (request.getSupplierId() == null) missing.add("supplierId");
+        if (isBlank(request.getSupplierName())) missing.add("supplierName");
         if (isBlank(request.getDropoffLocation())) missing.add("dropoffLocation");
         if (isBlank(request.getItem())) missing.add("item");
         if (request.getCreditAmount() == null) missing.add("creditAmount");
