@@ -24,9 +24,16 @@ import { useCurrentUserId } from '@/features/order/useCurrentUserId'
 import { errorMessage } from '@/lib/api/http'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
 
+// React Router keeps this component mounted when only :id changes (back/
+// forward between two deliveries). Keying the view on the id remounts it,
+// so the previous order's details, buttons, notices and errors can never
+// show under the new URL.
 export function ActiveDelivery() {
   const { id } = useParams()
-  const orderId = Number(id)
+  return <ActiveDeliveryView key={id} orderId={Number(id)} />
+}
+
+function ActiveDeliveryView({ orderId }: { orderId: number }) {
   const navigate = useNavigate()
   const userId = useCurrentUserId()
   const [order, setOrder] = useState<Order | null>(null)

@@ -8,7 +8,7 @@
 
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { orderApi } from '@/features/order/api'
@@ -16,6 +16,7 @@ import type { Order } from '@/features/order/types'
 import { ApiError } from '@/lib/api/http'
 import { CreateRequest } from '@/routes/create-request'
 import { MyRequests } from '@/routes/my-requests'
+import { ActiveDelivery } from '@/routes/active-delivery'
 import { OpenRequests } from '@/routes/open-requests'
 
 vi.mock('@/features/order/useCurrentUserId', () => ({
@@ -48,7 +49,7 @@ function renderAt(path: string) {
         <Route path="/my-requests/new" element={<CreateRequest />} />
         <Route path="/my-requests" element={<MyRequests />} />
         <Route path="/requests" element={<OpenRequests />} />
-        <Route path="/deliveries/:id" element={<p>delivery page</p>} />
+        <Route path="/deliveries/:id" element={<ActiveDelivery />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -218,16 +219,61 @@ describe('open requests', () => {
     vi.spyOn(orderApi, 'listOpenOrders').mockResolvedValue(
       pageOf([{ ...base, id: 6, requesterId: 9, requesterUsername: 'other' }]),
     )
-    vi.spyOn(orderApi, 'acceptOrder').mockResolvedValue({
+    const accepted: Order = {
       ...base,
       id: 6,
       status: 'ACCEPTED',
-    })
+      courierId: 3,
+      courierUsername: 'me',
+    }
+    vi.spyOn(orderApi, 'acceptOrder').mockResolvedValue(accepted)
+    vi.spyOn(orderApi, 'getOrder').mockResolvedValue(accepted)
     renderAt('/requests')
 
     await userEvent.click(await screen.findByRole('button', { name: 'Accept' }))
 
-    expect(await screen.findByText('delivery page')).toBeInTheDocument()
+    expect(await screen.findByText(/Active Delivery/)).toBeInTheDocument()
+  })
+})
+
+describe('active delivery', () => {
+  it('drops the previous order when the URL changes to another delivery', async () => {
+    const mine: Order = {
+      ...base,
+      id: 5,
+      status: 'ACCEPTED',
+      courierId: 3,
+      courierUsername: 'me',
+    }
+    vi.spyOn(orderApi, 'getOrder').mockImplementation((id) =>
+      id === 5
+        ? Promise.resolve(mine)
+        : Promise.reject(
+            new ApiError(404, { detail: 'Request #999 does not exist.' }),
+          ),
+    )
+    function GoTo() {
+      const navigate = useNavigate()
+      return <button onClick={() => navigate('/deliveries/999')}>go</button>
+    }
+    render(
+      <MemoryRouter initialEntries={['/deliveries/5']}>
+        <GoTo />
+        <Routes>
+          <Route path="/deliveries/:id" element={<ActiveDelivery />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await screen.findByRole('button', { name: 'Mark as picked up' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'go' }))
+
+    expect(
+      await screen.findByText('Request #999 does not exist.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Mark as picked up' }),
+    ).not.toBeInTheDocument()
   })
 })
 
