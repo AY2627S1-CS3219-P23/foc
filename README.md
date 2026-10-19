@@ -205,7 +205,7 @@ withdrawn, or exchanged for money, and only circulate within the platform.
 | Name | Service In-Charge | Nice-to-have |
 | ----- | ----- | ----- |
 | Kwey Xiu Xi | User Service | Cloud Deployment and DevOps |
-| Alastair Tan Choon Wei | Supplier Service | — |
+| Alastair Tan Choon Wei | Supplier Service | Supplier Bookmarks |
 | Aung Ko Khant | Order Service | Centralized Logging |
 | Ryan Ang Jun Wen | Credit Service | Order History |
 | Leong Wei Zhi | Notification Service | Rating System |
@@ -873,6 +873,15 @@ Zhi's PR #212 review suggestions: the Credit F2.1.3 requirement text
 restored and left in "Requirements to revise" for the team, the resent
 reply's comments and docs corrected, and the reserve and `parties()`
 comments extended.
+
+Claude Code (Sonnet 5.5) drafted the documentation for the supplier
+bookmarks nice-to-have (N8, issues #225-#227): this README's team table,
+`docs/architecture.md`, `docs/supplier-service.md` and its diagram. It
+transcribed only what Alastair Tan Choon Wei decided (bookmarks owned by
+supplier-service, a 5-bookmark cap enforced in both frontend and backend
+with a 409 response, a bookmark removed when its supplier is deleted);
+the mechanism for cleaning up bookmarks when an account is purged is
+marked open for the team.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

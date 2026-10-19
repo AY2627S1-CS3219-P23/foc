@@ -5692,3 +5692,20 @@ Entry template:
   explicit request. File-header attribution remains accurate.
 - **Verification:** Comment-only change; `git diff --check` passed.
 - **Author review:** Leong Wei Zhi to review via PR #197.
+
+## 2026-10-19 — Alastair Tan Choon Wei (docs: supplier bookmarks N8)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** docs
+- **Scope:** `README.md` (team table, AI Use Summary),
+  `docs/architecture.md` (scope paragraph, open decision),
+  `docs/supplier-service.md` (N8 requirements, D9-D12, component, entity)
+  and `docs/supplier-service.mmd` (bookmark API and table). Issue #226.
+- **Prompt(s):** "help me add the new N2H feature to the required docs,
+  in a separate branch." Only the author's decisions from #225 were
+  transcribed (supplier-service owns the table; 409 on a sixth
+  bookmark, cap enforced in frontend and backend; bookmark removed when
+  its supplier is deleted; no gateway change). Endpoint paths, column
+  names and the account-purge cleanup mechanism were not decided, so
+  they are marked TBD.
+- **Author review:** Alastair Tan Choon Wei to review before opening
+  the PR.

@@ -17,6 +17,10 @@
   rows a plain sequential scan for the `LIKE '%...%'` search is fast
   enough on its own, so the trigram/GIN indexing a 100,000-row target
   would have required is no longer warranted.
+  2026-10-19 (Claude Code, Sonnet 5.5), N8 (#225-#227): nice-to-have
+  requirements, D9-D12, bookmark component and entity added from the
+  decisions Alastair Tan Choon Wei recorded on #225; undecided
+  details are marked TBD. Transcription only.
   Reviewed by: XXX
 -->
 
@@ -53,6 +57,16 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | NFR2 | Capacity | High | Week 6 |
 | NFR2.1 | Store up to 1,000 suppliers | High | Week 6 |
 
+### Nice-to-have N8 — Supplier bookmarks (issue #227)
+
+| ID | Requirement | Priority | Sprint |
+| --- | --- | --- | --- |
+| N8.1 | Users can bookmark and un-bookmark suppliers as favourites, saved to their account so they persist across devices | Medium | Week 10 |
+| N8.2 | At most 5 bookmarks per user, enforced in both the frontend and the backend; a sixth attempt is rejected with a message stating the limit of 5 has been reached | Medium | Week 10 |
+| N8.3 | Bookmarked suppliers are shown first by default in the Suppliers tab | Medium | Week 10 |
+| N8.4 | Bookmarked suppliers are listed first in the pickup supplier dropdown on the create-request form | Medium | Week 10 |
+| N8.5 | A bookmark is removed when its supplier is deleted, and all of a user's bookmarks are removed when their account is purged | Medium | Week 10 |
+
 ## Requirements from other services this service serves
 
 | ID | Requirement | Owning service |
@@ -73,6 +87,10 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D5 | Deletion | **Team decision (2026-09-29):** hard delete — `DELETE /suppliers/{id}` removes the row. F1.1.3's "delete suppliers" is implemented literally; the team accepted that a supplier referenced by past/active orders loses its detail in order history as a consequence, rather than adding a `status: ACTIVE/INACTIVE` soft-delete column. | **Decided** |
 | D6 | Distance support | Supplier records store `latitude`/`longitude`; Supplier Service exposes an endpoint (or the raw coordinates) Order Service can use to compute the F8.1 distance check | Grounded in Order F8.1 |
 | D7 | Indexing | Not required at NFR2.1's revised 1,000-supplier target — a sequential scan comfortably clears NFR1.1's 5-second bound at that size, including for the search endpoint's leading-wildcard `LIKE '%...%'` query, which a standard btree index can't accelerate regardless (would need a trigram/GIN index, only worth the added complexity at a much larger row count). Revisit if NFR2.1 is raised again. | Revised 2026-09-27 (was: index on `name`/`category` to hit the original 100,000-row NFR2.1 target) |
+| D9 | Bookmark ownership | **Decided (2026-10-19, Alastair Tan Choon Wei):** the Supplier Service owns the bookmark table, so a supplier's deletion (D5) can remove its bookmarks in the same service. No gateway change: endpoints sit under the existing `/api/supplier/**` route. | **Decided** |
+| D10 | Bookmark cap | **Decided (2026-10-19, Alastair Tan Choon Wei):** at most 5 per user, enforced in both frontend and backend. A sixth is rejected with `409` and a message stating the limit of 5 has been reached. | **Decided** |
+| D11 | Supplier deletion | **Decided (2026-10-19, Alastair Tan Choon Wei):** deleting a supplier removes its bookmarks; affected users simply have one fewer. | **Decided** |
+| D12 | Account-purge cleanup | The Supplier Service holds only user ids, so it must learn when an account is purged (N8.5). Mechanism not yet chosen. | **Open — team** |
 | D8 | Seeding | Initial data load is an implementation task (tracked as issue #102 — CSV loader), not a numbered FR in the finalized brief | Confirmed: not in scope as an FR |
 
 ## Components
@@ -82,6 +100,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | **Browse/search REST API** | List (F1.2), details (F1.2.1), search by name (F2.1), filter by category (F2.2), empty-state (F2.2.1) |
 | **Admin CRUD REST API** (JWT role-gated, D2) | Create/read/update/delete on suppliers (F1.1–F1.1.4) |
 | **Internal validation/lookup API** | For Order Service: confirm a supplier exists (Order F1.1.1) and return its coordinates for distance checks (Order F8.1, D6) |
+| **Bookmark REST API** (JWT, per-user; N8) | List, add and remove the caller's own bookmarks and enforce the cap (D10). The caller's id comes from the verified JWT, never from the request. Endpoint paths TBD |
 | **Seed loader** (issue #102) | Parses the supplier seed CSV and populates the database on first startup |
 | **Supplier Database** (PostgreSQL, D1) | Owns supplier and category data exclusively |
 
@@ -90,6 +109,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | Entity | Key fields | Grounded in |
 | --- | --- | --- |
 | `Supplier` | `id`, `name`, `location` (building/description), `latitude`, `longitude`, `openingTime`, `closingTime`, `description`, `status` (pending D5) | F1.1.1, F1.2.1, Order F8.1 |
+| `SupplierBookmark` (N8) | `user_id`, `supplier_id` (FK, removed with its supplier, D11); unique per (user, supplier) pair. Column and table names TBD | N8.1, N8.5 |
 | `SupplierCategory` (join) | `supplier_id` (FK), `category` | F1.1.1 ("categories"), F2.2 |
 
 ## Diagram legend
