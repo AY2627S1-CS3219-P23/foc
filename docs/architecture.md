@@ -39,6 +39,9 @@
   Order DB engine no longer open — PostgreSQL 17, chosen by Ko-Khan
   via options Q&A when order-db was wired into compose.yaml
   (2026-10-10). Transcription only.
+  2026-10-19 (Claude Code, Sonnet 5.5), issue #226: N8 supplier
+  bookmarks added to the scope paragraph and the open decisions, per
+  Alastair Tan Choon Wei's decisions on #225. Transcription only.
 -->
 
 # Favours on Campus (FoC) — High-Level Service Architecture
@@ -65,7 +68,7 @@ Service that produces the events.
 only. The selected nice-to-haves (N1 ratings, N2 request history, N3
 disputes, N4 centralized logging, N5 cloud deployment/CI-CD/Kubernetes,
 N6 requester–courier chat, N7 admin dashboard incl. admin credit
-adjustments) are intentionally excluded from this runtime diagram; N5
+adjustments, N8 supplier bookmarks) are intentionally excluded from this runtime diagram; N5
 concerns deployment, not runtime structure. (In the latest backlog, chat
 and admin credit adjustment were reclassified from committed
 requirements to nice-to-haves N6/N7, so they no longer appear here.)
@@ -168,6 +171,10 @@ These shape sizing and implementation rather than adding components:
 
 - **Supplier caching mechanism** (Supplier NFR1.1.1) — in-process vs. a
   shared cache; drawn inside the Supplier Service until decided.
+- **Bookmark cleanup on account purge** (N8.5) — the Supplier Service
+  stores bookmarks by user id, so how it learns an account was purged is
+  open. N8's endpoints sit inside the Supplier Service, so the diagram
+  gains no edge unless the chosen mechanism adds one.
 
 Resolved 2026-09-29: the **email provider** for OTP delivery (User
 F1.1.3) is **Gmail SMTP**, with a Mailpit container in compose as the
