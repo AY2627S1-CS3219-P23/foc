@@ -17,6 +17,11 @@
 // latestNotification became a queue — two frames delivered in one
 // WebSocket message batch into a single render, and only the last would
 // have survived a replaceable field.
+// 2026-10-18, Claude Code (Fable 5), notification sound (follow-up to
+// issue #66, no issue yet): soundEnabled/setSoundEnabled added so the
+// provider's chime and both toggle surfaces (Center header, Profile
+// preferences — author decision via options Q&A) share one source of
+// truth.
 
 import { createContext, useContext } from 'react'
 import type { NotificationDto } from './types'
@@ -42,6 +47,12 @@ export interface NotificationsData {
   // after a successful mark-read/read-all, keeping the server
   // authoritative over the badge
   refreshUnreadCount: () => void
+  // whether a live push plays the chime. A device preference, not an
+  // account one (sound is a property of the machine you sit at):
+  // localStorage-backed, default on. Shared here so the Center header
+  // toggle and the Profile preferences switch always agree.
+  soundEnabled: boolean
+  setSoundEnabled: (enabled: boolean) => void
 }
 
 export const NotificationsContext = createContext<NotificationsData | null>(

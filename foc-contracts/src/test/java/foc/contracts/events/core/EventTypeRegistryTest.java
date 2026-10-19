@@ -9,6 +9,8 @@
  * 2026-10-08, Claude Code (Opus 5.5): count and domain-prefix tests updated for the credit domain
  * (team design, docs/credit-service.md D7-D8); author review: Ryan Ang,
  * pending pull request review.
+ * 2026-10-18, Claude Code (Fable 5): count bumped for request.dropped;
+ * pending pull request review.
  */
 package foc.contracts.events.core;
 
@@ -25,8 +27,8 @@ import org.junit.jupiter.api.Test;
 class EventTypeRegistryTest {
 
 	@Test
-	void catalogsExactlyElevenEvents() {
-		assertEquals(11, EventTypeRegistry.entries().size());
+	void catalogsExactlyTwelveEvents() {
+		assertEquals(12, EventTypeRegistry.entries().size());
 	}
 
 	@Test
