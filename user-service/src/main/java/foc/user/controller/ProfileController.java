@@ -11,6 +11,11 @@ delete; bearer token only, no body — chosen by Leong Wei Zhi via options Q&A).
 2026-09-27 (Claude Code, Opus 5.5), PR #135 review: callerId and the
 UserNotFoundException handler moved to CallerId / ProblemDetailAdvice,
 shared with AdminController.
+2026-10-11 (Claude Code, Fable 5), issue #94: POST /users/me/recover —
+the explicit restore for a soft-deleted caller, DELETE /users/me's
+mirror (owner decision via options Q&A: login reports the scheduled
+purge instead of silently recovering). Needs its own authenticated()
+line in SecurityConfig, above the admin catch-all.
 */
 
 package foc.user.controller;
@@ -21,6 +26,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,6 +56,15 @@ public class ProfileController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteOwnAccount(Authentication authentication) {
         profileService.deleteOwnAccount(CallerId.from(authentication));
+    }
+
+    // the restore half of the recovery flow (issue #94): login told the
+    // SPA the account is scheduled for deletion, the caller chose to
+    // keep it. Idempotent — an active caller just gets their account
+    // back in the body. 404 past the retention window, like everywhere
+    @PostMapping(value = "/me/recover", produces = MediaType.APPLICATION_JSON_VALUE)
+    public UserResponse recoverOwnAccount(Authentication authentication) {
+        return profileService.recoverOwnAccount(CallerId.from(authentication));
     }
 
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)

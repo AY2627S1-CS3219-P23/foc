@@ -32,12 +32,21 @@
 // password → edit direction, which #167's two cases missed, in both
 // shapes that left Save sending an empty code: a code requested from the
 // other card, and one requested here and then cancelled.
+// 2026-10-16, Claude Code (Opus 5.5), issue #174: the balance the
+// credit poll reads is faked too, so no case reaches a real gateway (a
+// running one refuses the test token with a 401, which signs the session
+// out), and the details case checks the live Credit Status.
 // Author review: Leong Wei Zhi (via PR #149).
+// 2026-10-18, Claude Code (Fable 5), notification sound (follow-up to
+// issue #66, no issue yet): Preferences-card cases — the sound switch
+// defaults on (and writes the default back), flips and persists under
+// the same key the Notification Center's header toggle uses.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
+import { creditApi } from '@/features/credit/api'
 import { adminUserApi } from '@/features/user/adminApi'
 import { EmailChangeModal } from '@/features/user/components/EmailChangeModal'
 import { profileApi } from '@/features/user/profileApi'
@@ -87,6 +96,12 @@ beforeEach(() => {
   vi.spyOn(adminUserApi, 'getCurrentUser').mockImplementation(async () => ({
     ...me,
   }))
+  // the shell's credit poll (CreditBalanceProvider)
+  vi.spyOn(creditApi, 'getBalance').mockResolvedValue({
+    available: 5,
+    reserved: 2,
+    total: 7,
+  })
   vi.spyOn(profileApi, 'requestOtp').mockResolvedValue({
     expiresInSeconds: 600,
     resendInSeconds: 60,
@@ -173,12 +188,14 @@ describe('profile page', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows the profile details with placeholder credits', async () => {
+  it('shows the profile details with the live credit balance', async () => {
     renderProfile()
     expect(await screen.findByText('nus_courier_99')).toBeInTheDocument()
     expect(screen.getByText('e1000101@u.nus.edu')).toBeInTheDocument()
     expect(screen.getByText('Requester / Courier')).toBeInTheDocument()
-    expect(screen.getByText('Available: — | Reserved: —')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Available: 5 | Reserved: 2'),
+    ).toBeInTheDocument()
   })
 
   it('shows an error when the profile fails to load', async () => {
@@ -954,5 +971,42 @@ describe('delete account', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('boom')
     expect(dialog).toBeInTheDocument()
     expect(JSON.parse(localStorage.getItem('user')!)).not.toBeNull()
+  })
+})
+
+describe('preferences', () => {
+  // the same key the Notification Center's header toggle writes — one
+  // device-wide preference, two surfaces
+  const SOUND_KEY = 'notificationSoundEnabled'
+
+  it('offers the notification sound switch, on by default', async () => {
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+
+    const toggle = screen.getByRole('switch', { name: 'Notification sound' })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    // the default is written back on first read, pinning default-ON
+    expect(localStorage.getItem(SOUND_KEY)).toBe('true')
+  })
+
+  it('flips and persists the preference', async () => {
+    const user = userEvent.setup()
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+
+    const toggle = screen.getByRole('switch', { name: 'Notification sound' })
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(localStorage.getItem(SOUND_KEY)).toBe('false')
+  })
+
+  it('renders a stored "false" as off', async () => {
+    localStorage.setItem(SOUND_KEY, 'false')
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+
+    expect(
+      screen.getByRole('switch', { name: 'Notification sound' }),
+    ).toHaveAttribute('aria-checked', 'false')
   })
 })

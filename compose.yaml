@@ -73,9 +73,39 @@
 # 2026-10-10, Claude Code (Opus 5.5), PR #168: CREDIT_RETRY_TTL_MS and
 # CREDIT_RETRY_MAX_ATTEMPTS passed to the credit service for its retry
 # queue (docs/credit-service.md D11); the values are the team's.
+# 2026-10-16, Claude Code (Opus 5.5), PR #190 re-review (Leong Wei Zhi):
+# CREDIT_RETRY_CONFIRM_TIMEOUT_MS passed too.
 # 2026-10-11, Claude Code (Opus 5.5), issue #169: CREDIT_SIGN_UP_CREDITS
 # and CREDIT_EARNED_CREDIT_LIFETIME_MONTHS passed to the credit service
 # (D4, D6); the values are the team's.
+# 2026-10-10, Claude Code (Opus 5.5): order-service + order-db wiring
+# added, following the notification-service pattern (RabbitMQ env and
+# depends_on included; no listener/JWT settings). Host ports 8088/5437 (DB moved off 5436 on 2026-10-14, which credit-service uses),
+# the postgres:17 image, and the broker-wiring scope chosen by Ko-Khan
+# via options Q&A.
+# 2026-10-14, Claude Code (Opus 5.5): order-service host port removed on
+# rebasing onto the gateway cutover (issue #151, PR review): like the
+# other backends it has no published port and is reached only through
+# the gateway's /api/order/** prefix (docs/gateway.md).
+# 2026-10-15, Claude Code (Opus 5.5): ORDER_PENDING_* and ORDER_RETRY_*
+# passed to the order service for the saga with the Credit Service
+# (30 s pending timeout swept every 15 s, and credit-service's 2 s / 5
+# attempts retry values; Ko-Khan via options Q&A).
+# 2026-10-18, Claude Code (Opus 5.5): JWT_SECRET and WEB_ALLOWED_ORIGIN
+# passed to the order service for its ownership checks and CORS; then
+# ORDER_EXPIRY_* and ORDER_AUTO_COMPLETE_* for its two new sweeps.
+# 2026-10-12, Claude Code (Fable 5), issue #67: REDIS_HOST/PORT passed to
+# the notification service for the D23 denylist read at STOMP CONNECT
+# (author decision via options Q&A). Deliberately no depends_on redis —
+# the check fails open (G6/D23), so gating startup on Redis would block
+# valid traffic exactly when the design says to serve it.
+# 2026-10-17, Claude Code (Fable 5), issue #66: WEB_ALLOWED_ORIGIN passed
+# to the notification service for its REST API's CORS config, as
+# supplier/user/credit already receive it.
+# 2026-10-17, Claude Code (Fable 5), issue #66: INTERNAL_SERVICE_TOKEN
+# passed to user- and notification-service, plus USER_SERVICE_BASE_URL
+# to the latter, for the ingest-time username lookups (author decisions
+# D30/D31 via options Q&A — zero-trust shared credential).
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -163,6 +193,17 @@ services:
       NOTIF_PURGE_CRON: "${NOTIF_PURGE_CRON:-0 0 3 * * *}"
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       NOTIFICATION_WS_ALLOWED_ORIGINS: ${NOTIFICATION_WS_ALLOWED_ORIGINS:-http://localhost:*}
+      WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
+      # Ingest-time username lookups (D30) against user-service's
+      # public-profile route, authenticated by the shared internal
+      # token (D31 — zero trust). Unset token = enrichment disabled,
+      # rows store IDs-only and the web shows actor-less copy.
+      USER_SERVICE_BASE_URL: http://user-service:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+      # Platform Redis: denylist read at STOMP CONNECT (D23). No
+      # depends_on redis on purpose — the check fails open (G6).
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     depends_on:
       notification-db:
         condition: service_healthy
@@ -287,6 +328,9 @@ services:
       # verify with.
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-1h}
+      # Accepts notification-service's X-Internal-Token on the
+      # public-profile route (issue #66, D31). Unset = filter disabled.
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
       # Browser origin allowed by CORS, shared with supplier-service.
       WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
       # OTP email delivery (issue #88). Defaults reach the mailpit
@@ -382,6 +426,8 @@ services:
       # retry delay and attempts for a failed request event (D11)
       CREDIT_RETRY_TTL_MS: ${CREDIT_RETRY_TTL_MS:-2000}
       CREDIT_RETRY_MAX_ATTEMPTS: ${CREDIT_RETRY_MAX_ATTEMPTS:-5}
+      # confirm wait for a retry copy, and the pause before a requeue
+      CREDIT_RETRY_CONFIRM_TIMEOUT_MS: ${CREDIT_RETRY_CONFIRM_TIMEOUT_MS:-5000}
       # sign-up credits and earned-credit lifetime (D6, D4)
       CREDIT_SIGN_UP_CREDITS: ${CREDIT_SIGN_UP_CREDITS:-5}
       CREDIT_EARNED_CREDIT_LIFETIME_MONTHS: ${CREDIT_EARNED_CREDIT_LIFETIME_MONTHS:-3}
@@ -419,6 +465,68 @@ services:
       retries: 10
     restart: unless-stopped
 
+  order-service:
+    # Context is the repo root so the build can include the shared
+    # foc-contracts library (D15).
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+    environment:
+      ORDER_DB_HOST: order-db
+      ORDER_DB_PORT: "5432"
+      ORDER_DB_NAME: ${ORDER_DB_NAME:-order}
+      ORDER_DB_USER: ${ORDER_DB_USER:-order}
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?set in .env}
+      # the saga's request events and the Credit Service's replies
+      # (docs/credit-service.md)
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-foc}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set in .env}
+      # how long a request may stay PENDING, and how often that is checked
+      ORDER_PENDING_TIMEOUT_MS: ${ORDER_PENDING_TIMEOUT_MS:-30000}
+      ORDER_PENDING_SWEEP_INTERVAL_MS: ${ORDER_PENDING_SWEEP_INTERVAL_MS:-15000}
+      # retry delay and attempts for a failed credit reply
+      ORDER_RETRY_TTL_MS: ${ORDER_RETRY_TTL_MS:-2000}
+      ORDER_RETRY_MAX_ATTEMPTS: ${ORDER_RETRY_MAX_ATTEMPTS:-5}
+      # deadline-expiry and auto-complete sweeps (F6.1, F7.2)
+      ORDER_EXPIRY_SWEEP_INTERVAL_MS: ${ORDER_EXPIRY_SWEEP_INTERVAL_MS:-300000}
+      ORDER_AUTO_COMPLETE_AFTER_MS: ${ORDER_AUTO_COMPLETE_AFTER_MS:-3600000}
+      ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS: ${ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS:-300000}
+      # verifies the caller's bearer token for the ownership checks
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
+      # the SPA's origin, for CORS
+      WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
+    depends_on:
+      order-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Order DB: PostgreSQL owned exclusively by the order service
+  # (database-per-service).
+  order-db:
+    image: postgres:17
+    # Published on the host so local tooling (psql, DB GUIs, the postgres
+    # MCP server) can reach the service-owned DB; the service itself talks
+    # to it over the compose network on 5432. Bound to loopback so the
+    # database is reachable from this machine only.
+    ports:
+      - "127.0.0.1:${ORDER_DB_HOST_PORT:-5437}:5432"
+    environment:
+      POSTGRES_DB: ${ORDER_DB_NAME:-order}
+      POSTGRES_USER: ${ORDER_DB_USER:-order}
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:?set in .env}
+    volumes:
+      - order-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ORDER_DB_USER:-order} -d ${ORDER_DB_NAME:-order}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   # Local mail catcher (issue #88): the default SMTP target for the user
   # service's OTP emails, so dev and demo need no real mail account.
   # Caught mail is browsable at http://localhost:8025; the store is
@@ -438,6 +546,7 @@ services:
 volumes:
   credit-db-data:
   notification-db-data:
+  order-db-data:
   rabbitmq-data:
   redis-data:
   supplier-db-data:

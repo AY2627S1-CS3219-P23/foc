@@ -7,6 +7,9 @@
  * dropped) recorded in docs/notification-service.md D16-D19.
  * 2026-09-20: order→request rename and events.core/.request package
  * split applied (author decision D22, docs/notification-service.md).
+ * 2026-10-18, PR #212 review (Leong Wei Zhi), reviewer's suggestion:
+ * parties()'s comment states which events may name no one; Claude Code
+ * (Opus 5.5).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.contracts.events.core;
@@ -65,7 +68,11 @@ public interface DomainEvent {
 	/** Correlates the event with the request/flow that caused it. */
 	String correlationId();
 
-	/** User IDs to notify — one notification per entry (F1.1, F1.2). */
+	/**
+	 * User IDs to notify — one notification per entry (F1.1, F1.2). Never
+	 * null; empty only for credit events, since every request event names
+	 * someone.
+	 */
 	List<String> parties();
 
 	/**

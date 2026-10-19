@@ -11,6 +11,12 @@
  * sessions (no session is ever created for a bearer API), and the JWT
  * filter built here rather than as a bean, so it runs only inside this
  * chain; both as user-service's SecurityConfig does.
+ * 2026-10-14, Claude Code (Opus 5.5), PR #189 review (Leong Wei Zhi):
+ * the CORS comment updated for the gateway cutover (issue #151), per
+ * the reviewer's comment.
+ * 2026-10-17, Claude Code (Opus 5.5), issue #174: the first role gate,
+ * /credits/admin/** for ADMIN and OWNER (team decision), the roles
+ * user-service's admin routes allow.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.config;
@@ -36,8 +42,10 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @Configuration
 public class SecurityConfig {
 
-    // the SPA calls this service directly from the browser (no gateway);
-    // the API only reads, so GET is the only method it needs
+    // the SPA calls this service from the browser through the API gateway,
+    // which passes these CORS headers through unchanged (docs/gateway.md,
+    // "CORS stays per-service"); the API only reads, so GET is the only
+    // method it needs
     @Bean
     public CorsConfigurationSource corsConfigurationSource(
             @Value("${credit.web-allowed-origin}") String webAllowedOrigin) {
@@ -70,6 +78,10 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         // health checks (compose depends_on / probes) carry no credentials
                         .requestMatchers("/actuator/health").permitAll()
+                        // the pool and its redistributions, for the admin
+                        // dashboard; the role is the token's, read by
+                        // JwtAuthenticationFilter
+                        .requestMatchers("/credits/admin/**").hasAnyRole("ADMIN", "OWNER")
                         // everything else is the caller's own credit data
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling

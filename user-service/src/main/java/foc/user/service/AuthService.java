@@ -114,6 +114,19 @@ via options Q&A over freezing the row until expiry).
 Also: verify's exhausting guess now carries the cooldown left until a
 re-sign-up may replace the spent row, for the 429's Retry-After
 (PR #157 Copilot review).
+2026-10-11 (Claude Code, Fable 5), issue #94: login no longer recovers a
+soft-deleted account (owner decision via options Q&A, reversing the
+#93-era behaviour this header's first paragraph describes): a deleted
+account's login succeeds unchanged, and the response now carries
+deletionScheduledFor (LoginAttempts.purgeAt) so the SPA offers the
+explicit restore-or-keep-deleted choice; POST /users/me/recover is what
+restores.
+2026-10-11 (Claude Code, Fable 5), PR #179 Copilot review: login redoes
+the whole lookup-and-check when LoginAttempts reports the hash changed
+between the bcrypt check and the locked write (a concurrent reset) —
+the stale verdict is discarded in both directions, and three such
+rounds in a row answer as the 409 the concurrent-update handler
+already renders.
 */
 
 package foc.user.service;
@@ -125,6 +138,7 @@ import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.MailException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -421,44 +435,63 @@ public class AuthService {
 
     // Not @Transactional: the lookup and the bcrypt check run without
     // holding a pooled connection; LoginAttempts then records the attempt
-    // in its own short transaction
+    // in its own short transaction. The loop redoes everything when the
+    // hash changed under the check (a concurrent password reset, PR #179
+    // Copilot review) — each stale round needs another committed change
+    // inside a microsecond window, so three in a row is adversarial churn
+    // and answers as the 409 the concurrent-update handler renders
     public LoginResponse login(LoginRequest request) {
-        Optional<User> found = findAccount(request.usernameOrEmail());
-        if (found.isEmpty()) {
-            throw LoginFailedException.unknownAccount();
+        for (int round = 0; round < 3; round++) {
+            Optional<User> found = findAccount(request.usernameOrEmail());
+            if (found.isEmpty()) {
+                throw LoginFailedException.unknownAccount();
+            }
+
+            User user = found.get();
+            Instant now = clock.instant();
+
+            // past the recovery window the account is waiting for the purge, so
+            // it answers as if it were already gone — before the lock and the
+            // password, so every attempt on it gets that one answer and none of
+            // them count against a row that is on its way out
+            if (loginAttempts.pastRetention(user, now)) {
+                throw LoginFailedException.unknownAccount();
+            }
+
+            // locked: refused without counting the attempt, and told how long
+            // is left rather than the full lockout
+            if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(now)) {
+                throw new AccountLockedException(Duration.between(now, user.getLockedUntil()));
+            }
+
+            // bcrypt, outside any transaction; LoginAttempts then counts the
+            // attempt with the row locked, re-checking the lock a parallel
+            // attempt may have set meanwhile — and that the hash this check
+            // ran against is still the account's
+            String checkedHash = user.getPasswordHash();
+            boolean matched = passwordEncoder.matches(request.password(), checkedHash);
+            LoginAttempts.Result result = loginAttempts.record(user.getId(), matched, checkedHash, now);
+            switch (result.outcome()) {
+                // a soft-deleted account logs in without being recovered
+                // (issue #94): deletionScheduledFor tells the SPA to offer
+                // the restore-or-keep-deleted choice (POST /users/me/recover)
+                case SUCCESS -> {
+                    return LoginResponse.bearer(jwtIssuer.issue(result.user()),
+                        jwtIssuer.ttl().toSeconds(), loginAttempts.purgeAt(result.user()));
+                }
+                // the attempt that trips the lock reports the lockout too, so
+                // the user learns immediately rather than on the next try
+                case LOCKED -> throw new AccountLockedException(result.retryAfter());
+                case FAILED -> throw LoginFailedException.wrongPassword(result.attemptsLeft());
+                // purged since the lookup
+                case GONE -> throw LoginFailedException.unknownAccount();
+                // the verdict was computed against a hash a concurrent
+                // reset replaced: nothing was counted, check again fresh
+                case STALE_CREDENTIAL -> { }
+            }
         }
-
-        User user = found.get();
-        Instant now = clock.instant();
-
-        // past the recovery window the account is waiting for the purge, so
-        // it answers as if it were already gone — before the lock and the
-        // password, so every attempt on it gets that one answer and none of
-        // them count against a row that is on its way out
-        if (loginAttempts.pastRetention(user, now)) {
-            throw LoginFailedException.unknownAccount();
-        }
-
-        // locked: refused without counting the attempt, and told how long
-        // is left rather than the full lockout
-        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(now)) {
-            throw new AccountLockedException(Duration.between(now, user.getLockedUntil()));
-        }
-
-        // bcrypt, outside any transaction; LoginAttempts then counts the
-        // attempt with the row locked, re-checking the lock a parallel
-        // attempt may have set meanwhile
-        boolean matched = passwordEncoder.matches(request.password(), user.getPasswordHash());
-        LoginAttempts.Result result = loginAttempts.record(user.getId(), matched, now);
-        return switch (result.outcome()) {
-            case SUCCESS -> LoginResponse.bearer(jwtIssuer.issue(result.user()), jwtIssuer.ttl().toSeconds());
-            // the attempt that trips the lock reports the lockout too, so
-            // the user learns immediately rather than on the next try
-            case LOCKED -> throw new AccountLockedException(result.retryAfter());
-            case FAILED -> throw LoginFailedException.wrongPassword(result.attemptsLeft());
-            // purged since the lookup
-            case GONE -> throw LoginFailedException.unknownAccount();
-        };
+        throw new OptimisticLockingFailureException(
+            "The account was changed by another request while logging in");
     }
 
     // usernames can't contain '@', so an '@' means an email

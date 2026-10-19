@@ -22,6 +22,11 @@
  * round-trip went with the entity and its table (V6 — the denylist moved
  * to Redis TTL keys checked by the API gateway).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-11, Claude Code (Fable 5), issue #94: the PasswordResetOtp
+ * round-trip (the AccountToken scaffold, remade by V7 for the reset
+ * flow) covers createdAt and attempts, and a case pins the
+ * one-live-code-per-user index. No unique-hash case on purpose: the
+ * credential is an OTP code, whose salted hash is never looked up.
  */
 package foc.user.entity;
 
@@ -56,7 +61,7 @@ class EntityMappingTest extends PostgresTestContainer {
     @BeforeEach
     void emptyTables() {
         entityManager.createNativeQuery("delete from pending_signups").executeUpdate();
-        entityManager.createNativeQuery("delete from account_tokens").executeUpdate();
+        entityManager.createNativeQuery("delete from password_reset_otps").executeUpdate();
         entityManager.createNativeQuery("delete from users").executeUpdate();
     }
 
@@ -118,18 +123,32 @@ class EntityMappingTest extends PostgresTestContainer {
     }
 
     @Test
-    void accountTokenRoundTrip() {
+    void passwordResetOtpRoundTrip() {
         User user = persistUser("e3234567@u.nus.edu", "token_user");
-        AccountToken saved = persistAndFlush(
-            new AccountToken(user, "token_hash", AccountToken.Kind.RECOVERY, EXPIRY));
+        PasswordResetOtp otp = new PasswordResetOtp(user, "code_hash", SENT_AT, EXPIRY);
+        otp.incrementAttempts();
+        PasswordResetOtp saved = persistAndFlush(otp);
         entityManager.clear();
 
-        AccountToken found = entityManager.find(AccountToken.class, saved.getId());
+        PasswordResetOtp found = entityManager.find(PasswordResetOtp.class, saved.getId());
 
         assertThat(found.getUser().getId()).isEqualTo(user.getId());
-        assertThat(found.getTokenHash()).isEqualTo("token_hash");
-        assertThat(found.getKind()).isEqualTo(AccountToken.Kind.RECOVERY);
+        assertThat(found.getCodeHash()).isEqualTo("code_hash");
+        assertThat(found.getCreatedAt()).isEqualTo(SENT_AT);
         assertThat(found.getExpiresAt()).isEqualTo(EXPIRY);
+        assertThat(found.getAttempts()).isEqualTo(1);
+    }
+
+    @Test
+    void passwordResetOtpOnePerUser() {
+        // V7: one live reset code per account — a repeat request renews
+        // the row instead of inserting a second
+        User user = persistUser("e6234567@u.nus.edu", "one_token_user");
+        persistAndFlush(new PasswordResetOtp(user, "first_hash", SENT_AT, EXPIRY));
+
+        assertThatThrownBy(() -> persistAndFlush(new PasswordResetOtp(user, "second_hash",
+                SENT_AT, EXPIRY)))
+            .isInstanceOf(PersistenceException.class);
     }
 
 }

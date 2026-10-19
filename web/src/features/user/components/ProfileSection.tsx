@@ -33,10 +33,17 @@
 // let the next account to sign in see — and confirm, against its own
 // account — an address somebody else had parked.
 // Author review: Leong Wei Zhi (via PR #149).
+// 2026-10-18, Claude Code (Fable 5), notification sound (follow-up to
+// issue #66, no issue yet): a Preferences card with the notification
+// sound switch — the same context-held, localStorage-backed preference
+// the Notification Center's header toggle flips (author decision via
+// options Q&A: both surfaces). Beyond the profile.png wireframe; see
+// web/AGENTS.md.
 
 import { useEffect, useState } from 'react'
 
 import { errorMessage } from '@/lib/api/http'
+import { useNotifications } from '@/features/notifications/useNotifications'
 import { useGateCode } from '../otp'
 import { profileApi } from '../profileApi'
 import type { PendingEmailChange } from '../types'
@@ -66,6 +73,8 @@ export function ProfileSection() {
   // the account's single gate code, held here so both cards see the same
   // one (issue #167)
   const gate = useGateCode()
+  // the device-wide chime preference, shared with the Center's toggle
+  const { soundEnabled, setSoundEnabled } = useNotifications()
 
   // The snapshot this page may use: the signed-in account's own. One
   // belonging to another account is left in storage — it is still its
@@ -173,6 +182,39 @@ export function ProfileSection() {
         />
       )}
       <ChangePasswordCard email={user.email} gate={gate} />
+      <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-gray-900">Preferences</h2>
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <div>
+            <p
+              id="sound-pref-label"
+              className="text-sm font-medium text-gray-900"
+            >
+              Notification sound
+            </p>
+            <p className="text-xs text-gray-500">
+              Play a chime when a notification arrives
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={soundEnabled}
+            aria-labelledby="sound-pref-label"
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+              soundEnabled ? 'bg-gray-900' : 'bg-gray-200'
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                soundEnabled ? 'translate-x-5' : ''
+              }`}
+            />
+          </button>
+        </div>
+      </section>
       <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900">Danger Zone</h2>
         <button

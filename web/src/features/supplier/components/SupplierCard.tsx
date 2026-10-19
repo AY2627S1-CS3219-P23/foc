@@ -17,7 +17,12 @@ interface SupplierCardProps {
   distanceLabel?: string
 }
 
-export function SupplierCard({ supplier, selected, onSelect, distanceLabel }: SupplierCardProps) {
+export function SupplierCard({
+  supplier,
+  selected,
+  onSelect,
+  distanceLabel,
+}: SupplierCardProps) {
   return (
     <button
       type="button"

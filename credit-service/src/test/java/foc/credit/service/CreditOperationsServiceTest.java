@@ -12,6 +12,9 @@
  * record answers NO_RESERVATION, and the transfer-against-release race
  * is restored; a transfer naming no courier and a release naming no
  * requester.
+ * 2026-10-18, issue #165 (reviewer's suggestion): a redelivered
+ * reservation on a HELD or REJECTED record answers what the record
+ * holds, so the handler can send its reply again.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -189,13 +192,18 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
         assertBalance(requester, 5, 0);
         assertThat(statusOf(request)).isEqualTo(ReservationStatus.REJECTED);
         assertThat(statusOf(negative)).isEqualTo(ReservationStatus.REJECTED);
+
+        // a redelivery answers the same refusal
+        assertThat(operations.reserve(request, requester, 0))
+            .isEqualTo(ReserveResult.ALREADY_REJECTED_INVALID_AMOUNT);
+        assertBalance(requester, 5, 0);
     }
 
     @Test
-    void reserveIsADuplicateOnceHeld() {
+    void reserveAgainOnceHeldAnswersAlreadyReserved() {
         operations.reserve(request, requester, 3);
 
-        assertThat(operations.reserve(request, requester, 3)).isEqualTo(ReserveResult.DUPLICATE);
+        assertThat(operations.reserve(request, requester, 3)).isEqualTo(ReserveResult.ALREADY_RESERVED);
 
         assertBalance(requester, 2, 3);
     }
@@ -210,7 +218,8 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
         // the balance grows back, but the record stands
         operations.release(other, requester);
 
-        assertThat(operations.reserve(request, requester, 3)).isEqualTo(ReserveResult.DUPLICATE);
+        assertThat(operations.reserve(request, requester, 3))
+            .isEqualTo(ReserveResult.ALREADY_REJECTED_INSUFFICIENT_CREDITS);
         assertThat(statusOf(request)).isEqualTo(ReservationStatus.REJECTED);
         assertBalance(requester, 5, 0);
     }
@@ -493,11 +502,11 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
         assertThat(results).filteredOn(ReserveResult.RESERVED::equals).hasSize(1);
         assertThat(results).filteredOn(r -> !ReserveResult.RESERVED.equals(r)).allSatisfy(loser ->
             assertThat(loser).satisfiesAnyOf(
-                r -> assertThat(r).isEqualTo(ReserveResult.DUPLICATE),
+                r -> assertThat(r).isEqualTo(ReserveResult.ALREADY_RESERVED),
                 r -> assertThat(r).isInstanceOf(RuntimeException.class)));
         assertThat(statusOf(request)).isEqualTo(ReservationStatus.HELD);
         assertBalance(requester, 2, 3);
-        assertThat(operations.reserve(request, requester, 3)).isEqualTo(ReserveResult.DUPLICATE);
+        assertThat(operations.reserve(request, requester, 3)).isEqualTo(ReserveResult.ALREADY_RESERVED);
     }
 
     @RepeatedTest(RACE_REPETITIONS)

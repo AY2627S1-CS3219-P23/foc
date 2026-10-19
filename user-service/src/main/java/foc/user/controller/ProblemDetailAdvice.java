@@ -52,6 +52,7 @@ import org.springframework.web.server.ResponseStatusException;
 import foc.user.exception.OtpAttemptsExceededException;
 import foc.user.exception.OtpResendTooSoonException;
 import foc.user.exception.OtpVerificationException;
+import foc.user.exception.ResetCodeInvalidException;
 import foc.user.exception.UserNotFoundException;
 
 // the web client reads RFC 9457 problem+json error bodies
@@ -138,6 +139,17 @@ class ProblemDetailAdvice {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
             .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
             .body(problem);
+    }
+
+    // a password-reset code that is wrong, expired, spent, or belongs
+    // to no account — one 400, one wording, one type (#94): any
+    // distinction (the OTP handlers' expired/429 answers included)
+    // would let an outsider probe which addresses hold accounts
+    @ExceptionHandler(ResetCodeInvalidException.class)
+    ProblemDetail handleResetCodeInvalid(ResetCodeInvalidException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+        problem.setType(ProblemTypes.RESET_CODE_INVALID);
+        return problem;
     }
 
     // refusals the services raise with a status and reason (blocked admin

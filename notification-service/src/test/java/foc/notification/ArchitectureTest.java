@@ -4,6 +4,8 @@
  * Scope: ArchUnit test for issue #69, enforcing team decision D11
  * (docs/notification-service.md, "Broker decoupling"): broker-specific
  * types must stay confined to the messaging.rabbitmq adapter package.
+ * 2026-10-12, issue #67: parallel rule for the D23 Redis adapter —
+ * Redis types confined to security.redis.
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.notification;
@@ -32,6 +34,16 @@ class ArchitectureTest {
 				.that().resideOutsideOfPackage("foc.notification.messaging.rabbitmq..")
 				.should().dependOnClassesThat()
 				.resideInAnyPackage("org.springframework.amqp..", "com.rabbitmq..");
+
+		rule.check(CLASSES);
+	}
+
+	@Test
+	void onlyTheRedisAdapterDependsOnRedisTypes() {
+		ArchRule rule = noClasses()
+				.that().resideOutsideOfPackage("foc.notification.security.redis..")
+				.should().dependOnClassesThat()
+				.resideInAnyPackage("org.springframework.data.redis..", "io.lettuce..");
 
 		rule.check(CLASSES);
 	}

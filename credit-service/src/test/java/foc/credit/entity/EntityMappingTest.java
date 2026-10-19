@@ -6,6 +6,8 @@
  * else checks that the mappings match the tables.
  * 2026-10-11, Claude Code (Opus 5.5), issue #169: the slice case saves
  * and reads back its lot_id.
+ * 2026-10-13, Claude Code (Opus 5.5), PR #188 review (Leong Wei Zhi):
+ * the outbox case saves and reads back next_attempt_at (V2).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.entity;
@@ -204,8 +206,15 @@ class EntityMappingTest extends PostgresTestContainer {
         assertThat(unsent.getPayload()).isEqualTo("{\"requestId\":\"r-1\"}");
         assertThat(unsent.getCreatedAt()).isEqualTo(NOW);
         assertThat(unsent.getSentAt()).isNull();
+        assertThat(unsent.getNextAttemptAt()).isNull();
 
-        unsent.setSentAt(LATER);
+        unsent.setNextAttemptAt(LATER);
+        flushAndClear();
+
+        OutboxEvent deferred = outbox.findById(eventId).orElseThrow();
+        assertThat(deferred.getNextAttemptAt()).isEqualTo(LATER);
+
+        deferred.setSentAt(LATER);
         flushAndClear();
 
         assertThat(outbox.findById(eventId).orElseThrow().getSentAt()).isEqualTo(LATER);

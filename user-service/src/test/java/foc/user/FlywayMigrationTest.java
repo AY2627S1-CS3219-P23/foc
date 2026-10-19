@@ -20,6 +20,14 @@ Scope: issue #147. Runs the Flyway migrations against their own schemas in
        2026-10-11, Claude Code (Fable 5), issue #151: V6 joins them (drops
        token_denylist — the denylist moved to Redis), moving the counts to
        5 and 6; the fresh-database case also proves the table is gone.
+       2026-10-11, Claude Code (Fable 5), issue #94: V7 joins them
+       (account_tokens becomes password_reset_otps for the reset flow:
+       code_hash, created_at, attempts, one row per account, no kind),
+       moving the counts to 6 and 7; the fresh-database case proves the
+       rename and the per-user uniqueness. Squashed before merge from
+       the branch's three same-day revisions (link token → OTP code →
+       per-operation naming), each decided by the owner via options
+       Q&A.
 Author review: Ryan to review via the PR.
 */
 
@@ -48,7 +56,7 @@ import org.springframework.core.io.ClassPathResource;
 class FlywayMigrationTest extends PostgresTestContainer {
 
     // scripts in db/migration; a new V<n> bumps this
-    private static final int MIGRATION_SCRIPTS = 6;
+    private static final int MIGRATION_SCRIPTS = 7;
 
     // the application's Flyway, built from application.yaml's spring.flyway
     @Autowired
@@ -145,6 +153,27 @@ class FlywayMigrationTest extends PostgresTestContainer {
             assertThatThrownBy(() -> statement.execute("select 1 from token_denylist"))
                 .isInstanceOf(SQLException.class)
                 .hasMessageContaining("token_denylist");
+
+            // V7: account_tokens is gone — the reset table is
+            // password_reset_otps, holding one live code per account,
+            // while the same hash on two accounts is fine (a salted
+            // code hash is never looked up, so no hash index exists)
+            assertThatThrownBy(() -> statement.execute("select 1 from account_tokens"))
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("account_tokens");
+            insertUser(statement, "e1000003@u.nus.edu", "alice", "2026-01-03T00:00:00Z");
+            statement.execute("insert into password_reset_otps (user_id, code_hash,"
+                + " created_at, expires_at, attempts) select id, 'h1',"
+                + " now(), now(), 0 from users where username = 'Bob'");
+            statement.execute("insert into password_reset_otps (user_id, code_hash,"
+                + " created_at, expires_at, attempts) select id, 'h1',"
+                + " now(), now(), 0 from users where username = 'alice'");
+            assertThatThrownBy(() -> statement.execute(
+                    "insert into password_reset_otps (user_id, code_hash, created_at, expires_at, attempts)"
+                    + " select id, 'h2', now(), now(), 0 from users"
+                    + " where username = 'Bob'"))
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("idx_password_reset_otps_user");
         }
     }
 }

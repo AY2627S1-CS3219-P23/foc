@@ -61,4 +61,12 @@ public final class ProblemTypes {
     /** No owner key is set up on the server. */
     public static final URI OWNER_SETUP_TOKEN_MISSING = URI.create("urn:foc:user:owner-setup-token-missing");
     
+    /**
+     * The password-reset code is wrong, expired, spent, or belongs to
+     * no account — indistinguishable on purpose (#94): unlike the OTP
+     * types above, whose caller owns the flow, this route is where an
+     * outsider would probe other people's accounts. The remedy is one
+     * and the same: request a fresh code.
+     */
+    public static final URI RESET_CODE_INVALID = URI.create("urn:foc:user:reset-code-invalid");
 }

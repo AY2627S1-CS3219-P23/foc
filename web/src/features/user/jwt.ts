@@ -31,7 +31,9 @@ export function decodeJwtRole(token: string): UserRole | null {
   try {
     const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
     const claims = JSON.parse(json) as { role?: unknown }
-    return claims.role === 'USER' || claims.role === 'ADMIN' || claims.role === 'OWNER'
+    return claims.role === 'USER' ||
+      claims.role === 'ADMIN' ||
+      claims.role === 'OWNER'
       ? claims.role
       : null
   } catch {

@@ -4,6 +4,8 @@
  * Scope: the two credit properties: values other than the defaults are
  * the ones applied, and a value below 1 is refused when the service is
  * constructed. Written by the tool from the reviewer's comment.
+ * 2026-10-16, PR #193 review: the lifetime check is now
+ * EarnedCreditLifetime's, shared with the redistribution.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -59,14 +61,15 @@ class CreditOperationsConfigurationTest extends PostgresTestContainer {
     @ParameterizedTest
     @ValueSource(ints = { 0, -1 })
     void aSignUpAmountBelowOneIsRefused(int signUpCredits) {
-        assertThatThrownBy(() -> new CreditOperationsService(null, null, null, null, null, signUpCredits, 3))
+        assertThatThrownBy(() -> new CreditOperationsService(null, null, null, null, null, signUpCredits,
+            new EarnedCreditLifetime(3)))
             .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("credit.sign-up-credits");
     }
 
     @ParameterizedTest
     @ValueSource(ints = { 0, -1 })
     void aLifetimeBelowOneMonthIsRefused(int lifetimeMonths) {
-        assertThatThrownBy(() -> new CreditOperationsService(null, null, null, null, null, 5, lifetimeMonths))
+        assertThatThrownBy(() -> new EarnedCreditLifetime(lifetimeMonths))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("credit.earned-credit-lifetime-months");
     }
