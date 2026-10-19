@@ -23,6 +23,9 @@
  * Same day: request.accepted / request.collected (requester and courier
  * in parties), completeAutomatically; events looked up by type.
  * Same day: accept after the deadline is refused.
+ * Same day, Claude Code (Fable 5): drop now writes request.dropped
+ * (requester-only parties, courier captured before clearing; the
+ * author's decisions via options Q&A); pending pull request review.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -230,7 +233,7 @@ class RequestsServiceTests {
 	}
 
 	@Test
-	void everyStepButDropWritesItsEvent() {
+	void everyStepWritesItsEvent() {
 		Long id = newCreatedRequest();
 		requestsService.accept(id, COURIER_ID);
 		requestsService.drop(id, COURIER_ID);
@@ -239,9 +242,9 @@ class RequestsServiceTests {
 		requestsService.arrive(id, COURIER_ID);
 		requestsService.complete(id, REQUESTER_ID);
 
-		// the drop between the two accepts writes nothing (Order F5.2)
-		assertEquals(List.of("request.submitted", "request.created", "request.accepted", "request.accepted",
-				"request.collected", "request.courier-arrived", "request.completed"), eventTypes(id));
+		assertEquals(List.of("request.submitted", "request.created", "request.accepted", "request.dropped",
+				"request.accepted", "request.collected", "request.courier-arrived", "request.completed"),
+				eventTypes(id));
 	}
 
 	@Test
@@ -408,6 +411,24 @@ class RequestsServiceTests {
 		assertEquals(OrderStates.CREATED, stored.getStatus());
 		assertNull(stored.getCourierId());
 		assertNull(stored.getAcceptedAt());
+	}
+
+	@Test
+	void dropWritesRequestDroppedForTheRequester() {
+		Long id = newCreatedRequest();
+		requestsService.accept(id, COURIER_ID);
+
+		requestsService.drop(id, COURIER_ID);
+
+		JsonNode dropped = event(id, "request.dropped");
+		assertEquals("request.dropped", dropped.get("eventType").stringValue());
+		assertEquals(id.toString(), dropped.get("requestId").stringValue());
+		assertEquals("1", dropped.get("requesterId").stringValue());
+		// the courier who dropped, captured before the entity's courier
+		// fields were cleared
+		assertEquals(COURIER_ID.toString(), dropped.get("courierId").stringValue());
+		// the reward stays held (F5.2), so only the requester is told
+		assertEquals(List.of("1"), parties(dropped));
 	}
 
 	@Test

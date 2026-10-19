@@ -64,7 +64,8 @@ The team's design is in [`docs/credit-service.md`](../docs/credit-service.md)
   (`parties` = requester, plus the courier on an expiry after
   acceptance). ACCEPT and COLLECT publish `request.accepted` and
   `request.collected` (`parties` = requester and courier). DROP publishes
-  nothing, so the reward stays held.
+  `request.dropped` (`parties` = requester), so the requester is told;
+  the reward stays held for the next courier.
 - **Timers** (every `ORDER_EXPIRY_SWEEP_INTERVAL_MS` /
   `ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS`, default 5 min): a CREATED or
   ACCEPTED request past its deadline is EXPIRED (F6.1); a request
