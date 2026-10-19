@@ -34,6 +34,8 @@
  * 2026-10-18: accept and collect write request.accepted and
  * request.collected (the author's decision); completeAutomatically for
  * the auto-complete sweep.
+ * Same day: accept refuses a request whose deadline has passed (409), as
+ * the expiry sweep may not have run yet (the author's decision).
  * Same day, Claude Code (Fable 5): drop writes request.dropped so the
  * requester is told (new event type, not request.cancelled — the
  * reward stays held, F5.2; the author's decision via options Q&A);
@@ -112,6 +114,10 @@ public class RequestsService {
         Requests request = transition(requestId, OrderEvents.ACCEPT);
         if (request.getRequesterId().equals(courierId)) {
             throw new IllegalStateException("A requester cannot accept their own request");
+        }
+        // past the deadline but not yet expired by the sweep: too late to take on
+        if (!request.getDeadline().isAfter(Instant.now())) {
+            throw new IllegalStateException("The request's deadline has passed");
         }
         request.setCourierId(courierId);
         request.setAcceptedAt(Instant.now());

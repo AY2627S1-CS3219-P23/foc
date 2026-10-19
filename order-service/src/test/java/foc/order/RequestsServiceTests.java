@@ -22,6 +22,7 @@
  * at least 1, deadline in the future); supplierName then made required.
  * Same day: request.accepted / request.collected (requester and courier
  * in parties), completeAutomatically; events looked up by type.
+ * Same day: accept after the deadline is refused.
  * Same day, Claude Code (Fable 5): drop now writes request.dropped
  * (requester-only parties, courier captured before clearing; the
  * author's decisions via options Q&A); pending pull request review.
@@ -335,6 +336,21 @@ class RequestsServiceTests {
 
 		assertEquals(OrderStates.COMPLETED, stored(id).getStatus());
 		assertEquals(COURIER_ID.toString(), event(id, "request.completed").get("courierId").stringValue());
+	}
+
+	@Test
+	void acceptAfterTheDeadlineIsRefusedAndChangesNothing() {
+		Long id = newCreatedRequest();
+		Requests stored = stored(id);
+		stored.setDeadline(Instant.now().minusSeconds(60));
+		requestsRepository.save(stored);
+
+		IllegalStateException e = assertThrows(IllegalStateException.class, () -> requestsService.accept(id, COURIER_ID));
+
+		assertEquals("The request's deadline has passed", e.getMessage());
+		assertEquals(OrderStates.CREATED, stored(id).getStatus());
+		assertNull(stored(id).getCourierId());
+		assertFalse(eventTypes(id).contains("request.accepted"));
 	}
 
 	@Test

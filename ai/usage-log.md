@@ -39,6 +39,68 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Aung Ko Khant (order-service: hide past-deadline requests)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `GET /requests` lists only CREATED requests whose deadline
+  is still ahead (`RequestSpecifications.after`); `RequestsService.accept`
+  refuses a request past its deadline with 409 "The request's deadline
+  has passed"; tests (97 passing); README, `endpoints.txt`.
+- **Prompt(s):** "For read endpoints, can we hide requests that are
+  already past their deadline from couriers?" The expiry sweep runs
+  every 5 min, so such requests stay CREATED until it does. The tool
+  asked as neutral options; the author chose: the open-errands list only
+  (a courier's own deliveries unchanged), and accept refused with 409.
+- **Author review:** `mvn test` in a Maven container: 97 tests, 0
+  failures. To be reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: list filters and sort)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** new `RequestFilter` (query-string record) and
+  `repository.RequestSpecifications`; `RequestsRepository` now a
+  `JpaSpecificationExecutor` (the four JPQL list queries removed);
+  `RequestsQueryService` combines the base query with the filters,
+  checks the ranges and the sort; `RequestsController` binds the filter
+  on all three lists and answers a wrong-typed value with 400; tests
+  (95 passing); README reads section; `endpoints.txt`.
+- **Prompt(s):** "for our list endpoints, could we add filtering?" The
+  tool listed candidate filters as neutral options; the author chose
+  supplier, reward range, deadline and created ranges, a sort parameter
+  (createdAt / deadline), on all three lists (not a multi-state filter).
+  Range rules (lower bound inclusive, upper exclusive, amounts at least
+  1, an offset on instants) follow credit-service's history filters.
+- **Author review:** `mvn test` in a Maven container: 95 tests, 0
+  failures. Through the gateway: minCredit, sort=deadline and a +08:00
+  createdFrom filtered as expected; minCredit=abc was a 400. To be
+  reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: read endpoints)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `GET /requests`, `/requests/{id}`, `/requests/mine`,
+  `/users/{id}/requests` in `RequestsController`; new
+  `RequestsQueryService` (read-only), `dto.RequestSummary`,
+  `dto.RequestDetail`, `dto.PageResponse` (copied from credit-service),
+  four paged repository queries; `SecurityConfig` limits the admin view
+  to ADMIN / OWNER with `RestAccessDeniedHandler` (copied from
+  credit-service) for the 403; tests `RequestsReadEndpointsTests` (90
+  passing in all); README reads section; `endpoints.txt`.
+- **Prompt(s):** "How should we set up read endpoints?" — the tool
+  declined to design the interface, listed the requirements, the other
+  services' conventions and the open decisions. The author then gave the
+  design (paths, what each returns, who may call it: open errands for
+  any user, detail for the requester / assigned courier / ADMIN / OWNER,
+  /mine by role, the admin view for ADMIN / OWNER). The tool asked the
+  remaining details as neutral options; the author chose: GET /requests
+  is CREATED only (any other state 400); lists trimmed, the detail full;
+  newest first, page size 20; the admin view covers both roles. The
+  page / size limits (0+, 1-100) follow credit-service's history.
+- **Author review:** `mvn test` in a Maven container: 90 tests, 0
+  failures. Through the gateway with the rebuilt container: open
+  errands, /mine with a state, the requester's detail 200, a
+  non-party's detail 404, the admin view 403 for an ordinary user. To be
+  reviewed via pull request.
 ## 2026-10-18 — Leong Wei Zhi (PR #215 bot-review round)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor + docs

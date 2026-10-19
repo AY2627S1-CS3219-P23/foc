@@ -17,7 +17,8 @@
   bearer-token auth and the ownership rules in the endpoints section;
   then /create's 400 field checks;
   order-e2e.ps1 section. Then request.accepted / request.collected and
-  the expiry and auto-complete timers.
+  the expiry and auto-complete timers. Then the read endpoints, and their
+  filters and sort; past-deadline requests hidden from the open list.
   Reviewed by: Ko-Khan (via pull request).
 -->
 
@@ -95,8 +96,9 @@ All are `POST` with a JSON body and need a bearer token (the platform
 JWT from user-service's login, verified with the shared `JWT_SECRET`);
 the caller is the token's user. They answer `{"message": "..."}`: 200
 on success; 409 if the event is not allowed from the request's current
-state (including a courier action on a still-PENDING request) or the
-requester tries to accept their own request; 404 if no request has that
+state (including a courier action on a still-PENDING request), the
+requester tries to accept their own request, or `/accept` comes after
+the deadline (before the expiry sweep has run); 404 if no request has that
 id **or the step is not the caller's** (the same answer, so a stranger
 cannot tell the request exists). A missing or invalid token is a 401
 problem+json. `/create` answers 400 listing every problem at once:
@@ -114,6 +116,37 @@ must be at least 1"}`.
 | `/drop` | `requestId` | the assigned courier |
 | `/cancel` | `requestId` | the requester |
 | `/complete` | `requestId` | the requester |
+
+### Reads
+
+All need a bearer token. Lists are newest first and paged like the
+supplier listing: `page` (from 0, default 0) and `size` (1-100, default
+20), answered as `{"content": [...], "page", "size", "totalElements",
+"totalPages"}`, each item trimmed to `id`, `status`, `supplierName`,
+`dropoffLocation`, `item`, `creditAmount`, `deadline`, `createdAt`. A bad
+`state`, `role`, `page` or `size` is a 400 with a `message`.
+
+Every list also takes these optional filters, combined with AND:
+
+| Parameter | Matches |
+| --- | --- |
+| `supplierId` | requests from that supplier |
+| `minCredit` / `maxCredit` | reward at least / at most (both inclusive, each at least 1) |
+| `deadlineAfter` / `deadlineBefore` | deadline at or after / before (ISO-8601 instant with an offset, e.g. `Z`; write `+08:00` as `%2B08:00`) |
+| `createdFrom` / `createdTo` | created at or after / before (same format) |
+| `sort` | `createdAt` (newest first, the default) or `deadline` (nearest first) |
+
+A range whose lower bound is not below its upper (`minCredit` above
+`maxCredit`, `deadlineAfter` not before `deadlineBefore`, ...), an unknown
+`sort`, or a value of the wrong type is a 400 naming the parameter.
+
+| Path | Returns | Who may call it |
+| --- | --- | --- |
+| `GET /requests?state=CREATED&page=&size=` | open errands for couriers (F2.1): CREATED requests whose deadline is still ahead; `state` may only be `CREATED` (the default) | any logged-in user |
+| `GET /requests/{id}` | the request in full (every column, incl. `requesterId`, `courierId` and the step timestamps) | its requester, its assigned courier, or ADMIN / OWNER; anyone else 404 |
+| `GET /requests/mine?role=requester&state=` | the caller's requests as requester, optionally in one state | the caller |
+| `GET /requests/mine?role=courier&state=` | the caller's assigned deliveries | the caller |
+| `GET /users/{id}/requests?state=` | that user's requests as requester or courier (admin view) | ADMIN / OWNER; anyone else 403 |
 
 ## Run
 
