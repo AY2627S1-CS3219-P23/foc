@@ -6,10 +6,16 @@
 // hook-facing cache-reset test hook. House style: URL-dispatching fetch
 // stub, no MSW (see notification-center.test.tsx).
 // Author review: Leong Wei Zhi to review via the PR.
+// 2026-10-19, Claude Code (Fable 5), PR #222 review (@claude bot): hook
+// recovery case added — a lookup that fails once succeeds through the
+// mounted hook's 30 s re-resolve tick after the negative TTL lapses.
+
+import { act, renderHook } from '@testing-library/react'
 
 import {
   clearUsernameCache,
   resolveUsername,
+  useUsernames,
 } from '@/features/user/usernames'
 
 vi.mock('@/lib/api/config', () => ({
@@ -59,9 +65,8 @@ afterEach(() => {
 
 // the lookups this module issued (ignores anything else on the stub)
 const lookups = () =>
-  fetchMock.mock.calls.filter(([url]) =>
-    /\/users\/[^/?]+$/.test(String(url)),
-  ).length
+  fetchMock.mock.calls.filter(([url]) => /\/users\/[^/?]+$/.test(String(url)))
+    .length
 
 describe('resolveUsername', () => {
   test('resolves a username and caches it — a second call issues no fetch', async () => {
@@ -123,5 +128,33 @@ describe('resolveUsername', () => {
     expect(String(fetchMock.mock.calls[0][0])).toBe(
       'http://user.test/users/usr%2Fodd%20id',
     )
+  })
+})
+
+describe('useUsernames', () => {
+  test("a lookup that fails once recovers on the mounted hook's tick after the negative TTL (PR #222 review)", async () => {
+    vi.useFakeTimers()
+    const { result } = renderHook(() => useUsernames(['usr-ghost']))
+
+    // first resolve 404s and negative-caches; the map stays empty
+    await act(async () => {})
+    expect(result.current.get('usr-ghost')).toBeUndefined()
+    expect(lookups()).toBe(1)
+
+    // nothing re-fetches before the first 30 s tick
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(29_000)
+    })
+    expect(lookups()).toBe(1)
+
+    // the user becomes resolvable; the tick lands past the negative
+    // TTL, re-fetches, and the name arrives without the id set changing
+    usernamesOnServer['usr-ghost'] = 'returned_user'
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000)
+    })
+    await act(async () => {})
+    expect(result.current.get('usr-ghost')).toBe('returned_user')
+    expect(lookups()).toBe(2)
   })
 })

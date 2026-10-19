@@ -9,6 +9,11 @@
 // requests are deduped in flight, and every failure degrades to "no
 // name" so the templates' actor-less copy renders — never an error.
 // Author review: Leong Wei Zhi to review via the PR.
+// 2026-10-19, Claude Code (Fable 5), PR #222 review (@claude bot): the
+// hook re-resolves on a 30 s tick while mounted, so a failed lookup
+// recovers once its negative TTL lapses (and a rename lands once the
+// positive TTL does) — previously nothing re-asked the cache until the
+// id set changed. Ticks hit the cache, not the network, inside a TTL.
 
 import { apiFetch } from '@/lib/api/http'
 import { useEffect, useMemo, useState } from 'react'
@@ -75,7 +80,10 @@ export function resolveUsername(id: string): Promise<string | null> {
 /**
  * Hydrates a list of user ids into id → username. Entries appear as
  * lookups settle (cache hits settle in a microtask); ids that can't
- * resolve simply never appear, and callers render their no-name copy.
+ * resolve render their callers' no-name copy. While mounted the hook
+ * re-resolves every {@link NEGATIVE_TTL_MS}, so a failed lookup is
+ * retried once its negative cache lapses and a rename shows once the
+ * positive TTL does — inside a TTL the tick is a cache hit, no network.
  */
 export function useUsernames(
   ids: ReadonlyArray<string | null>,
@@ -89,6 +97,15 @@ export function useUsernames(
   }, [ids])
 
   const [names, setNames] = useState<ReadonlyMap<string, string>>(new Map())
+  // bumped on an interval to re-run the resolve effect (PR #222 review:
+  // keying on the id set alone muted recovery until the ids changed)
+  const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    if (key === '') return
+    const timer = setInterval(() => setAttempt((n) => n + 1), NEGATIVE_TTL_MS)
+    return () => clearInterval(timer)
+  }, [key])
 
   useEffect(() => {
     if (key === '') return
@@ -107,7 +124,7 @@ export function useUsernames(
     return () => {
       cancelled = true
     }
-  }, [key])
+  }, [key, attempt])
 
   return names
 }
