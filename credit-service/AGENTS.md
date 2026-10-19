@@ -43,7 +43,8 @@
   PR #210 review (Leong Wei Zhi): the CreditControllerTest invariant
   counts three first-read cases.
   2026-10-19, Claude Code (Opus 5.5), issue #218: the package map and
-  invariants updated for the outbox retention purge and V3.
+  invariants updated for the outbox retention purge and V3. Same day,
+  PR #224 review (Leong Wei Zhi): the purge off in the test profile.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -104,7 +105,10 @@ IDs (D1–D13) when touching related code.
   null` in its condition: an unsent reply is one the Order Service is
   still waiting for, however old. No other table is purged: the
   reservations, history, lots and slices are the ledger. The window
-  (`credit.outbox.retention.days`) is refused below 1 at startup.
+  (`credit.outbox.retention.days`) is refused below 1 at startup. The
+  purge is off in the `test` profile
+  (`credit.outbox.retention.enabled: false`), so it cannot delete the
+  old sent rows a test stores.
 - **A reply is inserted, never saved.** `OutboxEventRepository.save`
   merges: it reads the row first, and for an event ID already stored
   would set a published reply back to unsent. `insert` fails on the

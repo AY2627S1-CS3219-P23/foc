@@ -33,7 +33,8 @@
   2026-10-17, Claude Code (Opus 5.5), issue #196: the expiries route in
   the read API and how to call it.
   2026-10-19, Claude Code (Opus 5.5), issue #218: V3 and the outbox
-  retention purge.
+  retention purge. Same day, PR #224 review (Leong Wei Zhi): off in
+  tests.
   Author review: Ryan Ang, pending pull request review.
   2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the run
   section's service URL updated for the gateway cutover (#151) — the
@@ -127,7 +128,8 @@ What is here:
   03:00 Singapore time (`CREDIT_OUTBOX_PURGE_CRON`), deletes the
   replies sent more than `CREDIT_OUTBOX_RETENTION_DAYS` (default 30)
   days ago. Unsent replies are never deleted, and no other table is
-  purged. A window below 1 day fails startup.
+  purged. A window below 1 day fails startup. Off in tests
+  (`credit.outbox.retention.enabled: false`).
 - **Expiry and redistribution** (`service/ExpiryAndRedistributionScheduler`,
   `LotExpiryService`, `RedistributionService`), in Singapore time:
   - Daily at 00:00, what remains in each lot past its expiry moves to

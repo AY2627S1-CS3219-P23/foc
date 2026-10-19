@@ -8,6 +8,8 @@
  * configuration), purging outbox_event and nothing else, and refusing a
  * window below 1 day at startup are the team's decisions; the tool
  * wrote the code to them.
+ * Same day, PR #224 review (Leong Wei Zhi): off in tests, like the
+ * other two scheduled components, the reviewer's suggestion.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -20,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -31,8 +34,12 @@ import foc.credit.repository.OutboxEventRepository;
  * again: the publisher reads only unsent rows, and duplicates are caught
  * by the reservation record, not by the outbox. An unsent reply is kept
  * however old it is. Nothing but {@code outbox_event} is purged.
+ *
+ * <p>Off in tests via {@code credit.outbox.retention.enabled=false}, so
+ * the clock cannot purge rows a test has just stored.
  */
 @Component
+@ConditionalOnProperty(name = "credit.outbox.retention.enabled", havingValue = "true", matchIfMissing = true)
 public class OutboxRetentionScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxRetentionScheduler.class);

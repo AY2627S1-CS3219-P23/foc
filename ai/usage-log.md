@@ -39,6 +39,23 @@ Entry template:
 ```
 
 ---
+## 2026-10-19 — Ryan Ang (PR #224 review: outbox retention purge off in tests)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + docs)
+- **Prompt(s):** asked to review the PR #224 comments, then to apply the
+  fix for the one inline finding.
+- **Scope:** `credit-service/`. PR review found the purge's
+  cron live in every test context, unlike the other two scheduled
+  components. Following the reviewer's suggestion and the existing
+  pattern: `OutboxRetentionScheduler` gains
+  `@ConditionalOnProperty(credit.outbox.retention.enabled, matchIfMissing
+  = true)` and its "off in tests" javadoc line; `application-test.yaml`
+  sets it to `false`; the service's `AGENTS.md` and README note it.
+  Deployed behaviour is unchanged (the property is unset there).
+- **Verification:** full credit-service suite (`./mvnw test`): 268
+  tests, 0 failures, 0 errors, 0 skipped.
+- **Author review:** Ryan Ang, pending pull request review.
+
 ## 2026-10-19 — Ryan Ang (credit-service: outbox retention purge, issue #218)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate (code + tests + docs)
