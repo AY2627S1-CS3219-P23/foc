@@ -31,6 +31,9 @@ title: "Favours on Campus (FoC) — High-Level Service Architecture"
 %% (Leong Wei Zhi, 2026-10-11, options Q&A — docs/gateway.md G1–G10):
 %% all WEB REST edges and the STOMP push now route through the gateway,
 %% which rejects revoked tokens platform-wide. Transcription only.
+%% 2026-10-15 (Claude Code, Opus 5.5), PR #187 review (Leong Wei Zhi):
+%% Order DB labelled PostgreSQL (chosen by Ko-Khan via options Q&A when
+%% order-db was wired into compose.yaml, 2026-10-10).
 %% Legend and dependency table: see docs/architecture.md
 flowchart TB
     USERS(["Users: requester / courier / admin<br/>(NUS students and platform admins)"])
@@ -67,7 +70,7 @@ flowchart TB
 
     USER_DB[("User DB<br/>PostgreSQL<br/>60 000 accounts (User NFR2)")]
     SUP_DB[("Supplier DB<br/>PostgreSQL<br/>1,000 suppliers (Supplier NFR2)")]
-    ORDER_DB[("Order DB<br/>engine TBD")]
+    ORDER_DB[("Order DB<br/>PostgreSQL")]
     CREDIT_DB[("Credit DB<br/>PostgreSQL")]
     NOTIF_DB[("Notification DB<br/>PostgreSQL")]
 

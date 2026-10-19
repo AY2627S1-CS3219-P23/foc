@@ -43,11 +43,20 @@ OTP cases pin $.type alongside the unchanged details.
 now keeps an OTP row as spent instead of deleting it, so the resend
 cooldown still gates the next code — exhaustion/takeover tests updated
 and cooldown-bypass regressions added.
+2026-10-11 (Claude Code, Fable 5), issue #94: a deleted account's login
+now carries deletionScheduledFor instead of recovering — its case pins
+the field (and its absence on an active login), since recovery moved to
+POST /users/me/recover.
+2026-10-12 (Claude Code, Fable 5), PR #179 review (@Sinnez1): that case's
+deletedAt is truncated to microseconds — Postgres stores no finer, so a
+sub-microsecond clock (Windows) read back rounded and failed the compare.
 */
 
 package foc.user.controller;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -477,6 +486,35 @@ class AuthControllerTest extends PostgresTestContainer {
             assertThat(claims.getSubject()).isEqualTo(String.valueOf(id));
             assertThat(claims.get("role", String.class)).isEqualTo("USER");
         }
+    }
+
+    @Test
+    @DisplayName("A deleted account's login reports the purge date instead of recovering (#94)")
+    void login_deletedAccountCarriesDeletionSchedule() throws Exception {
+        createAccount("e1234567@u.nus.edu", "student_alex");
+        User deleted = userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow();
+        // truncated because the column stores microseconds: a finer clock
+        // (Windows' 100 ns ticks) would read back rounded and fail the
+        // string comparison below (PR #179 review, @Sinnez1)
+        Instant deletedAt = Instant.now().minus(10, ChronoUnit.DAYS)
+            .truncatedTo(ChronoUnit.MICROS);
+        deleted.setDeletedAt(deletedAt);
+        userRepository.save(deleted);
+
+        login("student_alex", PASSWORD)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isNotEmpty())
+            .andExpect(jsonPath("$.deletionScheduledFor")
+                .value(deletedAt.plus(30, ChronoUnit.DAYS).toString()));
+
+        // recovery is POST /users/me/recover's explicit choice now
+        assertThat(userRepository.findById(deleted.getId()).orElseThrow().isActive()).isFalse();
+
+        // and an active account's body doesn't carry the field at all
+        createAccount("e7654321@u.nus.edu", "active_bob");
+        login("active_bob", PASSWORD)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.deletionScheduledFor").doesNotExist());
     }
 
     @Test

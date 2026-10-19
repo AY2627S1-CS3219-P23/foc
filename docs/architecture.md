@@ -35,6 +35,10 @@
   through the gateway, authentication note updated for revocation,
   legend covers the shared Redis store. Transcription only; no
   decisions made by the tool.
+  2026-10-15 (Claude Code, Opus 5.5), PR #187 review (Leong Wei Zhi):
+  Order DB engine no longer open — PostgreSQL 17, chosen by Ko-Khan
+  via options Q&A when order-db was wired into compose.yaml
+  (2026-10-10). Transcription only.
 -->
 
 # Favours on Campus (FoC) — High-Level Service Architecture
@@ -162,9 +166,6 @@ These shape sizing and implementation rather than adding components:
 
 ## Decisions still open (team, not AI)
 
-- **Database engine** for the Order Service — one database per service
-  is decided; the User, Supplier, Notification and Credit DBs are
-  decided (PostgreSQL; Credit per [`credit-service.md`](credit-service.md) D1).
 - **Supplier caching mechanism** (Supplier NFR1.1.1) — in-process vs. a
   shared cache; drawn inside the Supplier Service until decided.
 

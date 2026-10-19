@@ -35,6 +35,11 @@
 # logout denylist writes (team decision: Redis-only denylist, enforced at
 # the API gateway; logout is best-effort — chosen by Leong Wei Zhi via
 # options Q&A), and the Redis health indicator disabled like mail's.
+# 2026-10-11, Claude Code (Fable 5), issue #94: the password-reset codes
+# ride the user.otp.* knobs whole (ttl, max-attempts, resend-cooldown) —
+# no reset-specific configuration. An earlier same-day revision added a
+# user.password-reset.ttl for a link-shaped credential; the owner
+# revisited that to an OTP code via options Q&A and the knob went.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
 spring:
@@ -109,8 +114,9 @@ user:
   retention:
     # Soft-deleted accounts keep their row — and so their unique email/
     # username — for this many days (design doc §2: 30-day reuse block).
-    # The purge scheduler hard-deletes them, with their account_tokens
-    # rows, once deleted_at is older than this ("purge on day 31").
+    # The purge scheduler hard-deletes them, with their
+    # password_reset_otps rows, once deleted_at is older than this
+    # ("purge on day 31").
     days: ${USER_RETENTION_DAYS:30}
     # Cron schedule (Spring's 6-field format) controlling how often the
     # purge sweep runs. Default: daily at 03:00 server time.
@@ -120,6 +126,13 @@ user:
     # startup, skipping any already present (DemoAccountsSeeder). Local
     # testing and demos only: their passwords are public, in the README.
     demo: ${USER_SEED_DEMO:false}
+  internal:
+    # Shared secret sibling services present (X-Internal-Token) for the
+    # ingest-time username lookups on GET /users/{id} (issue #66, D31 —
+    # zero trust: the route stays authenticated instead of opening to
+    # the compose network). Empty default disables the filter: without
+    # INTERNAL_SERVICE_TOKEN set, no header ever authenticates.
+    service-token: ${INTERNAL_SERVICE_TOKEN:}
   jwt:
     # Shared HS256 secret (at least 32 bytes) that every service verifies
     # tokens with. Empty default: startup fails with a clear message
@@ -134,8 +147,10 @@ user:
     # MAIL_USERNAME (Gmail rewrites anything else).
     from: ${MAIL_FROM:no-reply@foc.local}
   otp:
-    # Sign-up verification code lifetime, as a Spring duration (10m); a
-    # bare number is seconds (OTP_TTL=600 is 10 min).
+    # Code lifetime for every emailed code — sign-up verification,
+    # account-update gates, email-change confirm and password reset
+    # (#94) — as a Spring duration (10m); a bare number is seconds
+    # (OTP_TTL=600 is 10 min).
     ttl: ${OTP_TTL:10m}
     # Wrong codes allowed before the pending sign-up is discarded and a
     # fresh sign-up is required (mirrors the login lockout's 5). Counted

@@ -17,6 +17,10 @@
 // 2026-10-09, Claude Code (Opus 5), PR #149 Copilot review:
 // PendingEmailChange names the account it belongs to, so the profile
 // page can tell its own snapshot from one another account left behind.
+// 2026-10-11, Claude Code (Fable 5), issue #94: deletionScheduledFor on
+// LoginResponse — login no longer silently recovers a deleted account;
+// this field (when present) is what sends the session to the
+// account-recovery screen.
 // Reviewed by: Ryan Ang
 
 // POST /auth/login body (user-service's LoginResponse DTO) — the
@@ -25,6 +29,10 @@ export interface LoginResponse {
   accessToken: string
   tokenType: string
   expiresIn: number
+  // ISO-8601 instant; present only when the account is soft-deleted —
+  // the purge date the account-recovery screen shows. Cleared from the
+  // stored session by restored() once the account is brought back.
+  deletionScheduledFor?: string
 }
 
 // What POST /auth/signup answers with (user-service's SignupResponse DTO).

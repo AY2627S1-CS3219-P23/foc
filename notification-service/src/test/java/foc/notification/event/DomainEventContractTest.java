@@ -14,7 +14,11 @@
  * now spans the request and credit domains, so the producer and
  * requestId checks go through each event's domain marker, and
  * parties is required present rather than non-empty (credit events
- * notify no one). Author review: Ryan Ang, pending pull request review.
+ * notify no one).
+ * 2026-10-18, Claude Code (Opus 5.5), issue #165 (Leong Wei Zhi's
+ * suggestion): a request event's parties is still required non-empty;
+ * only credit events may have none.
+ * Author review: Ryan Ang, pending pull request review.
  */
 package foc.notification.event;
 
@@ -71,7 +75,12 @@ class DomainEventContractTest {
 			assertThat(event.occurredAt()).isNotNull();
 			assertThat(event.producer()).isEqualTo(expectedProducer(event));
 			assertThat(event.correlationId()).isNotBlank();
-			assertThat(event.parties()).isNotNull();
+			// credit events notify no one; every request event names someone
+			if (event instanceof RequestEvent) {
+				assertThat(event.parties()).isNotEmpty();
+			} else {
+				assertThat(event.parties()).isNotNull();
+			}
 			assertThat(requestIdOf(event)).isEqualTo("req-20260919-0042");
 		}
 	}

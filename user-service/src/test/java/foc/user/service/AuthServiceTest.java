@@ -48,6 +48,14 @@ and cooldown-bypass regressions added.
 Same day, PR #157 Copilot re-review: a spent row revives only for its own
 request (original expiry kept); other details stay 409 — takeover test
 split accordingly.
+2026-10-11 (Claude Code, Fable 5), issue #94: the recovery case became
+login_deletedAccountLogsInWithoutRecovery — login keeps deletedAt and
+reports deletionScheduledFor instead of restoring (owner decision via
+options Q&A); an active-login case pins the field's absence.
+Same day, PR #179 Copilot review: a case pins the stale-credential
+retry — a reset committing between the bcrypt check and the row lock
+must not let the OLD password finish logging in; the verdict is
+discarded and the login re-checks against the fresh hash.
 */
 
 package foc.user.service;
@@ -70,6 +78,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -103,6 +113,7 @@ import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
 import foc.user.security.JwtIssuer;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -788,13 +799,51 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Logging in within the retention window recovers a soft-deleted account")
-    void login_recoversDeletedAccount() {
+    @DisplayName("Logging in within the retention window succeeds but no longer recovers (#94)")
+    void login_deletedAccountLogsInWithoutRecovery() {
         userFoundByUsername();
         user.softDelete(NOW.minus(Duration.ofDays(10)));
 
-        assertThat(login(PASSWORD).accessToken()).isNotBlank();
-        assertThat(user.isActive()).isTrue();
+        LoginResponse response = login(PASSWORD);
+
+        assertThat(response.accessToken()).isNotBlank();
+        // recovery is an explicit choice now (POST /users/me/recover);
+        // the response tells the SPA when the purge would take the
+        // account, so it can offer that choice
+        assertThat(user.isActive()).isFalse();
+        assertThat(response.deletionScheduledFor())
+            .isEqualTo(NOW.minus(Duration.ofDays(10)).plus(Duration.ofDays(30)));
+    }
+
+    @Test
+    @DisplayName("An active account's login carries no deletion schedule")
+    void login_activeAccountHasNoDeletionSchedule() {
+        userFoundByUsername();
+
+        assertThat(login(PASSWORD).deletionScheduledFor()).isNull();
+    }
+
+    @Test
+    @DisplayName("A reset committing mid-login stops the OLD password's match becoming a token")
+    void login_staleHashIsRechecked() {
+        userFoundByUsername();
+        // the reset lands exactly between login's bcrypt check and the
+        // row lock: the locked re-read (refresh) reveals a new hash, so
+        // the stale match is discarded and the whole check reruns —
+        // against the new hash, where the old password fails
+        doAnswer(invocation -> {
+            user.setPasswordHash(PLAIN_ENCODER.encode("BrandNewPass456"));
+            return null;
+        }).doNothing().when(entityManager).refresh(eq(user), eq(LockModeType.PESSIMISTIC_WRITE));
+
+        assertThatThrownBy(() -> login(PASSWORD))
+            .isInstanceOf(LoginFailedException.class)
+            .hasMessageContaining("Incorrect password");
+        // and the rerun is what counted the failure — exactly once
+        assertThat(user.getFailedLoginAttempts()).isEqualTo(1);
+
+        // the password the reset installed is what logs in
+        assertThat(login("BrandNewPass456").accessToken()).isNotBlank();
     }
 
     @Test

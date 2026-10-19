@@ -3,6 +3,8 @@
  * Tool: Claude Code (Opus 5.5), 2026-10-10.
  * Scope: JPA entity for the outbox_event table, transcribed from
  * V1__baseline.sql (docs/credit-service.md "Schema"); no logic.
+ * 2026-10-13, Claude Code (Opus 5.5), PR #188 review (Leong Wei Zhi):
+ * next_attempt_at, from V2 (team decision).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.entity;
@@ -42,6 +44,10 @@ public class OutboxEvent {
     @Column(name = "sent_at")
     private Instant sentAt;
 
+    // null = due at once; set when the broker returned the reply
+    @Column(name = "next_attempt_at")
+    private Instant nextAttemptAt;
+
     protected OutboxEvent() {
     }
 
@@ -74,5 +80,13 @@ public class OutboxEvent {
 
     public void setSentAt(Instant sentAt) {
         this.sentAt = sentAt;
+    }
+
+    public Instant getNextAttemptAt() {
+        return nextAttemptAt;
+    }
+
+    public void setNextAttemptAt(Instant nextAttemptAt) {
+        this.nextAttemptAt = nextAttemptAt;
     }
 }

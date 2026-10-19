@@ -21,6 +21,10 @@ Reviewed by: Leong Wei Zhi (via pull request).
 2026-09-30 (Claude Code, Fable 5), issue #92: the account-update gate
 and email-change confirmation messages, same shape as sign-up's; the
 new-address message says what to do if the change wasn't yours.
+2026-10-11 (Claude Code, Fable 5), issue #94: the password-reset code
+message, same shape as the other codes (never logged); it replaced a
+reset-link message when the owner revisited the credential's form via
+options Q&A.
 */
 
 package foc.user.service;
@@ -80,6 +84,20 @@ class SmtpOtpEmailSender implements OtpEmailSender {
             + "It expires in " + describe(validity) + ".\n\n"
             + "If you didn't ask to use this address for a FoC account, you "
             + "can ignore this email; the change won't happen.");
+        mailSender.send(message);
+    }
+
+    @Override
+    public void sendPasswordResetCode(String toEmail, String code, Duration validity) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(from);
+        message.setTo(toEmail);
+        message.setSubject("Your FoC password reset code");
+        message.setText("Your FoC password reset code is " + code + ".\n\n"
+            + "Enter it with your new password to finish the reset.\n\n"
+            + "It can be used once and expires in " + describe(validity) + ".\n\n"
+            + "If you didn't ask to reset your password, you can ignore this "
+            + "email; your password stays as it is.");
         mailSender.send(message);
     }
 

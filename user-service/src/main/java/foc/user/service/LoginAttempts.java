@@ -16,6 +16,18 @@ Scope: issue #147. The database write for a login attempt, split out of
        choice), so the read is fresh even if the User is already
        loaded in the persistence context.
 Author review: Ryan to review via the PR.
+2026-10-11 (Claude Code, Fable 5), issue #94: login no longer silently
+recovers a soft-deleted account (owner decision via options Q&A,
+reversing the #93-era team decision): it succeeds and AuthService
+reports the scheduled purge date (purgeAt) so the SPA can offer the
+explicit choice — restore via POST /users/me/recover, or keep deleted.
+2026-10-11 (Claude Code, Fable 5), PR #179 Copilot review: record()
+now receives the hash the bcrypt check actually ran against and
+answers STALE_CREDENTIAL when the locked re-read shows a different
+one — a concurrent password reset committing between the check and
+this lock could otherwise turn an old-password match into a fresh
+JWT. AuthService redoes the whole check; bcrypt stays outside the
+lock either way (#147's rule).
 */
 
 package foc.user.service;
@@ -37,7 +49,7 @@ import jakarta.persistence.LockModeType;
 @Component
 public class LoginAttempts {
 
-    public enum Outcome { SUCCESS, FAILED, LOCKED, GONE }
+    public enum Outcome { SUCCESS, FAILED, LOCKED, GONE, STALE_CREDENTIAL }
 
     // user: the account after a SUCCESS; retryAfter: the lock's time left
     // (LOCKED); attemptsLeft: failures left before the lock (FAILED)
@@ -56,6 +68,10 @@ public class LoginAttempts {
 
         static Result gone() {
             return new Result(Outcome.GONE, null, null, 0);
+        }
+
+        static Result stale() {
+            return new Result(Outcome.STALE_CREDENTIAL, null, null, 0);
         }
     }
 
@@ -79,7 +95,7 @@ public class LoginAttempts {
     // transaction proxy only wraps public methods, and without the
     // transaction the row lock ends with the read
     @Transactional
-    public Result record(Long userId, boolean passwordMatched, Instant now) {
+    public Result record(Long userId, boolean passwordMatched, String checkedHash, Instant now) {
         User user = entityManager.find(User.class, userId);
         if (user == null) {
             // purged between the lookup and now
@@ -95,6 +111,17 @@ public class LoginAttempts {
             return Result.gone();
         }
 
+        // the hash the caller's bcrypt check ran against is no longer the
+        // account's (a password reset committed in between): the verdict
+        // is stale in BOTH directions — an old-password match must not
+        // become a token, and a mismatch must not count against the new
+        // password — so nothing is recorded and the caller redoes the
+        // check against the fresh hash (PR #179 Copilot review). The
+        // recheck happens outside this lock, like every bcrypt here (#147)
+        if (!user.getPasswordHash().equals(checkedHash)) {
+            return Result.stale();
+        }
+
         // locked by a parallel attempt since the lookup: not counted
         if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(now)) {
             return Result.locked(Duration.between(now, user.getLockedUntil()));
@@ -108,12 +135,12 @@ public class LoginAttempts {
         }
 
         // only write when something changes: an unconditional save bumps the
-        // row's @Version and could make a concurrent admin action fail
-        if (user.getFailedLoginAttempts() != 0 || user.getLockedUntil() != null || !user.isActive()) {
+        // row's @Version and could make a concurrent admin action fail.
+        // deletedAt deliberately survives a login (issue #94): recovery
+        // is an explicit choice now, made at POST /users/me/recover
+        if (user.getFailedLoginAttempts() != 0 || user.getLockedUntil() != null) {
             user.setFailedLoginAttempts(0);
             user.setLockedUntil(null);
-            // logging in within the window recovers a soft-deleted account
-            user.setDeletedAt(null);
             userRepository.save(user);
         }
         return Result.success(user);
@@ -124,6 +151,17 @@ public class LoginAttempts {
     boolean pastRetention(User user, Instant now) {
         return !user.isActive()
             && user.getDeletedAt().isBefore(now.minus(retentionDays, ChronoUnit.DAYS));
+    }
+
+    // when the purge will take a soft-deleted account (day 31's sweep
+    // condition, deletedAt older than the retention window), or null for
+    // an active one. Lives here with the retention knob it shares with
+    // pastRetention; AuthService quotes it in the LoginResponse so the
+    // SPA can offer the restore-or-keep-deleted choice (issue #94)
+    public Instant purgeAt(User user) {
+        return user.isActive()
+            ? null
+            : user.getDeletedAt().plus(retentionDays, ChronoUnit.DAYS);
     }
 
     // returns the running failure count this attempt made;

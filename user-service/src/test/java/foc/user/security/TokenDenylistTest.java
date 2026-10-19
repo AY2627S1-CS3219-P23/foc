@@ -6,6 +6,9 @@ Scope: unit tests for TokenDenylist (issue #151) over a mocked
        already-expired skip, and the best-effort swallow of a Redis
        failure (team decision G9 — logout must not fail on an outage).
 Author review: Leong Wei Zhi to review via the PR.
+2026-10-12 (Claude Code, Fable 5), PR #179 review (@Sinnez1):
+revokeUserSessions cases added — the denylist:user:<id> stamp's shape
+and TTL, and the same best-effort swallow.
 */
 
 package foc.user.security;
@@ -32,6 +35,8 @@ class TokenDenylistTest {
 
     private static final Instant NOW = Instant.parse("2026-10-11T12:00:00Z");
 
+    private static final Duration JWT_TTL = Duration.ofHours(1);
+
     private StringRedisTemplate redis;
     private ValueOperations<String, String> values;
     private TokenDenylist denylist;
@@ -42,7 +47,9 @@ class TokenDenylistTest {
         redis = mock(StringRedisTemplate.class);
         values = mock(ValueOperations.class);
         when(redis.opsForValue()).thenReturn(values);
-        denylist = new TokenDenylist(redis, Clock.fixed(NOW, ZoneOffset.UTC));
+        JwtIssuer jwtIssuer = mock(JwtIssuer.class);
+        when(jwtIssuer.ttl()).thenReturn(JWT_TTL);
+        denylist = new TokenDenylist(redis, jwtIssuer, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -69,6 +76,28 @@ class TokenDenylistTest {
             .when(values).set("denylist:a-jti", "1", Duration.ofHours(1));
 
         assertThatCode(() -> denylist.revoke("a-jti", NOW.plus(Duration.ofHours(1))))
+            .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("Revoking a user's sessions stamps denylist:user:<id> with the epoch second, for one token TTL")
+    void revokeUserSessions_stampsCutoff() {
+        denylist.revokeUserSessions(42L);
+
+        // the gateway refuses user 42's tokens whose iat predates the
+        // stamp; by the time the key expires, so have those tokens
+        verify(values).set("denylist:user:42",
+            String.valueOf(NOW.getEpochSecond()), JWT_TTL);
+    }
+
+    @Test
+    @DisplayName("A Redis failure on the session revocation is swallowed too — best-effort like logout")
+    void revokeUserSessions_swallowsRedisFailure() {
+        doThrow(new RedisConnectionFailureException("redis is down"))
+            .when(values).set("denylist:user:42",
+                String.valueOf(NOW.getEpochSecond()), JWT_TTL);
+
+        assertThatCode(() -> denylist.revokeUserSessions(42L))
             .doesNotThrowAnyException();
     }
 }

@@ -6,6 +6,19 @@
   change they describe, following the template below; each entry names
   its own tool, author, and review.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-10-17, Codex (GPT-6): recorded PR #180 review work and the
+  missing main-sync entry from its PR description and file headers.
+  Author review: Leong Wei Zhi to review via PR #180.
+  2026-10-17, Codex (GPT-6.1 Sol): recorded implementation and verification
+  of the Docker-unavailable test skips for issue #98.
+  PR #197 review: recorded the CI skipped-test check and its verification.
+  2026-10-17, Claude Code (Opus 5): appended the issue #203 entry below.
+  PR #209 main merge: this file was the only conflict — both sides had
+  appended fresh entries under the same `---`, so both were kept (the
+  #203 entry first, then main's three order-service ones) and the stray
+  second `---` the #203 entry had introduced was dropped; nothing
+  reworded or removed.
+  Author review: Leong Wei Zhi to review via pull request.
 -->
 
 # AI Usage Log
@@ -26,6 +39,1654 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Aung Ko Khant (order-service: hide past-deadline requests)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `GET /requests` lists only CREATED requests whose deadline
+  is still ahead (`RequestSpecifications.after`); `RequestsService.accept`
+  refuses a request past its deadline with 409 "The request's deadline
+  has passed"; tests (97 passing); README, `endpoints.txt`.
+- **Prompt(s):** "For read endpoints, can we hide requests that are
+  already past their deadline from couriers?" The expiry sweep runs
+  every 5 min, so such requests stay CREATED until it does. The tool
+  asked as neutral options; the author chose: the open-errands list only
+  (a courier's own deliveries unchanged), and accept refused with 409.
+- **Author review:** `mvn test` in a Maven container: 97 tests, 0
+  failures. To be reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: list filters and sort)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** new `RequestFilter` (query-string record) and
+  `repository.RequestSpecifications`; `RequestsRepository` now a
+  `JpaSpecificationExecutor` (the four JPQL list queries removed);
+  `RequestsQueryService` combines the base query with the filters,
+  checks the ranges and the sort; `RequestsController` binds the filter
+  on all three lists and answers a wrong-typed value with 400; tests
+  (95 passing); README reads section; `endpoints.txt`.
+- **Prompt(s):** "for our list endpoints, could we add filtering?" The
+  tool listed candidate filters as neutral options; the author chose
+  supplier, reward range, deadline and created ranges, a sort parameter
+  (createdAt / deadline), on all three lists (not a multi-state filter).
+  Range rules (lower bound inclusive, upper exclusive, amounts at least
+  1, an offset on instants) follow credit-service's history filters.
+- **Author review:** `mvn test` in a Maven container: 95 tests, 0
+  failures. Through the gateway: minCredit, sort=deadline and a +08:00
+  createdFrom filtered as expected; minCredit=abc was a 400. To be
+  reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: read endpoints)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `GET /requests`, `/requests/{id}`, `/requests/mine`,
+  `/users/{id}/requests` in `RequestsController`; new
+  `RequestsQueryService` (read-only), `dto.RequestSummary`,
+  `dto.RequestDetail`, `dto.PageResponse` (copied from credit-service),
+  four paged repository queries; `SecurityConfig` limits the admin view
+  to ADMIN / OWNER with `RestAccessDeniedHandler` (copied from
+  credit-service) for the 403; tests `RequestsReadEndpointsTests` (90
+  passing in all); README reads section; `endpoints.txt`.
+- **Prompt(s):** "How should we set up read endpoints?" — the tool
+  declined to design the interface, listed the requirements, the other
+  services' conventions and the open decisions. The author then gave the
+  design (paths, what each returns, who may call it: open errands for
+  any user, detail for the requester / assigned courier / ADMIN / OWNER,
+  /mine by role, the admin view for ADMIN / OWNER). The tool asked the
+  remaining details as neutral options; the author chose: GET /requests
+  is CREATED only (any other state 400); lists trimmed, the detail full;
+  newest first, page size 20; the admin view covers both roles. The
+  page / size limits (0+, 1-100) follow credit-service's history.
+- **Author review:** `mvn test` in a Maven container: 90 tests, 0
+  failures. Through the gateway with the rebuilt container: open
+  errands, /mine with a state, the requester's detail 200, a
+  non-party's detail 404, the admin view 403 for an ordinary user. To be
+  reviewed via pull request.
+## 2026-10-18 — Leong Wei Zhi (PR #215 bot-review round)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor + docs
+- **Source:** the three @claude bot comments on PR #215.
+- **Scope:** `useLocalStorage`'s cross-tab `storage` listener became
+  opt-in (`{ sync: true }`, used only by the sound preference) — the
+  hook-wide listener had silently made the `'user'` session key swap a
+  tab's account live when another tab logged in, a behaviour change
+  beyond this PR with no test; the listener's `defaultValue` fallback
+  now reads through a ref so an object-literal default cannot
+  re-subscribe every render; a new `notifications.test.tsx` case pins
+  that another tab's write of `'user'` is NOT adopted. The PR
+  description no longer promises background-tab chimes (the visibility
+  gate is deliberate: the visible tab speaks for all open tabs).
+- **Prompt(s):** "address the latest pr comments from claude bot".
+- **Author review:** Leong Wei Zhi to review via the PR; `npm test`
+  (273 passing), lint, format:check, build all clean.
+
+## 2026-10-18 — Leong Wei Zhi (PR #215 review fixes)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debug + refactor
+- **Source:** all six items are @Sinnez1's PR #215 review comments.
+- **Scope:**
+  - **`chime.ts`:** a policy-blocked `resume()` is no longer awaited —
+    its promise stays pending until a user gesture, so stacked awaits
+    all released and chimed together on the first click (the blocking
+    item); a context that reached `closed` is replaced, not reused; the
+    context suspends itself ~0.6 s after a chime so the audio thread
+    idles, with an `idled` flag so that self-suspension is woken by the
+    next chime rather than mistaken for an autoplay block; new
+    `unlockChime()` creates/resumes the context inside a gesture for
+    iOS Safari.
+  - **`NotificationProvider.tsx`:** the chime keys on an arrival
+    counter bumped before the body parse (a frame that fails
+    `JSON.parse` bumps the badge, so it chimes too); only the visible
+    tab chimes; the first `pointerdown` hands its gesture to
+    `unlockChime`.
+  - **`useLocalStorage.tsx`:** a `storage` listener adopts another
+    tab's write of the key, so a mute in one tab lands everywhere
+    (noted: this also syncs the `'user'` session across tabs).
+  - Tests follow in `chime.test.ts` (never-settling fake `resume`,
+    no-stack-on-unlock, closed-context replacement, idle/wake,
+    unlockChime) and `notifications.test.tsx` (malformed frame chimes,
+    hidden tab quiet, cross-tab mute, pointerdown unlock).
+- **Author review:** Leong Wei Zhi to review via the PR; `npm test`
+  (271 passing), lint, format:check, build all clean.
+
+## 2026-10-18 — Leong Wei Zhi (notification sound, follow-up to issue #66)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `web/` — a bell chime on live STOMP notification arrivals
+  with a client-stored mute: new `features/notifications/chime.ts` (Web
+  Audio two-tone synth, every blocked/muted path silent);
+  `NotificationProvider` keys the chime on the pushed queue's identity
+  (live arrivals only — REST seeds, reconnect catch-ups and the logout
+  reset stay silent; a burst batched into one render chimes once) and
+  holds the localStorage-backed toggle (`notificationSoundEnabled`,
+  default on) in the context; toggle surfaces in the Notification
+  Center header (`aria-pressed` icon button) and a new profile
+  Preferences card (`role="switch"`); `useLocalStorage.setValue`
+  memoized so the context `useMemo` holds; tests in `chime.test.ts`
+  plus new cases in `notifications.test.tsx`,
+  `notification-center.test.tsx`, `profile.test.tsx`; wireframe
+  deviation rows in `web/AGENTS.md`.
+- **Prompt(s):** "i want to have a bell sound on the web everytime a
+  notification is arrived, the sound can be disabled by the client (the
+  setting should be stored on the client), also if the external system
+  like os or web browser tab disables sound, then the notification
+  should be silent" — surface (both toggles) and sound source (Web
+  Audio synthesis, no binary asset) chosen by the author via options
+  Q&A.
+- **Author review:** Leong Wei Zhi to review via the PR; `npm test`
+  (263 passing), `npm run lint`, `npm run format:check`, `npm run
+  build` all clean. Known limit flagged in the PR: a push arriving
+  before the first user gesture after a cold page load may be silent
+  (browser autoplay policy; accepted, no workaround added).
+
+## 2026-10-18 — Leong Wei Zhi (PR #214 review round)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor + docs
+- **Scope:** all three findings of @Sinnez1's PR #214 review:
+  `order-service/README.md`'s "DROP publishes nothing" line updated to
+  `request.dropped` (blocking); the `RequestsService` header's older
+  "DROP still publishes nothing" line marked "(until request.dropped,
+  below)"; `RequestEvents.dropped` now takes the dropping courier as a
+  parameter (the reviewer's snippet), so the enqueue no longer depends
+  on running before the courier fields are cleared.
+- **Prompt(s):** "address pr comments and reply to each comment
+  individually".
+- **Author review:** to review via PR #214. `RequestsServiceTests`
+  rerun 36/36.
+
+---
+## 2026-10-18 — Leong Wei Zhi (request.dropped notification)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** a courier dropping an accepted request now notifies the
+  requester. New `request.dropped` contract (`RequestDropped` record,
+  registry entry, `request-dropped.example.json` fixture, count test
+  bumped to 12); `RequestsService.drop` enqueues
+  `RequestEvents.dropped` before clearing the courier fields;
+  order-service tests (`everyStepWritesItsEvent` renamed and extended,
+  new `dropWritesRequestDroppedForTheRequester`); web template in
+  `eventMessage.ts` + Notification Center test cases; event-catalog
+  paragraph in `docs/notification-service.md` and the F5.2 row in
+  `docs/credit-service.md`. Notification- and credit-service code
+  untouched (`request.#` binding and field-driven name enrichment pick
+  the type up; credit-service binds explicit keys and never sees it).
+- **Prompt(s):** "we dont have a notif if courier drops a request
+  after accepting. make one"; decisions via options Q&A: event name
+  `request.dropped`, parties = the requester only, one PR across
+  contracts + order-service + web.
+- **Author review:** to review via pull request. Verified:
+  foc-contracts 11/11, order-service `RequestsServiceTests` 36/36,
+  notification-service 94 tests with `DomainEventContractTest`
+  validating the new fixture, web vitest suite. The 5 order-service /
+  1 notification-service `internalRabbitListenerEndpointRegistry`
+  context-restart errors reproduce on a clean `origin/main` worktree
+  under local Java 26 (known environmental issue, not this change).
+
+---
+## 2026-10-18 — Ryan Ang (PR #212 review follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** docs + code comments
+- **Source:** every item below is a suggestion from 
+  PR #212 review.
+- **Scope:**
+  - **Credit F2.1.3** (`docs/credit-service.md`): the traceability
+    row's left column restored to the requirement as stated ("reject
+    creation when available < reward"), keeping the reworded
+    implementation column; Credit F2.1.3 put back next to Order F1.1.4
+    in "Requirements to revise", and the "has been revised" sentence
+    removed. The requirement itself is left for the team.
+  - **Resent reply wording:** comments in `ReserveResult`,
+    `RequestEventHandler`, `CreditOperationsService` and two test
+    headers, the `request.submitted` handler row and the README now say
+    the reply is rebuilt from the event with the record's decision,
+    not "the recorded reply"; the rejection reason is described as
+    worked out from the recorded reward.
+  - **Redelivery failure row:** names the two cases in which the
+    resend comes into play (a crash between commit and ack, an operator
+    replaying the submission), since the outbox never drops a reply.
+  - **Comments:** `CreditOperations.reserve` javadoc states its result
+    per existing record status; the `REJECTED` case in
+    `applyReserve` points at the `V1__baseline.sql` invariant;
+    `DomainEvent.parties()` (foc-contracts) states that only credit
+    events may name no one.
+  - README AI Use Summary paragraph updated and its grammar fixed.
+  - Not done: storing the rejection reason on the row (a migration the
+    reviewer left optional; a team decision), and the PR body's
+    "Closes" line (author's choice).
+- **Prompt(s):** Asked to read the PR #212 review comments, then to
+  review the blocking item and all notes except the PR-body one.
+- **Verification:** comment and doc changes only. foc-contracts
+  `./mvnw install` (with its tests), credit-service main and test
+  compile, and notification-service `DomainEventContractTest` all pass;
+  `git diff --check` clean.
+- **Author review:** Ryan Ang, pending pull request review.
+
+## 2026-10-18 — Ryan Ang (issue #165 follow-ups from Leong Wei Zhi's PR #163 re-review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** implementation + tests + docs
+- **Source:** every item below was found by Leong Wei Zhi in the
+  PR #163 re-review and tracked in issue #165; the fixes are the
+  reviewer's suggestions, taken as written by team decision.
+- **Scope:**
+  - **Duplicate `request.submitted` on `HELD` / `REJECTED`:** it
+    answered nothing, so a reply lost after the commit (for example a
+    dead-lettered `credit.reserved`) could never be recovered and the
+    Order Service's give-up timer would cancel a request whose credits
+    had reserved fine. `ReserveResult` gains `ALREADY_RESERVED`,
+    `ALREADY_REJECTED_INSUFFICIENT_CREDITS` and
+    `ALREADY_REJECTED_INVALID_AMOUNT` (the reason rebuilt from the
+    recorded reward, since only a reward below 1 is refused as
+    invalid); `RequestEventHandler` resends `credit.reserved` or
+    `credit.reservation-rejected` for them. `DUPLICATE` now means a
+    settled record (`TRANSFERRED` / `RELEASED`), which owes no reply.
+    Tests: operations, handler and listener integration tests updated
+    or added. `docs/credit-service.md`: the `request.submitted` row of
+    "How each event is handled" and two failure rows.
+  - **`DomainEventContractTest`** (notification-service): `parties`
+    must be non-empty for request events again; only credit events may
+    have none.
+  - **Diagram legend** in `docs/credit-service.md`: no longer claims
+    the same notation as `architecture.md`, and states the two
+    differences (`-->` covers JDBC, `---` unused).
+  - **Credit F2.1.3** (the credit half of #165's "Requirements to
+    revise" item): the traceability row in `docs/credit-service.md`
+    reworded to describe what is implemented (refused as `REJECTED`,
+    rejection published, request moves `pending` → `rejected`, same
+    rejection on redelivery), and Credit F2.1.3 dropped from
+    "Requirements to revise". Transcription of the existing saga
+    design; no new behaviour chosen. The Order requirements (F0.1,
+    F1.1, F1.1.4, NFR1.1) left for the Order owner.
+- **Prompt(s):** Asked to fix the duplicate-reply item using the
+  reviewer's suggestion and to explain the problem, then to continue
+  with the remaining #165 follow-ups, then to update the credit-side
+  requirement to match the implementation and leave the Order ones.
+- **Verification:** credit-service `./mvnw test` with Docker running:
+  262 tests, 0 failures, 0 skipped. notification-service
+  `DomainEventContractTest`: 2 tests, 0 failures.
+- **Author review:** Ryan Ang, pending pull request review.
+
+## 2026-10-16 — Alastair Tan (order-service frontend pages)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** generate
+- **Scope:** web/ only — `src/features/order/` (types, status helpers, API client, dev-only in-memory mock, components), `src/features/credit/api.ts` (balance read), and the pages `my-requests`, `create-request`, `open-requests`, `active-delivery`, `request-history` plus their route entries in `src/routes/index.tsx`, built from `web/docs/wireframes/`. No backend files touched. The order-service endpoint paths and field names in `features/order/api.ts` and `types.ts` are placeholders pending the order-service owner's contract; the mock (`VITE_MOCK_ORDER_API=true`, dev server only) is temporary.
+- **Prompt(s):** "build the frontend pages for this service and run the UI to let me take a look at it; backend no need to be touched, we only work on the frontend."
+- **Author review:** Pending — author to review the diff via the PR, and the API contract with the order-service owner.
+## 2026-10-18 — Aung Ko Khant (order-service: accepted/collected events, expiry and auto-complete)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `RequestsService.accept` / `.collect` write
+  `request.accepted` / `request.collected` (`RequestEvents`, parties =
+  requester and courier); new `DeadlineExpirySweeper` (CREATED / ACCEPTED
+  past the deadline -> EXPIRE, F6.1-F6.2) and `AutoCompleteSweeper`
+  (ARRIVED longer than the delay -> `RequestsService.completeAutomatically`,
+  F7.2), modelled on `PendingTimeoutSweeper`; two repository queries;
+  `order.expiry.*` / `order.auto-complete.*` settings, compose and
+  `.env.example` variables, scheduler pool 2 -> 4; `endpoints.txt`
+  brought up to date with the API; README saga section; tests (82
+  passing). Also committed the earlier `/create` field-check tests.
+- **Prompt(s):** "Can you perform the ones that only require small
+  decisions" (from the remaining-tasks list). The tool asked as neutral
+  options; the author chose: both sweeps every 5 min; auto-complete after
+  1 h, configurable; accepted / collected notify requester and courier;
+  update `endpoints.txt` and push.
+- **Author review:** `mvn test` in a Maven container: 82 tests, 0
+  failures. Live run with the intervals shortened through environment
+  variables: a request past its deadline became EXPIRED and an ARRIVED
+  one COMPLETED within 25 s, with request.accepted / collected / expired /
+  completed all sent; the container was then restarted on the defaults.
+  To be reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: create field checks)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `RequestsService.create` checks a new request before storing
+  it: the NOT NULL columns present (blank text counts as missing;
+  `supplierName` optional), `creditAmount` at least 1 (F1.1.3), `deadline`
+  in the future (F1.1.2); every problem in one `InvalidRequestException`
+  (new), which `RequestsController` answers 400 with the message. Tests
+  (78 passing); README endpoints paragraph. Then `supplierName` made
+  required in the check too ("Can we have suppliername field be required
+  for now?"); its column stays nullable.
+- **Prompt(s):** "When creating a request, can we check that all required
+  fields are there and raise an error explicitly if not instead of
+  silently failing" (a missing field was a bare 500). The tool asked as
+  neutral options; the author chose: required = the database's NOT NULL
+  columns (supplierName optional); 400 listing every missing field; also
+  check the reward and deadline values in the same 400.
+- **Author review:** `mvn test` in a Maven container: 78 tests, 0
+  failures. Rebuilt container through the gateway: missing fields 400 with
+  the list, reward 0 and a past deadline 400, a valid create 200. To be
+  reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: order-e2e.ps1)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** new `order-service/order-e2e.ps1`: logs in a requester and
+  a courier (real user-service accounts, passwords prompted hidden),
+  creates requests through the gateway, gets them reserved (credit-service
+  within 5 s, else `credit-stub.ps1`), and checks 11 steps against the
+  ownership rules (409 self-accept, 404 other party, 401 no token, 200
+  owner); README section.
+- **Prompt(s):** "How can I manually test user verified order service",
+  then "Could we write this as a script".
+- **Author review:** run by the tool against the compose stack with two
+  throwaway accounts it created in the local user-db through sign-up and
+  Mailpit (e2e_requester, e2e_courier): 11 of 11 checks passed. The
+  first run showed this branch's credit-service never reserves (no
+  request-event listener before main's), hence the stub fallback. To be
+  reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: scripts call as users)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** split from the 2026-10-18 ownership-checks entry:
+  `ManualRequestsHarness` acts as each step's party; `order-curl.ps1`
+  signs a bearer token like user-service's (HS256 with `.env`'s
+  `JWT_SECRET`; sub, role, jti, iat, exp) for the step's party, or for
+  `-As`, and no longer sends `requesterId` / `courierId`.
+- **Prompt(s):** part of "I would like to add owner ship checks ..."
+  (the endpoints now need a token).
+- **Author review:** `order-curl.ps1` run through the gateway against the
+  rebuilt container (owners 200, other party 404, self-accept 409). To be
+  reviewed via pull request.
+
+## 2026-10-17 — Aung Ko Khant (order-service: credit and user stubs)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** new `order-service/credit-stub.ps1` (sends `credit.reserved`
+  / `credit.reservation-rejected` for one request to `credit-events`
+  via the RabbitMQ management API, values read from order-db; warns if
+  credit-service is running or the request is not PENDING; prints the
+  resulting status), new `order-service/stub-users.psd1` (alice 1, bob
+  2, carol 3, dave 4), `order-curl.ps1` `-Requester` / `-Courier` take a
+  name or an id (courier default now bob instead of 7), README section.
+- **Prompt(s):** "can we create a stub for credit service and user
+  service?" The tool asked as neutral options; the author chose: for
+  testing order-service alone; the credit stub replies only when told
+  (reserve/reject per call); the user stub is a fixed user list.
+- **Author review:** run against the compose stack with credit-service
+  stopped: reserve moved a request PENDING -> CREATED and accept then
+  succeeded; reject moved one to REJECTED and a later reserve was
+  ignored. A first run failed with RabbitMQ `not_json` (Windows
+  PowerShell piped a BOM); fixed by sending the body from a BOM-less
+  file. To be reviewed via pull request.
+
+---
+
+## 2026-10-17 — Aung Ko Khant (gateway: /api/order route)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug
+- **Scope:** `gateway/nginx.conf` — the reserved `/api/order/` 503 stub
+  replaced with a proxied location identical in form to credit's (auth
+  check, prefix stripped, `order-service:8080`); `docs/gateway.md`
+  routing-table row; `order-service/order-curl.ps1` default `BaseUrl`
+  now `http://localhost:8090/api/order`.
+- **Prompt(s):** `./order-curl create` failed with "Failed to connect to
+  localhost:8088". Cause: order-service lost its host port in the
+  gateway cutover (G3), and the gateway still answered the stub. The
+  stub's own comment and G3 reserved the prefix for this replacement,
+  so no new decision was made.
+- **Author review:** gateway rebuilt with compose; `./order-curl.ps1
+  create` returned 200 "Request 1 created" through the gateway. To be
+  reviewed via pull request.
+
+---
+
+## 2026-10-13 — Aung Ko Khant (order-service: manual-testing scripts)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `order-service/order-event.ps1` and `order-curl.ps1`
+  (new), `ManualRequestsHarness` (interactive mode),
+  `order-service/README.md` manual-testing sections. Later extended:
+  reserve / reject / timeout (2026-10-15) and arrive (2026-10-16).
+- **Prompt(s):** split from the 2026-10-13 RequestsController entry.
+  After asking how to test the transitions against the real database
+  and view the rows in DBeaver, "Can you create a script?": the tool
+  wrote `order-event.ps1`, which runs the existing
+  `ManualRequestsHarness` in a Maven container against the compose
+  `order-db`. Then "is it possible for it to stay on until I am done":
+  the tool added an interactive mode to the harness
+  (`-Dinteractive=true`) and made the script start it when run with no
+  event. Then "Can I test the endpoints using a curl script?": the
+  tool wrote `order-curl.ps1`, which POSTs to one endpoint with curl
+  and prints the status and body.
+- **Author review:** the interactive mode was run in the Maven
+  container against `order-db` with piped commands; `order-curl.ps1`
+  was run against the compose order-service (create, accept, collect,
+  complete, plus a 409 and a 404). To be reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: ownership checks)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service bearer-token auth copied from credit-service
+  (`security.JwtVerifier`, `JwtAuthenticationFilter`,
+  `RestAuthEntryPoint`, `config.SecurityConfig` with per-service CORS
+  allowing POST; `spring-boot-starter-security`, jjwt 0.13.0;
+  `order.jwt.secret` / `order.web-allowed-origin`; `JWT_SECRET` and
+  `WEB_ALLOWED_ORIGIN` passed in compose). `RequestsController` takes
+  the caller from the token: `/create` makes them the requester and
+  `/accept` the courier (`requesterId` / `courierId` removed from the
+  bodies). `RequestsService`: collect, arrive and drop only by the
+  assigned courier; cancel and complete only by the requester; checked
+  before the state, anyone else gets the unknown-request 404. Tests
+  (73 passing) sign tokens with the test secret; README endpoints
+  section. The manual-testing scripts' token support follows in a later
+  commit.
+- **Prompt(s):** "I would like to add owner ship checks. Users should
+  only be able to add requests for themselves. All steps in the
+  lifecycle should only be able to be performed by a single person."
+  The token mechanism follows the existing services (credit-service,
+  supplier-service: shared `JWT_SECRET`, `sub` = user id). The tool
+  asked as neutral options; the author chose: requester = create (for
+  self), cancel, complete; assigned courier = collect, arrive, drop;
+  accept = any user but the requester, no admin override; ids taken
+  from the token instead of the body; a step that is not the caller's
+  answers 404.
+- **Author review:** `mvn test` in a Maven container: 73 tests, 0
+  failures. Run through the gateway against the rebuilt container:
+  self-accept 409, other party's collect / complete 404, the owners'
+  steps 200, no token 401. To be reviewed via pull request.
+
+## 2026-10-18 — Aung Ko Khant (order-service: no self-accept)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService.accept` refuses a courier id
+  equal to the request's requester id (IllegalStateException, so the
+  controller answers 409 and the transaction rolls back); tests in
+  `RequestsServiceTests` and `RequestsControllerTests` (67 passing);
+  README endpoints paragraph.
+- **Prompt(s):** "Is there a check for whether courier and requester
+  are the same person?" (there was none). The tool asked how a refusal
+  should answer (409 / 403 / 400) as neutral options; the author chose
+  409 Conflict.
+- **Author review:** `mvn test` in a Maven container: 67 tests, 0
+  failures. To be reviewed via pull request.
+
+## 2026-10-16 — Aung Ko Khant (order-service: ARRIVED state)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService
+  .arrive` (sets `arrivedAt`, writes `request.courier-arrived` to the
+  outbox), `RequestEvents.courierArrived`, `POST /arrive` in
+  `RequestsController`, the `Requests` status comment, `endpoints.txt`,
+  the README, and tests (57 passing). The ARRIVED constant in
+  `OrderStates` was the author's own edit; the state-machine part
+  (ARRIVE, COLLECTED -> ARRIVED -> COMPLETED) was committed on its own
+  earlier, and the harness, `order-curl.ps1` and `order-event.ps1`
+  changes follow in a later commit.
+- **Prompt(s):** "I would like to add an arrived state between
+  collected and completed, the point is to inform requester that
+  courier has arrived". The tool asked the open choices as neutral
+  options; the author chose: COMPLETE only from ARRIVED (no direct
+  COLLECTED -> COMPLETED); ARRIVE publishes `request.courier-arrived`
+  (the existing foc-contracts record) now; `parties` = the requester
+  only. `/arrive` takes the same `{requestId}` body as `/collect`.
+- **Author review:** `mvn test` run in a Maven container: 57 tests,
+  0 failures. Not yet run against a live broker or notification-service.
+  To be reviewed via pull request.
+
+## 2026-10-13 — Aung Ko Khant (order-service: RequestsController)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, explain
+- **Scope:** order-service `foc.order.controller.RequestsController`
+  (new; six POST endpoints) and `RequestsControllerTests` (new);
+  `order-service/README.md`; README AI Use Summary. The same session's
+  `order-event.ps1`, `order-curl.ps1` and harness interactive mode are
+  logged with the manual-testing tools in a later commit.
+- **Prompt(s):** "How can I start adding endpoints", "Treat order
+  service as its own isolated microservice for now" (explanations
+  only; the tool declined to pick routes or request/response shapes
+  and listed them as the author's decisions), then "Can you add a
+  method for each event for me to fill out?". The tool wrote a
+  `@RestController` with one unmapped, empty stub method per
+  `OrderEvents` constant, each commented with the `RequestsService`
+  method it corresponds to. No routes, HTTP methods, parameters,
+  DTOs or status codes were chosen by the tool. Then "For the create
+  event, I would like a row to be added to db based on the
+  parameters supplied to create method, status should be created":
+  the tool filled in `create()` to take the entity's caller-supplied
+  columns as parameters, build a `Requests` and store it through the
+  existing `RequestsService.create` (which sets status `CREATED`).
+  The method is still unmapped. Then "fill out stub methods with
+  corresponding method from request service. Modify method
+  signatures as needed": the tool made `accept`, `collect`,
+  `cancel`, `drop`, `expire` and `complete` each delegate to the
+  `RequestsService` method of the same name, taking that method's
+  parameters and returning its `Requests` result, and fixed the
+  compile errors in the author's in-progress edits (`void` methods
+  returning a value, a `requestService` typo, and a
+  `setStatus('CREATED')` line, removed because
+  `RequestsService.create` already sets the status). Still unmapped.
+  Not compiled or run by the tool (no JDK or Docker available in the
+  session). Then "Can you help me add the endpoints": the
+  tool declined to pick the interface and listed what it needed; the
+  author wrote `endpoints.txt` (paths and parameters for create,
+  accept, collect, drop, cancel, complete) and asked "Can we create
+  these endpoints?". Four points the file left open were put to the
+  author as neutral-options Q&A, and the author chose: POST with a
+  JSON body; `creditAmount` and `deadline` added to `/create` (both
+  are NOT NULL columns); a JSON `{"message": ...}` response with 200
+  / 409 (illegal transition) / 404 (unknown id); endpoints only, no
+  event publishing in this change. The tool mapped the six
+  controller methods accordingly (`expire` left unmapped), added
+  `RequestsControllerTests`, and ran the full order-service suite in
+  a Maven container (25 tests, all passing).
+- **Author review:** Stubs are to be filled out by the author, who
+  decides the interface; reviewed via pull request.
+
+## 2026-10-17 — Aung Ko Khant (order-service: request.cancelled / request.expired)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService.cancel` and `.expire` write
+  `request.cancelled` / `request.expired` to the outbox with the state
+  change; `RequestEvents.expired` (new) and the existing `cancelled`
+  builder; a comment on `drop` that it must not publish (Order F5.2);
+  README saga section; tests (65 passing): each event's fields and
+  parties, and no event from a refused cancel.
+- **Prompt(s):** "Can we add events for expire and cancel, these should
+  release credits back to requester". The Credit Service already
+  releases on both (docs/credit-service.md D9). The tool noted that the
+  foc-contracts `RequestExpired` record has no `courierId` and
+  describes expiry before acceptance, while the state machine also
+  expires ACCEPTED requests, and asked who goes in `parties`. The
+  author chose: expired = requester plus the courier when one had
+  accepted; cancelled = requester only.
+- **Author review:** `mvn test` in a Maven container: 65 tests, 0
+  failures. Not yet run end to end against credit-service. To be
+  reviewed via pull request.
+
+## 2026-10-17 — Aung Ko Khant (order-service: request.completed)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService.complete` writes
+  `request.completed` to the outbox in the same transaction as the
+  COMPLETED status; `RequestEvents.completed` builds it from the
+  existing foc-contracts `RequestCompleted` record; README saga
+  section; tests (62 passing): the event's fields, the event sequence,
+  and no event when COMPLETE is refused.
+- **Prompt(s):** "I would like to publish an event when an order is
+  completed successfully, to signal to credit service to release
+  credits to courier". The Credit Service already transfers on
+  `request.completed` using `requestId` and `courierId`
+  (docs/credit-service.md D9). The tool asked as neutral options who
+  goes in `parties`; the author chose requester and courier.
+- **Author review:** `mvn test` in a Maven container: 62 tests, 0
+  failures. Not yet run end to end against a live broker and
+  credit-service. To be reviewed via pull request.
+
+## 2026-10-16 — Aung Ko Khant (order-service: status enum)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `Requests` (`status` is now `OrderStates` with
+  `@Enumerated(EnumType.STRING)` and a hand-written
+  `check (status in (...))` in its text column definition),
+  `RequestsService`, `CreditReplyHandler`, `PendingTimeoutSweeper`,
+  `RequestsRepository` (enum instead of names), and tests (60 passing):
+  a save without `createdAt`, a bad status rejected by the database,
+  and every `OrderStates` constant accepted by it. The `createdAt`
+  default from the same session was committed on its own earlier.
+- **Prompt(s):** "Is it enforced that status must be one
+  of the enums we defined" (it was not) and "I would like the states to
+  be an enum". `columnDefinition = "text"` stopped Hibernate generating
+  its check constraint; the tool asked as neutral options (drop the
+  column definition / write the check into it / Java-only) and the
+  author chose the hand-written check.
+- **Author review:** `mvn test` in a Maven container: 60 tests, 0
+  failures. Under `ddl-auto: update` an existing order-db `requests`
+  table does not gain the check until it is recreated. To be reviewed
+  via pull request.
+
+## 2026-10-15 — Aung Ko Khant (order-service: saga with the Credit Service)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `RequestsService` (create starts PENDING; reserve/reject/timeout),
+  new `CreditReplyHandler`, `PendingTimeoutSweeper`, `RequestEvents`,
+  `EventOutbox`, `EventPublisher`, `OutboxPublisher`, `OutboxEvent` +
+  repository, `messaging.rabbitmq` (converter, topology, initializer,
+  `RabbitEventPublisher`, `CreditEventsListener`), configuration,
+  compose/`.env.example` variables, the order-service README, and
+  tests (54 passing). The state-machine part (PENDING, REJECTED and
+  their events) was committed on its own earlier; the harness and
+  `order-event.ps1` changes follow in a later commit.
+- **Prompt(s):** "I think we need to add 2 additional stages pending
+  and rejected to coordinate with credit service. Pending is to check
+  if there are enough credits for requester and to reserve it, rejected
+  is in the event that there are not enough". The saga itself was
+  already the team's design (`docs/credit-service.md` D7–D8, D10, and
+  "What the other services must build"). The tool asked the open
+  order-side choices as neutral options; the author chose: event names
+  RESERVE / REJECT / TIMEOUT; only those leave PENDING; scope including
+  the broker wiring; only the four saga transitions publish; copy
+  credit-service's outbox and retry layout with its values; field
+  mapping pickupLocation = supplierName, note = item; correlationId =
+  the request id; 30 s pending timeout swept every 15 s.
+- **Tool's readings, for the author to confirm:** a reply naming no
+  known request is dead-lettered at once (credit-service D11's rule
+  for events that conflict with the recorded state); queue names
+  `order-service.credit-events[.retry|.dlq]` follow credit-service's
+  consumer-prefixed convention; the listener's retry republish waits
+  on a correlated confirm (the outbox needs correlated confirms on the
+  same connection, where notification-service uses simple ones).
+- **Author review:** `./mvnw test` run in a Maven container: 54 tests,
+  0 failures. Not yet run against a live broker or credit-service. To
+  be reviewed via pull request.
+
+## 2026-10-12 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, explain
+- **Scope:** order-service `foc.order.RequestsService` (body of the
+  author's empty `@Service` stub) and `RequestsServiceTests`;
+  order-service README status paragraph; README AI Use Summary.
+- **Prompt(s):** "So how do we add transitions to this file?", "How do
+  I wire this to db?", "Which existing module's responsibility is it
+  to change the db?" (explanations only), then "Can you populate
+  requestservice". The tool wrote one method per `OrderEvents`
+  constant: load via `RequestsRepository`, ask `OrderStateMachine`
+  for the next state, set the status and the entity's existing
+  courier/timestamp columns. The class was named `RequestsService` to
+  match the author's file name (the stub's class was `RequestService`,
+  which does not compile in `RequestsService.java`). The `status`
+  field was left as a `String`; the tool raised String-vs-enum as the
+  author's choice and changed nothing in the entity. No validation,
+  ownership checks, error mapping or event publishing were added.
+- **Author review:** Integration tests against in-memory H2 (each
+  event's stored status and columns; illegal event leaves the row
+  unchanged); `mvn test` passes (19 tests). Reviewed via pull request.
+## 2026-10-17 — Leong Wei Zhi (issue #137: purge processed_events past retention)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** notification-service — `ProcessedEventRepository`
+  (`deleteByProcessedAtBefore`, bulk `@Modifying @Query` mirroring the
+  PR #81 notification purge pattern), `ProcessedEvent`
+  (`idx_processed_events_processed_at`), `RetentionPurgeScheduler`
+  (same run/cutoff also sweeps the dedupe table, one combined log
+  line), tests (`ProcessedEventRepositoryTest` new,
+  `RetentionPurgeSchedulerTest` extended), and the doc set
+  (design doc D4/D9/components/trace/config, service README, AGENTS.md).
+- **Prompt(s):** Asked to plan and resolve issue #137. Two
+  implementation details were author-decided via neutral options Q&A:
+  purge cutoff reuses the 30-day `NOTIF_RETENTION_DAYS` window (vs 2×
+  retention or a separate property), and `processed_at` gets an index
+  (vs matching the unindexed notifications purge).
+- **Author review:** `./mvnw clean test` — the new tests pass; the two
+  `ApplicationContext` restart errors (AMQP listener bean under local
+  Java 26) reproduce identically on unmodified main. Pending pull
+  request review.
+- **PR #201 review round (Codex, 2026-10-17):** two findings assessed,
+  no code change. The queued-redelivery dedupe gap is the same accepted
+  ≥30-day-outage class as the issue's DLQ-replay path — now named
+  explicitly in the scheduler javadoc and the design doc's D4 note. The
+  run-off-the-heartbeat-scheduler suggestion was rejected as
+  pre-existing #68 design (documented in `WebSocketStompConfig`), with
+  the indexed daily delete far below the 10 s heartbeat interval at
+  this scale.
+- **main merge (2026-10-17):** merged `origin/main` (through PR #195)
+  into the branch to clear the PR #201 conflict. Three docs conflicted,
+  all against #66's notification work: `ai/usage-log.md` (both sides
+  appended at the top — kept every entry), the design doc and the
+  service README (disclosure headers kept both lines; the F3.4 trace
+  row and the Status line take #66's newer REST wording with the
+  `processed_events` sweep folded in). No code conflict. `./mvnw clean
+  test`: 94 run, 1 error — the `RetentionPurgeSchedulerTest`
+  `ApplicationContext` AMQP failure, which unmodified main reproduces
+  identically (92 run, same error); both purge tests pass 2/2 in
+  isolation.
+- **main merge, round 2 (2026-10-17):** merged `origin/main` (now
+  through PR #199, #209 and #210) to clear the PR #201 conflict again.
+  One conflict this time, `ai/usage-log.md` — both sides had appended
+  at the top of the entry list, so the resolution keeps every entry
+  from each side with this branch's entry first, matching the earlier
+  merge. Verified by heading count: 144 on the branch + 151 on main
+  with 143 shared gives the 152 the merged file has, and no heading
+  from either parent is missing. No code conflict and no doc conflict:
+  the design doc and the service README now carry only this branch's
+  own edits over main. `./mvnw clean test`: 94 run, 1 error — the same
+  `RetentionPurgeSchedulerTest` `ApplicationContext` AMQP failure that
+  unmodified main reproduces under local Java 26; the four purge tests
+  pass 4/4 in isolation.
+
+## 2026-10-17 — Ryan Ang (PR #210 review: upcoming credit expiries)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + tests + docs
+- **Scope:** Leong Wei Zhi's review of PR #210 (issue #196), and a merge
+  of `main` (#202's order-service code) whose only conflict, this log,
+  was resolved by keeping both sides.
+  - `web/src/features/credit/CreditHistoryPage.tsx` and `api.ts`: the
+    expiries are read on page load and on every balance poll, keyed on
+    the poll's `version` instead of `available`/`reserved`. The test
+    that pinned the old trigger is replaced by one with the reviewer's
+    case: the same balance, a different lot set, and the line and
+    notice update on the next poll.
+  - `CreditControllerTest`: a first expiries read that commits outside
+    the test transaction (`NOT_SUPPORTED`), like the balance and
+    history routes; "two first-read cases" made three there and in
+    `credit-service/AGENTS.md`.
+  - `docs/credit-service.md`: the contract's cadence sentence for
+    `GET /credits/me/expiries`, and the "No window" bullet's upper
+    bound (hundreds of lots for a busy courier, about 450 at five
+    errands a day) in place of the earlier understatement.
+- **Prompt(s):** Asked to go through the review's three findings. For
+  the blocker (the expiry line going stale when two balance changes
+  cancel out between polls), the tool laid out four options neutrally
+  (re-read daily, on a new history row, on every poll, or a marker on
+  the balance route), and the team chose re-reading on every poll,
+  reversing its earlier "not on every poll" decision. The two
+  non-blocking items were applied as the reviewer described: add the
+  first-read test, and correct the doc's stated list size rather than
+  add a limit.
+- **Author review:** `./mvnw test` in `credit-service` with Docker
+  (259/259) and the `web` suite (199/199) with `tsc -b`, eslint and
+  Prettier; the new web test fails against the old trigger. Pending
+  pull request review.
+
+## 2026-10-17 — Ryan Ang (upcoming credit expiries: route and credits page, issue #196)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate + tests + docs
+- **Scope:** `credit-service/` (`GET /credits/me/expiries` in
+  `CreditController`, `CreditQueryService.upcomingExpiries`,
+  `ExpiriesResponse`, and the route's cases in `CreditControllerTest`),
+  the route in `docs/credit-service.md`'s Read API contract and REST API
+  component row, and the service's README and AGENTS.md. Then `web/`:
+  `getExpiries()`, `expiry.ts` (items grouped by Singapore date), the
+  Available card's line, `ExpiryNotice`, and their tests in
+  `credits.test.tsx`.
+- **Prompt(s):** Asked to implement #196, backend then web, to the
+  team's decisions, given in full: a new route
+  `GET /credits/me/expiries` returning `{"items": [{amount,
+  expiresAt}]}`, one item per lot still holding credits, ordered by
+  `expiresAt` then lot ID, with no lot IDs, no window, sign-up, drained
+  and reserved credits left out, past dates kept until the expiry run,
+  an empty list rather than 404, get-or-create first, and the web app
+  reading it on page load and balance changes rather than on the poll.
+  The web half to the same decisions: the soonest credits on the
+  Available card ("5 credits expire by 12 Jan"), a notice above the
+  transactions only when they expire within 7 days ("3 credits expire
+  on 12 Jan. Use them on a request before then."), dates in Singapore,
+  no "never expire" line, and nothing on the badge or profile card.
+  The tool's own choices: reusing the spend-order query, whose order is
+  the contract's with the sign-up lot last, and dropping that lot;
+  counting anything dated today or earlier in Singapore as "tonight",
+  since tonight's 00:00 run moves it; the soonest Singapore date's
+  items added up for the card and the notice; and an expiries read
+  that fails showing nothing rather than an error.
+- **Author review:** `./mvnw test` in `credit-service` with Docker, and
+  the `web` suite with `tsc -b` and eslint. Pending pull request
+  review.
+
+## 2026-10-17 — Leong Wei Zhi (self-deletion keeps the admin role, issue #203)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** docs (+ one test)
+- **Scope:** `user-service/README.md`, `docs/gateway.md`,
+  `user-service/src/main/java/foc/user/service/ProfileService.java`
+  (comment only) and
+  `user-service/src/test/java/foc/user/security/JwtAuthenticationTest.java`.
+  - The asymmetry #203 reported: `DELETE /users/{id}` demotes the
+    target to USER and stamps `denylist:user:<id>` (#179, #178);
+    `DELETE /users/me` does neither, so a self-deleting ADMIN keeps the
+    role for the 30-day window — the admin routes authorize on the
+    token's claim alone — and restores as ADMIN.
+  - `README.md`'s login section claimed "no admin powers ride along"
+    for every deleted account; it was true only of admin removal. Now
+    both paths are stated there and in the soft-delete section;
+    `docs/gateway.md`'s G12 note says self-deletion writes no stamp.
+  - `JwtAuthenticationTest.selfDeletedAdminKeepsAdminRoutes`: an ADMIN
+    self-deletes, logs in inside the window (200 with
+    `deletionScheduledFor`), the fresh token carries ADMIN, `GET /users`
+    answers 200 and `GET /users/me` 404 — the acceptance in #203.
+  - No behaviour changed.
+- **Prompt(s):** "resolve #203" — the tool read the cited files, then
+  put the issue's three options (A demote on self-delete, B active-
+  caller check on the admin routes, C accept and document) as a neutral
+  question.
+- **Author review:** Decision by Leong Wei Zhi: **option C** — the
+  state is self-inflicted and nobody but the account's owner can open
+  or close it, so the window is accepted and only the docs were wrong.
+  Verified by `./mvnw clean test` in `user-service` (367/367 green,
+  one more than before).
+
+## 2026-10-17 — Aung Ko Khant (order-service: createdAt default, pushed first)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug
+- **Scope:** order-service `Requests.createdAt` defaults to
+  `Instant.now()`, so a `save()` that never calls `setCreatedAt` still
+  passes the not-null check; the column stays NOT NULL.
+- **Prompt(s):** 2026-10-16, pasted PR review comment (blocking:
+  `createdAt` is `nullable = false` but nothing sets it). The reviewer
+  offered a field default (as Notification and User do),
+  `@CreationTimestamp` or `@PrePersist`; the tool applied the field
+  default, compared it with `@CreationTimestamp` when asked, and the
+  author kept the default.
+- **Author review:** a test saving a request without `createdAt` comes
+  with the service code in a later commit; this commit's tests run in a
+  Maven container on a clean checkout. To be reviewed via pull request.
+
+## 2026-10-17 — Aung Ko Khant (order-service: state machine states, pushed first)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service `OrderStates` (PENDING and REJECTED added by
+  the tool on 2026-10-15; ARRIVED added by the author on 2026-10-16),
+  `OrderEvents` (RESERVE, REJECT, TIMEOUT on 2026-10-15; ARRIVE on
+  2026-10-16), `OrderStateMachine` (PENDING -RESERVE-> CREATED,
+  -REJECT-> REJECTED, -TIMEOUT-> CANCELLED; COLLECTED -ARRIVE->
+  ARRIVED -COMPLETE-> COMPLETED) and `OrderStateMachineTests`.
+  Committed ahead of the rest of the 2026-10-15 to 10-17 order-service
+  work at the author's request ("Can we push state machine changes
+  first?"); the service, messaging and endpoint code that fires these
+  events follows in later commits with their own entries.
+- **Prompt(s):** 2026-10-15: "I think we need to add 2 additional
+  stages pending and rejected to coordinate with credit service"; the
+  saga is the team's design (`docs/credit-service.md` D7-D8), and the
+  author chose the event names RESERVE / REJECT / TIMEOUT and that only
+  they leave PENDING. 2026-10-16: "I would like to add an arrived state
+  between collected and completed, the point is to inform requester
+  that courier has arrived"; the author chose COMPLETE only from
+  ARRIVED (no direct COLLECTED -> COMPLETED).
+- **Author review:** this commit's tests run in a Maven container on a
+  clean checkout of it: 15 tests, 0 failures. To be reviewed via pull
+  request.
+
+## 2026-10-11 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service request state machine skeleton —
+  `foc.order.OrderStateMachine` (transition table) and
+  `OrderStateMachineTests`; `package foc.order;` line added to the
+  author's `OrderStates` / `OrderEvents` enums; order-service README
+  status paragraph; README AI Use Summary.
+- **Prompt(s):** "Help me implement skeleton of state mchine", with
+  the author's hand-written `OrderStates` and `OrderEvents` enums
+  (including the guard comments on CANCEL, DROP and EXPIRE) as input.
+  The tool asked two neutral-options questions and the author chose:
+  DROP leads ACCEPTED -> CREATED (not CANCELLED), and a plain-Java
+  transition table (not the Spring Statemachine library). The
+  remaining transitions were transcribed from the enums and their
+  comments.
+- **Author review:** Transition table pinned by unit tests (every
+  permitted transition, every other state/event pair rejected);
+  `mvn test` passes (11 tests). Reviewed via pull request.
+
+## 2026-10-17 — Ryan Ang (admin dashboard: common pool box, issue #174 branch)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Scope:** `credit-service/`, `web/` and `docs/credit-service.md`.
+  - Credit service: `GET /credits/admin/pool` (pool balance, the
+    accounts a redistribution shares among, a preview of each share,
+    the last run and when the next is due) and
+    `GET /credits/admin/redistributions` (recorded months, newest
+    first, paged), in `AdminCreditController` and `PoolQueryService`,
+    with two response records; `SecurityConfig` gates
+    `/credits/admin/**` to `ADMIN` and `OWNER`. Tests:
+    `PoolQueryServiceTest` (6) and `AdminCreditControllerTest` (10).
+  - Design doc: an "Admin routes" part of the Read API contract and a
+    403 row. The service's README and AGENTS.md (package map, and the
+    "only the caller's own data" invariant's one exception).
+  - Web: `CommonPoolCard` on the admin dashboard above the Users
+    section, two `creditApi` calls and their types; times shown in
+    Singapore time. Tests in `credits.test.tsx` (3); `admin.test.tsx`
+    fakes the new call and expects the second section.
+- **Prompt(s):** Asked for a box on the admin dashboard showing the
+  common pool, how many users it would be shared among, and the last
+  and next distribution.
+- **Author review:** Team decisions, via options Q&A: a summary route
+  plus a paged run history (the server computing the next run and the
+  share preview); ADMIN and OWNER only; the account count with a share
+  preview; built on the #174 branch. Choices the tool made for the
+  author to review: the route paths and field names; the next run
+  following PR #193's routine (the 1st at 00:00 Singapore time once the
+  month is recorded, otherwise the next midnight), although this branch
+  does not have #193's scheduler yet; the box loading once when the
+  dashboard opens. Checked through the gateway as an ADMIN (summary)
+  and a USER (403), and in the browser. Then, at the author's request:
+  the dashboard subtitle removed, and a past-distributions table under
+  the figures (`PastDistributions`, 12 months a page, its "Run at"
+  column right-aligned) on the runs route, with the formatting shared
+  in `poolFormat.ts`; 3 more tests in `credits.test.tsx`.
+  Pending pull request review.
+
+## 2026-10-17 — Ryan Ang (web: credit balance and history, issue #174)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Scope:** `web/`.
+  - `src/features/credit/`: `api.ts` (`GET /credits/me` and
+    `/credits/me/history` through `apiFetch`), `types.ts`,
+    `history.ts` (each history type's label, sign and description; the
+    filter inputs turned into the query, local days to UTC instants
+    with the end exclusive, and the range checks),
+    `CreditBalanceProvider` + `useCreditBalance` (one balance poll for
+    the app), `CreditHistoryPage` and its `BalanceCards`,
+    `HistoryFilters` and `HistoryList` (a table on desktop, cards on
+    mobile).
+  - `routes/credits.tsx` and `/credits` behind `ProtectedRoute`; the
+    provider as a layout route below `NotificationProvider`.
+  - `shared/shell/CreditsBadge.tsx` shows the live available balance as
+    a link to `/credits`; `ProfileDetailsCard`'s Credit Status shows the
+    live balance with a link (a user-domain file, flagged in the PR).
+  - Tests: `credits.test.tsx` (19); `profile.test.tsx` fakes the
+    balance call, since a running gateway answers the test token with a
+    401 that signs the session out; `app.test.tsx` checks the new badge.
+  - `web/AGENTS.md`'s wireframe row and the README's AI Use Summary.
+- **Prompt(s):** Review and scaffold issue #174 on the current branch.
+- **Author review:** Team decisions, via options Q&A: the lifetime-earned
+  card replaced by Total and no running-balance column (the API has
+  neither); `/credits` as its own page reached from the badge and the
+  profile card, with no nav item; minimum and maximum amount fields;
+  and polling the balance every 30 s while the tab is visible, paused
+  while it is hidden and refetched when it is shown. Choices the tool
+  made for the author to review: the type labels and descriptions; a
+  row's sign follows its change to the available balance, with
+  `TRANSFER_OUT` shown as a loss; a failed poll keeps the last balance;
+  the page reloads its rows when a poll finds the balance changed; the
+  badge shows a dash while logged out. Checked in the browser against
+  the running stack at 1280 and 390 px wide, including a date filter
+  the server accepted. Then, at the author's request, a loss's amount
+  shown in red, as a gain's is in green. Pending pull request review.
+
+## 2026-10-17 — Leong Wei Zhi (issue #66: D29 reversed — ingest-time name enrichment, D30/D31)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor + generate
+- **Scope:** `foc-contracts` (requesterName/courierName removed from
+  all nine request records, example JSONs, README/AGENTS, record-shape
+  test inverted to a no-display-names guard), `user-service`
+  (`InternalServiceTokenFilter` + SecurityConfig wiring + yaml binding
+  + ProfileControllerTest cases), `notification-service`
+  (`UserDirectory` port, `RestUserDirectory` adapter + unit test,
+  processor enrichment, both yamls, pom: spring-boot-starter-restclient),
+  `compose.yaml`, `.env.example`, `docs/notification-service.md`
+  (D29 removed as superseded; D30/D31 + "Display-name enrichment"
+  section added).
+- **Prompt(s):** The author questioned coupling display names into the
+  shared event contracts ("do we really want to couple name in events
+  since requester id is already present?") and decided the reversal
+  through neutral options Q&A rounds: IDs-only events with
+  notification-service enrichment (D30); enrichment at ingest, stored
+  in the payload, after establishing the live STOMP push would
+  otherwise prepend actor-less rows; names injected into the payload
+  map so the web templates are untouched; lookups via the existing
+  GET /users/{id} behind a TTL cache; and a zero-trust static internal
+  token (D31) after explicitly rejecting the AI-suggested permitAll
+  ("we want zero trust even though gateway has it"). AI also explained
+  why borrowing the STOMP CONNECT JWT cannot work (offline recipients,
+  1 h token lifetime vs CONNECT-only checks, credential replay).
+- **Author review:** foc-contracts suite green; user-service
+  ProfileControllerTest 20/20; notification-service 91/92 with only the
+  known Java-26-local context-restart AMQP error on
+  `RetentionPurgeSchedulerTest` (passes alone; exists on main). To be
+  reviewed via pull request (PR #198).
+- **PR #205 review (2026-10-17):** both reviewer bots' inline note
+  confirmed valid — the username lookup ran inside the @Transactional
+  ingest, so a user-service stall could hold a pooled DB connection for
+  seconds per event. Fixed as the reviewers suggested: the lookup moved
+  before the transaction (programmatic TransactionTemplate replaces
+  @Transactional); duplicates now pay a cache-absorbed lookup. Suite
+  re-run green (same 91/92).
+
+## 2026-10-17 — Leong Wei Zhi (Notification Center, web half of issue #66)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `web/src/features/notifications/` (new: types, api module,
+  eventMessage templates + relativeTime, NotificationCenter page;
+  modified: NotificationProvider — badge seeds from
+  GET /notifications/me/unread-count on login/reconnect and re-syncs
+  after writes, pushed frame body exposed for the open Center to
+  prepend; useNotifications context widened), `routes/notifications.tsx`
+  + the route table, the bell (button → Link to /notifications), tests
+  (`notification-center.test.tsx` new; `notifications.test.tsx` and
+  `app.test.tsx` updated for the link bell and a URL-dispatching fetch
+  stub), `web/AGENTS.md` wireframe row.
+- **Prompt(s):** The web half of issue #66's plan. UI decisions were the
+  author's via neutral options Q&A (no recommendations): clicking an
+  unread row marks it read (no mark-unread affordance), an All/Unread
+  filter toggle, a "Load more" append pager, display names rendered
+  from the event payloads (backend D29; superseded the same day by D30 —
+  the names now arrive via ingest-time enrichment, same payload
+  shape, web untouched), pushed frames prepend into the
+  open Center, and the badge re-fetches the server count after writes.
+  Layout follows web/docs/wireframes/notification-center.png; the three
+  controls the wireframe doesn't draw are recorded in web/AGENTS.md.
+- **Author review:** `npm run lint`, `prettier --check`, all 168 vitest
+  tests and `npm run build` pass. To be reviewed via pull request.
+- **PR #199 review (2026-10-17), Claude Code (Opus 5):** eleven inline
+  findings from the two reviewer bots (@claude, @codex) triaged — the
+  two backend ones were already fixed on main by the #205 review and
+  are not in this diff; the rest were valid and are fixed, each with a
+  regression test that fails against the pre-review code. A failed
+  "Load more" is retryable rather than skipping its page (`loaded` /
+  `attempt` split from `page`); a filter switch clears the previous
+  filter's page count; a page-0 answer merges rather than discards
+  frames pushed while it was in flight; "Mark all as read" only touches
+  rows that existed when it started; the empty state hides behind an
+  error banner; the bulk control falls back to the loaded rows when the
+  best-effort badge count is unavailable; a count sync can no longer
+  erase a pushed increment (newest-sync-wins guard, plus a push starting
+  its own sync); pushes queue instead of a single replaceable value, so
+  two frames batched into one render both land; and the relative times
+  tick on a 60 s clock. One finding was a UX fork, not a defect, so the
+  author decided it via neutral options Q&A: under the Unread filter a
+  row marked read now leaves the list (and read-all empties it), while
+  the All filter keeps graying in place. Re-verified: 179 vitest tests,
+  `tsc -b`, eslint and Prettier clean.
+- **Browser run (2026-10-17), Claude Code (Opus 5):** drove the branch
+  against the live compose stack with Playwright (Vite dev server on
+  5173, gateway 8090, 14 then 13 seeded notifications published to the
+  `request-events` exchange as demo_user_001). Confirmed working: the
+  REST-seeded badge, all nine event templates with D30 display names,
+  D25's created_at ordering, "Load more", the Unread filter, a row
+  marked read leaving the Unread list, a live STOMP push prepending and
+  re-syncing the badge, and the ticking relative times. It also found
+  one defect the unit tests had missed: after "Mark all as read"
+  emptied the Unread view, the page count from the last fetch outlived
+  its rows and the dashed empty state rendered with a "Load more"
+  button under it. Fixed (the bulk write clears the Unread page count,
+  and the pager is gated on having rows) with a regression test that
+  fails against the pre-fix code; 180 vitest tests green.
+- **PR #199 review, round 2 (2026-10-17), Claude Code (Opus 5):** after
+  the #195 main sync, two threads were still open. @claude found that
+  "Load more" skips rows under the Unread filter: the list is
+  offset-paged over a set that shrinks as rows are read, so asking for
+  `loaded + 1` steps past the rows that moved up into the slice just
+  vacated. Confirmed against the live API — with 13 unread, marking 3
+  read makes `page=1` return 0 rows while `page=0` returns the 10
+  remaining, 3 of them never seen. Fixed by deriving the next offset
+  from the rows held (`floor(items.length / PAGE_SIZE)`, the held rows
+  being a prefix of the server's current set) and testing "is there
+  more" against `totalElements` rather than a page count computed from
+  an older, larger set; the fetch request became one value carrying its
+  own replace/append mode, so a page number and the merge it implies
+  cannot disagree. The reviewer's secondary claim that a push also
+  loses a row does not hold — a push shifts every offset by exactly one
+  and the one-row overlap is absorbed by the id dedupe. The test stub
+  gained a small mutating server model for the unread set, which is
+  what makes "mark read, then Load more" honest; two paging fixtures
+  that used one-row pages against a `size=10` request were corrected.
+  @codex's standing P1 (the README's consolidated AI Use Summary had
+  the backend half of #66 but not the web half) was valid against
+  AGENTS.md duty 4 and is now addressed. 213 vitest tests, `tsc -b`,
+  eslint and Prettier clean.
+- **PR #199 review, round 3 (2026-10-17), Claude Code (Opus 5):** the
+  approving review (@Sinnez1) left one actionable nit: "Load more" can
+  disappear before everything is loaded, because `totalElements` only
+  moves on a fetch while live pushes add rows to the list — 15 on the
+  server with 10 held, then 5 pushed, and the rows held reach a total
+  those rows postdate, hiding the pager over 5 unreachable rows. Valid
+  and fixed by keeping the two in step: a push raises the total by the
+  rows it actually prepends. The same defect runs the other way under
+  the Unread filter, which the nit did not mention — a row marked read
+  leaves the list but not the total, so one page of unread rows grew a
+  pager that offered a page already on screen — so the read path lowers
+  the total too. Two regression tests, both failing against the
+  pre-review code. The review's second point (credit-service's
+  rejection reasons are lowercase machine strings, so a row reads
+  "…rejected: insufficient available credits") was a copy fork rather
+  than a defect and the reviewer called it fine as it is; put to the
+  author via neutral options Q&A against leaving it, capitalising the
+  reason, and mapping the two known reasons — the author chose to leave
+  the service's wording unchanged, so no code change. 215 vitest tests,
+  `tsc -b`, eslint and Prettier clean.
+
+---
+## 2026-10-17 — Leong Wei Zhi (notification REST API, backend half of issue #66)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `notification-service/` REST API (new `config/`,
+  `controller/`, `dto/` packages; `security/` filter + handlers;
+  repository queries; `NotificationQueryService`; both application
+  yamls; pom), `foc-contracts` request-event records
+  (requesterName/courierName + record-shape test), the nine test files
+  constructing those records (notification- and credit-service),
+  `compose.yaml`, `.env.example`, `docs/notification-service.md` (+
+  `.mmd`), service README/AGENTS.md. New tests: `SecurityConfigTest`
+  (chain 401s + the `/ws/info` stays-open canary for #67),
+  `NotificationControllerTest` (order, paging 400s, ownership 404s,
+  idempotent writes, unread count/filter).
+- **Prompt(s):** Asked to plan and resolve issue #66. Every API/UX
+  decision was made by the author via neutral options Q&A rounds
+  (no recommendations): scope split (backend + web PRs), PATCH-with-body
+  shape, `/notifications/me` base path, created_at list order,
+  204 + ownership-scoped bulk UPDATE (count 0 → 404, no existence
+  oracle), empty filter authorities, `POST /read-all`,
+  `GET /unread-count` → `{"count": n}`, `?unread=true` filter, and
+  display names carried in the event payloads rather than rendered from
+  IDs or looked up cross-service. Recorded as D24–D29 in
+  `docs/notification-service.md`; implementation mechanics transcribe
+  credit-service's precedent (its SecurityConfig/controller/test style).
+- **Author review:** full suites run — foc-contracts and credit-service
+  (217/217) green; notification-service 83 tests with the known
+  Java-26-local context-restart AMQP error on `RetentionPurgeSchedulerTest`
+  (passes alone; same environmental failure exists on main). To be
+  reviewed via pull request.
+- **PR #198 Codex review (2026-10-17):** both findings reproduced in
+  tests before fixing. (1) Jackson's default coercion bound
+  {"read":"true"}/{"read":1} → 204 where the contract promises 400 —
+  fixed with a field-scoped strict Boolean deserializer (the AMQP
+  mapper is untouched). (2) The /** CORS registration policed the /ws
+  paths, 403ing a handshake Origin the WS config allows — narrowed to
+  /notifications/**. Both pinned by new tests.
+- **PR #198 follow-up (2026-10-17):** reverted the strict-deserializer
+  fix above — author decided the PATCH `read` field should keep
+  Jackson's default scalar coercion rather than reject it, so
+  `StrictBooleanDeserializer` and its pinning test are removed and
+  `MarkReadRequest` is back to a plain `Boolean`. The CORS fix is
+  unaffected and stays. `docs/notification-service.md`'s REST API
+  contract (D24) is reworded to document the PATCH body's coercion as
+  deliberate rather than promising 400 for every non-boolean. Also
+  addressed Sinnez1's non-blocking review nit on the `unread` query
+  param: rather than hand-validating it like `page`/`size`, D27 and
+  the REST API table now document that `unread` uses Spring's
+  standard boolean conversion (accepts `1`/`yes`/`on` and
+  `0`/`no`/`off` alongside `true`/`false`) — both are the author's
+  decisions via options Q&A, not this tool's.
+- **Author review:** `mvn -pl notification-service test` after the
+  revert; reviewed via pull request.
+
+## 2026-10-16 — Ryan Ang (PR #193 review: expiry and redistribution scheduler)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + tests + docs
+- **Scope:** `credit-service/` and `docs/credit-service.md`, for Leong
+  Wei Zhi's review.
+  - `ExpiryAndRedistributionScheduler`: one routine, `run`, called by
+    the 00:00 daily job and at startup: the sweep, then the current
+    Singapore month's redistribution, which the service skips if the
+    month is recorded. The 00:10 job and the catch-up's time check are
+    gone. Review findings 1 (startup sweep), 2 (no retry of a failed
+    run) and 3 (order not enforced) are answered by it.
+  - `EarnedCreditLifetime`: the earned-credit expiry and its `>= 1`
+    check, moved from `CreditOperationsService` and used by both it
+    and `RedistributionService` (finding 4).
+  - Tests: `ExpiryAndRedistributionSchedulerTest` rewritten (8: the
+    order inside the routine, the Singapore month on the 1st, an
+    ordinary day and a startup with the month recorded, a missed
+    month at startup, a failed redistribution completed the next day,
+    and neither step throwing at startup);
+    `aPoolSmallerThanTheAccountsGivesOneEachAndSkipsTheRest` makes its
+    own accounts (finding 5); `CreditOperationsConfigurationTest`
+    builds the new component.
+  - Design doc: D12 and the failure table (the down-at-00:00 row, and
+    new rows for a failed run, a month that never completes, and a
+    startup run overlapping the 00:00 one). The service's README and
+    AGENTS.md, and the README's AI Use Summary, updated.
+- **Prompt(s):** Asked whether a proposed single daily-and-startup
+  routine answers the review's first two findings, then to implement
+  it with the review's smaller items.
+- **Author review:** The single routine, dropping the 00:10 time, and
+  
+  ing that a month failing every day until its end is skipped
+  (its credits stay in the pool) are team decisions; the tool wrote
+  the code, tests and doc text to them. The shared component is the
+  reviewer's suggested option. Pending pull request review.
+
+## 2026-10-16 — Ryan Ang (credit-service: expiry and redistribution scheduler, issue #173)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Scope:** `credit-service/` and `docs/credit-service.md`.
+  - `service/LotExpiryService`: moves what remains in each lot past its
+    expiry to the common pool, one transaction per account (the
+    owner's account lock, their lots read again, then the pool), with
+    one `EXPIRY` history row per account.
+  - `service/RedistributionService`: in one transaction, locks every
+    account in ascending user ID order and then the pool, gives each
+    `floor(pool / accounts)` and the remainder 1 each to accounts
+    chosen at random, each share a new lot that expires the
+    earned-credit lifetime after it is received, with a
+    `REDISTRIBUTION` history row; records the month in
+    `redistribution_run`, checked before and after the locks.
+  - `service/ExpiryAndRedistributionScheduler`: expiry daily at 00:00
+    and redistribution on the 1st at 00:10, Asia/Singapore; a missed
+    month caught up at startup, after an expiry run; one account's
+    failed expiry logged
+    without stopping the others. Off in the `test` profile
+    (`credit.scheduler.enabled`).
+  - Repositories: the expired lots and their owners, the pool's row
+    lock, every account locked by `user_id collate "C"`, and the run
+    row inserted rather than merged.
+  - Tests: `ExpiryAndRedistributionTest` (9, real Postgres, committing,
+    with the design doc's invariants checked after each; one covers a
+    pool smaller than the number of accounts, where a share of 0 writes
+    no lot or history row) and
+    `ExpiryAndRedistributionSchedulerTest` (7, mocked, fixed clock).
+  - Design doc: D12, the scheduler's component row and two failure
+    table rows record the team's decisions. The service's README and
+    AGENTS.md, and the README's AI Use Summary, updated.
+- **Prompt(s):** Implement issue #173 on
+  `feat/credit-expiry-redistribution`.
+- **Author review:** The behaviour is the team's, from
+  `docs/credit-service.md` (D2, D4, D12, "How lots are spent, returned
+  and expired") and issue #173. Where the doc was silent, the team
+  decided: both runs in Singapore time (expiry 00:00 daily,
+  redistribution 00:10 on the 1st, the Singapore month as the period),
+  one transaction per account for expiry, a month with an empty pool
+  still recorded, and a missed redistribution caught up at startup.
+  On review, a further team decision: the catch-up runs an expiry
+  first, the order of a normal night, so credits that expired while the
+  service was down are in that month's share (the tool's first draft
+  ran the redistribution alone). The tool also made the catch-up never
+  throw, since a failing ready-event listener stops the service from
+  starting. One `EXPIRY` row per account per run (the doc's "one row per 
+  affected account per operation"); a lot past its expiry when its `expires_at` 
+  is before the run's instant; the remainder given to distinct accounts 
+  by a shuffle; `distributed` in `redistribution_run` counting every 
+  credit taken from the pool, the remainder included; the "C" collation 
+  on the all-accounts lock so its order matches the transfer's Java
+  string order.
+  Pending pull request review.
+
+## 2026-10-16 — Leong Wei Zhi (CI pipeline + Claude PR review)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `.github/workflows/ci.yml` and
+  `.github/workflows/claude-review.yml` (first CI setup — the repo had
+  no `.github/` directory).
+  - `ci.yml`: one always-running workflow; `dorny/paths-filter` picks
+    the changed Maven modules (contracts-dependent services also rebuild
+    on `foc-contracts/**`), a web job (lint, format, vitest, build), a
+    path-filtered Docker build check for all seven images (no push), and
+    a `ci-ok` gate job intended as the sole required check so skipped
+    path-filtered jobs can't block merges.
+  - `claude-review.yml`: `anthropics/claude-code-action@v1` reviews
+    non-draft PRs on open/ready/push, posting inline comments plus a
+    summary; authenticated by the `CLAUDE_CODE_OAUTH_TOKEN` secret
+    (subscription OAuth) running claude-sonnet-5-5; docs-only changes
+    are skipped and superseded runs cancelled.
+  - Two pre-existing issues the first CI run surfaced, fixed on the same
+    PR: `supplier-service/mvnw` was committed non-executable (mode
+    100644; exit 126 on a fresh checkout), and 10 `web/src` files had
+    drifted from Prettier style — reformatted mechanically with
+    `prettier --write` (lint and all 125 vitest tests pass unchanged).
+- **Prompt(s):** Asked to plan and implement a CI/CD GitHub pipeline
+  with a cost-efficient Claude Code review in CI; chose Docker
+  build-check-only CD, subscription OAuth auth, auto-trigger on
+  opened/ready/synchronize, and the Sonnet 5.5 model in follow-ups.
+- **Author review:** Workflow YAML checked against the
+  claude-code-action docs ("Automatic PR Code Review" recipe) and
+  validated locally; path filtering and the review to be exercised on
+  this PR and follow-up test PRs before marking `ci-ok` required.
+  Pending pull request review.
+
+## 2026-10-16 — Ryan Ang (PR #190 re-review: credit request event listener)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** docs + config
+- **Scope:** the four items in Leong Wei Zhi's approving re-review,
+  applied as the reviewer suggested:
+  - `credit.rabbitmq.retry.confirm-timeout-ms` takes
+    `CREDIT_RETRY_CONFIRM_TIMEOUT_MS` (default 5000), passed through
+    `compose.yaml` and listed in `.env.example`, whose stale "attempts
+    are not read yet" note is dropped.
+  - The test profile's broker host is `broker.invalid`, so a reused
+    test context cannot reach a developer's own broker on 5672.
+  - `credit-service/AGENTS.md`'s "never dropped" narrowed to a missing
+    dead-letter queue, and the design doc's returned-copy row notes it.
+  - The `credit-service/README.md` listener paragraph reflowed, and the
+    2026-10-14 entry's superseded "left unacked" clause replaced with
+    the reviewer's wording.
+- **Prompt(s):** Asked to explain and apply the reviewer's re-review suggestions.
+- **Author review:** The changes are the reviewer's suggestions, taken
+  as written by team decision. Pending pull request review.
+
+## 2026-10-16 — Ryan Ang (PR #190 review: credit request event listener)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor + docs
+- **Scope:** `credit-service/` and `docs/credit-service.md`.
+  - `RequestEventsListener`: a retry copy returned as unroutable now
+    dead-letters the original; a nacked, unconfirmed or unsendable copy
+    requeues it after a pause of the confirm timeout, which moved from
+    a constant to `credit.rabbitmq.retry.confirm-timeout-ms` (5000).
+    The catch around the republish widened from `AmqpException` to
+    `RuntimeException`, so a `CancellationException` also settles the
+    delivery. The event's own failure is logged and attached as a
+    suppressed exception on the requeue and returned paths. The outcome
+    `switch` became a switch expression, so a new `Outcome` no longer
+    compiles unsettled.
+  - `RequestEventsListenerTest`: the returned-copy test now expects a
+    dead-letter; the nacked, unconfirmed and unsendable tests expect the
+    requeue after the (mocked) pause; new tests for a cancelled confirm
+    and an interrupted pause. The confirm timeout is passed in (50 ms),
+    so no test waits 5 s.
+  - `RequestEventsListenerIntegrationTest`: a new test deletes the
+    retry queue on the real broker and checks that a failed event is
+    dead-lettered on its first delivery, then redeclares the topology.
+  - Design doc failure table: the refused-copy row split into a
+    returned row and a nacked/timeout row (noting a timeout waits up to
+    10 s in total: the confirm wait, then the pause), and a row for a
+    timed-out confirm leaving two copies. Service README, AGENTS.md and
+    `application.yaml` updated to match.
+- **Prompt(s):** Review the
+  review comments on PR #190, then to implement the team's decisions
+  on the two that needed one, with the fixes for the rest.
+- **Author review:** Team decisions, transcribed: a returned copy
+  dead-letters immediately; a nack or timeout requeues after a 5 s
+  pause; a timed-out confirm keeps the requeue and is documented as
+  possibly running the event twice. The tool's triage of the Copilot
+  comments (the README environment variable name and the message
+  mutation found not to be bugs) was checked against the code.
+  Pending pull request review.
+
+## 2026-10-14 — Ryan Ang (credit-service: request event listener, issue #171)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Scope:** `credit-service/`.
+  - `messaging/rabbitmq/RequestEventsListener`: consumes
+    `credit-service.request-events` with manual acknowledgement and
+    hands each event to `RequestEventHandler`. `HANDLED` is acked after
+    the handler's transaction commits; `INVALID_STATE` is nacked
+    without requeue, so it is dead-lettered at once; any exception
+    (including `ReservationNotFoundException`) is republished to the
+    retry queue until `credit.rabbitmq.retry.max-attempts`, then
+    dead-lettered. Each settled delivery logs its event type, event
+    ID, request and outcome.
+  - Tests: `RequestEventsListenerTest` (mocked: each outcome, the
+    attempt header, the cap, and how a retry copy the broker does not
+    accept settles the original; see the 2026-10-16 entry for the
+    final behaviour) and
+    `RequestEventsListenerIntegrationTest` (Testcontainers RabbitMQ and
+    Postgres: a reservation with its reply in the outbox, a duplicate
+    delivery changing nothing, a completion that overtook its
+    reservation transferred on a retry, a completion with no
+    reservation retried then dead-lettered, a conflict dead-lettered
+    without a retry, and a fractional reward dead-lettered on first
+    delivery).
+  - The service's README and AGENTS.md, and the README's AI Use
+    Summary updated.
+- **Prompt(s):** The scope of issue #171, on
+  `feat/credit-event-listener`.
+- **Author review:** The settlement rules, the retry delay and the
+  attempt cap are the team's, from `docs/credit-service.md` D11 and
+  issue #171; the design doc is unchanged. Choices the tool made for
+  the author to review, following notification-service's
+  `DomainEventsListener`: attempts counted in an `x-retry-attempts`
+  header the listener stamps, since RabbitMQ 4 resets `x-death` on a
+  client republish; the original acked only after the retry copy is
+  confirmed; what the listener does when the copy is nacked, returned
+  or not confirmed is the 2026-10-16 entry's answer, not this one's.
+  One difference from notification-service: the
+  retry copy is confirmed through a `CorrelationData` future, because
+  this service uses correlated publisher confirms (PR #188) and
+  notification-service's `waitForConfirmsOrDie` needs simple ones. The
+  listener container keeps Boot's defaults (one consumer). A retry copy
+  the broker does not accept requeues the original at once (it was
+  left unacknowledged, so stuck until the channel closed), recorded as
+  a row in the design doc's failure table, and that the two
+  dead-letters the listener decides are logged at ERROR. The cap is
+  now asserted as total attempts, and a `request.submitted` with no
+  requester is shown to be dead-lettered on first delivery by the
+  converter. Four unit tests now cover the requeue (a nacked, returned,
+  unconfirmed or unsendable retry copy).
+  Pending pull request review.
+
+## 2026-10-15 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** docs
+- **Scope:** PR #187 review items 4 and 5 (Leong Wei Zhi):
+  `order-service/mvnw` committed executable (`100755`);
+  `docs/architecture.md` "Database engine for the Order Service" bullet
+  struck from the open decisions and the Order DB node in
+  `docs/architecture.mmd` labelled PostgreSQL.
+- **Prompt(s):** "You can address 4 and 5". The engine (PostgreSQL 17)
+  was the author's choice when order-db was wired into compose.yaml
+  (2026-10-10); the tool only recorded it.
+- **Author review:** Reviewed via pull request.
+
+## 2026-10-14 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, docs
+- **Scope:** `order-db` host port default 5436 -> 5437 in
+  `compose.yaml`, `.env.example`, `AGENTS.md` (service DB table) and
+  `order-service/README.md`.
+- **Prompt(s):** "I need to use port 5437 instead as 5436 is used by
+  credit service". Port chosen by the author; the tool only applied it.
+- **Author review:** Reviewed via pull request.
+- **Same day:** rebased `feat/order-service-scaffold` onto main after
+  the gateway cutover (#151) and, per the PR review, removed
+  order-service's `ports:` block and `ORDER_SERVICE_PORT` (compose,
+  `.env.example`, order-service README). Conflicts with the
+  credit-service work resolved by keeping both sides (credit-db on
+  5436, order-db on 5437; main's gateway `VITE_*` URLs kept).
+  Prompt: "Please carry out 1" (rebase and drop the ports block, as
+  the reviewer asked). `docker compose config` validated; the service
+  build and tests were not re-run.
+
+## 2026-10-14 — Ryan Ang (PR #189 review follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** refactor, docs
+- **Scope:** `credit-service/`, following review
+  comments on PR #189.
+  - `service/CreditOperationsService.getOrCreate` reads an existing
+    account first and only attempts the insert when there is none.
+  - `controller/ApiExceptionHandler`: a type mismatch reads "must be an
+    integer" only for an integer parameter; any other non-instant type
+    reads "must be a valid value".
+  - `config/SecurityConfig`: the CORS comment updated for the gateway
+    cutover (issue #151).
+  - `AGENTS.md`: the `CreditControllerTest` invariant now states the
+    two `NOT_SUPPORTED` first-read cases that commit.
+  - Second review round: the `main` merge resolution redone for
+    `ai/usage-log.md`, the root README, and the service's README and
+    AGENTS.md. Each was rebuilt from `main`'s copy with only #172's
+    and #189's additions on top, so the #170 and PR #188 text the
+    first resolution dropped is back, and the conflict markers left in
+    the service README are gone.
+- **Prompt(s):** Review the four review comments on PR #189 as
+  the reviewer suggested; then fix the merge resolution as the
+  reviewer's second round suggested.
+- **Author review:** Each change follows the reviewer's comment.
+  Pending pull request review.
+
+## 2026-10-13 — Ryan Ang (credit-service: read API, issue #172)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Scope:** `credit-service/`.
+  - `controller/CreditController`: `GET /credits/me` and
+    `GET /credits/me/history`, for the token's user only. `page` and
+    `size` are plain integers and `from` / `to` bind as
+    `OffsetDateTime`, as the design doc's "Implementation notes" say;
+    the checks behind the contract's 400s are in the controller.
+  - `controller/ApiExceptionHandler` (`@RestControllerAdvice`) and
+    `InvalidQueryParameterException`: an out-of-range or contradictory
+    parameter, or one of the wrong type, is a 400 problem+json whose
+    detail names the parameter.
+  - `service/CreditQueryService` and `HistoryFilter`: both reads get
+    or create the account first (D6); the history is a JPA
+    Specification over the caller's rows with the optional filters, in
+    the fixed order `occurredAt` descending then `id` descending.
+  - `dto/`: `BalanceResponse`, `HistoryEntryResponse`, and
+    `PageResponse`, a copy of supplier-service's shape.
+  - `CreditHistoryEntryRepository` now extends
+    `JpaSpecificationExecutor`.
+  - Tests: `CreditControllerTest` (42 cases through the security chain
+    against a real Postgres: the balance on first read and with held
+    credits, the history's fields, order, filters and paging, an empty
+    page, a page past the last one, both instant formats, and each row
+    of the contract's "Errors" table). `SecurityConfigTest`'s
+    valid-token case now expects the balance, not a 404.
+  - The service's README and AGENTS.md, and the README's AI Use
+    Summary updated.
+- **Prompt(s):** The scope of issue #172, on `feat/credit-read-api`.
+- **Author review:** The routes, fields, order, parameter bounds,
+  errors and the two implementation notes are the team's, from
+  `docs/credit-service.md` "Read API contract"; the tool transcribed
+  them and the design doc is unchanged. Choices the tool made where the
+  contract is silent, for the author to review: the wording of each
+  400's `detail`; the checks placed in the controller rather than bean
+  validation, so each has its own message; a refused request creating
+  no account, since validation runs before the read; an unknown
+  parameter such as `sort` being ignored; and the test class being
+  `@Transactional`, so its made-up history rows are never committed.
+  On the author's review, two first-read cases (balance and history)
+  were added that run outside the test transaction and commit, so a
+  read that could not write on its own would fail a test; no read-only
+  transaction was found in the code.
+  `./mvnw test` on JDK 21 with Docker: 169 tests, 0 failures. Pending
+  pull request review.
+
+## 2026-10-13 — Ryan Ang (PR #188 review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** review assistance, refactoring, tests, docs
+- **Scope:** `credit-service/`, `docs/credit-service.md`.
+  - `V2__outbox_next_attempt_at.sql` and `OutboxEvent.nextAttemptAt`: a
+    nullable column, null meaning due at once.
+  - `OutboxEventRepository`: `findDue` replaces the unsent-rows query
+    (unsent and due, oldest first, limited), and an `insert` that never
+    overwrites, as `ReservedRepository` has.
+  - `OutboxPublisher`: a returned reply gets its next attempt time and
+    is saved; the poll reads only the replies that are due.
+  - `ReplyOutboxService`: the row is inserted, not saved.
+  - `RabbitReplyPublisher`: the no-op returns callback is removed, and
+    the class comment says a return is read from the `CorrelationData`
+    without one.
+  - `application.yaml`: `unroutable-retry-delay-ms` (30 000) and
+    `spring.task.scheduling.pool.size` (2).
+  - Tests: `OutboxEventRepositoryTest` (new: which replies are due,
+    their order, the batch counted over the due ones only), a repeated
+    event ID refused in `ReplyOutboxServiceTest`, the next attempt time
+    in `OutboxPublisherTest`, no callback registered in
+    `RabbitReplyPublisherTest`, the new column in `EntityMappingTest`,
+    and in `OutboxPublisherIntegrationTest` two unroutable replies
+    filling a batch of two while the routable reply behind them is
+    still delivered.
+  - `docs/credit-service.md` (D10, the component and failure rows, the
+    `outbox_event` table), the service's README and AGENTS.md, two
+    wording fixes from the Copilot review, and the README's AI Use
+    Summary.
+- **Prompt(s):** Summary: asked to assess the review comments on
+  PR #188. The tool checked
+  each against the code and the spring-rabbit jar, reported all six as
+  accurate, and left the approach to the two that needed a decision to
+  the team. It was then asked to implement the decisions below and the
+  four items that needed none.
+- **Author review:** Team decisions, transcribed into
+  `docs/credit-service.md`. (1) Head-of-line blocking: a
+  `next_attempt_at` column, in this PR; on a return it is set to now
+  plus 30 s, and the poll reads only rows that are unsent and due. No
+  cap on attempts, as before. (2) The returns callback is removed
+  rather than moved to a template of its own: the return is still read
+  from the `CorrelationData`, and the cost is the template's own
+  warning beside ours for each returned reply, a few lines at the 30 s
+  spacing. A private template inside `RabbitReplyPublisher` is the
+  fallback if that warning is a nuisance in the demo logs; a template
+  bean is ruled out. The reviewer's other two points (a second
+  scheduler thread; insert, not save) and Copilot's two wording points
+  were accepted as raised. Choices the tool made within those
+  decisions, for the author to review: the column is nullable with
+  null meaning due at once, so existing rows need no backfill; the
+  delay is a `credit.outbox.publisher` setting so the integration test
+  can shorten it; the unsent index is unchanged; a stopped poll
+  (`BROKER_UNAVAILABLE`) sets no delay. `./mvnw test` on JDK 21 with
+  Docker: 156 tests, 0 failures, including the existing
+  unbound-then-bound integration test after the callback's removal.
+  Pending pull request review.
+
+## 2026-10-12 — Ryan Ang (credit-service: reply outbox and outbox publisher, issue #170)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Scope:** `credit-service/`, `docs/credit-service.md`.
+  - `ReplyOutboxService`: the real `ReplyOutbox` bean, replacing
+    `NotImplementedReplyOutbox`, which is deleted with
+    `NotImplementedStubsTest`. One `outbox_event` row per reply, in the
+    caller's transaction (`MANDATORY`), holding the message body as it
+    goes on the wire.
+  - `OutboxPublisher` (`@Scheduled`, fixed delay) and the
+    `ReplyPublisher` interface it sends through, with
+    `RabbitReplyPublisher` in `messaging/rabbitmq/`: mandatory publish
+    to `credit-events`, a correlated confirm, and a reply marked sent
+    only when it was confirmed and not returned.
+  - `OutboxEventRepository`: the poll query (unsent, oldest first,
+    limited).
+  - `application.yaml`: `credit.outbox.publisher` (poll interval,
+    batch size, confirm wait); the publisher is off in the test
+    profile.
+  - Tests: `ReplyOutboxServiceTest` (stored with its transaction, not
+    stored on rollback, refused outside one), `OutboxPublisherTest`
+    and `RabbitReplyPublisherTest` (each outcome, mocked), and
+    `OutboxPublisherIntegrationTest` (Testcontainers RabbitMQ and
+    Postgres: published and marked sent, unsent while no queue is
+    bound and delivered once one is, an unsent row from an earlier run
+    published, a sent reply not published again).
+  - `docs/credit-service.md`, the service's README and AGENTS.md, and
+    the README's AI Use Summary updated.
+- **Prompt(s):** The scope of issue #170, on
+  `feat/reply-outbox-publisher`. The tool put three behaviours the
+  design doc does not state to the team as questions with the options
+  described factually and no recommendation: the poll interval, what a
+  failed publish does to the rest of a poll, and how long to wait for
+  a confirm.
+- **Author review:** Team decisions, transcribed into
+  `docs/credit-service.md`: a 1 s poll as a fixed delay, so a slow
+  publish cannot overlap the next poll; at most 100 replies in a poll;
+  a 5 s confirm wait; no cap on attempts for now. What a failed publish
+  does to the rest of the poll was decided twice. First: an unreachable
+  broker or a lost connection stops the poll, and a nack, a missing
+  confirm or a returned reply is skipped. The tool's first version
+  followed that, and told a lost connection from a broker nack by
+  whether the nack carried a reason. **Revised team decision**, on the
+  author's review of that version: only a returned reply is skipped,
+  with a warning naming its event ID; a nack or a missing confirm stops
+  the poll like an unreachable broker, because they mean the broker is
+  in trouble, not that one reply is bad, so going on only multiplies
+  the waits. The reason check is removed with its test, and two mocked
+  tests run a poll of three replies through a confirm timeout and
+  through a nack, with the replies after it left unsent. The author
+  also reviewed and kept two choices the tool had raised: the publisher
+  split into a scheduled class in `service/` and a `ReplyPublisher`
+  interface implemented in `messaging/rabbitmq/`, which keeps broker
+  types out of `service/`; and "published after a restart" tested as an
+  unsent row already in the table when a poll runs, not by restarting
+  the application. Each reply is marked sent in its own transaction. The first run of the integration test
+  failed on the tool's own test queue (RabbitMQ 4 refuses a transient
+  non-exclusive queue); it is now durable. A run in the local compose
+  stack (rows written to the outbox by hand, a temporary queue bound
+  to `credit-events`, RabbitMQ stopped and started) showed the template
+  logging its own warning for every returned reply, so the publisher
+  now registers a returns callback that does nothing. `./mvnw test`:
+  147 tests, 0 failures, with Docker. Pending pull request review.
+
+## 2026-10-11 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, debug
+- **Scope:** order-service JPA skeleton — `foc.order.model.Requests`
+  (table `requests`) and
+  `foc.order.repository.RequestsRepository`; order-service README
+  status paragraph; README AI Use Summary. Also diagnosed a failing
+  `docker compose up` build (no file changes).
+- **Prompt(s):** "Can you add basic jpa skeleton for order? In
+  particular I would like a table named requests". The tool mirrored
+  the supplier-service `Suppliers` / `SuppliersRepository` pattern,
+  including its auto-increment `Long` id. Then "I would like to add
+  these columns:" with the author's ER diagram of the `requests`
+  table — the tool transcribed those columns, types and nullability
+  into the entity (bigint -> `Long`, text -> `String`, int ->
+  `Integer`, timestamptz -> `Instant`, version -> `@Version`) and
+  added or changed none.
+  Earlier in the session: "I am getting this error when running docker
+  compose up" — traced to antivirus HTTPS scanning replacing Maven
+  Central's certificate inside the build container.
+- **Author review:** Table name and schema given by the author.
+  `./mvnw test` and the image build were not run by the
+  tool (no JDK on the machine; Maven Central unreachable from
+  containers), so both remain for the author to run. To be reviewed
+  via pull request.
+
+## 2026-10-10 — Aung Ko Khant
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** order-service Spring Boot scaffold — `pom.xml`,
+  `OrderServiceApplication`, context-load test, main/test
+  `application.yaml`, `Dockerfile` (replacing the earlier placeholder),
+  Maven wrapper and `.gitignore`/`.gitattributes` copied from
+  supplier-service, service README; `compose.yaml`
+  order-service/order-db wiring; `.env.example` Order Service section
+  and `VITE_ORDER_SERVICE_URL`; `AGENTS.md` port-table row; README AI
+  Use Summary.
+- **Prompt(s):** "Help me scaffold order service". The tool mirrored
+  the supplier-service / notification-service skeletons. Open points
+  were decided by the author via neutral options Q&A: PostgreSQL 17 for
+  the order DB (`docs/architecture.md` listed the engine as undecided);
+  host ports 8088 (service) / 5436 (DB); scope = skeleton plus broker
+  wiring (`spring-boot-starter-amqp`, the `foc-contracts` dependency
+  and Dockerfile stage, RabbitMQ env/depends_on in compose) with no
+  entities, endpoints or publisher code.
+- **Author review:** All decisions made by the author during the
+  options Q&A; `docker compose config` validated by the tool. The
+  image build and `./mvnw test` were not run by the tool (no JDK on the
+  machine, and Maven Central was unreachable from containers), so both
+  remain for the author to run. To be reviewed via pull request.
+
 ## 2026-10-11 — Ryan Ang (PR #175 review)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** review assistance, refactoring, tests, docs
@@ -3270,3 +4931,764 @@ Entry template:
   JSON valid, CORS headers present. Behavior-preserving fixes; no new
   design decisions.
 - **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** code generation with options Q&A (issue #94)
+- **Prompt(s):** Asked to plan and implement issue #94 (account recovery
+  + password reset via token table). Five flow decisions made by the
+  author via options Q&A before coding: reset credential is an opaque
+  token in an emailed link (not an OTP code); recovery is login +
+  explicit restore (login stops silently recovering — reverses the
+  #93-era behavior; POST /users/me/recover restores); a reset on a
+  soft-deleted account inside the window works but leaves it deleted;
+  the request endpoint answers 202 whatever the email maps to (with the
+  silent-202 cooldown corollary, since a 429 would reveal account
+  existence); scope covers backend and the web screens together.
+- **Scope:** user-service — `V7__account_tokens_reset.sql` (created_at,
+  unique token_hash, unique user_id+kind), `AccountToken` (createdAt,
+  replace(), RECOVERY dropped from the enum), `AccountTokenRepository` +
+  `UserRepository.findWithLockById` (one lock order: user then token),
+  new `PasswordResetService`/`PasswordResetController`/DTOs/
+  `ResetTokenInvalidException` (+ ProblemTypes URI and advice handler),
+  `OtpEmailSender.sendPasswordResetLink` (+ SMTP impl), SHA-256 token
+  hashing (lookup-by-hash needs a deterministic hash; 256-bit entropy
+  needs no slow one — documented as the inverse of the OTP BCrypt
+  rationale), `LoginAttempts` no longer clears deletedAt (+ purgeAt),
+  `LoginResponse.deletionScheduledFor`, `ProfileService/Controller`
+  recover route + SecurityConfig line, purge scheduler sweep,
+  application.yaml/.env.example `PASSWORD_RESET_TTL`. web — login's
+  forgot-password link and reset notice, `forgot-password.tsx`,
+  `reset-password.tsx` (URL token strip), `account-recovery.tsx`
+  (wireframe's restore/keep-deleted), AuthProvider/useAuth `restored()`
+  + deleted-session guard in ProtectedRoute, `apiFetch` tolerates the
+  bodyless 202. Tests: new PasswordResetService/Controller tests, web
+  password-reset and account-recovery suites; existing login/profile/
+  purge/Flyway/entity tests updated (user-service 350 green, web 112
+  green). Docs: README #94 section + corrections to the two sections
+  that said login recovers.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** code generation with options Q&A (issue #94, revision)
+- **Prompt(s):** Asked whether the reset flow could use an OTP instead;
+  the author chose "reset via OTP code" via options Q&A, revisiting the
+  same day's link-token decision. Follow-on shapes applied and
+  documented: confirm carries email + code (a salted BCrypt code hash
+  cannot be looked up); the codes ride the user.otp.* knobs whole (the
+  PASSWORD_RESET_TTL knob went); and every confirm failure is the one
+  reset-code-invalid 400 — stricter than sign-up's verify on purpose,
+  since a 429 or an expired-specific answer on this public route would
+  reveal which addresses hold accounts.
+- **Scope:** user-service — V8 (attempts column, V7's unique hash index
+  dropped), AccountToken (codeHash naming, attempts, replace() resets
+  the budget), AccountTokenRepository (by-hash finders removed),
+  PasswordResetService rewritten for the code flow (dummy-hash cost for
+  missing rows, spent-until-replaced attempts), DTO gains email + code,
+  ResetTokenInvalidException → ResetCodeInvalidException with
+  urn:foc:user:reset-code-invalid, sendPasswordResetCode replaces the
+  link mail, yaml/.env/test pins drop the reset TTL knob. web — the
+  /reset-password route went; forgot-password.tsx is the wireframe's
+  two steps on one page (email → code + new password, resend/change
+  affordances). Tests reworked on both sides (user-service 353 green,
+  web 112 green); README #94 section and Flyway paragraph rewritten.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactoring with options Q&A (issue #94, PR #179 review)
+- **Prompt(s):** Asked to rename account_tokens to something
+  reset-specific and remove the kind column, now that recovery carries
+  no emailed credential. Names chosen by the author via options Q&A:
+  table password_reset_otps / entity PasswordResetOtp (the
+  account_update_otps parallel), and the token_hash column follows as
+  code_hash (revisiting the earlier keep-tokenHash call now that the
+  table itself says OTP).
+- **Scope:** `V9__password_reset_otps.sql` (rename table and column,
+  drop kind — V7's composite index and V1's CHECK go with it —
+  per-user unique index, FK renamed to the siblings' convention; a new
+  migration, not an edit, since V7/V8 are applied on dev DBs).
+  AccountToken/AccountTokenRepository → PasswordResetOtp/
+  PasswordResetOtpRepository (Kind enum gone, finders lose the kind
+  parameter); PasswordResetService and AccountPurgeScheduler follow;
+  stale comments updated (UserRepository's "login recovers" note
+  included). Tests track the rename (user-service suite green);
+  README/application.yaml/.env.example wording updated.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactoring (issue #94, PR #179 review)
+- **Prompt(s):** Asked to collapse the branch's three stacked
+  migrations into one, since they all belong to one PR.
+- **Scope:** V7/V8/V9 squashed into a single `V7__password_reset_otps.sql`
+  (rename + code_hash + drop kind + created_at + attempts + per-user
+  unique index + FK rename, with the design iterations noted in its
+  header); FlywayMigrationTest counts back to 6/7 and its proof block
+  rewritten; the V8/V9 references in headers, comments and the README's
+  Flyway paragraph updated. Dev databases that ran the branch's stacked
+  migrations must be reset (README's "Old local databases" steps) —
+  noted in the migration header and the PR.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-11 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debugging assistance, refactoring (PR #179 Copilot review)
+- **Prompt(s):** Asked to address the Copilot review's findings.
+- **Scope:** (1) stale-credential login race — LoginAttempts.record now
+  receives the hash the bcrypt check ran against and answers
+  STALE_CREDENTIAL when the locked re-read shows a different one (a
+  concurrent reset could otherwise turn an old-password match into a
+  fresh JWT); AuthService redoes the whole check, three stale rounds
+  answer as the existing concurrent-update 409. (2) Both reset flows'
+  FIRST read is the locked one (UserRepository.findWithLockByEmail) —
+  the plain-read-then-lock-by-id shape kept stale entity state, so a
+  code could be mailed to a just-replaced address; the purged-between-
+  lookups case now falls through the same dummy-BCrypt branch as an
+  unknown email. (3) The purge locks its condemned user rows before
+  touching child tables (findWithLockByDeletedBefore), matching the
+  flows' user-then-child lock order instead of deadlocking against a
+  reset request. (4) forgot-password.tsx: "Change email" clears the
+  typed passwords, and the step-2 resend/change buttons are disabled
+  while a request is in flight. (5) The README's consolidated AI Use
+  Summary extended for issue #94 (it ended at #151). Tests added or
+  updated for (1)–(4); the review's AI-policy finding is left to the
+  team, not resolved by wording changes.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debugging assistance, refactoring, documentation (PR #179
+  review by @Sinnez1)
+- **Prompt(s):** Asked to address the latest PR #179 review comments.
+  The review's four security/design questions (OTP brute-force cap,
+  deleted-account access scope, admin-removal recoverability, fix vs
+  document for the lock-across-send and surviving-sessions findings)
+  were put to Leong Wei Zhi as neutral options Q&A; the tool
+  implemented the choices.
+- **Scope:** (1) Windows test fix — the deleted-login test truncates
+  its Instant to microseconds, matching what Postgres stores. (2) OTP
+  brute-force cap (chosen: carry attempts across renewals) —
+  PasswordResetOtp.replace split into renew (live row, count carried)
+  and replaceExpired (dead row, fresh budget); a spent live row absorbs
+  requests silently, so the budget is OTP_MAX_ATTEMPTS guesses per
+  OTP_TTL, not per cooldown. (3) Lock-across-send (chosen: fix) —
+  requestReset parks the row in a TransactionTemplate transaction that
+  commits before the SMTP send; a failed send retracts the undelivered
+  code best-effort and still answers 502. (4) Sessions surviving a
+  reset (chosen: fix) — gateway decision G11: confirmReset stamps
+  denylist:user:<id> via TokenDenylist.revokeUserSessions, and
+  gateway/lua/auth.lua rejects the subject's tokens whose iat predates
+  the stamp (fail-open, best-effort, docs/gateway.md updated).
+  (5) Deleted-account access (chosen: accept) — README and PR body now
+  say the full 30-day window, not ≤1 h. (6) Admin removal (chosen:
+  same as self-delete) — recorded in AdminService and the README.
+  Tests: suite 354 → 359 (renewal/absorb/retract/eviction pins).
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** debugging assistance, refactoring, documentation (PR #179
+  approval follow-ups by @Sinnez1)
+- **Prompt(s):** Asked to address the latest PR #179 comments — the
+  seven non-blocking follow-ups on @Sinnez1's approval. The two that
+  were design/security choices (what admin removal does to the ADMIN
+  role; how retract handles a failed send on a renewal) were put to
+  Leong Wei Zhi as neutral options Q&A; the tool implemented the
+  choices and the mechanical corrections.
+- **Scope:** (1) Admin removal (chosen: demote to USER; alternatives
+  were an active-check in the admin routes or documenting as
+  accepted) — AdminService.removeUser sets the role before the
+  soft-delete, so a removed admin's later logins and a self-restored
+  account carry no admin powers; a pre-removal ADMIN token lasts its
+  ≤1 h exp. Pinned in AdminServiceTest. (2) Failed renewal send
+  (chosen: restore the pre-renewal row; alternatives were leaving the
+  renewed row in place or documenting the budget-reset exception) —
+  PreparedReset snapshots the live row before renew, retract restores
+  code/clock via PasswordResetOtp.restore instead of deleting (new or
+  expired-takeover rows still delete), closing the second
+  budget-renewal path and keeping the delivered code working. Pinned
+  in PasswordResetServiceTest. (3) user-service README: the stale
+  pre-G11 "old JWT stays valid" sentence replaced with the
+  Redis-failure/same-second exceptions; the retract and soft-delete
+  passages updated for (1)/(2). (4) Root README AI Use Summary: web
+  clauses moved out (the web half is PR #180's), scope corrected to
+  backend-only, this round appended. (5) TokenDenylist javadoc records
+  the reviewer-reproduced same-second survivor and the
+  login-racing-the-reset gap as the same accepted leak. (6) Test
+  isolation: PasswordResetControllerTest and AccountPurgeSchedulerTest
+  clear password_reset_otps in @AfterEach (AccountUpdateControllerTest's
+  rule) so a leftover row cannot break other classes' deleteAll setup.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (issue #178, web half — PR #182), then refactor
+  (PR #182 Copilot review)
+- **Prompt(s):** Asked to plan and resolve issue #178 (a demoted admin
+  keeps ADMIN until their token expires); the revocation mechanism
+  (option A, per-user epoch stamp), the scope (the issue's two paths
+  only), the web reaction (force sign-out on any token-bearing 401)
+  and the sign-out UX (/login with a notice) were decided by the
+  author via neutral options Q&A. Then asked to address the PR's
+  review comments.
+- **Scope:** `web/src/lib/api/http.ts` — a swappable unauthorized
+  handler, invoked before the throw when a 401 answers a request that
+  carried the bearer token; review round: `auth: false` opts a call
+  out of the token injection. `web/src/features/user/AuthProvider.tsx`
+  — registers the handler: clears the stored session and navigates to
+  /login; guarded on a live session so logout's own best-effort 401
+  doesn't re-navigate. `web/src/features/user/sessionNotice.ts` (new)
+  — one-shot flag carrying the "session ended" notice to the login
+  page; chosen over router navigation state because ProtectedRoute's
+  stateless bounce races the handler's startTransition-deferred
+  navigation and can wipe the state before the login page mounts (the
+  test caught this; the file documents it).
+  `web/src/features/user/login.tsx` — renders the notice; review
+  round: the login call sends no bearer token, so a stale stored
+  session can't make a wrong-credentials 401 read as a revoked
+  session. `web/src/test/auth.test.tsx` — revoked-session cases, plus
+  the review round's stale-session login regression.
+- **Author review:** web 102/102 (vitest), eslint, tsc, prettier; the
+  diff reviewed via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate (issue #178, server half — PR #183)
+- **Prompt(s):** Same issue #178 session as the web half above, for the
+  server side: which revocation mechanism (the author chose option A of
+  the issue's table — a per-user epoch stamp in Redis, enforced at the
+  gateway — via neutral options Q&A, accepting its documented trade-off
+  that one demotion signs the target out on every device) and how wide
+  to scope it (issue scope only: the two paths the issue names, no
+  further stamp points).
+- **Scope:** `user-service` — `AdminService` takes `TokenDenylist` and
+  calls `revokeUserSessions(targetId)` after the save in `changeRole`
+  (any actual change, promotion and self-demotion included; the
+  same-role early return and every refusal path stamp nothing) and in
+  `removeUser`, best-effort at the same call-site pattern as
+  `PasswordResetService.confirmReset`. `AdminServiceTest` pins the
+  eviction on each success path and its absence on the no-op and the
+  refusals; `AdminControllerTest` pins it end-to-end with
+  `TokenDenylist` as a `@MockitoBean` (no Redis in that test stack,
+  like `LogoutTest`). `docs/gateway.md` — decision G12 and its
+  request-flow note; **no gateway code changed**, since G11's
+  `iat`-versus-stamp check already covers the new stamp writer.
+- **Author review:** user-service suite via Testcontainers, and the
+  diff reviewed via PR #183.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** implementation + documentation (issue #67, remaining scope)
+- **Prompt(s):** Asked to plan and resolve issue #67. Exploration found
+  the server half already merged (PR #74); the remaining scope was
+  decided by the author via neutral options Q&A: badge-only UI (no
+  dropdown/toasts — issue #66 owns the Notification Center), native
+  WebSocket only (no sockjs-client), the verifier's missing-exp fix
+  folded in, and D23 — notification-service reads the Redis denylist at
+  STOMP CONNECT itself, fail-open, as a narrow exception to gateway
+  decision G4 (the CONNECT-frame token never reaches the gateway).
+- **Scope:** `notification-service` — `JwtVerifier.verify()` now
+  requires `exp` and exposes `jti` (parity with the other services);
+  new `TokenDenylist` port + `security.redis.RedisTokenDenylist`
+  adapter (`EXISTS denylist:<jti>`, fails open on `DataAccessException`,
+  finite 2 s client timeouts); `JwtChannelInterceptor` rejects revoked
+  jtis at CONNECT; ArchUnit rule confining Redis types; yaml/compose/
+  .env.example/README wiring (no `depends_on: redis`, mirroring the
+  gateway's stance). Tests: no-expiry/jti verifier cases, adapter unit
+  tests, revoked/not-revoked/jti-less CONNECT cases against a fake
+  denylist (the STOMP integration test stays Docker- and Redis-free).
+  `web` — `@stomp/stompjs` added; `features/notifications/`
+  (`NotificationProvider` layout route owning the app's single STOMP
+  client: gateway `/ws/websocket` URL, bearer CONNECT header,
+  exponential 1 s→30 s reconnect, resubscribe in onConnect, stop on
+  STOMP ERROR; `useNotifications`; `stompUrl`); `NotificationBell`
+  badge wired to the session count; test suite for URL derivation,
+  connect config, badge counting, logout teardown and ERROR handling.
+  Docs: D23 recorded in `docs/notification-service.md` (plus the stale
+  "no API gateway" wording fixed and the client policy marked
+  implemented); `docs/gateway.md` known limit retired + G4 exception
+  noted; user-service `TokenDenylist` javadoc updated.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-12 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** review fixes (PR #185 Copilot review)
+- **Prompt(s):** Asked to check and address the Copilot review's two
+  findings.
+- **Scope:** `web/src/shared/shell/NotificationBell.tsx` — the unread
+  count joins the button's accessible name (`Notifications (N unread)`)
+  since `aria-label` overrides the badge's descendant text for screen
+  readers; the test suite asserts the name. `README.md` — the AI Use
+  Summary extended for the #67 remaining scope, which the PR had missed
+  (policy: the summary stays current).
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-13 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debugging assistance, refactoring (PR #182 review by
+  @Sinnez1)
+- **Prompt(s):** Asked to address the PR #182 review comments — the
+  blocking session-identity finding and the lower-priority notice-timing
+  one. Both were defects with a stated fix direction, so no new design
+  decisions were put to the author.
+- **Scope:** (1) A late 401 for an old token was signing out a new
+  session: `apiFetch` now hands the unauthorized handler the bearer
+  token the refused request actually carried (read back off the request
+  headers, so a caller-supplied Authorization counts the same), and
+  `AuthProvider`'s guard compares it against the live session's token
+  instead of merely checking that some session exists — a reply
+  outlived by a fresh login is ignored. (2) The "session ended" notice
+  could show at the wrong time: `sessionNotice` publishes the flag to
+  listeners as well as holding it, and the login page subscribes, so a
+  401 landing while the page is already open shows the notice then and
+  consumes the flag — it can no longer surface on a later visit, e.g.
+  after a plain manual logout. (3) `web/src/test/auth.test.tsx` — a case
+  per finding (both verified to fail without the fix), and the flag is
+  reset between tests since it is module state. Also merged `main`
+  (PR #179), resolving the README and usage-log conflicts by keeping
+  both sides in date order.
+- **Author review:** web 104/104 (vitest), `tsc -b`, eslint, prettier
+  clean on the touched files; the diff reviewed via the PR.
+
+## 2026-10-14 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debugging assistance, refactoring (PR #182 second review
+  round by @Sinnez1)
+- **Prompt(s):** Asked to resolve the PR #182 review comments. Eight of
+  the nine findings were defects with a stated fix direction, so no
+  decision was put to the author. The ninth asked a behaviour question
+  — whether a forced sign-out should redirect a visitor off a public
+  page, and whether to return them to the page afterwards — which was
+  put to Leong Wei Zhi as neutral options and answered: clear the
+  session in place on public pages (no redirect, no notice), and leave
+  return-to-location alone, as no flow in the app has it today.
+- **Scope:** (1) `AuthProvider` compares the refused token with what
+  `localStorage` holds at call time instead of the token of the last
+  committed render: the rendered value lags `login()`'s `setToken` by a
+  render, and another tab can have stored a newer session under the
+  shared key — the handler was clearing both. (2) The notice and the
+  redirect are limited to the case where the user ends up at the login
+  form (a route behind `ProtectedRoute`, which carries a new
+  `handle.requiresSession` in `src/routes/index.tsx`, or `/login`
+  itself); the handler no longer navigates at all, since clearing the
+  token makes `ProtectedRoute` bounce a gated page on its own. (3) The
+  layout effect unregisters the handler and the token source on
+  unmount. (4) `web/src/lib/api/http.ts` — a handler that throws is
+  logged rather than raised in place of the `ApiError` callers match
+  on, and the bearer scheme is matched case-insensitively, as the
+  gateway matches it. (5) `web/src/features/user/useLocalStorage.tsx` —
+  `readStoredValue` added for (1); the hook is unchanged.
+  (6) `web/src/test/auth.test.tsx` — a case per blocking finding, each
+  verified to fail without its fix, and the double-wrapped `me` fixture
+  the reviewer spotted is unwrapped; `web/src/test/http.test.ts` (new)
+  — the two apiFetch contracts above. (7) File-header review notes
+  split per entry, as the reviewer asked.
+- **Not changed:** the login page still reads the notice flag in a
+  `useState` initializer and clears it in an effect rather than in one
+  read-and-clear call — StrictMode invokes an initializer twice, which
+  would spend the flag on a call whose result React may discard. The
+  reviewer left this one optional.
+- **Author review:** web 113/113 (vitest), `tsc -b`, eslint, prettier
+  clean on the touched files; the diff reviewed via the PR.
+
+## 2026-10-14 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** review fixes + documentation (PR #185 review by @Sinnez1)
+- **Prompt(s):** Asked to resolve the PR #185 review comments. The
+  blocking finding offered two routes (implement the check or correct
+  the docs); the review's own wording asked for the check, which is
+  what the gateway already does for REST — implemented rather than put
+  back to the author as a new decision, since G11 was already the
+  author's.
+- **Scope:** `origin/main` merged into the branch first (the branch's
+  `docs/gateway.md` edits predated #179, so the merge keeps main's G11
+  rows and request-flow note). (1) Reset cutoff at CONNECT —
+  `JwtVerifier.VerifiedToken` exposes `iat`; `TokenDenylist` gains
+  `isUserRevokedSince`; `RedisTokenDenylist` reads
+  `denylist:user:<id>` and compares strictly, like `auth.lua`
+  (unparseable stamp and Redis error both fail open);
+  `JwtChannelInterceptor` runs both lookups in the gateway's order.
+  (2) Docs: D23 extended to both key shapes, and the CONNECT-only
+  timing recorded as an accepted limit in `docs/notification-service.md`
+  (Session mechanics) with the matching entry in `docs/gateway.md`'s
+  known limits — the reviewer's second finding. (3)
+  `spring.data.redis.repositories.enabled: false` in both yamls, which
+  stops the starter scanning the JPA repositories for a Redis store
+  (the reviewer's startup-log nit). Tests: 5 adapter cases, 2 verifier
+  cases, 3 CONNECT cases (pre-cutoff rejected, post-cutoff and
+  iat-less accepted) — notification-service 53 run, the 2 pre-existing
+  Java-26 AMQP context-restart errors unchanged.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-16 — Leong Wei Zhi
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** review fixes (PR #185 re-review by @Sinnez1)
+- **Prompt(s):** Asked to resolve the PR #185 re-review comments —
+  two blocking STOMP auth gaps the reviewer demonstrated and six
+  non-blocking items.
+- **Scope:** (1) `JwtChannelInterceptor` — STOMP 1.2's `STOMP` frame
+  is authenticated like `CONNECT` (it used to open an unauthenticated
+  session), every client SEND is refused (a SEND to
+  `/user/{id}/queue/notifications` was delivered to that user), and
+  SUBSCRIBE is allowed only to `/user/queue/notifications`. Both gaps
+  predate this PR but combined allowed tokenless spoofed
+  notifications, so they were fixed where the PR already works.
+  (2) Non-blocking: `RedisTokenDenylist` fails open on any
+  `RuntimeException` (the port's contract), the Redis-outage cost
+  comment corrected to ~4 s (two lookups, each with its own 2 s
+  timeout), the no-jti gateway-parity comment reworded (this check is
+  marginally stricter than `auth.lua`), the ERROR-frame comment
+  softened in `NotificationProvider.tsx` and
+  `docs/notification-service.md`, the unused `NotificationDto` export
+  dropped until issue #66 reads the body, and the redundant
+  `mockito-core` dependency removed. (3) Docs: Session mechanics
+  gained a Frame policing bullet. Tests: raw-frame STOMP cases (with
+  and without token), spoofed-SEND and stray-SUBSCRIBE rejection, two
+  untranslated-exception fail-open adapter cases.
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-16 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** review response with options Q&A (PR #185 re-review)
+- **Prompt(s):** Asked to rebase the branch onto `origin/main` and then
+  address the PR #185 comments. The one open thread was @Sinnez1's
+  blocking note that `onStompError` permanently deactivates the app's
+  only STOMP client: with no token refresh in the SPA, a session that
+  outlives the 1 h token TTL and then loses its socket reconnects with
+  a dead token, gets an ERROR frame, and push stops silently behind a
+  frozen badge. Exploration established that neither direction the
+  reviewer suggested exists on this branch — notification-service has
+  no REST controllers, so there is no unread count to re-fetch (issue
+  #66 owns it), and `apiFetch` has no 401/expired-session path to route
+  the ERROR frame through (PR #182 is adding one for #178). The author
+  was given four options — sign out via `useAuth().logout()`, report it
+  in the bell only, both, or bounded retry then report — with the
+  trade-offs stated factually, and chose **bounded retry, then
+  reported stop**.
+- **Scope:** web — `NotificationProvider` retries a rejected CONNECT
+  three times 30 s apart (the reconnect cap, so a dead token is not
+  re-sent every second), resets the budget on a successful CONNECT, and
+  then marks the session stopped instead of dying quietly; the stop is
+  derived per token, so a re-login starts live, and an unset
+  `VITE_NOTIFICATION_SERVICE_URL` derives the same state without a
+  setState in the effect. `useNotifications` exposes `pushStopped`;
+  `NotificationBell` greys the badge and appends "updates paused, sign
+  in again" to its accessible name, keeping the count visible (those
+  notifications did arrive) without presenting it as current. Tests:
+  retry-then-reactivate, budget exhaustion with the bell's paused name,
+  a reconnect earning a fresh budget, and the unset-URL case (web 111
+  green; `tsc -b` and eslint clean — eslint's
+  `react-hooks/set-state-in-effect` is what pushed the unset-URL case
+  to a derived value). Docs: an ERROR-frame policy bullet in
+  `docs/notification-service.md` Session mechanics, and the root README
+  AI Use Summary extended for this round plus the frame-policing round
+  its 2026-10-14 disclosure line claimed but never wrote into the
+  clause. Also in this session: the branch rebased onto `origin/main`
+  (the flattened merge put the pre-#179 commits against post-#189 main;
+  `README.md`, `ai/usage-log.md`, `docs/gateway.md` and user-service's
+  `TokenDenylist` javadoc resolved by keeping both sides, in date order
+  where the file keeps one).
+- **Author review:** Pending author review of the diff via the PR.
+
+## 2026-10-16 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** repository maintenance (PR #185 main sync)
+- **Prompt(s):** Asked to fix PR #185's merge conflict. GitHub reported
+  the PR as conflicting after PR #187 (order-service scaffold) landed
+  on `main`; no review comment was open and no decision was put to the
+  author.
+- **Scope:** No source change. The branch was rebased onto `main`
+  (PR #187 landed) and the seven #67 commits replayed. Conflicts in
+  `README.md` (the header disclosure log and the AI Use Summary),
+  `.env.example` and `compose.yaml` (both disclosure headers) were
+  resolved by keeping both sides — `main`'s order-service block in the
+  position `main` appends it, then this branch's #67 entry — with no
+  clause reworded and nothing removed; the AI Use Summary's paragraph
+  break that the conflict seam swallowed was restored.
+  `ai/usage-log.md` merged without a conflict. The replayed diff was
+  diffed line-for-line against the pre-rebase diff to confirm it is
+  unchanged, and `main`'s own lines in the four files confirmed intact.
+  `main` since the old base changes no code outside `order-service/`,
+  so nothing the branch changes overlaps it; the rest of its diff is
+  the shared docs and compose/`.env` wiring resolved above. PR #190 (credit request event
+  listener) merged while this was in flight, so the branch was rebased
+  a second time the same day for a fresh `README.md` conflict: `main`'s
+  #171/#190 header lines kept, the two order-service header lines left
+  to `main`'s copy (its #190 merge had relocated them into date order,
+  so re-adding this branch's copy would have duplicated them), and this
+  branch's two #67 lines placed in their date positions, which is now
+  how the upstream header reads. The replayed diff was again confirmed
+  line-for-line identical to the pre-rebase diff.
+- **Author review:** web 111/111 (vitest), `tsc -b`, eslint, and
+  prettier clean on the touched files; notification-service
+  `./mvnw test` 59 tests with the two known Java 26 AMQP
+  context-restart errors that also fail on `main` locally
+  (`IdempotentEventProcessorTest`, `RetentionPurgeSchedulerTest`).
+  Author review of the resolution pending via the PR.
+
+## 2026-10-16 — Leong Wei Zhi
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** repository maintenance (PR #182 main sync)
+- **Prompt(s):** Asked to address the PR #182 review comments and to
+  rebase onto `origin/main` before pushing. The three open review
+  rounds were checked against the branch first: every finding already
+  has a fix in the code and a reply on the thread, so no code change
+  was needed and no decision was put to the author.
+- **Scope:** No source change. The branch was rebased onto `main`
+  (PRs #187/#188/#189 landed), which dropped the earlier
+  `main`-into-branch merge commit and replayed the four #178 commits.
+  Conflicts in `README.md` (the header disclosure log and the AI Use
+  Summary) and in `ai/usage-log.md` were resolved by keeping both
+  sides in date order — `main`'s entries first, then this branch's —
+  with no clause reworded and nothing removed; the two paragraph
+  breaks the conflict seams swallowed were restored. The README header
+  also gained the 2026-10-14 line the second review round had left out.
+  Later the same day PRs #190 and #185 landed and the branch was
+  rebased again, this time with a code conflict: `web/src/routes/index.tsx`
+  — #185 had added a `NotificationProvider` layout route between
+  `AuthProvider` and the shell, while this branch adds the
+  `RouteHandle` type and the `handle` on the session-gated branch. The
+  seam paired the wrong layers (main's `element: <AppShell />` against
+  this branch's `Component: ProtectedRoute`), so it was resolved by
+  hand: #185's layout route and import kept, `RouteHandle` kept, and
+  `handle: { requiresSession: true } satisfies RouteHandle` placed on
+  the nested `ProtectedRoute` that actually gates
+  /suppliers, /profile and /admin. The `README.md` and
+  `ai/usage-log.md` conflicts were resolved by keeping both sides in
+  date order, with the order-service header lines left to `main`'s copy
+  (its #190 merge had moved them into date order, so re-adding this
+  branch's copy would have duplicated them). Checked afterwards: the
+  branch's added and removed lines are identical to the pre-rebase set
+  apart from the `handle` line's new indentation under the extra route
+  layer, and both docs are additive against `main` (36 and 122 lines,
+  zero deletions).
+- **Author review:** web 125/125 (vitest — this branch's cases and
+  #185's notification suite together), `tsc -b`, eslint and
+  `vite build` clean; prettier clean on the touched files (the one
+  warning, `src/features/user/jwt.ts`, is pre-existing on `main` and
+  untouched here). The diff is reviewed via the PR.
+
+## 2026-10-16 — Leong Wei Zhi (PR #180 main sync; recorded 2026-10-17)
+- **Tool:** Claude Code (Opus 5); entry transcribed by Codex (GPT-6).
+- **Mode:** repository maintenance + debugging (issue #94, PR #180).
+- **Prompt(s):** Retrospective entry from PR #180's description and
+  commit `0ba4212` file headers: sync the frontend half of #94 with
+  main, including the merged #182 session handling and #185 provider.
+  The original prompt text is not available in this session.
+- **Scope:** Reconciled the route table so /forgot-password stays
+  inside AppShell and /account-recovery stays inside ProtectedRoute's
+  requiresSession branch under NotificationProvider. Preserved both
+  sides of header conflicts in AuthProvider, login, and http. Both
+  reset calls now pass auth: false; a successful reset clears the
+  local session with endSession(), without calling the logout endpoint.
+  Added password-reset regression tests and HTTP cases for empty/body
+  202 responses and the auth opt-out. The original #94 screen generation
+  is covered by the 2026-10-11 entries above (Claude Code, Fable 5).
+- **Author review:** PR #180 reports 145 web tests, lint, TypeScript,
+  build, touched-file formatting and browser reset/recovery walkthroughs
+  passing at that commit. These historical results are transcribed,
+  not newly executed by Codex. This retrospective disclosure is pending
+  Leong Wei Zhi's review via PR #180.
+
+## 2026-10-16 — Leong Wei Zhi (PR #183 main sync)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** repository maintenance (PR #183 main sync) + docs
+- **Prompt(s):** Asked to bring PR #183 up to date with the merged
+  PR #179, its base. The scope of that update was put to the author as
+  neutral options: fix the claims #179 left stale and add the owed
+  disclosures (chosen), conflicts only, or conflicts plus claims
+  without the disclosures; likewise retargeting to `main` and marking
+  the PR ready (chosen), and running the full user-service suite
+  (chosen). No design decision was made by AI.
+- **Scope:** The branch was rebased onto `main` (its base branch
+  `feat/account-recovery-password-reset` merged as #179, and #182 and
+  #185 landed since; #180 was still open at that point). Three files
+  conflicted and all three were resolved by keeping both sides:
+  `docs/gateway.md`'s header log (this branch's G12 line placed in date
+  order among #185's two entries), `AdminService`'s header log (#179's
+  approval follow-up entry, then this branch's), and
+  `AdminServiceTest`'s header plus the remove-another-admin case, where
+  #179's demotion assertion and this branch's eviction `verify` now both
+  stand.
+  One semantic change beyond the seams: #179's approval follow-up had
+  written, in `AdminService.removeUser`'s comment and in
+  `user-service/README.md`, that a token minted before a removal keeps
+  ADMIN until its `exp` — true of `main`, false once this branch's
+  stamp lands. Both copies now describe the revocation, with the
+  demotion to USER kept and re-framed as the fallback for a failed
+  best-effort write (G9) against a gateway failing open (G6).
+  `user-service/README.md` also gains the stamp in its admin-endpoint
+  list and in the token section's account of what this service writes
+  to the denylist, and `docs/gateway.md` records the two facts #185's
+  D23 content creates for G12: notification-service's CONNECT lookup
+  reads the same stamp, so a new STOMP session is refused too, while
+  an already-open session still is not (that accepted known limit now
+  names a demote/remove among its triggers).
+- **Author review:** user-service suite via Testcontainers after the
+  rebase; the resolution and the doc corrections reviewed via PR #183.
+
+## 2026-10-17 — Leong Wei Zhi (PR #180 review)
+- **Tool:** Codex (GPT-6).
+- **Mode:** debug + refactor + documentation (issue #94).
+- **Prompt(s):** "Address pr comments on
+  https://github.com/AY2627S1-CS3219-P23/foc/pull/180".
+- **Scope:** Applied @Sinnez1's recovery hold to all routes through the
+  shared AuthProvider; ProtectedRoute keeps the sign-in gate. Parsed
+  202 response text so only an empty body resolves undefined and
+  malformed JSON rejects. Moved the recovery request to profileApi
+  and removed its duplicate imperative home navigation. Reused the
+  existing CodeInput/emptyCode for six-digit reset entry and required
+  the email field. Added public-route and Home-link recovery regression
+  cases, malformed-202 cases using real Responses, and code-entry
+  integration coverage; updated existing response mocks and code-box
+  selectors. Added the retrospective main-sync entry above and the
+  README summary for PR #180. The reset API supplies no timing data,
+  so no cooldown/expiry values were invented or API changes made.
+  Unconditional local sign-out after reset retains the existing PR
+  behavior; the reviewer left changing it optional.
+- **Author review:** 157/157 frontend tests pass; lint, TypeScript and
+  production build pass. Prettier is clean on every touched source/test
+  file, and git diff --check passes. The nine new public-route/Home-link
+  and malformed-202 regression cases fail against the previous source
+  implementation. Recovery tests were rerun after correcting a test
+  query option caught by TypeScript. No live browser walkthrough was
+  performed in this review round. Leong Wei Zhi to review via PR #180.
+
+## 2026-10-17 — Leong Wei Zhi (PR #183 review)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debug + docs (issue #178, PR #183)
+- **Prompt(s):** "address mr comments on <PR #183> and rebase from
+  origin/main also before pushing". The review's one code finding names
+  two mechanisms, so both open choices were put to the author as
+  neutral options: the mechanism (chosen: the `afterCommit` sketch
+  credit-service already uses, over a
+  `@TransactionalEventListener(AFTER_COMMIT)` event) and the scope
+  (chosen: fix `PasswordResetService.confirmReset` too, which carries
+  the identical pre-commit write from the merged #179, rather than only
+  the two sites the review names). No design decision was made by AI;
+  the options were factual.
+- **Scope:** @Sinnez1's two non-blocking comments.
+  - The reviewer reproduced the revocation stamp being written inside
+    the caller's `@Transactional`, where the committed role is still
+    `ADMIN`, so a login in the gap between the Redis write and the
+    commit could mint an ADMIN token with an `iat` the stamp accepts.
+    New `foc.user.service.AfterCommit` runs the write on
+    `TransactionSynchronization.afterCommit`, or inline when no
+    transaction is open; `AdminService.changeRole`, `removeUser` and
+    `PasswordResetService.confirmReset` all stamp through it.
+    `TokenDenylist`'s javadoc states the requirement, and
+    `user-service/README.md` records it.
+  - The 2026-10-16 PR #183 main-sync entry claimed #180 had landed; it
+    was still open then, so the entry now says so. (#180 has merged
+    since — this round's rebase is onto `main` at `668b538`, which
+    includes it.)
+  - Also in this round: the branch rebased onto `main` for #180's
+    merge. `README.md` and this log conflicted and were resolved by
+    keeping both sides, with this branch's #178 server-half summary
+    paragraph kept next to the #182 web-half paragraph it refers back
+    to and main's #180 paragraph left after it.
+- **Author review:** user-service **362/362** via Testcontainers (the
+  two new `AdminControllerTest` cases). All three new ordering
+  assertions were confirmed to fail against the pre-fix code: each
+  reads the target's row over a second JDBC connection — committed
+  state only — at the moment the stamp is written, and before the fix
+  saw the old role, a null `deleted_at` and the old password hash. The
+  manual gateway walkthrough the PR description owes is still owed.
+  Leong Wei Zhi to review via PR #183.
+
+## 2026-10-17 — Leong Wei Zhi (PR #183 Codex review)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** docs + analysis (issue #178, PR #183)
+- **Prompt(s):** "address latest pr comments", then — on the second
+  finding — "is this even valid?" and, after the analysis below,
+  "revert changes and reply to codex comments". The author's call on
+  both findings; no design decision was made by AI.
+- **Scope:** Codex's two P1 findings on `fb0f270`.
+  - **Accepted:** `AfterCommit.run` had no `// AI-generated (edited by
+    <name>)` block marker (AGENTS.md disclosure duty 2). Added in the
+    form the repo already uses, matching
+    `CreditOperationsService.afterCommit`, the sketch it follows.
+  - **Declined:** the claim that an older post-commit cutoff can
+    overwrite a newer one. Codex's mechanism does not hold — the cutoff
+    is read from the clock as the first statement of
+    `revokeUserSessions`, not captured at commit time and carried into
+    the callback, so a delayed callback writes a *later* second, never
+    the stale one in Codex's example. The genuine residue is narrower
+    than stated: the writes are indeed no longer ordered by the row
+    lock (confirmed in `AbstractPlatformTransactionManager.processCommit`,
+    spring-tx 7.0.9 — `doCommit` precedes `triggerAfterCommit`), but an
+    out-of-order *value* needs a ≥1 s stall inside the few instructions
+    between the clock read and the Redis command, with the other
+    request completing its whole transaction and stamp in that stall,
+    plus a login in between to mint a token worth resurrecting. A
+    monotonic Lua cutoff was drafted and then reverted on the author's
+    call. Noted for whoever revisits it: the case that would actually
+    bite is **clock skew between user-service replicas** (each stamps
+    from its own `Clock.systemUTC()`), which needs no stall at all —
+    latent today because compose runs one instance, and already a
+    property of G11's `iat`-versus-stamp comparison rather than
+    something this PR introduced.
+- **Author review:** comment-only change to `AfterCommit`; the
+  user-service suite is unchanged at 362/362 from the previous entry.
+  Both Codex threads answered on the PR. Leong Wei Zhi to review via
+  PR #183.
+
+## 2026-10-17T11:17:00+08:00 — Leong Wei Zhi (issue #98)
+- **Tool:** Codex (GPT-6.1 Sol).
+- **Mode:** debugging + implementation + documentation.
+- **Prompt(s):** "can i close https://github.com/AY2627S1-CS3219-P23/foc/issues/98";
+  "what is meant by auto-skip docker?"; "create a plan to resolve this issue";
+  "Implement the plan."; "create the pr";
+  "wait are you sure you are opus 5? you are gpt 6.1 sol".
+- **Scope:** Implemented the approved automatic Docker-unavailable skip plan
+  in the shared user-service PostgreSQL test base: inherited
+  `@Testcontainers(disabledWithoutDocker = true)` and a Docker availability
+  guard around static startup. Preserved the singleton container and
+  `@ServiceConnection`, without adding `@Container` or catching startup
+  failures. Updated the service test instructions and consolidated README
+  AI Use Summary. No production code, API, schema, dependency, or CI changes.
+- **Verification:** Full user-service suite with Docker: 360 tests, zero
+  failures/errors/skips, one PostgreSQL container start. With Docker socket
+  access denied by the sandbox: 360 tests discovered, 157 unit tests executed,
+  203 integration tests skipped, zero failures/errors. Surefire reports
+  confirmed that exactly the 17 PostgreSQL test subclasses were skipped.
+  The unmodified base failed in the same Docker-inaccessible environment
+  with `ExceptionInInitializerError` from unconditional container startup.
+  Both successful runs used `./mvnw -o test` with Mockito's existing 5.23.0
+  jar passed as `-javaagent` through `-DargLine` to avoid this machine's
+  Java 26 self-attachment restriction; no build configuration was changed.
+  `git diff --check` passed.
+- **Attribution correction:** Model label refined from GPT-6 to GPT-6.1 Sol
+  using the model identification supplied by Leong Wei Zhi. Historical
+  Claude/Opus attributions from earlier work remain unchanged.
+- **Author review:** Leong Wei Zhi to review via pull request.
+
+## 2026-10-17T11:33:22+08:00 — Leong Wei Zhi (PR #197 review, issue #98)
+- **Tool:** Codex (GPT-6.1 Sol).
+- **Mode:** debugging + implementation + documentation.
+- **Prompt(s):** "address latest pr comments".
+- **Scope:** Addressed both inline reviews about CI succeeding when Docker
+  is unavailable. Added a user-service-only CI step after Maven verify to
+  reject any skipped Surefire suites and missing reports. Local automatic
+  skipping remains unchanged. Updated service instructions, workflow file
+  attribution, and the consolidated AI Use Summary.
+- **Verification:** Parsed the workflow YAML and executed its extracted
+  shell step against actual Surefire reports. The previous Docker-available
+  full run's reports (360 passed, zero skipped) passed the new check. A
+  fresh sandboxed Docker-unavailable run passed locally (157 tests executed,
+  203 skipped), then failed the new CI check with all 17 skipped integration
+  classes named in the error. Missing reports also failed the check.
+  The Maven rerun used the same existing Mockito jar as a Java agent for
+  this machine's Java 26 restriction. No Java code changed in this review
+  round; the Docker-available suite was not rerun. `git diff --check` passed.
+- **Author review:** Leong Wei Zhi to review via PR #197.
+
+## 2026-10-17 — Leong Wei Zhi (PR #197 comment cleanup)
+- **Tool:** Codex (GPT-6.1 Sol).
+- **Prompt(s):** "remove // AI-generated (edited by Codex; human review pending)."
+- **Scope:** Removed the specified inline Java comment at the user's
+  explicit request. File-header attribution remains accurate.
+- **Verification:** Comment-only change; `git diff --check` passed.
+- **Author review:** Leong Wei Zhi to review via PR #197.

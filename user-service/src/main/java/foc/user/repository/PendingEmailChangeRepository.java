@@ -45,7 +45,7 @@ public interface PendingEmailChangeRepository extends JpaRepository<PendingEmail
 
     // removes the pending changes of accounts whose recovery window has
     // passed, whatever their expiry, so the purge's users delete can't
-    // trip the user_id FK (AccountTokenRepository's shape; bulk delete
+    // trip the user_id FK (PasswordResetOtpRepository's shape; bulk delete
     // statements can't join, hence the subquery)
     @Modifying(clearAutomatically = true)
     @Query("DELETE FROM PendingEmailChange p WHERE p.userId IN"

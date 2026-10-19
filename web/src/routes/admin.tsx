@@ -12,7 +12,12 @@
 // the dashboard shows only the Users section for now (Ryan Ang's
 // decision); admins manage suppliers on the Suppliers page.
 // Reviewed by: Ryan Ang.
+// 2026-10-17, Claude Code (Opus 5.5), issue #174: the credit domain's
+// Common Pool box above the Users section (team decision). Same day,
+// author's request: the subtitle under the heading removed.
+// Author review: Ryan Ang, pending pull request review.
 
+import { CommonPoolCard } from '@/features/credit/components/CommonPoolCard'
 import { UsersSection } from '@/features/user/components/UsersSection'
 
 export function Admin() {
@@ -22,11 +27,9 @@ export function Admin() {
         <h1 className="text-2xl font-semibold text-gray-900">
           Admin Dashboard
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Manage university platform content, system configurations, and campus
-          users.
-        </p>
       </div>
+
+      <CommonPoolCard />
 
       <UsersSection />
     </div>

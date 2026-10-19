@@ -9,6 +9,9 @@
  * 2026-09-20: order→request event vocabulary rename applied (author
  * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-17, Claude Code (Fable 5), issue #66: fixtures updated for
+ * the display-name fields added to the request event records (D29);
+ * no behavior change in this test.
  */
 package foc.notification.messaging.rabbitmq;
 

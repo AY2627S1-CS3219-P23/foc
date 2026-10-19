@@ -31,6 +31,14 @@ fail-closed admin catch-all.
 2026-10-11 (Claude Code, Fable 5), issue #151: POST /auth/logout gets the
 authenticated() rule the #90 comment reserved, above the /auth/** permit
 (the filter already runs for it and verifies the caller's token).
+2026-10-11 (Claude Code, Fable 5), issue #94: POST /users/me/recover's
+authenticated() line, above the admin catch-all as the #92 comment
+prescribes; the reset routes need no line — they live under /auth/**.
+2026-10-17 (Claude Code, Fable 5), issue #66: InternalServiceTokenFilter
+added to the chain so notification-service's ingest-time username
+lookups can authenticate with a shared secret — the author's zero-trust
+decision (D31): GET /users/{id} keeps its authenticated() rule instead
+of opening to the compose network.
 */
 
 package foc.user.config;
@@ -54,6 +62,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import foc.user.security.InternalServiceTokenFilter;
 import foc.user.security.JwtAuthenticationFilter;
 import foc.user.security.JwtVerifier;
 import foc.user.security.SecurityProblemResponses;
@@ -85,7 +94,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtVerifier jwtVerifier,
-            SecurityProblemResponses problems) throws Exception {
+            SecurityProblemResponses problems,
+            @Value("${user.internal.service-token}") String internalServiceToken) throws Exception {
         return http
             .csrf(AbstractHttpConfigurer::disable)
             // uses the corsConfigurationSource bean; answers preflights
@@ -96,6 +106,11 @@ public class SecurityConfig {
             // the caller comes from the Authorization header (design doc §3)
             .addFilterBefore(new JwtAuthenticationFilter(jwtVerifier, problems),
                 UsernamePasswordAuthenticationFilter.class)
+            // sibling services authenticate username lookups with the
+            // shared internal token instead of a user JWT (issue #66,
+            // D31 — zero trust: the route stays authenticated())
+            .addFilterBefore(new InternalServiceTokenFilter(internalServiceToken),
+                JwtAuthenticationFilter.class)
             // 401 without usable credentials, 403 for the wrong role, both
             // problem+json like the controllers' errors
             .exceptionHandling(errors -> errors
@@ -125,6 +140,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/users/me/email/verify").authenticated()
                 .requestMatchers(HttpMethod.POST, "/users/me/email/resend").authenticated()
                 .requestMatchers(HttpMethod.POST, "/users/me/password").authenticated()
+                // the recovery restore (#94): must be reachable by a
+                // soft-deleted caller, whose JWT is valid like anyone's
+                .requestMatchers(HttpMethod.POST, "/users/me/recover").authenticated()
                 // everything else under /users, whatever the method, is an
                 // admin endpoint (#96). Method-less so unlisted methods (HEAD,
                 // OPTIONS, POST, ...) fail closed, and checked here rather
