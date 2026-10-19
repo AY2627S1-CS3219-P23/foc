@@ -185,6 +185,8 @@
   2026-10-18: AI Use Summary extended for the issue #165 follow-ups
   (a duplicate reservation resends its reply, the contract test's
   parties check, the credit legend) by Claude Code (Opus 5.5).
+  2026-10-19: AI Use Summary extended for the supplier bookmarks N8
+  documentation (issues #225-#227) by Claude Code (Sonnet 5.5).
   Author review: Ryan Ang, pending pull request review.
 -->
 

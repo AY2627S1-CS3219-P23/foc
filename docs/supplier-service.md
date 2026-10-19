@@ -87,11 +87,11 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D5 | Deletion | **Team decision (2026-09-29):** hard delete — `DELETE /suppliers/{id}` removes the row. F1.1.3's "delete suppliers" is implemented literally; the team accepted that a supplier referenced by past/active orders loses its detail in order history as a consequence, rather than adding a `status: ACTIVE/INACTIVE` soft-delete column. | **Decided** |
 | D6 | Distance support | Supplier records store `latitude`/`longitude`; Supplier Service exposes an endpoint (or the raw coordinates) Order Service can use to compute the F8.1 distance check | Grounded in Order F8.1 |
 | D7 | Indexing | Not required at NFR2.1's revised 1,000-supplier target — a sequential scan comfortably clears NFR1.1's 5-second bound at that size, including for the search endpoint's leading-wildcard `LIKE '%...%'` query, which a standard btree index can't accelerate regardless (would need a trigram/GIN index, only worth the added complexity at a much larger row count). Revisit if NFR2.1 is raised again. | Revised 2026-09-27 (was: index on `name`/`category` to hit the original 100,000-row NFR2.1 target) |
+| D8 | Seeding | Initial data load is an implementation task (tracked as issue #102 — CSV loader), not a numbered FR in the finalized brief | Confirmed: not in scope as an FR |
 | D9 | Bookmark ownership | **Decided (2026-10-19, Alastair Tan Choon Wei):** the Supplier Service owns the bookmark table, so a supplier's deletion (D5) can remove its bookmarks in the same service. No gateway change: endpoints sit under the existing `/api/supplier/**` route. | **Decided** |
 | D10 | Bookmark cap | **Decided (2026-10-19, Alastair Tan Choon Wei):** at most 5 per user, enforced in both frontend and backend. A sixth is rejected with `409` and a message stating the limit of 5 has been reached. | **Decided** |
 | D11 | Supplier deletion | **Decided (2026-10-19, Alastair Tan Choon Wei):** deleting a supplier removes its bookmarks; affected users simply have one fewer. | **Decided** |
 | D12 | Account-purge cleanup | The Supplier Service holds only user ids, so it must learn when an account is purged (N8.5). Mechanism not yet chosen. | **Open — team** |
-| D8 | Seeding | Initial data load is an implementation task (tracked as issue #102 — CSV loader), not a numbered FR in the finalized brief | Confirmed: not in scope as an FR |
 
 ## Components
 
