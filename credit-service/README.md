@@ -32,6 +32,8 @@
   2026-10-17, Claude Code (Opus 5.5), issue #174: the admin API.
   2026-10-17, Claude Code (Opus 5.5), issue #196: the expiries route in
   the read API and how to call it.
+  2026-10-19, Claude Code (Opus 5.5), issue #218: V3 and the outbox
+  retention purge.
   Author review: Ryan Ang, pending pull request review.
   2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the run
   section's service URL updated for the gateway cutover (#151) — the
@@ -64,6 +66,8 @@ What is here:
 - **Flyway V2** (`V2__outbox_next_attempt_at.sql`): adds
   `outbox_event.next_attempt_at`. It is applied on the next start of
   the service; an existing `credit-db` volume is kept.
+- **Flyway V3** (`V3__outbox_event_sent_index.sql`): a partial index on
+  `outbox_event.sent_at` over the sent rows, for the retention purge.
 - **Entities and repositories** (`entity/`, `repository/`): one JPA
   entity per table and a Spring Data repository for each.
 - **Credit operations** (`service/CreditOperationsService`): get-or-create
@@ -119,6 +123,11 @@ What is here:
   Spring's own "Returned message but no callback available" warning:
   the publisher registers no returns callback on the shared
   `RabbitTemplate`, which takes only one.
+- **Outbox retention** (`service/OutboxRetentionScheduler`): daily at
+  03:00 Singapore time (`CREDIT_OUTBOX_PURGE_CRON`), deletes the
+  replies sent more than `CREDIT_OUTBOX_RETENTION_DAYS` (default 30)
+  days ago. Unsent replies are never deleted, and no other table is
+  purged. A window below 1 day fails startup.
 - **Expiry and redistribution** (`service/ExpiryAndRedistributionScheduler`,
   `LotExpiryService`, `RedistributionService`), in Singapore time:
   - Daily at 00:00, what remains in each lot past its expiry moves to

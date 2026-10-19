@@ -42,6 +42,8 @@
   the package map.
   PR #210 review (Leong Wei Zhi): the CreditControllerTest invariant
   counts three first-read cases.
+  2026-10-19, Claude Code (Opus 5.5), issue #218: the package map and
+  invariants updated for the outbox retention purge and V3.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -51,7 +53,7 @@ Java 21 + Spring Boot 4 service for credit balances, reservation,
 transfer and history. Read the root `AGENTS.md` first (architecture,
 course constraints, AI usage policy). The design authority is
 [`docs/credit-service.md`](../docs/credit-service.md): cite its decision
-IDs (D1–D12) when touching related code.
+IDs (D1–D13) when touching related code.
 
 ## Package map (`src/main/java/foc/credit/`)
 
@@ -63,7 +65,7 @@ IDs (D1–D12) when touching related code.
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
 | `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
-| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API, `PoolQueryService`, the admin routes' reads, and `ExpiryAndRedistributionScheduler` with `LotExpiryService` and `RedistributionService` (D12), and `EarnedCreditLifetime`, the earned-credit expiry both the transfer and the redistribution use (D4) |
+| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API, `PoolQueryService`, the admin routes' reads, and `ExpiryAndRedistributionScheduler` with `LotExpiryService` and `RedistributionService` (D12), and `EarnedCreditLifetime`, the earned-credit expiry both the transfer and the redistribution use (D4), and `OutboxRetentionScheduler`, the daily purge of sent replies (D13) |
 | `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), `RequestEventsListener` (settles each request event on the handler's outcome: ack, dead-letter, or a confirmed republish to the retry queue), and `DomainEventMessageConverter`, a copy of notification-service's |
 
 ## Invariants — do not break
@@ -75,7 +77,7 @@ IDs (D1–D12) when touching related code.
 - **The schema follows the design doc's "Database" section**: a schema
   change is a design change, so update the doc with it.
 - **Entities mirror the migrations** (V1, and V2 for
-  `outbox_event.next_attempt_at`). With `ddl-auto: none` nothing validates the
+  `outbox_event.next_attempt_at`; V3 adds only an index). With `ddl-auto: none` nothing validates the
   mappings at startup; `EntityMappingTest` saves and reads each one back.
   A new column needs a migration, the entity field and that test.
 - **A reply is enqueued inside the transaction that owes it.**
@@ -97,6 +99,12 @@ IDs (D1–D12) when touching related code.
   every batch and nothing behind them would be published (PR #188).
   `BROKER_UNAVAILABLE` sets no delay; those replies are due on the
   next poll.
+- **The retention purge deletes sent replies and nothing else** (D13).
+  `OutboxEventRepository.deleteSentBefore` keeps `sent_at is not
+  null` in its condition: an unsent reply is one the Order Service is
+  still waiting for, however old. No other table is purged: the
+  reservations, history, lots and slices are the ledger. The window
+  (`credit.outbox.retention.days`) is refused below 1 at startup.
 - **A reply is inserted, never saved.** `OutboxEventRepository.save`
   merges: it reads the row first, and for an event ID already stored
   would set a published reply back to unsent. `insert` fails on the

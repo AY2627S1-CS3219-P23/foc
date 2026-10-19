@@ -8,6 +8,8 @@
  * 2026-10-13, Claude Code (Opus 5.5), PR #188 review (Leong Wei Zhi):
  * the poll reads only the replies that are due (team decision), and an
  * insert that never overwrites, as ReservedRepository has.
+ * 2026-10-19, Claude Code (Opus 5.5), issue #218: the retention purge's
+ * bulk delete (team decisions: sent rows only, counted from sent_at).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.repository;
@@ -20,6 +22,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import foc.credit.entity.OutboxEvent;
 
@@ -53,4 +56,16 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
         """, nativeQuery = true)
     void insertRow(@Param("eventId") UUID eventId, @Param("eventType") String eventType,
             @Param("payload") String payload, @Param("createdAt") Instant createdAt);
+
+    /**
+     * The retention purge (D13): deletes the replies sent before
+     * {@code cutoff} in one bulk {@code DELETE}, on the partial index
+     * idx_outbox_event_sent. An unsent reply is never deleted, however
+     * old: the Order Service is still waiting for it. Transactional on
+     * its own, since the scheduled caller has no transaction.
+     */
+    @Modifying
+    @Transactional
+    @Query("delete from OutboxEvent e where e.sentAt is not null and e.sentAt < :cutoff")
+    int deleteSentBefore(@Param("cutoff") Instant cutoff);
 }
