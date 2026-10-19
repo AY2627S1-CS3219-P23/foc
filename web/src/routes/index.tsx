@@ -25,6 +25,7 @@ import { AdminRoute } from '../features/user/AdminRoute'
 import { ProtectedRoute } from '../features/user/ProtectedRoute'
 import { Login } from '../features/user/login'
 import { Register } from '../features/user/register'
+import { RegisterOwner } from '../features/user/registerOwner'
 import { AuthProvider } from '../features/user/AuthProvider'
 // One page = one file in this folder + one child entry below, so
 // five owners adding pages touch one line each here. Loaders/actions
@@ -39,6 +40,7 @@ export const routes: RouteObject[] = [
           { index: true, element: <Home /> },
           { path: 'login', element: <Login /> },
           { path: 'register', element: <Register /> },
+          { path: 'register-owner', element: <RegisterOwner /> },
           {
             Component: ProtectedRoute,
             children: [

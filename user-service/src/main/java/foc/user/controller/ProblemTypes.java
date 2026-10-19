@@ -57,4 +57,8 @@ public final class ProblemTypes {
 
     /** The username is already taken (ignoring case; includes soft-deleted accounts). */
     public static final URI USERNAME_TAKEN = URI.create("urn:foc:user:username-taken");
+
+    /** No owner key is set up on the server. */
+    public static final URI OWNER_SETUP_TOKEN_MISSING = URI.create("urn:foc:user:owner-setup-token-missing");
+    
 }

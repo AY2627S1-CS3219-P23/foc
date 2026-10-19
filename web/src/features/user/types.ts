@@ -50,6 +50,15 @@ export interface SignupPending {
   resendAt: number // epoch ms
 }
 
+export interface OwnerSignupPending {
+  email: string
+  username: string
+  password: string
+  ownerKey: string
+  expiresAt: number // epoch ms
+  resendAt: number // epoch ms
+}
+
 // Role values as stored by user-service (User.role).
 export type UserRole = 'USER' | 'ADMIN' | 'OWNER'
 
