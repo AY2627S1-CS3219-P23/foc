@@ -5709,3 +5709,18 @@ Entry template:
   they are marked TBD.
 - **Author review:** Alastair Tan Choon Wei to review before opening
   the PR.
+
+## 2026-10-19 — Alastair Tan Choon Wei (docs: supplier bookmarks D13)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** docs
+- **Scope:** `docs/supplier-service.md` (D13, N8.3/N8.4, browse/search
+  component, bookmark entity), `docs/supplier-service.mmd` (browse/search
+  label), `README.md` (AI Use Summary and header line). Issue #226.
+- **Prompt(s):** "ill stick to option 1. help me update the relevant
+  docs." The tool compared the two options and the changes option 1
+  needs in `GET /suppliers`; the author chose option 1 and decided the
+  ordering: bookmarked first by default, most recently bookmarked first,
+  and no bookmark precedence once a filter such as nearest-to-me is
+  applied. Only those decisions were transcribed.
+- **Author review:** Alastair Tan Choon Wei to review before opening
+  the PR.

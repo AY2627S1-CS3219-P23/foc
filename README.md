@@ -186,7 +186,9 @@
   (a duplicate reservation resends its reply, the contract test's
   parties check, the credit legend) by Claude Code (Opus 5.5).
   2026-10-19: AI Use Summary extended for the supplier bookmarks N8
-  documentation (issues #225-#227) by Claude Code (Sonnet 5.5).
+  documentation (issues #225-#227) by Claude Code (Sonnet 5.5); same
+  day, extended for D13 (how the supplier list flags and orders
+  bookmarks).
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -881,7 +883,8 @@ bookmarks nice-to-have (N8, issues #225-#227): this README's team table,
 `docs/architecture.md`, `docs/supplier-service.md` and its diagram. It
 transcribed only what Alastair Tan Choon Wei decided (bookmarks owned by
 supplier-service, a 5-bookmark cap enforced in both frontend and backend
-with a 409 response, a bookmark removed when its supplier is deleted);
+with a 409 response, a bookmark removed when its supplier is deleted, and how the supplier
+list flags and orders bookmarks);
 the mechanism for cleaning up bookmarks when an account is purged is
 marked open for the team.
 

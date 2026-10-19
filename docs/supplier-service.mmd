@@ -10,13 +10,15 @@ title: "FoC — Supplier Service Component Diagram"
 %% decision to drop the zone feature (see supplier-service.md, D4).
 %% 2026-10-19 (Claude Code, Sonnet 5.5): bookmark API and table added
 %% for N8 (see supplier-service.md, D9-D12). Transcription only.
+%% 2026-10-19: browse/search API label gains the bookmarked flag and
+%% default order (D13). Transcription only.
 %% Reviewed by: XXX
 flowchart TB
     WEB["Web App<br/>(web/)"]
     ORDER_SVC["Order Service<br/>(external)"]
 
     subgraph SUP["Supplier Service"]
-        API["Browse/search REST API<br/>F1.2, F1.2.1, F2.1, F2.2, F2.2.1"]
+        API["Browse/search REST API<br/>F1.2, F1.2.1, F2.1, F2.2, F2.2.1<br/>bookmarked flag + default order — D13, N8.3-N8.4"]
         ADMIN_API["Admin CRUD REST API<br/>JWT role-gated (D2) — F1.1-F1.1.4"]
         VALID_API["Internal validation/lookup API<br/>D6 — serves Order F1.1.1, Order F8.1"]
         BOOKMARK_API["Bookmark REST API<br/>JWT, per-user — N8.1-N8.5"]
