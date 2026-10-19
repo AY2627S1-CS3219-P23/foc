@@ -32,13 +32,19 @@
 // pushed row raises the total, and a row read out of the Unread view
 // lowers it — so the pager neither disappears with older rows still
 // unloaded nor offers a page that is already on screen.
+// 2026-10-19, Claude Code (Fable 5), issue #221: courier names hydrate
+// at read time per the author's D32 decision (options Q&A, supersedes
+// D30/D31) — one useUsernames call over the held rows covers REST pages
+// and pushed frames alike; a row renders actor-less copy until (and
+// unless) its courierId resolves.
 
 import { useEffect, useState } from 'react'
 
 import { listNotifications, markAllRead, setNotificationRead } from './api'
-import { notificationMessage, relativeTime } from './eventMessage'
+import { courierIdOf, notificationMessage, relativeTime } from './eventMessage'
 import { useNotifications } from './useNotifications'
 import type { NotificationDto } from './types'
+import { useUsernames } from '@/features/user/usernames'
 import { errorMessage } from '@/lib/api/http'
 
 const PAGE_SIZE = 10
@@ -284,6 +290,10 @@ export function NotificationCenter() {
   // mark, so it must not be gated on the badge alone (PR #199 review).
   const canMarkAll = unreadCount > 0 || items.some((n) => !n.read)
 
+  // Read-time hydration (D32): resolve the couriers named by the held
+  // rows — REST pages and pushed frames alike converge on `items`.
+  const names = useUsernames(items.map((n) => courierIdOf(n.payload)))
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -387,6 +397,7 @@ export function NotificationCenter() {
             <NotificationRow
               key={notification.id}
               notification={notification}
+              names={names}
               now={now}
               onClick={() => handleRowClick(notification)}
             />
@@ -412,14 +423,16 @@ export function NotificationCenter() {
 
 function NotificationRow({
   notification,
+  names,
   now,
   onClick,
 }: {
   notification: NotificationDto
+  names: ReadonlyMap<string, string>
   now: Date
   onClick: () => void
 }) {
-  const { icon, title } = notificationMessage(notification)
+  const { icon, title } = notificationMessage(notification, names)
   const time = relativeTime(notification.occurredAt, now)
 
   // An unread row is a button (clicking marks it read); a read row is

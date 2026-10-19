@@ -39,6 +39,40 @@ Entry template:
 ```
 
 ---
+## 2026-10-19 — Leong Wei Zhi (issue #221: D32 read-time name hydration, supersedes D30/D31)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor
+- **Scope:** removed the system's only synchronous inter-service call —
+  notification-service's ingest-time username enrichment (D30) and its
+  `X-Internal-Token` credential (D31). notification-service: `UserDirectory`
+  port, `RestUserDirectory` adapter (+ test) deleted; `IdempotentEventProcessor`
+  stores IDs-only payloads and reverted to `@Transactional` (the
+  lookup-before-transaction ordering was `TransactionTemplate`'s only
+  reason); `notification.user-service.*` yaml keys and
+  `spring-boot-starter-restclient` dropped. user-service:
+  `InternalServiceTokenFilter`, its SecurityConfig wiring,
+  `user.internal.service-token` and the four token tests deleted
+  (`GET /users/{id}` stays authenticated — now the web's hydration source).
+  web: new `features/user/usernames.ts` (per-id `GET /api/user/users/{id}`
+  via the gateway, 10 m/30 s TTL cache, in-flight dedupe, `useUsernames`
+  hook + unit tests); `eventMessage.ts` reads `courierId` against a
+  resolved-name map (stored name keys of old rows ignored);
+  `NotificationCenter` hydrates REST rows and STOMP frames at one seam.
+  compose.yaml/.env.example: `USER_SERVICE_BASE_URL` +
+  `INTERNAL_SERVICE_TOKEN` plumbing removed. docs/notification-service.md:
+  D32 row, "Display names (D32)" section, catalog/config notes.
+- **Prompt(s):** "check if synchronous communication between microservices
+  exist", "is this anti pattern? what are the alternatives", "what would
+  industry do?", then "/plan make a plan to remove this synchronous call
+  using [read-time hydration industry pattern]. Create a new github issue
+  for the created pr to resolve." Design decided by the author via neutral
+  options Q&A: per-id lookups + SPA cache (no batch endpoint), internal-token
+  machinery removed in the same PR, web always hydrates (ignores stored
+  name keys, no migration), Claude opens the PR closing #221.
+- **Author review:** Leong Wei Zhi to review via the PR. Verified:
+  notification-service + user-service `./mvnw clean test`, web `npm test`
+  (279) + `npm run build`, compose config parse, dead-reference grep.
+
 ## 2026-10-18 — Aung Ko Khant (order-service: hide past-deadline requests)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate

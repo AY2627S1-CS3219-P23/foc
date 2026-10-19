@@ -106,6 +106,9 @@
 # passed to user- and notification-service, plus USER_SERVICE_BASE_URL
 # to the latter, for the ingest-time username lookups (author decisions
 # D30/D31 via options Q&A — zero-trust shared credential).
+# 2026-10-19, Claude Code (Fable 5), issue #221: both variables removed —
+# D32 (options Q&A) supersedes D30/D31: the web hydrates names at read
+# time through the gateway, so no service-to-service call remains.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
 
@@ -194,12 +197,6 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       NOTIFICATION_WS_ALLOWED_ORIGINS: ${NOTIFICATION_WS_ALLOWED_ORIGINS:-http://localhost:*}
       WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
-      # Ingest-time username lookups (D30) against user-service's
-      # public-profile route, authenticated by the shared internal
-      # token (D31 — zero trust). Unset token = enrichment disabled,
-      # rows store IDs-only and the web shows actor-less copy.
-      USER_SERVICE_BASE_URL: http://user-service:8080
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
       # Platform Redis: denylist read at STOMP CONNECT (D23). No
       # depends_on redis on purpose — the check fails open (G6).
       REDIS_HOST: redis
@@ -328,9 +325,6 @@ services:
       # verify with.
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-1h}
-      # Accepts notification-service's X-Internal-Token on the
-      # public-profile route (issue #66, D31). Unset = filter disabled.
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
       # Browser origin allowed by CORS, shared with supplier-service.
       WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
       # OTP email delivery (issue #88). Defaults reach the mailpit

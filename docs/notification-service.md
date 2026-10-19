@@ -3,7 +3,7 @@
   Tool: Claude Code (Fable 5), 2026-09-15 – 2026-09-21.
   Scope: transcribed and maintained the team-decided notification-service
   design in this document and the companion diagram. Every design decision
-  (D1–D31) was made by a team member — recorded per decision in the
+  (D1–D32) was made by a team member — recorded per decision in the
   Decisions table, chosen via neutral options Q&As where AI assisted — and
   the decision-by-decision history lives in ai/usage-log.md and git
   history. The tool documented decisions, derived the traceability
@@ -54,6 +54,13 @@
   2026-10-17, Claude Code (Fable 5), PR #201 Codex review: the D4
   trade-off note names the unacked work-queue redelivery path alongside
   DLQ replay (same accepted ≥30-day-outage class; no design change).
+  2026-10-19, Claude Code (Fable 5), issue #221: the author reopened the
+  display-name design via neutral options Q&A and superseded D30/D31
+  with D32 — read-time hydration in the web (per-id lookups through the
+  gateway with the caller's own JWT, SPA-side TTL cache); the ingest
+  lookup, its adapter and the internal token are removed. D30/D31 rows
+  removed (superseded-decision convention), the enrichment section
+  rewritten as "Display names (D32)", catalog/config notes updated.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -74,10 +81,12 @@ Companion diagram: [`notification-service.mmd`](notification-service.mmd)
 
 All decisions were made by Leong Wei Zhi (D1–D10 on 2026-09-15, D11 on
 2026-09-18, D12–D19 on 2026-09-19, D20–D22 on 2026-09-20, D23 on
-2026-10-12, D24–D31 on 2026-10-17) and count as
+2026-10-12, D24–D31 on 2026-10-17, D32 on 2026-10-19) and count as
 the team's finalized design for this service. Superseded decisions
-(D5, D14, and D29 — display names in events, reversed the same day in
-favor of D30) have been removed; gaps in the numbering are intentional.
+(D5, D14, D29 — display names in events, reversed the same day in
+favor of D30 — and D30/D31 themselves, the ingest-time lookup and its
+internal token, superseded by D32's read-time hydration) have been
+removed; gaps in the numbering are intentional.
 
 | # | Concern | Decision | Serves |
 | --- | --- | --- | --- |
@@ -107,8 +116,7 @@ favor of D30) have been removed; gaps in the numbering are intentional.
 | D26 | Read-flag write mechanism | **One ownership-scoped bulk `UPDATE`, row count checked**: 0 rows → 404, so a foreign ID and a missing ID are indistinguishable (no existence oracle); counting matched rows makes repeats idempotent | Notif F3.2 |
 | D27 | List paging & filter | **Hand-validated `page`/`size`** (defaults 0/20, cap 100, out-of-range → 400 — credit-service's anti-`Pageable` stance) plus an optional **`unread=true` filter**, bound as a primitive `boolean` — deliberately as lenient as Spring's standard conversion (`1`/`yes`/`on` and `0`/`no`/`off` alongside `true`/`false`), not hand-validated like `page`/`size` | Notif F3.1 |
 | D28 | REST filter authorities | **Empty authorities**: the JWT filter authenticates the subject only — this service's verifier exposes no role claim and no route is role-gated; the denylist is NOT re-checked on REST (gateway decision G4; D23 stays the STOMP-only exception) | least change |
-| D30 | Display names (supersedes D29) | **Events carry party IDs only; this service resolves `requesterId`/`courierId` to usernames at ingest** (user-service `GET /users/{id}` behind a TTL cache) and stores `requesterName`/`courierName` in the payload — so the STOMP push frame and the REST rows carry identical names, producers stay display-agnostic, and F1.1's "everything from the event alone" gains this one best-effort exception: a failed lookup stores the row without the name (the web renders actor-less copy), never dead-letters | Notif F3.1 UX |
-| D31 | Lookup credential | **Shared static internal token (`X-Internal-Token`), zero trust**: user-service keeps `GET /users/{id}` behind `authenticated()` and additionally accepts the env-configured secret (constant-time compare, honored on the public-profile route only) — `permitAll` inside the network was explicitly rejected even though the gateway JWT-gates the edge | security posture |
+| D32 | Display names (supersedes D30/D31) | **Events and stored payloads carry party IDs only; the web resolves `courierId` → username at read time** (gateway `GET /api/user/users/{id}` with the caller's own JWT, SPA-side cache: 10 min positive / 30 s negative TTL, in-flight dedupe) — no service-to-service call remains, the internal-token machinery is gone, F1.1 holds unamended, renames show current names (D30's ingest snapshot went stale), and a failed lookup renders the actor-less copy — see [Display names](#display-names-d32) | Notif F3.1 UX |
 
 ## Components
 
@@ -188,10 +196,10 @@ carry `requestId`, `requesterId`, `pickupLocation`, `dropoffLocation`,
 and `note` (nullable: a request may have none); the post-acceptance events add `courierId` (nullable on
 `request.cancelled` — a pre-acceptance cancel has no courier),
 `request.submitted` adds `reward` and `request.rejected` adds
-`reason`. Display names are deliberately **not** event fields (D30,
-superseding D29): this service resolves them at ingest and stores
-`requesterName`/`courierName` in the payload — see
-[Display-name enrichment](#display-name-enrichment-d30d31). The credit domain's `credit.reserved` and
+`reason`. Display names are deliberately **not** event fields — and not
+stored payload fields either (D32, superseding D30): payloads keep the
+party IDs as-is and the web resolves `courierId` to a username at read
+time — see [Display names](#display-names-d32). The credit domain's `credit.reserved` and
 `credit.reservation-rejected` carry `requestId`, `requesterId` and
 `amount` (plus `reason` on the rejection) and go to the separate
 `credit-events` exchange, which this service does not bind. Adding
@@ -224,36 +232,35 @@ changes (D16).
   the container's rejection plus the dead-letter leg — no custom
   error-handler code.
 
-## Display-name enrichment (D30/D31)
+## Display names (D32)
 
-At ingest — before the transaction opens (PR #205 review) — the
-processor resolves each party-id payload field (`requesterId` →
-`requesterName`, `courierId` → `courierName`) through the
-`UserDirectory` port and writes any resolved name into the stored
-payload. The push frame and every later REST read serve that same
-payload, so copy is identical everywhere without a read-time lookup.
-Duplicate deliveries resolve names too (the lookup precedes the dedupe
-check), which the cache absorbs.
+Stored payloads and push frames carry party IDs only — this service
+makes **no outward calls** (F1.1 holds with no exceptions; D32
+superseded D30's ingest-time lookup and D31's internal token, and the
+ingest transaction is plain `@Transactional` again: the
+lookup-before-transaction ordering was the only reason it had been
+programmatic). The web resolves names where they are displayed:
 
-- **Adapter:** `GET {USER_SERVICE_BASE_URL}/users/{id}` (the
-  public-profile route, username only) with the shared
-  `X-Internal-Token` secret (D31 — zero trust; `INTERNAL_SERVICE_TOKEN`
-  must match on both services). 2 s connect/read ceilings: the call
-  runs on the listener path, so a hung lookup must cost seconds, not
-  Lettuce-style minutes — and it runs **outside** the ingest
-  transaction (a programmatic `TransactionTemplate` opens after the
-  lookup), so a user-service stall delays the listener thread but
-  never holds a pooled DB connection.
-- **Cache:** per-id TTL (`NOTIF_NAME_CACHE_TTL`, default 10 m) bounds
-  lookup volume from a busy queue and how long a rename shows stale;
-  misses and errors negative-cache for a fixed 30 s so an outage
-  doesn't hammer user-service but recovery isn't muted for the TTL.
+- **Lookup:** the SPA calls `GET /api/user/users/{id}` through the
+  gateway with the caller's own JWT (the route was already
+  `authenticated()` — no new credential, no service-to-service trust).
+  One request per unique `courierId` on screen; in-flight dedupe
+  collapses concurrent rows naming the same courier.
+- **Cache:** SPA-side, per id — 10 min positive / 30 s negative TTL
+  (the retired ingest adapter's numbers, for the same reasons: bound
+  request volume, don't mute recovery). Fan-out is bounded by unique
+  couriers per page (10-row pages behind "Load more"); a batch
+  endpoint (`GET /users/batch?ids=…`) is noted as future work if
+  volume ever warrants it.
 - **Degradation:** any failure — unknown id, 404 (deleted account),
-  401 (token mismatch), timeout, unset config — stores the row with
-  the name absent; the web's templates render actor-less copy. A
-  lookup can slow an ingest but never fail one (F1.1's one amended
-  exception), and names are an ingest-time snapshot: a later rename
-  does not rewrite stored notifications.
+  network error — renders the template's actor-less copy, the same
+  strings that show while a lookup is still in flight. A row is never
+  blocked on a name.
+- **Renames:** copy always shows the *current* username — D30's
+  ingest-time snapshot (stale after a rename) was a motivating defect.
+  Pre-D32 rows still carry stored `requesterName`/`courierName` keys;
+  the web ignores them entirely (no migration — dead keys age out with
+  the 30-day retention purge).
 
 ## REST API contract (D24–D28)
 
@@ -321,10 +328,6 @@ not drawn on the diagram — the traceability table below maps them.
 - `NOTIF_PURGE_CRON` — purge schedule, default daily at 03:00.
 - `NOTIFICATION_RETRY_TTL_MS` / `NOTIFICATION_RETRY_MAX_ATTEMPTS` —
   retry backoff and attempt cap (D6), defaults **10 s / 3**.
-- `USER_SERVICE_BASE_URL` / `INTERNAL_SERVICE_TOKEN` /
-  `NOTIF_NAME_CACHE_TTL` — the D30 username lookups (base URL, the D31
-  shared secret, cache TTL defaulting **10 m**); an empty URL or token
-  disables enrichment, degrading to actor-less copy.
 
 > 🔴 The retry TTL is baked into the retry queue's arguments at
 > declaration: changing it against a broker that already holds the
