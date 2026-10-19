@@ -50,6 +50,7 @@ export function Register() {
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [ownerKey, setOwnerKey] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   // set once a code is on its way: the body that was sent, plus when that
@@ -68,7 +69,7 @@ export function Register() {
     try {
       const accepted = await apiFetch<SignupAccepted>('user', '/auth/signup', {
         method: 'POST',
-        body: JSON.stringify({ email, username, password }),
+        body: JSON.stringify({ email, username, password, ownerKey }),
       })
 
       setError('')
@@ -78,6 +79,7 @@ export function Register() {
         email,
         username,
         password,
+        ownerKey,
         expiresAt: Date.now() + accepted.expiresInSeconds * 1000,
         resendAt: Date.now() + accepted.resendInSeconds * 1000,
       })
@@ -96,6 +98,7 @@ export function Register() {
     setEmail('')
     setUsername('')
     setPassword('')
+    setOwnerKey('')
     // the login page shows an "account created" notice (issue #147)
     router.navigate('/login', { state: { accountCreated: true } })
   }
@@ -146,6 +149,15 @@ export function Register() {
           </label>
           <PasswordChecklist password={password} />
         </div>
+        <label className="block text-sm font-medium text-gray-700">
+          Setup token (Optional: For owners only)
+          <input
+            type="text"
+            value={ownerKey}
+            onChange={(e) => setOwnerKey(e.target.value)}
+            className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 font-normal focus:border-gray-400 focus:outline-none"
+          />
+        </label>
         <button
           type="submit"
           disabled={submitting}

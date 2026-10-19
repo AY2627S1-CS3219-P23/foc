@@ -30,5 +30,8 @@ public record SignupRequest(
     @NotBlank(message = PASSWORD_REQUIRED)
     @Size(min = PASSWORD_MIN, max = PASSWORD_MAX, message = PASSWORD_SIZE_MESSAGE)
     @Pattern(regexp = PASSWORD_PATTERN, message = PASSWORD_MESSAGE)
-    String password
+    String password,
+
+    @Size(max = OWNER_KEY_MAX, message = OWNER_KEY_SIZE_MESSAGE)
+    String ownerKey
 ) {}

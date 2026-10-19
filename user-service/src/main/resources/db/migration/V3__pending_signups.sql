@@ -25,6 +25,7 @@ create table pending_signups (
     email varchar(255) not null,
     password_hash varchar(255) not null,
     username varchar(255) not null,
+    owner_key varchar(255),
     primary key (id)
 );
 
