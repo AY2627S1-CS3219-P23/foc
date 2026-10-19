@@ -8,6 +8,7 @@
 // reloading the request (and a drop leaving the page), My Requests' state
 // filter, PENDING / REJECTED messages, cancel and confirm, History's
 // default Completed filter, and usernames from user-service.
+// 2026-10-19: My Requests' filter offers only the lifecycle states.
 // Author review: [pending]
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -420,6 +421,18 @@ describe('my requests', () => {
         expect.objectContaining({ state: 'ARRIVED', page: 0 }),
       ),
     )
+  })
+
+  it('offers only the lifecycle states as filters, after All', async () => {
+    vi.spyOn(orderApi, 'listMyRequests').mockResolvedValue(pageOf([summary]))
+    renderAt('/my-requests')
+
+    const group = await screen.findByRole('group', { name: 'Filter by state' })
+    expect(
+      within(group)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['All', 'Open', 'Accepted', 'Collected', 'Arrived', 'Completed'])
   })
 
   it('explains a PENDING and a REJECTED request', async () => {

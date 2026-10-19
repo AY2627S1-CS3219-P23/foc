@@ -10,6 +10,8 @@
 // re-release are gone (no backend); steps answer a message, so the list
 // reloads after one; the courier's name and the auto-complete time come
 // from the request's detail and user-service.
+// 2026-10-19: the filter offers only All, Open, Accepted, Collected,
+// Arrived and Completed (the author's choice).
 // Author review: [pending]
 
 import { useEffect, useState } from 'react'
@@ -21,7 +23,6 @@ import { OrderProgress } from '@/features/order/components/OrderProgress'
 import { StateFilter } from '@/features/order/components/StateFilter'
 import { StatusChip } from '@/features/order/components/StatusChip'
 import {
-  allStatuses,
   autoCompleteAt,
   credits,
   deadlineLine,
@@ -40,7 +41,16 @@ import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import { Pagination } from '@/shared/components/Pagination'
 
 const PAGE_SIZE = 10
-const FILTERS: (RequestStatus | undefined)[] = [undefined, ...allStatuses]
+// The states a requester follows a request through (the author's choice);
+// PENDING, REJECTED, CANCELLED and EXPIRED still show under All.
+const FILTERS: (RequestStatus | undefined)[] = [
+  undefined,
+  'CREATED',
+  'ACCEPTED',
+  'COLLECTED',
+  'ARRIVED',
+  'COMPLETED',
+]
 
 export function MyRequests() {
   const location = useLocation()
