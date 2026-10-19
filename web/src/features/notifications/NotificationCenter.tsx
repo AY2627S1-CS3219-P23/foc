@@ -37,8 +37,12 @@
 // D30/D31) — one useUsernames call over the held rows covers REST pages
 // and pushed frames alike; a row renders actor-less copy until (and
 // unless) its courierId resolves.
+// 2026-10-19, Claude Code (Fable 5), PR #222 review (@Sinnez1): the id
+// array passed to useUsernames is memoized over the held rows — a fresh
+// array every render (clock ticks, pushes, filter toggles) defeated the
+// hook's own memo and re-ran its dedupe/sort/join each time.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { listNotifications, markAllRead, setNotificationRead } from './api'
 import { courierIdOf, notificationMessage, relativeTime } from './eventMessage'
@@ -292,7 +296,14 @@ export function NotificationCenter() {
 
   // Read-time hydration (D32): resolve the couriers named by the held
   // rows — REST pages and pushed frames alike converge on `items`.
-  const names = useUsernames(items.map((n) => courierIdOf(n.payload)))
+  // Memoized over the rows so the hook's own memo on the array can hit;
+  // a fresh array every render (clock tick, filter toggle) would re-run
+  // its dedupe/sort/join for nothing (PR #222 review).
+  const courierIds = useMemo(
+    () => items.map((n) => courierIdOf(n.payload)),
+    [items],
+  )
+  const names = useUsernames(courierIds)
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">

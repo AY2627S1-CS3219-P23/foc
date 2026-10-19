@@ -10,27 +10,46 @@
 // name" so the templates' actor-less copy renders — never an error.
 // Author review: Leong Wei Zhi to review via the PR.
 // 2026-10-19, Claude Code (Fable 5), PR #222 review (@claude bot): the
-// hook re-resolves on a 30 s tick while mounted, so a failed lookup
-// recovers once its negative TTL lapses (and a rename lands once the
-// positive TTL does) — previously nothing re-asked the cache until the
-// id set changed. Ticks hit the cache, not the network, inside a TTL.
+// hook re-resolves on a tick while mounted, so a failed lookup recovers
+// once its negative TTL lapses (and a rename lands once the positive
+// TTL does) — previously nothing re-asked the cache until the id set
+// changed. Ticks hit the cache, not the network, inside a TTL.
+// 2026-10-19, Claude Code (Fable 5), PR #222 review (@Sinnez1): a
+// definite 404 now clears a name the hook already surfaced (deleted
+// user mid-mount), while transient failures keep the last known name;
+// the tick runs independently of the id set (keying it on the ids
+// restarted the countdown on every push, muting recovery); expiry is
+// stamped from request issue and the tick runs at half the negative
+// TTL, so a retry lands within one TTL instead of slipping a period.
 
-import { apiFetch } from '@/lib/api/http'
+import { ApiError, apiFetch } from '@/lib/api/http'
 import { useEffect, useMemo, useState } from 'react'
 
 const POSITIVE_TTL_MS = 10 * 60_000
 const NEGATIVE_TTL_MS = 30_000
+// Half the shortest TTL: entries expire relative to request-issue time,
+// which the ticks are phase-locked to, so a tick equal to the TTL would
+// land right on the expiry boundary and a retry could slip a whole
+// period (~60 s for a 30 s promise — PR #222 review).
+const TICK_MS = NEGATIVE_TTL_MS / 2
 // crude bound, like the retired backend adapter's: a runaway id space
 // resets the cache, not the tab's memory
 const MAX_CACHE_ENTRIES = 10_000
 
-interface Entry {
+interface Lookup {
   value: string | null
+  // true when the server definitively answered 404 — the user is gone,
+  // as opposed to a transient failure (network, 5xx) where the last
+  // known name is still the best guess (PR #222 review)
+  missing: boolean
+}
+
+interface Entry extends Lookup {
   expiresAt: number
 }
 
 const cache = new Map<string, Entry>()
-const inFlight = new Map<string, Promise<string | null>>()
+const inFlight = new Map<string, Promise<Lookup>>()
 
 /** Test hook: module state would otherwise bleed across vitest files. */
 export function clearUsernameCache(): void {
@@ -38,16 +57,17 @@ export function clearUsernameCache(): void {
   inFlight.clear()
 }
 
-/**
- * Resolves one user id to a username, or null when it can't — unknown
- * or deleted user (404), bad id (400), network failure, anything.
- * Never throws; misses are negative-cached briefly so a burst of rows
- * naming an unresolvable user doesn't hammer the gateway.
- */
-export function resolveUsername(id: string): Promise<string | null> {
+// The resolver behind the public surfaces: answers from cache inside a
+// TTL, dedupes in-flight requests, and never rejects.
+function resolve(id: string): Promise<Lookup> {
+  // issue time, also the TTL epoch: stamping expiry at settle time
+  // (issue + latency) put it just past the hook's phase-locked tick,
+  // deferring every retry by a full period (PR #222 review)
   const now = Date.now()
   const cached = cache.get(id)
-  if (cached && now < cached.expiresAt) return Promise.resolve(cached.value)
+  if (cached && now < cached.expiresAt) {
+    return Promise.resolve({ value: cached.value, missing: cached.missing })
+  }
   const pending = inFlight.get(id)
   if (pending) return pending
 
@@ -55,20 +75,25 @@ export function resolveUsername(id: string): Promise<string | null> {
     'user',
     `/users/${encodeURIComponent(id)}`,
   )
-    .then((profile) =>
-      typeof profile.username === 'string' && profile.username !== ''
-        ? profile.username
-        : null,
-    )
-    .catch(() => null)
-    .then((value) => {
+    .then((profile): Lookup => ({
+      value:
+        typeof profile.username === 'string' && profile.username !== ''
+          ? profile.username
+          : null,
+      missing: false,
+    }))
+    .catch((err: unknown): Lookup => ({
+      value: null,
+      missing: err instanceof ApiError && err.status === 404,
+    }))
+    .then((lookup) => {
       if (cache.size >= MAX_CACHE_ENTRIES) cache.clear()
       cache.set(id, {
-        value,
+        ...lookup,
         expiresAt:
-          Date.now() + (value === null ? NEGATIVE_TTL_MS : POSITIVE_TTL_MS),
+          now + (lookup.value === null ? NEGATIVE_TTL_MS : POSITIVE_TTL_MS),
       })
-      return value
+      return lookup
     })
     .finally(() => {
       inFlight.delete(id)
@@ -78,12 +103,24 @@ export function resolveUsername(id: string): Promise<string | null> {
 }
 
 /**
+ * Resolves one user id to a username, or null when it can't — unknown
+ * or deleted user (404), bad id (400), network failure, anything.
+ * Never throws; misses are negative-cached briefly so a burst of rows
+ * naming an unresolvable user doesn't hammer the gateway.
+ */
+export function resolveUsername(id: string): Promise<string | null> {
+  return resolve(id).then((lookup) => lookup.value)
+}
+
+/**
  * Hydrates a list of user ids into id → username. Entries appear as
  * lookups settle (cache hits settle in a microtask); ids that can't
- * resolve render their callers' no-name copy. While mounted the hook
- * re-resolves every {@link NEGATIVE_TTL_MS}, so a failed lookup is
- * retried once its negative cache lapses and a rename shows once the
- * positive TTL does — inside a TTL the tick is a cache hit, no network.
+ * resolve render their callers' no-name copy, and a definite 404 for an
+ * id that had resolved (user deleted mid-mount) drops its entry again.
+ * While mounted the hook re-resolves every {@link TICK_MS}, so a failed
+ * lookup is retried once its negative cache lapses and a rename shows
+ * once the positive TTL does — inside a TTL the tick is a cache hit,
+ * no network.
  */
 export function useUsernames(
   ids: ReadonlyArray<string | null>,
@@ -102,21 +139,32 @@ export function useUsernames(
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
-    if (key === '') return
-    const timer = setInterval(() => setAttempt((n) => n + 1), NEGATIVE_TTL_MS)
+    // deliberately independent of the id set: keying the interval on it
+    // restarted the countdown on every push, so with frames arriving
+    // under a tick apart a failed lookup never retried (PR #222 review)
+    const timer = setInterval(() => setAttempt((n) => n + 1), TICK_MS)
     return () => clearInterval(timer)
-  }, [key])
+  }, [])
 
   useEffect(() => {
     if (key === '') return
     let cancelled = false
     for (const id of key.split('\u0000')) {
-      void resolveUsername(id).then((name) => {
-        if (cancelled || name === null) return
+      void resolve(id).then(({ value, missing }) => {
+        if (cancelled) return
         setNames((prev) => {
-          if (prev.get(id) === name) return prev
+          if (value === null) {
+            // only a definite 404 clears a surfaced name — a transient
+            // failure keeps the last known one rather than flickering
+            // the row back to actor-less copy (PR #222 review)
+            if (!missing || !prev.has(id)) return prev
+            const next = new Map(prev)
+            next.delete(id)
+            return next
+          }
+          if (prev.get(id) === value) return prev
           const next = new Map(prev)
-          next.set(id, name)
+          next.set(id, value)
           return next
         })
       })

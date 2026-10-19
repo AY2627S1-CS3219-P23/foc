@@ -23,6 +23,10 @@
 // the degrade case is an id the map doesn't know (settled 404 →
 // actor-less copy). clearUsernameCache() runs per test: the resolver's
 // module-scoped cache would otherwise bleed names across tests.
+// 2026-10-19, Claude Code (Fable 5), PR #222 review (@Sinnez1): the
+// degrade case now waits for the usr-ghost lookup to settle before
+// asserting — the same copy renders pre-settle, so the old assertion
+// could not fail on the behaviour it checked.
 
 import {
   act,
@@ -406,8 +410,16 @@ describe('notification center page', () => {
     await screen.findByRole('button', {
       name: 'Request #1051 dropped by courier_maya — unread, select to mark read',
     })
-    // the unknown id's 404 has settled by now (same awaited round) and
-    // the actor-less copy stands
+    // wait for the usr-ghost lookup itself to settle: the actor-less
+    // copy also renders before the 404 lands, so asserting it without
+    // this could never fail (PR #222 review)
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/users/usr-ghost'),
+        expect.anything(),
+      ),
+    )
+    await act(async () => {})
     screen.getByRole('button', {
       name: 'Request #1052 was dropped by its courier — unread, select to mark read',
     })
