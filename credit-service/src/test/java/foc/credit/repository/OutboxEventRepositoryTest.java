@@ -5,12 +5,16 @@
  * Scope: the outbox publisher's poll query against a real Postgres:
  * which replies are due, in what order, and the batch cap applied to
  * the due ones only (the team's decision on the review's finding).
+ * 2026-10-19, Claude Code (Opus 5.5), issue #218: the retention purge's
+ * delete (team decisions: sent rows only, counted from sent_at) and the
+ * V3 index it reads.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -20,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Limit;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import foc.credit.PostgresTestContainer;
 import foc.credit.entity.OutboxEvent;
@@ -31,6 +36,9 @@ class OutboxEventRepositoryTest extends PostgresTestContainer {
 
     @Autowired
     private OutboxEventRepository outboxEvents;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     // the query reads the whole table, so rows other tests left count
     @BeforeEach
@@ -79,6 +87,41 @@ class OutboxEventRepositoryTest extends PostgresTestContainer {
         stored(NOW.minusSeconds(5), null, null);
 
         assertThat(dueAt(NOW, 2)).containsExactly(third, fourth);
+    }
+
+    @Test
+    void thePurgeDeletesTheRepliesSentBeforeTheCutoff() {
+        Instant cutoff = NOW.minus(Duration.ofDays(30));
+        stored(cutoff.minus(Duration.ofDays(2)), cutoff.minusSeconds(1), null);
+        UUID sentAtCutoff = stored(cutoff.minus(Duration.ofDays(2)), cutoff, null);
+        UUID sentSince = stored(cutoff.minus(Duration.ofDays(2)), cutoff.plusSeconds(1), null);
+
+        assertThat(outboxEvents.deleteSentBefore(cutoff)).isEqualTo(1);
+        assertThat(remaining()).containsExactlyInAnyOrder(sentAtCutoff, sentSince);
+    }
+
+    // an unsent reply is one the Order Service is still waiting for
+    @Test
+    void thePurgeNeverDeletesAnUnsentReply() {
+        Instant cutoff = NOW.minus(Duration.ofDays(30));
+        UUID unsent = stored(cutoff.minus(Duration.ofDays(60)), null, null);
+        UUID returned = stored(cutoff.minus(Duration.ofDays(60)), null, NOW.plusSeconds(30));
+
+        assertThat(outboxEvents.deleteSentBefore(cutoff)).isZero();
+        assertThat(remaining()).containsExactlyInAnyOrder(unsent, returned);
+    }
+
+    @Test
+    void theSentRepliesHaveAPartialIndexOnSentAt() {
+        String definition = jdbc.queryForObject(
+            "select indexdef from pg_indexes where tablename = 'outbox_event' and indexname = 'idx_outbox_event_sent'",
+            String.class);
+
+        assertThat(definition).contains("(sent_at)").contains("WHERE (sent_at IS NOT NULL)");
+    }
+
+    private List<UUID> remaining() {
+        return outboxEvents.findAll().stream().map(OutboxEvent::getEventId).toList();
     }
 
     private List<UUID> dueAt(Instant now, int batchSize) {
