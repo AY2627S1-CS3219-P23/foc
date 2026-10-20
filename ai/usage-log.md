@@ -39,6 +39,35 @@ Entry template:
 ```
 
 ---
+## 2026-10-18 — Aung Ko Khant (web: order pages on the real order API)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, refactor
+- **Scope:** `web/src/features/order` — `types.ts` and `api.ts` replaced
+  the placeholder contract with order-service's real one (paths, the
+  request states incl. PENDING / REJECTED, RequestSummary / RequestDetail,
+  the /create body, {"message"} replies and error bodies); `status.ts`,
+  `StatusChip`, `OrderProgress` retyped; new `StateFilter` and
+  `useUsername` (user-service's GET /users/{id}, cached); `orderApiMock.ts`
+  rewritten to the real contract and rules; `DisputeModal` removed. Pages
+  `my-requests`, `open-requests`, `active-delivery`, `request-history`,
+  `create-request` adapted; tests `orders.test.tsx` and
+  `order-api.test.ts` rewritten (255 web tests passing); `web/AGENTS.md`
+  wireframe rows.
+- **Prompt(s):** "Can we merge the frontend and backend tgt for order
+  service? Adapt frontend to match backend when a discrepancy occurs".
+  The tool listed the mismatches (from its PR #192 review) and asked the
+  points the rule left open as neutral options; the author chose:
+  usernames looked up from user-service; a state filter (one backend query
+  per chip) for My Requests and History; keep and rewrite the dev mock; a
+  new branch stacked on #213. Following the rule, dispute and re-release
+  were removed, actions reload instead of patching, and the open feed
+  uses the backend's sort=deadline.
+- **Author review:** `tsc`, `eslint`, `prettier` and `vitest` (255
+  tests) pass. Run in a browser against the compose stack with the real
+  user-, order-, credit- and notification-services: create (PENDING ->
+  reserved -> Open), accept, pick up, arrive, confirm; balances moved
+  5 -> 2 (requester) and 5 -> 8 (courier); History checked at 390 px. To
+  be reviewed via pull request.
 ## 2026-10-19 — Leong Wei Zhi (issue #221: D32 read-time name hydration, supersedes D30/D31)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** refactor
@@ -5779,6 +5808,49 @@ Entry template:
 - **Verification:** Comment-only change; `git diff --check` passed.
 - **Author review:** Leong Wei Zhi to review via PR #197.
 
+## 2026-10-20 — Aung Ko Khant (order lists: active / finished state groups)
+- **Tool:** Claude Code (Opus 5.5).
+- **Scope:** order-service's `state` parameter on the request lists takes
+  several states, comma-separated (`RequestsQueryService.parseStates`,
+  `RequestSpecifications.statusIn`, two endpoint tests; the open list
+  still takes only CREATED). In `web/`, My Requests lists only active
+  requests (All active by default) and History only finished ones (All
+  finished by default), each sent as one state list; `StateFilter` chips
+  stand for a set of states; the mock, types, tests and `web/AGENTS.md`
+  wireframe rows updated. The grouping and the comma-separated form were
+  the author's decisions.
+- **Verification:** web vitest (282 passed), order-service `mvn test` in a
+  maven:3.9-eclipse-temurin-21 container (100 passed).
+- **Author review:** Aung Ko Khant, pending pull request review.
+
+## 2026-10-20 — Aung Ko Khant (My Requests PENDING polling)
+- **Tool:** Claude Code (Opus 5.5).
+- **Prompt(s):** "For order service I would like to refetch order list every
+  2 seconds when an order is in pending state."
+- **Scope:** `web/src/routes/my-requests.tsx` refetches the list 2 seconds
+  after each response while any shown request is PENDING, and stops once
+  none is; a test in `web/src/test/orders.test.tsx` covers the refetch and
+  the stop. File headers updated.
+- **Verification:** `vitest run src/test/orders.test.tsx` (23 passed),
+  `tsc -b`, eslint and prettier clean.
+- **Author review:** Aung Ko Khant, pending pull request review.
+
+## 2026-10-20 — Aung Ko Khant (order-service: lost races answered 409)
+- **Tool:** Claude Code (Opus 5.5).
+- **Prompt(s):** "map errors to 409, say these request's state has changed?"
+  (after asking how order-service handles two couriers accepting at once,
+  and a cancel racing an accept).
+- **Scope:** `RequestsController` answers an
+  `OptimisticLockingFailureException` (a step that lost a race, caught by
+  the `@Version` check) with 409 "This request's state has changed"
+  instead of a 500. New `RequestsControllerConflictTests` (the mapping,
+  service mocked); two `RequestsServiceTests` staging the real races —
+  accept vs accept and accept vs cancel — where the loser is refused and
+  leaves no state change or outbox event. The status code and message
+  were the author's decision.
+- **Verification:** order-service `mvn test` in a
+  maven:3.9-eclipse-temurin-21 container (103 passed).
+- **Author review:** Aung Ko Khant, pending pull request review.
 ## 2026-10-19 — Alastair Tan Choon Wei (docs: supplier bookmarks N8)
 - **Tool:** Claude Code (Sonnet 5.5)
 - **Mode:** docs

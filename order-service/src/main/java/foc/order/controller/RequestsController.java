@@ -32,6 +32,10 @@
  * RequestsQueryService.
  * Same day: the lists take the author's filters and sort (RequestFilter,
  * bound from the query string); a value of the wrong type is a 400.
+ * 2026-10-20: a step that loses a race (another step committed on the
+ * same request after this one read it, caught by the @Version check) is
+ * answered 409 "This request's state has changed" instead of a 500 (the
+ * author's decision).
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order.controller;
@@ -44,6 +48,7 @@ import foc.order.dto.PageResponse;
 import foc.order.dto.RequestDetail;
 import foc.order.dto.RequestSummary;
 import foc.order.model.Requests;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.BindException;
@@ -216,6 +221,14 @@ public class RequestsController {
     @ResponseStatus(HttpStatus.CONFLICT)
     public MessageResponse handleIllegalTransition(IllegalStateException e) {
         return new MessageResponse(e.getMessage());
+    }
+
+    // Another step changed the request between this one's read and its
+    // write, so the @Version check refused the write.
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public MessageResponse handleConcurrentChange(OptimisticLockingFailureException e) {
+        return new MessageResponse("This request's state has changed");
     }
 
     // No request has the given id, or the step is not the caller's (the

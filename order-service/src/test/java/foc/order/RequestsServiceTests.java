@@ -26,6 +26,10 @@
  * Same day, Claude Code (Fable 5): drop now writes request.dropped
  * (requester-only parties, courier captured before clearing; the
  * author's decisions via options Q&A); pending pull request review.
+ * 2026-10-20, Claude Code (Opus 5.5): two steps racing on one request
+ * (two accepts; an accept and a cancel) — the one committing second is
+ * refused by the @Version check and leaves no trace; pending pull
+ * request review.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -37,7 +41,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -46,6 +53,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -70,6 +78,9 @@ class RequestsServiceTests {
 
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
+
+	@Autowired
+	private PlatformTransactionManager transactionManager;
 
 	@Test
 	void createStoresRequestAsPending() {
@@ -567,6 +578,47 @@ class RequestsServiceTests {
 	@Test
 	void unknownRequestThrows() {
 		assertThrows(NoSuchElementException.class, () -> requestsService.cancel(-1L, REQUESTER_ID));
+	}
+
+	@Test
+	void secondOfTwoRacingAcceptsIsRefusedByTheVersionCheck() {
+		Long id = newCreatedRequest();
+
+		assertThrows(OptimisticLockingFailureException.class, () -> whileUncommitted(id,
+				() -> requestsService.accept(id, COURIER_ID),
+				() -> requestsService.accept(id, STRANGER_ID)));
+
+		Requests stored = stored(id);
+		assertEquals(OrderStates.ACCEPTED, stored.getStatus());
+		assertEquals(STRANGER_ID, stored.getCourierId());
+		assertEquals(1, eventTypes(id).stream().filter("request.accepted"::equals).count());
+	}
+
+	@Test
+	void acceptLosingARaceWithCancelLeavesTheRequestCancelled() {
+		Long id = newCreatedRequest();
+
+		assertThrows(OptimisticLockingFailureException.class, () -> whileUncommitted(id,
+				() -> requestsService.accept(id, COURIER_ID),
+				() -> requestsService.cancel(id, REQUESTER_ID)));
+
+		Requests stored = stored(id);
+		assertEquals(OrderStates.CANCELLED, stored.getStatus());
+		assertNull(stored.getCourierId());
+		assertFalse(eventTypes(id).contains("request.accepted"));
+		assertTrue(eventTypes(id).contains("request.cancelled"));
+	}
+
+	// Two callers overlapping: first's transaction reads the request, then
+	// other runs and commits in its own transaction on another thread,
+	// then first carries on with the copy it read — so first writes last,
+	// against a version that has moved on.
+	private void whileUncommitted(Long id, Runnable first, Runnable other) {
+		new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+			requestsRepository.findById(id).orElseThrow();
+			CompletableFuture.runAsync(other).join();
+			first.run();
+		});
 	}
 
 	private Long newRequest() {

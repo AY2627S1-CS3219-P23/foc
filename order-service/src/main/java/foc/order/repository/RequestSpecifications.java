@@ -5,6 +5,7 @@
  * optional filters (RequestFilter) combine into one paged query. Each
  * returns null when its value is absent, and null pieces are skipped.
  * Same day: after(), for hiding past-deadline requests from the open list.
+ * 2026-10-20: statusIn(), for a list filtered by several states.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order.repository;
@@ -14,6 +15,7 @@ import foc.order.model.Requests;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Objects;
 import java.util.stream.Stream;
 
@@ -31,6 +33,11 @@ public final class RequestSpecifications {
 
     public static Specification<Requests> status(OrderStates status) {
         return status == null ? null : (root, query, cb) -> cb.equal(root.get("status"), status);
+    }
+
+    /** In any of the states; null matches every state. */
+    public static Specification<Requests> statusIn(Collection<OrderStates> states) {
+        return states == null ? null : (root, query, cb) -> root.get("status").in(states);
     }
 
     public static Specification<Requests> requester(Long userId) {
