@@ -1,0 +1,1335 @@
+{
+  "info": {
+    "name": "FoC D3 Demo",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Postman transcription of the wiki's D3 Demo Script (curl walkthrough): proves Order + Credit and the async pipeline work without the UI, through the gateway only. Run top to bottom with the Collection Runner or newman (see docs/postman/README.md); every request carries its own assertions. Steps mirror the wiki numbering; the saga waits are polls instead of sleeps, request ids are captured from responses instead of assuming a clean stack, and balance checks are deltas against the Step 1 baseline. The cancel/drop steps use 2-credit requests so the whole run fits the 5-credit provision (3 are transferred to the courier in Step 8). A full run spends the requester down to 0 available - rerun against the same stack with a fresh seeded user pair (see README).\n\nAI-assisted (CS3219 AI Usage Policy disclosure): Tool: Claude Code (Fable 5), 2026-10-20, Leong Wei Zhi. Scope: transcription of the wiki D3-Demo-Script page into this collection, with bodies, paths, and status codes taken from the merged contracts (order-service README, docs/credit-service.md \"Read API contract\", docs/notification-service.md); no design decisions by the tool. Reviewed by: Leong Wei Zhi (via pull request)."
+  },
+  "variable": [
+    { "key": "amountA", "value": "3" },
+    { "key": "amountC", "value": "2" },
+    { "key": "amountD", "value": "2" }
+  ],
+  "item": [
+    {
+      "name": "Setup - log in the three parties",
+      "description": "Seeded demo accounts (USER_SEED_DEMO=true): a requester, a courier, and an admin. Tokens go into collection variables; every later request picks the right one.",
+      "item": [
+        {
+          "name": "Login requester",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{gatewayUrl}}/api/user/auth/login",
+            "body": { "mode": "raw", "raw": "{\"usernameOrEmail\":\"{{requesterUser}}\",\"password\":\"{{requesterPass}}\"}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "pm.test('login 200 with Bearer accessToken', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body.accessToken).to.be.a('string').and.not.empty;",
+                  "    pm.expect(body.tokenType).to.eql('Bearer');",
+                  "});",
+                  "pm.collectionVariables.set('reqToken', body.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login courier",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{gatewayUrl}}/api/user/auth/login",
+            "body": { "mode": "raw", "raw": "{\"usernameOrEmail\":\"{{courierUser}}\",\"password\":\"{{courierPass}}\"}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "pm.test('login 200 with Bearer accessToken', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body.accessToken).to.be.a('string').and.not.empty;",
+                  "    pm.expect(body.tokenType).to.eql('Bearer');",
+                  "});",
+                  "pm.collectionVariables.set('couToken', body.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login admin",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{gatewayUrl}}/api/user/auth/login",
+            "body": { "mode": "raw", "raw": "{\"usernameOrEmail\":\"{{adminUser}}\",\"password\":\"{{adminPass}}\"}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "pm.test('login 200 with Bearer accessToken', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body.accessToken).to.be.a('string').and.not.empty;",
+                  "    pm.expect(body.tokenType).to.eql('Bearer');",
+                  "});",
+                  "pm.collectionVariables.set('admToken', body.accessToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Step 0 - Communication isolation (P4)",
+      "description": "The gateway is the only way in: the same call succeeds via the gateway while the backends publish no host ports since the #176 cutover. The no-host-port half stays a terminal demo (a connection refusal cannot be asserted without failing the collection run): `curl -m 2 http://localhost:8087/users/me` refuses the connection.",
+      "item": [
+        {
+          "name": "0.1 /users/me via gateway (200)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/user/users/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "pm.test('via gateway: 200 with the caller profile', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body.id).to.be.a('number');",
+                  "});",
+                  "pm.collectionVariables.set('requesterId', String(body.id));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Step 1 - Provisioning (P2)",
+      "description": "First balance read creates the account with 5 available / 0 reserved; a repeat read is identical (idempotent, no second allocation). The values are captured as the baseline for every later delta assertion.",
+      "item": [
+        {
+          "name": "1.1 First balance read (provisions the account)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/credit/credits/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "pm.test('200 with available/reserved/total, total = available + reserved', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body.total).to.eql(body.available + body.reserved);",
+                  "});",
+                  "pm.test('a full demo run fits the balance (needs amountA available, amountC+amountD more headroom after the transfer)', function () {",
+                  "    var needed = parseInt(pm.collectionVariables.get('amountA'), 10);",
+                  "    pm.expect(body.available, 'rerun with a fresh seeded user pair (see README)').to.be.at.least(needed + Math.max(parseInt(pm.collectionVariables.get('amountC'), 10), parseInt(pm.collectionVariables.get('amountD'), 10)));",
+                  "});",
+                  "pm.collectionVariables.set('baseAvailable', String(body.available));",
+                  "pm.collectionVariables.set('baseReserved', String(body.reserved));",
+                  "pm.collectionVariables.set('firstBalance', JSON.stringify(body));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 Repeat read (idempotent)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/credit/credits/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('identical to the first read - no second allocation', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json()).to.eql(JSON.parse(pm.collectionVariables.get('firstBalance')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Step 2 - Create then saga reserve (P1/P2/P3)",
+      "description": "The request starts PENDING and becomes CREATED when credit-service replies credit.reserved; the reward moves from available to reserved. The wiki's `sleep 2` is a poll here.",
+      "item": [
+        {
+          "name": "2.1 Create request A ({{amountA}} credits)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{reqToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/create",
+            "body": { "mode": "raw", "raw": "{\"supplierId\":1,\"supplierName\":\"Techno Edge\",\"dropoffLocation\":\"COM3-01-19\",\"item\":\"Chicken rice\",\"creditAmount\":{{amountA}},\"deadline\":\"{{deadline}}\"}" }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// the wiki's hardcoded deadline would go stale; always 7 days out",
+                  "pm.collectionVariables.set('deadline', new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "var m = (body.message || '').match(/^Request (\\d+) created$/);",
+                  "pm.test('200, message carries the new id', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(m, 'message was: ' + body.message).to.not.be.null;",
+                  "});",
+                  "if (m) { pm.collectionVariables.set('orderIdA', m[1]); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Poll request A until CREATED",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/order/requests/{{orderIdA}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var max = 15, key = 'poll_a_created';",
+                  "var tries = parseInt(pm.collectionVariables.get(key) || '0', 10);",
+                  "var body = pm.response.json();",
+                  "if (body.status !== 'CREATED' && tries < max) {",
+                  "    pm.collectionVariables.set(key, String(tries + 1));",
+                  "    console.log('request A still ' + body.status + ', retry ' + (tries + 1) + '/' + max);",
+                  "    setTimeout(function () {}, 1000);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "    pm.collectionVariables.unset(key);",
+                  "    pm.test('credit.reserved flipped the request PENDING -> CREATED', function () {",
+                  "        pm.expect(body.status).to.eql('CREATED');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 Balance after reserve (available -A, reserved +A)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/credit/credits/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "var base = { a: parseInt(pm.collectionVariables.get('baseAvailable'), 10), r: parseInt(pm.collectionVariables.get('baseReserved'), 10) };",
+                  "var amt = parseInt(pm.collectionVariables.get('amountA'), 10);",
+                  "pm.test('reward moved available -> reserved', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body.available).to.eql(base.a - amt);",
+                  "    pm.expect(body.reserved).to.eql(base.r + amt);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Step 3 - Create validation (P1)",
+      "description": "One 400 lists every problem at once, joined with '; '.",
+      "item": [
+        {
+          "name": "3.1 Invalid create (400 lists all problems)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{reqToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/create",
+            "body": { "mode": "raw", "raw": "{\"supplierId\":1,\"creditAmount\":0,\"deadline\":\"2020-01-01T00:00:00Z\"}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "pm.test('400 naming the missing fields, the bad amount, and the past deadline together', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(body.message).to.include('Missing required fields');",
+                  "    pm.expect(body.message).to.include('creditAmount must be at least 1');",
+                  "    pm.expect(body.message).to.include('deadline must be in the future');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Step 4 - Insufficient balance (P2, async)",
+      "description": "Reward > available is not a synchronous 422: the create succeeds, the request goes PENDING, and credit-service's credit.reservation-rejected flips it to REJECTED.",
+      "item": [
+        {
+          "name": "4.1 Create request B (99 credits, more than anyone has)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{reqToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/create",
+            "body": { "mode": "raw", "raw": "{\"supplierId\":1,\"supplierName\":\"Techno Edge\",\"dropoffLocation\":\"COM3\",\"item\":\"Feast\",\"creditAmount\":99,\"deadline\":\"{{deadline}}\"}" }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('deadline', new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "var m = (body.message || '').match(/^Request (\\d+) created$/);",
+                  "pm.test('create itself succeeds (200) - rejection comes back async', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(m, 'message was: ' + body.message).to.not.be.null;",
+                  "});",
+                  "if (m) { pm.collectionVariables.set('orderIdB', m[1]); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 Poll request B until REJECTED",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/order/requests/{{orderIdB}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var max = 15, key = 'poll_b_rejected';",
+                  "var tries = parseInt(pm.collectionVariables.get(key) || '0', 10);",
+                  "var body = pm.response.json();",
+                  "if (body.status !== 'REJECTED' && tries < max) {",
+                  "    pm.collectionVariables.set(key, String(tries + 1));",
+                  "    console.log('request B still ' + body.status + ', retry ' + (tries + 1) + '/' + max);",
+                  "    setTimeout(function () {}, 1000);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "    pm.collectionVariables.unset(key);",
+                  "    pm.test('credit.reservation-rejected flipped the request to REJECTED', function () {",
+                  "        pm.expect(body.status).to.eql('REJECTED');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.3 REJECTED shows up in the requester's own list",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/order/requests/mine?role=requester&state=REJECTED"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "var id = parseInt(pm.collectionVariables.get('orderIdB'), 10);",
+                  "pm.test('mine?state=REJECTED contains request B', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body.content.map(function (r) { return r.id; })).to.include(id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Step 5 - Self-accept blocked (P1 authz)",
+      "item": [
+        {
+          "name": "5.1 Requester accepts own request (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{reqToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/accept",
+            "body": { "mode": "raw", "raw": "{\"requestId\":{{orderIdA}}}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409: a requester cannot accept their own request', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "    pm.expect(pm.response.json().message).to.eql('A requester cannot accept their own request');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Step 6 - Single-winner accept (P1 concurrency)",
+      "description": "The wiki demos this as two parallel curls (& wait) where optimistic locking (@Version) picks one winner. Postman runs sequentially, which proves the same invariant: after the courier wins, a second accept of the same request gets 409.",
+      "item": [
+        {
+          "name": "6.1 Courier accepts A (200)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{couToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/accept",
+            "body": { "mode": "raw", "raw": "{\"requestId\":{{orderIdA}}}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('first accept wins (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().message).to.eql('Request ' + pm.collectionVariables.get('orderIdA') + ' accepted');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.2 Second accept of the same request (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{admToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/accept",
+            "body": { "mode": "raw", "raw": "{\"requestId\":{{orderIdA}}}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('second accept loses (409)', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Step 7 - Wrong-person step masked, admin read open (P1 authz)",
+      "item": [
+        {
+          "name": "7.1 Non-participant collect (404, no existence oracle)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{admToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/collect",
+            "body": { "mode": "raw", "raw": "{\"requestId\":{{orderIdA}}}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 \"Request not found\" - same answer as a nonexistent id', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "    pm.expect(pm.response.json().message).to.eql('Request not found');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.2 Admin READ of the same request (200 oversight)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admToken}}" }],
+            "url": "{{gatewayUrl}}/api/order/requests/{{orderIdA}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('admin can read what they cannot act on', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql('ACCEPTED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Step 8 - Happy path to transfer (P1/P2)",
+      "description": "collect -> arrive (courier) -> complete (requester); the reserved reward transfers to the courier asynchronously, lands as a 3-month expiring lot, and shows as TRANSFER_IN in history.",
+      "item": [
+        {
+          "name": "8.1 Courier balance before the transfer",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{couToken}}" }],
+            "url": "{{gatewayUrl}}/api/credit/credits/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "pm.test('200 (also provisions the courier account on first read)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body.total).to.eql(body.available + body.reserved);",
+                  "});",
+                  "pm.collectionVariables.set('couPreAvailable', String(body.available));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.2 Collect (courier, 200)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{couToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/collect",
+            "body": { "mode": "raw", "raw": "{\"requestId\":{{orderIdA}}}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('assigned courier may collect', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().message).to.eql('Request ' + pm.collectionVariables.get('orderIdA') + ' collected');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.3 Arrive (courier, 200)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{couToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/arrive",
+            "body": { "mode": "raw", "raw": "{\"requestId\":{{orderIdA}}}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('assigned courier may arrive', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().message).to.eql('Request ' + pm.collectionVariables.get('orderIdA') + ' arrived');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.4 Complete (requester, 200)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{reqToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/complete",
+            "body": { "mode": "raw", "raw": "{\"requestId\":{{orderIdA}}}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('requester confirms completion', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().message).to.eql('Request ' + pm.collectionVariables.get('orderIdA') + ' completed');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.5 Poll requester balance until the transfer settles",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/credit/credits/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var max = 15, key = 'poll_transfer_out';",
+                  "var tries = parseInt(pm.collectionVariables.get(key) || '0', 10);",
+                  "var body = pm.response.json();",
+                  "var base = { a: parseInt(pm.collectionVariables.get('baseAvailable'), 10), r: parseInt(pm.collectionVariables.get('baseReserved'), 10) };",
+                  "var amt = parseInt(pm.collectionVariables.get('amountA'), 10);",
+                  "if (body.reserved !== base.r && tries < max) {",
+                  "    pm.collectionVariables.set(key, String(tries + 1));",
+                  "    console.log('transfer not settled yet (reserved ' + body.reserved + '), retry ' + (tries + 1) + '/' + max);",
+                  "    setTimeout(function () {}, 1000);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "    pm.collectionVariables.unset(key);",
+                  "    pm.test('reserved back to baseline, the reward spent (not returned)', function () {",
+                  "        pm.expect(body.reserved).to.eql(base.r);",
+                  "        pm.expect(body.available).to.eql(base.a - amt);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.6 Poll courier balance until +A arrives",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{couToken}}" }],
+            "url": "{{gatewayUrl}}/api/credit/credits/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var max = 15, key = 'poll_transfer_in';",
+                  "var tries = parseInt(pm.collectionVariables.get(key) || '0', 10);",
+                  "var body = pm.response.json();",
+                  "var expected = parseInt(pm.collectionVariables.get('couPreAvailable'), 10) + parseInt(pm.collectionVariables.get('amountA'), 10);",
+                  "if (body.available !== expected && tries < max) {",
+                  "    pm.collectionVariables.set(key, String(tries + 1));",
+                  "    console.log('courier still at ' + body.available + ', retry ' + (tries + 1) + '/' + max);",
+                  "    setTimeout(function () {}, 1000);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "    pm.collectionVariables.unset(key);",
+                  "    pm.test('courier received the reward', function () {",
+                  "        pm.expect(body.available).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.7 Courier expiries show the new 3-month lot",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{couToken}}" }],
+            "url": "{{gatewayUrl}}/api/credit/credits/me/expiries"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "pm.test('at least one expiring lot with amount and expiresAt', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body.items).to.be.an('array').and.not.empty;",
+                  "    pm.expect(body.items[0]).to.have.keys(['amount', 'expiresAt']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.8 Courier history has the TRANSFER_IN row",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{couToken}}" }],
+            "url": "{{gatewayUrl}}/api/credit/credits/me/history?page=0&size=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "var ref = pm.collectionVariables.get('orderIdA');",
+                  "var amt = parseInt(pm.collectionVariables.get('amountA'), 10);",
+                  "pm.test('TRANSFER_IN row for request A', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var hit = body.content.some(function (row) { return row.type === 'TRANSFER_IN' && row.amount === amt && row.requestRef === ref; });",
+                  "    pm.expect(hit, JSON.stringify(body.content)).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Step 9 - Duplicate completion (P1/P2)",
+      "description": "Repeat complete is 409; the Credit record is already TRANSFERRED, so there is exactly one payment ever.",
+      "item": [
+        {
+          "name": "9.1 Repeat complete (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{reqToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/complete",
+            "body": { "mode": "raw", "raw": "{\"requestId\":{{orderIdA}}}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('COMPLETED cannot be completed again', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Step 10 - Cancel + release (P2)",
+      "description": "A new request is cancelled from CREATED; the reservation returns to its lot (history shows RELEASE). Uses 2 credits: after Step 8's transfer the requester only has baseline - 3 available.",
+      "item": [
+        {
+          "name": "10.1 Create request C ({{amountC}} credits)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{reqToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/create",
+            "body": { "mode": "raw", "raw": "{\"supplierId\":1,\"supplierName\":\"Techno Edge\",\"dropoffLocation\":\"COM3-01-19\",\"item\":\"Kopi peng\",\"creditAmount\":{{amountC}},\"deadline\":\"{{deadline}}\"}" }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('deadline', new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "var m = (body.message || '').match(/^Request (\\d+) created$/);",
+                  "pm.test('200, id captured', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(m, 'message was: ' + body.message).to.not.be.null;",
+                  "});",
+                  "if (m) { pm.collectionVariables.set('orderIdC', m[1]); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10.2 Poll request C until CREATED",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/order/requests/{{orderIdC}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var max = 15, key = 'poll_c_created';",
+                  "var tries = parseInt(pm.collectionVariables.get(key) || '0', 10);",
+                  "var body = pm.response.json();",
+                  "if (body.status !== 'CREATED' && tries < max) {",
+                  "    pm.collectionVariables.set(key, String(tries + 1));",
+                  "    console.log('request C still ' + body.status + ', retry ' + (tries + 1) + '/' + max);",
+                  "    setTimeout(function () {}, 1000);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "    pm.collectionVariables.unset(key);",
+                  "    pm.test('request C reached CREATED', function () {",
+                  "        pm.expect(body.status).to.eql('CREATED');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10.3 Requester cancels C (200)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{reqToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/cancel",
+            "body": { "mode": "raw", "raw": "{\"requestId\":{{orderIdC}}}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('requester may cancel from CREATED', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().message).to.eql('Request ' + pm.collectionVariables.get('orderIdC') + ' cancelled');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10.4 Poll balance until the reservation is released",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/credit/credits/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var max = 15, key = 'poll_release';",
+                  "var tries = parseInt(pm.collectionVariables.get(key) || '0', 10);",
+                  "var body = pm.response.json();",
+                  "var base = { a: parseInt(pm.collectionVariables.get('baseAvailable'), 10), r: parseInt(pm.collectionVariables.get('baseReserved'), 10) };",
+                  "var amtA = parseInt(pm.collectionVariables.get('amountA'), 10);",
+                  "if (body.reserved !== base.r && tries < max) {",
+                  "    pm.collectionVariables.set(key, String(tries + 1));",
+                  "    console.log('release not landed (reserved ' + body.reserved + '), retry ' + (tries + 1) + '/' + max);",
+                  "    setTimeout(function () {}, 1000);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "    pm.collectionVariables.unset(key);",
+                  "    pm.test('reservation released back to available', function () {",
+                  "        pm.expect(body.reserved).to.eql(base.r);",
+                  "        pm.expect(body.available).to.eql(base.a - amtA);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10.5 History shows the RELEASE",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/credit/credits/me/history?page=0&size=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "var ref = pm.collectionVariables.get('orderIdC');",
+                  "var amt = parseInt(pm.collectionVariables.get('amountC'), 10);",
+                  "pm.test('RELEASE row for request C', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var hit = body.content.some(function (row) { return row.type === 'RELEASE' && row.amount === amt && row.requestRef === ref; });",
+                  "    pm.expect(hit, JSON.stringify(body.content)).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Step 11 - Courier drop (P1)",
+      "description": "Accept then drop: the request goes back to CREATED and is relisted, but the reward STAYS held (request.dropped is not a cancellation).",
+      "item": [
+        {
+          "name": "11.1 Create request D ({{amountD}} credits)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{reqToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/create",
+            "body": { "mode": "raw", "raw": "{\"supplierId\":1,\"supplierName\":\"Techno Edge\",\"dropoffLocation\":\"COM3-01-19\",\"item\":\"Milo dinosaur\",\"creditAmount\":{{amountD}},\"deadline\":\"{{deadline}}\"}" }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('deadline', new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "var m = (body.message || '').match(/^Request (\\d+) created$/);",
+                  "pm.test('200, id captured', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(m, 'message was: ' + body.message).to.not.be.null;",
+                  "});",
+                  "if (m) { pm.collectionVariables.set('orderIdD', m[1]); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11.2 Poll request D until CREATED",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/order/requests/{{orderIdD}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var max = 15, key = 'poll_d_created';",
+                  "var tries = parseInt(pm.collectionVariables.get(key) || '0', 10);",
+                  "var body = pm.response.json();",
+                  "if (body.status !== 'CREATED' && tries < max) {",
+                  "    pm.collectionVariables.set(key, String(tries + 1));",
+                  "    console.log('request D still ' + body.status + ', retry ' + (tries + 1) + '/' + max);",
+                  "    setTimeout(function () {}, 1000);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "    pm.collectionVariables.unset(key);",
+                  "    pm.test('request D reached CREATED', function () {",
+                  "        pm.expect(body.status).to.eql('CREATED');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11.3 Courier accepts D (200)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{couToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/accept",
+            "body": { "mode": "raw", "raw": "{\"requestId\":{{orderIdD}}}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('accepted', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11.4 Requester balance before the drop",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/credit/credits/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "pm.test('reward for D is held', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body.reserved).to.eql(parseInt(pm.collectionVariables.get('baseReserved'), 10) + parseInt(pm.collectionVariables.get('amountD'), 10));",
+                  "});",
+                  "pm.collectionVariables.set('preDropReserved', String(body.reserved));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11.5 Courier drops D (200)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{couToken}}" }
+            ],
+            "url": "{{gatewayUrl}}/api/order/drop",
+            "body": { "mode": "raw", "raw": "{\"requestId\":{{orderIdD}}}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('assigned courier may drop', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().message).to.eql('Request ' + pm.collectionVariables.get('orderIdD') + ' dropped');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11.6 D is back in the open feed",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{couToken}}" }],
+            "url": "{{gatewayUrl}}/api/order/requests?state=CREATED&size=100"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "var id = parseInt(pm.collectionVariables.get('orderIdD'), 10);",
+                  "pm.test('open list contains D again', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body.content.map(function (r) { return r.id; })).to.include(id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11.7 Reward stays held after the drop",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/credit/credits/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('reserved unchanged - a drop is not a cancellation', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().reserved).to.eql(parseInt(pm.collectionVariables.get('preDropReserved'), 10));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Step 12 - Async workflow: notifications (P3)",
+      "description": "REST catch-up feed and unread count, fed by the broker pipeline from every step above. Manual parts of the wiki step (not automatable here): restart web and watch the bell + Notification Center update within 5 s of a step; in the RabbitMQ mgmt UI (localhost:15672) publish a contracts fixture twice with the same eventId - one notification, 'deduped' in the notification-service log; publish a malformed body - straight to .dlq on first rejection. Fixture payloads: foc-contracts/src/main/resources/contracts/*.example.json.",
+      "item": [
+        {
+          "name": "12.1 Notification feed has rows for the steps above",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/notification/notifications/me?page=0&size=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "pm.test('paged feed with eventType/payload/read rows', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body).to.include.keys(['content', 'page', 'size', 'totalElements', 'totalPages']);",
+                  "    pm.expect(body.content).to.be.an('array').and.not.empty;",
+                  "    pm.expect(body.content[0]).to.include.keys(['id', 'eventType', 'payload', 'read']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12.2 Unread count",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/notification/notifications/me/unread-count"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('a positive unread count from this run', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().count).to.be.a('number').and.to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Step 13 - Expiry (manual)",
+      "description": "Not automatable in a demo-length run: create a request with a deadline just ahead - it is hidden from the open list immediately after the deadline, flipped to EXPIRED by the sweep (every 5 min at most), the reservation is released in Credit, and an accept after the deadline gets 409. Demonstrate live if time allows.",
+      "item": []
+    },
+    {
+      "name": "Step 14 - Admin views (P1/P2)",
+      "description": "Role-gated, not masked: the admin endpoints answer 200 to ADMIN/OWNER and a plain 403 to everyone else.",
+      "item": [
+        {
+          "name": "14.1 Admin reads a user's requests (200)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admToken}}" }],
+            "url": "{{gatewayUrl}}/api/order/users/{{requesterId}}/requests"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "var idA = parseInt(pm.collectionVariables.get('orderIdA'), 10);",
+                  "pm.test('200 with the requester\\'s requests, including A', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body.content.map(function (r) { return r.id; })).to.include(idA);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "14.2 Same call as non-admin (403)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/order/users/{{requesterId}}/requests"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 for a non-admin', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "14.3 Admin pool view (200)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admToken}}" }],
+            "url": "{{gatewayUrl}}/api/credit/credits/admin/pool"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var body = pm.response.json();",
+                  "pm.test('pool balance, share preview and next run', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body).to.include.keys(['poolBalance', 'accounts', 'share', 'remainder', 'nextRunAt']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "14.4 Pool view as non-admin (403)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reqToken}}" }],
+            "url": "{{gatewayUrl}}/api/credit/credits/admin/pool"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 for a non-admin', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
