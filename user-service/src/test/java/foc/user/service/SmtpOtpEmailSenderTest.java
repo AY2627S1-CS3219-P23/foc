@@ -47,7 +47,7 @@ class SmtpOtpEmailSenderTest {
     void sendSignupCode() {
         SmtpOtpEmailSender sender = new SmtpOtpEmailSender(mailSender, "no-reply@foc.local");
 
-        sender.sendSignupCode("e1234567@u.nus.edu", "042042", Duration.ofMinutes(10));
+        sender.sendSignupCode("e1234567@u.nus.edu", "042042", Duration.ofMinutes(10), false);
 
         ArgumentCaptor<SimpleMailMessage> message = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(mailSender).send(message.capture());
@@ -56,7 +56,26 @@ class SmtpOtpEmailSenderTest {
         assertThat(message.getValue().getSubject()).isEqualTo("Your FoC verification code");
         assertThat(message.getValue().getText())
             .contains("042042")
-            .contains("10 minutes");
+            .contains("10 minutes")
+            .contains("user");
+    }
+
+    @Test
+    @DisplayName("A different sign-up email is sent if the user will be signed up as an owner")
+    void sendSignupCodeOwner() {
+        SmtpOtpEmailSender sender = new SmtpOtpEmailSender(mailSender, "no-reply@foc.local");
+
+        sender.sendSignupCode("e1234567@u.nus.edu", "042042", Duration.ofMinutes(10), true);
+
+        ArgumentCaptor<SimpleMailMessage> message = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(mailSender).send(message.capture());
+        assertThat(message.getValue().getFrom()).isEqualTo("no-reply@foc.local");
+        assertThat(message.getValue().getTo()).containsExactly("e1234567@u.nus.edu");
+        assertThat(message.getValue().getSubject()).isEqualTo("Your FoC verification code");
+        assertThat(message.getValue().getText())
+            .contains("042042")
+            .contains("10 minutes")
+            .contains("owner");
     }
 
     @Test
@@ -65,7 +84,7 @@ class SmtpOtpEmailSenderTest {
         SmtpOtpEmailSender sender = new SmtpOtpEmailSender(mailSender, "no-reply@foc.local");
 
         // what a resend leaves: 8m54s of the original 10 minutes
-        sender.sendSignupCode("e1234567@u.nus.edu", "042042", Duration.ofSeconds(534));
+        sender.sendSignupCode("e1234567@u.nus.edu", "042042", Duration.ofSeconds(534), false);
 
         ArgumentCaptor<SimpleMailMessage> message = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(mailSender).send(message.capture());
@@ -118,7 +137,7 @@ class SmtpOtpEmailSenderTest {
     void sendSignupCode_subMinuteLifetime() {
         SmtpOtpEmailSender sender = new SmtpOtpEmailSender(mailSender, "no-reply@foc.local");
 
-        sender.sendSignupCode("e1234567@u.nus.edu", "042042", Duration.ofSeconds(30));
+        sender.sendSignupCode("e1234567@u.nus.edu", "042042", Duration.ofSeconds(30), false);
 
         ArgumentCaptor<SimpleMailMessage> message = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(mailSender).send(message.capture());

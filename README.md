@@ -190,6 +190,11 @@
   day, extended for D13 (how the supplier list flags and orders
   bookmarks).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-20: AI Use Summary extended for the user-service
+  AuthServiceTest Mockito matcher fix by Copilot SDK in VS Code (model
+  not exposed).
+  Author review: Kwey Xiu Xi to review via PR.
+ 
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -887,6 +892,10 @@ with a 409 response, a bookmark removed when its supplier is deleted, and how th
 list flags and orders bookmarks);
 the mechanism for cleaning up bookmarks when an account is purged is
 marked open for the team.
+
+Copilot SDK in VS Code (model not exposed) corrected Mockito matcher
+misuse in the user-service `AuthServiceTest`: boolean constructor values
+are now literals, preventing matcher leakage into repository stubs.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

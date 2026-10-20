@@ -133,19 +133,23 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
         return postJson("/auth/signup/verify-owner", Map.of("email", email, "code", code));
     }
 
-    private void createAccount(String email, String username) throws Exception {
+    private void createOwner(String email, String username) throws Exception {
         signup(email, username, PASSWORD, CORRECT_SETUP_TOKEN).andExpect(status().isAccepted());
-        verifySignup(email, emailedCode(email)).andExpect(status().isCreated());
-    }
-
-    private String emailedCode(String email) {
         ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
-        verify(otpEmailSender, atLeastOnce()).sendSignupCode(eq(email), code.capture(), any());
-        return code.getValue();
+        verify(otpEmailSender, atLeastOnce()).sendSignupCode(eq(email), code.capture(), any(), eq(true));
+        verifySignup(email, code.getValue()).andExpect(status().isCreated());
     }
     
+    private String emailedCode(String email) {
+        ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+        verify(otpEmailSender, atLeastOnce()).sendSignupCode(eq(email), code.capture(), any(), eq(true));
+        return code.getValue();
+    }
     // a six-digit code that is certainly not the live one
     private String notTheCode(String email) {
+        ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+        verify(otpEmailSender, atLeastOnce()).sendSignupCode(eq(email), code.capture(), any(), eq(true));
+        
         return "000000".equals(emailedCode(email)) ? "111111" : "000000";
     }
 
@@ -162,10 +166,12 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
 
         assertThat(userRepository.findByUsernameIgnoreCase("student_alex")).isEmpty();
         PendingSignup pending = pendingSignupRepository.findByEmail("e1234567@u.nus.edu").orElseThrow();
-        String code = emailedCode("e1234567@u.nus.edu");
+        ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+        verify(otpEmailSender, atLeastOnce()).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), any(), eq(true));
+        
         // both secrets are stored hashed, never plain
         assertThat(pending.getPasswordHash()).isNotEqualTo(PASSWORD).startsWith("$2");
-        assertThat(pending.getCodeHash()).isNotEqualTo(code).startsWith("$2");
+        assertThat(pending.getCodeHash()).isNotEqualTo(code.getValue()).startsWith("$2");
     }
 
     @Test
@@ -174,7 +180,10 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD, CORRECT_SETUP_TOKEN)
             .andExpect(status().isAccepted());
 
-        verifySignup("e1234567@u.nus.edu", emailedCode("e1234567@u.nus.edu"))
+        ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+        verify(otpEmailSender, atLeastOnce()).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), any(), eq(true));
+        
+        verifySignup("e1234567@u.nus.edu", code.getValue())
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.id").isNumber())
             .andExpect(jsonPath("$.email").value("e1234567@u.nus.edu"))
@@ -185,14 +194,15 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
 
         User saved = userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow();
         assertThat(saved.getPasswordHash()).isNotEqualTo(PASSWORD).startsWith("$2");
+        assertThat(saved.getRole()).isEqualTo(Role.OWNER);
         assertThat(pendingSignupRepository.findByEmail("e1234567@u.nus.edu")).isEmpty();
     }
     
     @Test
     @DisplayName("Should allow a second setup call to create another OWNER")
     void setupOwner_secondCallCreatesAnotherOwner() throws Exception {
-        createAccount("e1234567@u.nus.edu", "student_alex");
-        createAccount("e1234568@u.nus.edu", "student_alexy");
+        createOwner("e1234567@u.nus.edu", "student_alex");
+        createOwner("e1234568@u.nus.edu", "student_alexy");
         assertThat(userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow()
             .getRole()).isEqualTo(Role.OWNER);
         assertThat(userRepository.findByUsernameIgnoreCase("student_alexy").orElseThrow()
@@ -206,28 +216,61 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD, CORRECT_SETUP_TOKEN)
             .andExpect(status().isServiceUnavailable())
             .andExpect(jsonPath("$.type").value("urn:foc:user:owner-setup-token-missing"))
-            .andExpect(jsonPath("$.detail").value("Owner setup is disabled: OWNER_SETUP_TOKEN is not configured"));
+            .andExpect(jsonPath("$.detail").value("Owner setup is unavailable"));
     }
 
     @Test
-    @DisplayName("No signup token rejects at verify")
+    @DisplayName("No signup token creates regular user instead, notified by email")
     void setupOwner_missingSetupToken() throws Exception {
-        signup("e1234567@u.nus.edu", "student_alex", PASSWORD, "");
-        verifySignup("e1234567@u.nus.edu", "123456")
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-invalid"))
-            .andExpect(jsonPath("$.detail").value("Invalid verification code"));
+        signup("e1234567@u.nus.edu", "student_alex", PASSWORD, "")
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.email").value("e1234567@u.nus.edu"))
+            .andExpect(jsonPath("$.expiresInSeconds").value(600))
+            .andExpect(jsonPath("$.resendInSeconds").value(0));
+
+        ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+        verify(otpEmailSender, atLeastOnce()).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), any(), eq(false));
+        
+        verifySignup("e1234567@u.nus.edu", code.getValue())
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").isNumber())
+            .andExpect(jsonPath("$.email").value("e1234567@u.nus.edu"))
+            .andExpect(jsonPath("$.username").value("student_alex"))
+            .andExpect(jsonPath("$.role").value("USER"))
+            .andExpect(jsonPath("$.password").doesNotExist())
+            .andExpect(jsonPath("$.passwordHash").doesNotExist());
+
+        User saved = userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow();
+        assertThat(saved.getPasswordHash()).isNotEqualTo(PASSWORD).startsWith("$2");
+        assertThat(saved.getRole().equals(Role.USER));
+        assertThat(pendingSignupRepository.findByEmail("e1234567@u.nus.edu")).isEmpty();
     }
 
     @Test
-    @DisplayName("Wrong signup token rejects at verify")
+    @DisplayName("Wrong signup token creates user instead, notified by email")
     void setupOwner_wrongSetupToken() throws Exception {
-        signup("e1234567@u.nus.edu", "student_alex", PASSWORD, "WrongToken");
-        verifySignup("e1234567@u.nus.edu", "123456")
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-invalid"))
-            .andExpect(jsonPath("$.detail").value("Invalid verification code"));
-    }
+                signup("e1234567@u.nus.edu", "student_alex", PASSWORD, "wrongkey")
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.email").value("e1234567@u.nus.edu"))
+            .andExpect(jsonPath("$.expiresInSeconds").value(600))
+            .andExpect(jsonPath("$.resendInSeconds").value(0));
+
+        ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+        verify(otpEmailSender, atLeastOnce()).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), any(), eq(false));
+        
+        verifySignup("e1234567@u.nus.edu", code.getValue())
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").isNumber())
+            .andExpect(jsonPath("$.email").value("e1234567@u.nus.edu"))
+            .andExpect(jsonPath("$.username").value("student_alex"))
+            .andExpect(jsonPath("$.role").value("USER"))
+            .andExpect(jsonPath("$.password").doesNotExist())
+            .andExpect(jsonPath("$.passwordHash").doesNotExist());
+
+        User saved = userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow();
+        assertThat(saved.getPasswordHash()).isNotEqualTo(PASSWORD).startsWith("$2");
+        assertThat(saved.getRole().equals(Role.USER));
+        assertThat(pendingSignupRepository.findByEmail("e1234567@u.nus.edu")).isEmpty();    }
 
     // Remaining tests found in AuthControllerTest
 
@@ -271,7 +314,7 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
             .andExpect(jsonPath("$.detail").value("Invalid verification code"));
 
         // needs same details to reuse row
-        createAccount("e1234567@u.nus.edu", "student_alex");
+        createOwner("e1234567@u.nus.edu", "student_alex");
     }
 
     @Test
@@ -355,7 +398,7 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
     @Test
     @DisplayName("Sign-up with a taken email or username is 400 with the exact reason")
     void signup_duplicates() throws Exception {
-        createAccount("e1234567@u.nus.edu", "student_alex");
+        createOwner("e1234567@u.nus.edu", "student_alex");
 
         signup("E1234567@u.nus.edu", "someone_else", PASSWORD, CORRECT_SETUP_TOKEN)
             .andExpect(status().isBadRequest())
@@ -375,7 +418,7 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD, CORRECT_SETUP_TOKEN).andExpect(status().isAccepted());
         String code = emailedCode("e1234567@u.nus.edu");
         // someone else completes the same username first
-        createAccount("e7654321@u.nus.edu", "student_alex");
+        createOwner("e7654321@u.nus.edu", "student_alex");
 
         verifySignup("e1234567@u.nus.edu", code)
             .andExpect(status().isBadRequest())
@@ -392,21 +435,23 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("Sign-up ignores a role in the body: the account is always OWNER")
+    @DisplayName("Sign-up ignores a role in the body")
     void signup_roleIgnored() throws Exception {
-        postJson("/auth/signup", Map.of(
+        postJson("/auth/signup-owner", Map.of(
                 "email", "e1234567@u.nus.edu",
                 "username", "student_alex",
                 "password", PASSWORD,
-                "role", "ADMIN"))
+                "ownerKey", "Wrongtoken",
+                "role", "OWNER"))
             .andExpect(status().isAccepted());
-
-        verifySignup("e1234567@u.nus.edu", emailedCode("e1234567@u.nus.edu"))
+        ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+        verify(otpEmailSender, atLeastOnce()).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), any(), eq(false));
+        verifySignup("e1234567@u.nus.edu", code.getValue())
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.role").value("OWNER"));
+            .andExpect(jsonPath("$.role").value("USER"));
 
         assertThat(userRepository.findByUsernameIgnoreCase("student_alex").orElseThrow()
-            .getRole()).isEqualTo(Role.OWNER);
+            .getRole()).isEqualTo(Role.USER);
     }
 
     @Test

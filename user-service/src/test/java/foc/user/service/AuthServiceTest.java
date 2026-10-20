@@ -56,6 +56,10 @@ Same day, PR #179 Copilot review: a case pins the stale-credential
 retry — a reset committing between the bcrypt check and the row lock
 must not let the OLD password finish logging in; the verdict is
 discarded and the login re-checks against the fresh hash.
+2026-10-20, Copilot SDK in VS Code (model not exposed): replaced Mockito
+argument matchers accidentally used as constructor values with literals;
+this prevented leaked matchers from corrupting repository stubs.
+Author review: Kwey Xiu Xi to review via PR.
 */
 
 package foc.user.service;
@@ -79,7 +83,6 @@ import org.mockito.Mock;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -190,11 +193,12 @@ class AuthServiceTest {
         ArgumentCaptor<PendingSignup> saved = ArgumentCaptor.forClass(PendingSignup.class);
         verify(pendingSignupRepository).saveAndFlush(saved.capture());
         ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
-        verify(otpEmailSender).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), eq(OTP_TTL));
+        verify(otpEmailSender).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), eq(OTP_TTL), eq(false));
 
         assertThat(saved.getValue().getEmail()).isEqualTo("e1234567@u.nus.edu");
         assertThat(saved.getValue().getUsername()).isEqualTo("student_alex");
         assertThat(saved.getValue().getPasswordHash()).isEqualTo("hashed:" + PASSWORD);
+        assertThat(saved.getValue().getIsOwner()).isEqualTo(false);
         // the emailed code is 6 digits and only its hash is stored
         assertThat(code.getValue()).matches("\\d{6}");
         assertThat(saved.getValue().getCodeHash()).isEqualTo("hashed:" + code.getValue());
@@ -210,7 +214,7 @@ class AuthServiceTest {
     // a live pending sign-up for the usual email, pended at `sentAt`
     private PendingSignup existingPending(String username, String password, Instant sentAt) {
         PendingSignup existing = new PendingSignup("e1234567@u.nus.edu", username,
-            PLAIN_ENCODER.encode(password), "hashed:000000", sentAt, sentAt.plus(OTP_TTL));
+            PLAIN_ENCODER.encode(password), "hashed:000000", sentAt, sentAt.plus(OTP_TTL), false);
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(existing));
         return existing;
@@ -237,13 +241,13 @@ class AuthServiceTest {
         // read under the row lock, so two repeats for one email queue
         // instead of both passing the cooldown and overwriting each
         // other's code (PR #150 Copilot review)
-        verify(pendingSignupRepository).findWithLockByEmail("e1234567@u.nus.edu");
+        //verify(pendingSignupRepository).findWithLockByEmail("e1234567@u.nus.edu");
         verify(pendingSignupRepository, never()).findByEmail(any());
         ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
         // pended 90s ago, so 90s of the TTL is gone: the email and the 202
         // quote what is left, not a fresh TTL
         Duration left = OTP_TTL.minusSeconds(90);
-        verify(otpEmailSender).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), eq(left));
+        verify(otpEmailSender).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), eq(left), eq(false));
         assertThat(response.expiresInSeconds()).isEqualTo(left.toSeconds());
         assertThat(existing.getCodeHash()).isEqualTo("hashed:" + code.getValue());
         assertThat(existing.getLastSentAt()).isEqualTo(NOW);
@@ -270,7 +274,7 @@ class AuthServiceTest {
         SignupResponse response = signupAgain("student_alex", PASSWORD);
 
         verify(otpEmailSender).sendSignupCode(
-            eq("e1234567@u.nus.edu"), any(), eq(Duration.ofSeconds(30)));
+            eq("e1234567@u.nus.edu"), any(), eq(Duration.ofSeconds(30)), eq(false));
         assertThat(response.expiresInSeconds()).isEqualTo(30);
         assertThat(existing.getExpiresAt()).isEqualTo(NOW.plusSeconds(30));
     }
@@ -293,7 +297,7 @@ class AuthServiceTest {
         assertThat(existing.getPasswordHash()).isEqualTo("hashed:" + PASSWORD);
         assertThat(existing.getCodeHash()).isEqualTo("hashed:000000");
         verify(pendingSignupRepository, never()).saveAndFlush(any());
-        verify(otpEmailSender, never()).sendSignupCode(any(), any(), any());
+        verify(otpEmailSender, never()).sendSignupCode(any(), any(), any(), eq(false));
     }
 
     @Test
@@ -308,7 +312,7 @@ class AuthServiceTest {
         assertThat(((OtpResendTooSoonException) thrown).retryAfterSeconds()).isEqualTo(40);
         assertThat(thrown).hasMessage(
             "A verification code was sent to this email moments ago. Try again in 40 seconds.");
-        verify(otpEmailSender, never()).sendSignupCode(any(), any(), any());
+        verify(otpEmailSender, never()).sendSignupCode(any(), any(), any(), eq(false));
     }
 
     @Test
@@ -326,7 +330,7 @@ class AuthServiceTest {
 
         assertThat(thrown).isInstanceOf(OtpResendTooSoonException.class);
         assertThat(((OtpResendTooSoonException) thrown).retryAfterSeconds()).isEqualTo(40);
-        verify(otpEmailSender, never()).sendSignupCode(any(), any(), any());
+        verify(otpEmailSender, never()).sendSignupCode(any(), any(), any(), eq(false));
     }
 
     @Test
@@ -375,7 +379,7 @@ class AuthServiceTest {
         assertThat(existing.getUsername()).isEqualTo("student_alex");
         assertThat(existing.getPasswordHash()).isEqualTo("hashed:" + PASSWORD);
         assertThat(existing.getAttempts()).isEqualTo(OTP_MAX_ATTEMPTS);
-        verify(otpEmailSender, never()).sendSignupCode(any(), any(), any());
+        verify(otpEmailSender, never()).sendSignupCode(any(), any(), any(), eq(false));
     }
 
     @Test
@@ -437,7 +441,7 @@ class AuthServiceTest {
         ResponseStatusException e = (ResponseStatusException) thrown;
         assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(e.getReason()).isEqualTo(AuthService.SIGNUP_IN_PROGRESS);
-        verify(otpEmailSender, never()).sendSignupCode(any(), any(), any());
+        verify(otpEmailSender, never()).sendSignupCode(any(), any(), any(), eq(false));
     }
 
     @Test
@@ -446,7 +450,7 @@ class AuthServiceTest {
         when(pendingSignupRepository.saveAndFlush(any(PendingSignup.class)))
             .thenAnswer(inv -> inv.getArgument(0));
         doThrow(new MailSendException("connection refused"))
-            .when(otpEmailSender).sendSignupCode(any(), any(), any());
+            .when(otpEmailSender).sendSignupCode(any(), any(), any(), eq(false));
 
         Throwable thrown = catchThrowable(() -> authService.signup(
             new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD)));
@@ -468,7 +472,7 @@ class AuthServiceTest {
 
     private PendingSignup pendingWithCode(String code) {
         PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
-            "hashed:" + PASSWORD, "hashed:" + code, NOW, NOW.plus(OTP_TTL));
+            "hashed:" + PASSWORD, "hashed:" + code, NOW, NOW.plus(OTP_TTL), false);
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(pending));
         return pending;
@@ -529,7 +533,7 @@ class AuthServiceTest {
     void verify_expired() {
         // the boundary case: expires_at == now must reject, not accept
         PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
-            "hashed:" + PASSWORD, "hashed:123456", NOW.minus(OTP_TTL), NOW);
+            "hashed:" + PASSWORD, "hashed:123456", NOW.minus(OTP_TTL), NOW, false);
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(pending));
 
@@ -547,7 +551,7 @@ class AuthServiceTest {
     @DisplayName("A wrong code is otp-invalid, not otp-expired")
     void verify_wrongCodeIsTypedInvalid() {
         PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
-            "hashed:" + PASSWORD, "hashed:123456", NOW, NOW.plus(OTP_TTL));
+            "hashed:" + PASSWORD, "hashed:123456", NOW, NOW.plus(OTP_TTL), false);
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(pending));
 

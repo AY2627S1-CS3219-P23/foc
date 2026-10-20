@@ -33,6 +33,8 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -55,15 +57,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
-import foc.user.controller.ProblemTypes;
 import foc.user.dto.SignupOwnerRequest;
-import foc.user.dto.SignupResponse;
 import foc.user.dto.SignupVerifyRequest;
 import foc.user.dto.UserResponse;
 import foc.user.entity.PendingSignup;
 import foc.user.entity.Role;
 import foc.user.entity.User;
-import foc.user.exception.OtpVerificationException;
 import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
 
@@ -71,7 +70,7 @@ import foc.user.repository.UserRepository;
 class OwnerSignupServiceTest {
 
     // values needed to build service
-    private static final String VALID_SETUP_TOKEN = "correct-setup-token";
+    private static final String VALID_SETUP_KEY = "correct-setup-key";
     private static final Instant NOW = Instant.parse("2026-09-29T10:00:00Z");
     private static final String PASSWORD = "ValidPassword123";
     private static final Duration OTP_TTL = Duration.ofMinutes(10);
@@ -117,7 +116,7 @@ class OwnerSignupServiceTest {
             new OtpService(PLAIN_ENCODER, OTP_TTL, OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN);
 
         ownerSignupService = new OwnerSignupService(userRepository, pendingSignupRepository, PLAIN_ENCODER,
-            otpService, otpEmailSender, Clock.fixed(NOW, ZoneOffset.UTC), VALID_SETUP_TOKEN);
+            otpService, otpEmailSender, Clock.fixed(NOW, ZoneOffset.UTC), VALID_SETUP_KEY);
 
         reset(pendingSignupRepository);
         reset(userRepository);
@@ -127,24 +126,24 @@ class OwnerSignupServiceTest {
     // --- happy path ---
 
     @Test
-    @DisplayName("Signup and verify create user with owner")
-    void setupOwner_savesOwnerAndReturnsResponse() {
+    @DisplayName("Signup and verify creates owner")
+    void signupOwner_savesOwnerAndReturnsResponse() {
         when(userRepository.saveAndFlush(any(User.class)))
             .thenAnswer(inv -> inv.getArgument(0));
 
         SignupOwnerRequest signRequest = new SignupOwnerRequest(
-            "e1234567@u.nus.edu", "owner_user", PASSWORD, VALID_SETUP_TOKEN
+            "e1234567@u.nus.edu", "owner_user", PASSWORD, VALID_SETUP_KEY
         );
-        SignupResponse signResponse = ownerSignupService.signupOwner(signRequest);
+        ownerSignupService.signupOwner(signRequest);
 
         ArgumentCaptor<PendingSignup> saved = ArgumentCaptor.forClass(PendingSignup.class);
         verify(pendingSignupRepository).saveAndFlush(saved.capture());
         verify(pendingSignupRepository, never()).findByEmail(any());
         ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
-        verify(otpEmailSender).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), eq(OTP_TTL));
+        verify(otpEmailSender).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), eq(OTP_TTL), eq(true));
 
         PendingSignup existing = new PendingSignup("e1234567@u.nus.edu", "owner_user",
-            PLAIN_ENCODER.encode(PASSWORD), PLAIN_ENCODER.encode(code.capture()), NOW, NOW.plus(OTP_TTL));
+            PLAIN_ENCODER.encode(PASSWORD), PLAIN_ENCODER.encode(code.capture()), NOW, NOW.plus(OTP_TTL), true);
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(existing));
         SignupVerifyRequest verifyRequest = new SignupVerifyRequest("e1234567@u.nus.edu", code.capture());
@@ -159,48 +158,102 @@ class OwnerSignupServiceTest {
     }
 
     @Test
-    @DisplayName("Missing owner key should pass signup and fail verify")
-    void setupOwner_throwsForbiddenWhenTokenMissing() {
+    @DisplayName("Missing owner key should create user, notified via otp email")
+    void signupOwner_KeyMissing() {
+        when(userRepository.saveAndFlush(any(User.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+
         SignupOwnerRequest signRequest = new SignupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", PASSWORD, null);
-        SignupResponse signResponse = ownerSignupService.signupOwner(signRequest);
+        ownerSignupService.signupOwner(signRequest);
 
-        verify(pendingSignupRepository, never()).saveAndFlush(any());
+        ArgumentCaptor<PendingSignup> saved = ArgumentCaptor.forClass(PendingSignup.class);
+        verify(pendingSignupRepository).saveAndFlush(saved.capture());
         ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
-        verify(otpEmailSender).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), eq(OTP_TTL));
+        verify(otpEmailSender).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), eq(OTP_TTL), eq(false));
 
-        SignupVerifyRequest verifyRequest = new SignupVerifyRequest("e1234567@u.nus.edu", code.capture());
-        assertThatThrownBy(() ->  ownerSignupService.verifySignup(verifyRequest))
-            .isInstanceOf(OtpVerificationException.class)
-            .satisfies(ex ->
-                assertThat(((OtpVerificationException) ex).type())
-                    .isEqualTo(ProblemTypes.OTP_INVALID)
-            );
+        when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
+            .thenReturn(Optional.of(saved.getValue()));
+        SignupVerifyRequest verifyRequest = new SignupVerifyRequest("e1234567@u.nus.edu", code.getValue());
+        UserResponse verifyResponse = ownerSignupService.verifySignup(verifyRequest);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(captor.capture());
+        
+        assertThat(captor.getValue().getRole()).isEqualTo(Role.USER);
+        assertThat(captor.getValue().getPasswordHash()).isEqualTo(PLAIN_ENCODER.encode(PASSWORD));
+        assertThat(verifyResponse.email()).isEqualTo("e1234567@u.nus.edu");
     }
 
     @Test
-    @DisplayName("Wrong owner key should pass signup and fail verify")
-    void setupOwner_throwsForbiddenWhenTokenWrong() {
+    @DisplayName("Wrong owner key should create user, notified via otp email")
+    void signupOwner_WrongKey() {
+        when(userRepository.saveAndFlush(any(User.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+
         SignupOwnerRequest signRequest = new SignupOwnerRequest(
-            "e1234567@u.nus.edu", "owner_user", PASSWORD, "wrongKey");
-        SignupResponse signResponse = ownerSignupService.signupOwner(signRequest);
+            "e1234567@u.nus.edu", "owner_user", PASSWORD, "wrongkey");
+        ownerSignupService.signupOwner(signRequest);
 
-        verify(pendingSignupRepository, never()).saveAndFlush(any());
+        ArgumentCaptor<PendingSignup> saved = ArgumentCaptor.forClass(PendingSignup.class);
+        verify(pendingSignupRepository).saveAndFlush(saved.capture());
         ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
-        verify(otpEmailSender).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), eq(OTP_TTL));
+        verify(otpEmailSender).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), eq(OTP_TTL), eq(false));
 
-        SignupVerifyRequest verifyRequest = new SignupVerifyRequest("e1234567@u.nus.edu", code.capture());
-        assertThatThrownBy(() ->  ownerSignupService.verifySignup(verifyRequest))
-            .isInstanceOf(OtpVerificationException.class)
-            .satisfies(ex ->
-                assertThat(((OtpVerificationException) ex).type())
-                    .isEqualTo(ProblemTypes.OTP_INVALID)
-            );
+        when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
+            .thenReturn(Optional.of(saved.getValue()));
+        SignupVerifyRequest verifyRequest = new SignupVerifyRequest("e1234567@u.nus.edu", code.getValue());
+        UserResponse verifyResponse = ownerSignupService.verifySignup(verifyRequest);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(captor.capture());
+        
+        assertThat(captor.getValue().getRole()).isEqualTo(Role.USER);
+        assertThat(captor.getValue().getPasswordHash()).isEqualTo(PLAIN_ENCODER.encode(PASSWORD));
+        assertThat(verifyResponse.email()).isEqualTo("e1234567@u.nus.edu");
     }
 
     @Test
-    @DisplayName("Should throw 503 Service Unavailable when OWNER_SETUP_TOKEN is not configured")
-    void setupOwner_throwsServiceUnavailableWhenTokenNotConfigured() {
+    @DisplayName("Refreshing expired request should read ownerKey again")
+    void signupOwner_refreshReadsNewKey() {
+        PendingSignup expired = new PendingSignup("e1234567@u.nus.edu", "owner_user",
+            PLAIN_ENCODER.encode(PASSWORD), PLAIN_ENCODER.encode("old code"), NOW.minus(OTP_TTL), NOW.minus(OTP_TTL), false);
+        when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
+            .thenReturn(Optional.of(expired));
+        when(userRepository.saveAndFlush(any(User.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+
+        SignupOwnerRequest signRequest = new SignupOwnerRequest(
+            "e1234567@u.nus.edu", "owner_user", PASSWORD, VALID_SETUP_KEY
+        );
+        ownerSignupService.signupOwner(signRequest);
+
+        ArgumentCaptor<PendingSignup> saved = ArgumentCaptor.forClass(PendingSignup.class);
+        verify(pendingSignupRepository).saveAndFlush(saved.capture());
+        verify(pendingSignupRepository, never()).findByEmail(any());
+        assertTrue(saved.getValue().getIsOwner());
+        ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+        verify(otpEmailSender).sendSignupCode(eq("e1234567@u.nus.edu"), code.capture(), eq(OTP_TTL), eq(true));
+
+        PendingSignup existing = new PendingSignup("e1234567@u.nus.edu", "owner_user",
+            PLAIN_ENCODER.encode(PASSWORD), PLAIN_ENCODER.encode(code.capture()), NOW, NOW.plus(OTP_TTL), true);
+        when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
+            .thenReturn(Optional.of(existing));
+        SignupVerifyRequest verifyRequest = new SignupVerifyRequest("e1234567@u.nus.edu", code.capture());
+        UserResponse verifyResponse = ownerSignupService.verifySignup(verifyRequest);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(captor.capture());
+
+        assertThat(captor.getValue().getRole()).isEqualTo(Role.OWNER);
+        assertThat(captor.getValue().getPasswordHash()).isEqualTo(PLAIN_ENCODER.encode(PASSWORD));
+        assertThat(verifyResponse.email()).isEqualTo("e1234567@u.nus.edu");
+    }
+
+
+    @Test
+    @DisplayName("Should throw 503 when OWNER_SETUP_KEY is not configured")
+    void signupOwner_throwsServiceUnavailableWhenKeyNotConfigured() {
         ReflectionTestUtils.setField(ownerSignupService, "expectedOwnerKey", "");
 
         SignupOwnerRequest signRequest = new SignupOwnerRequest(
@@ -215,7 +268,7 @@ class OwnerSignupServiceTest {
             // the reason reaches the caller, so it must not name the setting
             .satisfies(ex ->
                 assertThat(((ResponseStatusException) ex).getReason())
-                    .isEqualTo("Owner setup is disabled: OWNER_SETUP_TOKEN is not configured")
+                    .isEqualTo("Owner setup is unavailable")
             );
     }
 
@@ -223,11 +276,11 @@ class OwnerSignupServiceTest {
 
     @Test
     @DisplayName("Should throw 400 when email is already registered")
-    void setupOwner_throwsBadRequestOnDuplicateEmail() {
+    void signupOwner_throwsBadRequestOnDuplicateEmail() {
         when(userRepository.existsByEmail("e1234567@u.nus.edu")).thenReturn(true);
 
         SignupOwnerRequest request = new SignupOwnerRequest(
-            "e1234567@u.nus.edu", "owner_user", "ValidPassword123!", VALID_SETUP_TOKEN
+            "e1234567@u.nus.edu", "owner_user", "ValidPassword123!", VALID_SETUP_KEY
         );
 
         assertThatThrownBy(() -> ownerSignupService.signupOwner(request))
@@ -240,11 +293,11 @@ class OwnerSignupServiceTest {
 
     @Test
     @DisplayName("Should throw 400 when username is already taken")
-    void setupOwner_throwsBadRequestOnDuplicateUsername() {
+    void signupOwner_throwsBadRequestOnDuplicateUsername() {
         when(userRepository.existsByUsernameIgnoreCase("owner_user")).thenReturn(true);
 
         SignupOwnerRequest request = new SignupOwnerRequest(
-            "e1234567@u.nus.edu", "owner_user", PASSWORD, VALID_SETUP_TOKEN
+            "e1234567@u.nus.edu", "owner_user", PASSWORD, VALID_SETUP_KEY
         );
 
         assertThatThrownBy(() -> ownerSignupService.signupOwner(request))
@@ -259,23 +312,23 @@ class OwnerSignupServiceTest {
 
     @Test
     @DisplayName("Should normalise email to lowercase before saving")
-    void setupOwner_normalisesEmailToLowercase() {
+    void signupOwner_normalisesEmailToLowercase() {
         when(userRepository.saveAndFlush(any(User.class)))
             .thenAnswer(inv -> inv.getArgument(0));
 
         SignupOwnerRequest signRequest = new SignupOwnerRequest(
-            " E1234567@u.nus.edu ", "owner_user", PASSWORD, VALID_SETUP_TOKEN
+            " E1234567@u.nus.edu ", "owner_user", PASSWORD, VALID_SETUP_KEY
         );
-        SignupResponse signResponse = ownerSignupService.signupOwner(signRequest);
+        ownerSignupService.signupOwner(signRequest);
         ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
 
         PendingSignup existing = new PendingSignup("e1234567@u.nus.edu", "owner_user",
-            PLAIN_ENCODER.encode(PASSWORD), PLAIN_ENCODER.encode(code.capture()), NOW, NOW.plus(OTP_TTL));
+            PLAIN_ENCODER.encode(PASSWORD), PLAIN_ENCODER.encode(code.capture()), NOW, NOW.plus(OTP_TTL), true);
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(existing));
         
         SignupVerifyRequest verifyRequest = new SignupVerifyRequest("e1234567@u.nus.edu", code.capture());
-        UserResponse verifyResponse = ownerSignupService.verifySignup(verifyRequest);
+        ownerSignupService.verifySignup(verifyRequest);
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).saveAndFlush(captor.capture());
@@ -285,23 +338,23 @@ class OwnerSignupServiceTest {
 
     @Test
     @DisplayName("Should trim leading and trailing whitespace from username before saving")
-    void setupOwner_trimsUsernameWhitespace() {
+    void signupOwner_trimsUsernameWhitespace() {
                 when(userRepository.saveAndFlush(any(User.class)))
             .thenAnswer(inv -> inv.getArgument(0));
 
         SignupOwnerRequest signRequest = new SignupOwnerRequest(
-            "e1234567@u.nus.edu", "  owner_user  ", PASSWORD, VALID_SETUP_TOKEN
+            "e1234567@u.nus.edu", "  owner_user  ", PASSWORD, VALID_SETUP_KEY
         );
-        SignupResponse signResponse = ownerSignupService.signupOwner(signRequest);
+        ownerSignupService.signupOwner(signRequest);
         ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
 
         PendingSignup existing = new PendingSignup("e1234567@u.nus.edu", "owner_user",
-            PLAIN_ENCODER.encode(PASSWORD), PLAIN_ENCODER.encode(code.capture()), NOW, NOW.plus(OTP_TTL));
+            PLAIN_ENCODER.encode(PASSWORD), PLAIN_ENCODER.encode(code.capture()), NOW, NOW.plus(OTP_TTL), true);
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(existing));
         
         SignupVerifyRequest verifyRequest = new SignupVerifyRequest("e1234567@u.nus.edu", code.capture());
-        UserResponse verifyResponse = ownerSignupService.verifySignup(verifyRequest);
+        ownerSignupService.verifySignup(verifyRequest);
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).saveAndFlush(captor.capture());

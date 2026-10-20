@@ -56,7 +56,7 @@ import org.springframework.core.io.ClassPathResource;
 class FlywayMigrationTest extends PostgresTestContainer {
 
     // scripts in db/migration; a new V<n> bumps this
-    private static final int MIGRATION_SCRIPTS = 7;
+    private static final int MIGRATION_SCRIPTS = 8;
 
     // the application's Flyway, built from application.yaml's spring.flyway
     @Autowired

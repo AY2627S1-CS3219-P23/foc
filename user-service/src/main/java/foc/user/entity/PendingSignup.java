@@ -86,17 +86,21 @@ public class PendingSignup {
     @Column(nullable = false)
     private int attempts = 0;
 
+    @Column(name = "is_owner", nullable = false)
+    private boolean isOwner = false;
+
     protected PendingSignup() {
     }
 
     public PendingSignup(String email, String username, String passwordHash,
-            String codeHash, Instant sentAt, Instant expiresAt) {
+            String codeHash, Instant sentAt, Instant expiresAt, boolean isOwner) {
         this.email = email;
         this.username = username;
         this.passwordHash = passwordHash;
         this.codeHash = codeHash;
         this.lastSentAt = sentAt;
         this.expiresAt = expiresAt;
+        this.isOwner = isOwner;
     }
 
     /**
@@ -118,9 +122,10 @@ public class PendingSignup {
      * <p>Renewal in place rather than delete-and-insert, so the row never
      * leaves its unique index slot.
      */
-    public void renewCode(String codeHash, Instant sentAt) {
+    public void renewCode(String codeHash, Instant sentAt, boolean isOwner) {
         this.codeHash = codeHash;
         this.lastSentAt = sentAt;
+        this.isOwner = isOwner;
     }
 
     /**
@@ -136,13 +141,14 @@ public class PendingSignup {
      * revives only for its own requester via {@link #reviveSpent}.
      */
     public void replaceExpired(String username, String passwordHash, String codeHash,
-            Instant sentAt, Instant expiresAt) {
+            Instant sentAt, Instant expiresAt, boolean isOwner) {
         this.username = username;
         this.passwordHash = passwordHash;
         this.codeHash = codeHash;
         this.lastSentAt = sentAt;
         this.expiresAt = expiresAt;
         this.attempts = 0;
+        this.isOwner = isOwner;
     }
 
     /**
@@ -157,10 +163,11 @@ public class PendingSignup {
      * cooldown until the row dies for real (PR #157 Copilot review,
      * shape chosen by Leong Wei Zhi via options Q&A).
      */
-    public void reviveSpent(String codeHash, Instant sentAt) {
+    public void reviveSpent(String codeHash, Instant sentAt, boolean isOwner) {
         this.codeHash = codeHash;
         this.lastSentAt = sentAt;
         this.attempts = 0;
+        this.isOwner = isOwner;
     }
 
     public Long getId() {
@@ -198,5 +205,9 @@ public class PendingSignup {
 
     public void incrementAttempts() {
         this.attempts++;
+    }
+
+    public boolean getIsOwner() {
+        return this.isOwner;
     }
 }

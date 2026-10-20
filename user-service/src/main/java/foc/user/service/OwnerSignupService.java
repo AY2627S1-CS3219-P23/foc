@@ -106,7 +106,7 @@ public class OwnerSignupService {
             OtpService otpService,
             OtpEmailSender otpEmailSender,
             Clock clock,
-            @Value("${owner.setup.token:}") String expectedOwnerKey) {
+            String expectedOwnerKey) {
         this.userRepository = userRepository;
         this.pendingSignupRepository = pendingSignupRepository;
         this.passwordEncoder = passwordEncoder;
@@ -125,12 +125,12 @@ public class OwnerSignupService {
 
         PendingSignup pending = pendingSignupRepository.findWithLockByEmail(email).orElse(null);
         Instant now = clock.instant();
-        // signup expired
+        // Signup expired
         boolean expired = pending != null && !pending.getExpiresAt().isAfter(now);
-        // password attempts spent
+        // Password attempts spent
         boolean spent = pending != null && pending.getAttempts() >= otpService.maxAttempts();
 
-        // otp already sent
+        // Otp already sent
         if (pending != null && !expired && !isSameRequest(request, username, pending)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, SIGNUP_IN_PROGRESS);
         }
@@ -141,35 +141,36 @@ public class OwnerSignupService {
             }
         }
 
-        // generate otp
+        // Check if ownerKey matches, let user know in otp email
+        // If wrong ownerKey, user has to wait for otp expiry
+        boolean isOwner = checkOwnerKey(request.ownerKey());
+
+        // Generate otp
         String code = otpService.generateCode();
         String codeHash = otpService.hash(code);
         if (pending == null) {
             pending = new PendingSignup(email, username, passwordEncoder.encode(request.password()),
-                codeHash, now, now.plus(otpService.ttl()));
+                codeHash, now, now.plus(otpService.ttl()), isOwner);
         } else if (expired) {
             pending.replaceExpired(username, passwordEncoder.encode(request.password()),
-                codeHash, now, now.plus(otpService.ttl()));
+                codeHash, now, now.plus(otpService.ttl()), isOwner);
         } else if (spent) {
-            pending.reviveSpent(codeHash, now);
+            pending.reviveSpent(codeHash, now, isOwner);
         } else {
-            pending.renewCode(codeHash, now);
+            pending.renewCode(codeHash, now, isOwner);
         }
         
-        // save in pending if matches owner key
-        // wrong owner key will ask for otp but not create an account
+        // Save in pending
         try {
-            if (checkOwnerKey(request.ownerKey())) {
-                pendingSignupRepository.saveAndFlush(pending);
-            }
+            pendingSignupRepository.saveAndFlush(pending);
         } catch (DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, SIGNUP_IN_PROGRESS);
         }
 
-        // send email with otp
+        // Send email with otp
         Duration validity = Duration.between(now, pending.getExpiresAt());
         try {
-            otpEmailSender.sendSignupCode(email, code, validity);
+            otpEmailSender.sendSignupCode(email, code, validity, isOwner);
         } catch (MailException e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                 "Could not send the verification email; try again later");
@@ -197,13 +198,13 @@ public class OwnerSignupService {
                 "Code has expired; sign up again to get a new code");
         }
 
-        // a spent row answers exactly like no row at all
+        // A spent row answers exactly like no row at all
         if (pending.getAttempts() >= otpService.maxAttempts()) {
             otpService.matches(request.code(), unknownPendingCodeHash);
             throw new OtpVerificationException();
         }
 
-        // wrong otp
+        // Wrong otp
         if (!otpService.matches(request.code(), pending.getCodeHash())) {
             pending.incrementAttempts();
             pendingSignupRepository.save(pending);
@@ -216,7 +217,7 @@ public class OwnerSignupService {
             throw new OtpVerificationException();
         }
 
-        // check unique
+        // Check unique
         try {
             NewAccountDetails.ensureUnique(userRepository, email, pending.getUsername());
         } catch (ResponseStatusException e) {
@@ -224,12 +225,13 @@ public class OwnerSignupService {
             throw new SignupIdentifierTakenException(e);
         }
         
-        // create owner
-        User user = new User(email, pending.getUsername(), pending.getPasswordHash(), Role.OWNER);
+        // Create user
+        User user = new User(email, pending.getUsername(), pending.getPasswordHash(),
+            pending.getIsOwner() ? Role.OWNER : Role.USER);
         try {
             user = userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException e) {
-            // a concurrent sign-up took the email or username after the checks
+            // A concurrent sign-up took the email or username after the checks
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "Email or username was just taken; choose another");
         }
@@ -238,6 +240,7 @@ public class OwnerSignupService {
         return UserResponse.from(user);
     }
 
+    // Intentionally block changing the ownerKey behind otp expiry
     private boolean isSameRequest(SignupOwnerRequest request, String username, PendingSignup pending) {
         return pending.getUsername().equalsIgnoreCase(username)
             && passwordEncoder.matches(request.password(), pending.getPasswordHash());
@@ -247,7 +250,7 @@ public class OwnerSignupService {
         if (expectedOwnerKey == null || expectedOwnerKey.isBlank()) {
             ResponseStatusException e =  new ResponseStatusException(
                 HttpStatus.SERVICE_UNAVAILABLE,
-                "Owner setup is disabled: OWNER_SETUP_TOKEN is not configured"
+                "Owner setup is unavailable"
             );
             e.getBody().setType(ProblemTypes.OWNER_SETUP_TOKEN_MISSING);
             throw e;

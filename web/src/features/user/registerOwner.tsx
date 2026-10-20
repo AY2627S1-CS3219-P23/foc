@@ -114,7 +114,7 @@ export function RegisterOwner() {
         <label className="block text-sm font-medium text-gray-700">
           Setup token
           <input
-            type="text"
+            type="password"
             value={ownerKey}
             onChange={(e) => setOwnerKey(e.target.value)}
             className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 font-normal focus:border-gray-400 focus:outline-none"

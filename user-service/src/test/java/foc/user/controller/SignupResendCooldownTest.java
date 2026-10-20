@@ -85,7 +85,7 @@ class SignupResendCooldownTest extends PostgresTestContainer {
 
     private String emailedCode() {
         ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
-        verify(otpEmailSender, atLeastOnce()).sendSignupCode(eq(EMAIL), code.capture(), any());
+        verify(otpEmailSender, atLeastOnce()).sendSignupCode(eq(EMAIL), code.capture(), any(), eq(false));
         return code.getValue();
     }
 
