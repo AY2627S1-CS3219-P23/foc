@@ -197,6 +197,9 @@
   and My Requests' PENDING refetch, and for lost races answered 409, by
   Claude Code (Opus 5.5).
   Author review: Aung Ko Khant, pending pull request review.
+  2026-10-20: AI Use Summary extended for the D3 demo Postman
+  collection (docs/postman/) by Claude Code (Fable 5).
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -924,6 +927,18 @@ over a batch endpoint, removing the token machinery in the same PR,
 ignoring the stored name keys of old rows) was decided by Leong Wei Zhi
 via neutral options Q&A, recorded in the design doc and
 `ai/usage-log.md`.
+
+Claude Code (Fable 5) transcribed the wiki's D3 Demo Script page into a
+runnable Postman collection (`docs/postman/`): a Collection v2.1 JSON
+with per-step assertions, the local-gateway environment file, and a
+README, with bodies, paths, and status codes taken from the merged
+contracts (order-service README, `docs/credit-service.md`,
+`docs/notification-service.md`). The format, step scope, and location
+were chosen by Leong Wei Zhi via options Q&A; the mechanical deviations
+from the wiki page (polls for the sleeps, captured ids, delta balance
+checks, a sequential accept pair, the real seeded account names,
+2-credit cancel/drop amounts) are listed in `docs/postman/README.md`
+and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

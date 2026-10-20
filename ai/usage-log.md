@@ -5882,3 +5882,27 @@ Entry template:
   applied. Only those decisions were transcribed.
 - **Author review:** Alastair Tan Choon Wei to review before opening
   the PR.
+
+## 2026-10-20 — Leong Wei Zhi (docs: D3 demo as a Postman collection)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs, generate
+- **Scope:** `docs/postman/foc-d3-demo.postman_collection.json`,
+  `docs/postman/foc-local.postman_environment.json`,
+  `docs/postman/README.md` (new), `README.md` (AI Use Summary).
+- **Prompt(s):** "create postman script for d3 demo, you can find it in
+  github wiki." The tool transcribed the wiki D3-Demo-Script page into a
+  Collection v2.1 with per-step assertions, taking bodies, paths, and
+  status codes from the merged contracts (order-service README,
+  docs/credit-service.md "Read API contract",
+  docs/notification-service.md). Format (v2.1 JSON + newman), scope
+  (all automatable steps; expiry and the RabbitMQ/live-push parts stay
+  manual), and location (`docs/postman/`) chosen by the author via
+  options Q&A. Mechanical deviations from the wiki page (polls for the
+  sleeps, captured ids, delta balance checks, sequential accept pair,
+  the real seeded account names, 2-credit cancel/drop requests so the
+  run fits the 5-credit provision) are listed in `docs/postman/README.md`;
+  the wiki page's own stale bits (nonexistent `demo_requester` accounts,
+  3-credit steps 10–11 the balance cannot afford) were reported to the
+  author for a separate wiki fix.
+- **Author review:** Leong Wei Zhi verified the newman run against the
+  compose stack and reviews via pull request.
