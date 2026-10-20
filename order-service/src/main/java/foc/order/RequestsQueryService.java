@@ -12,6 +12,9 @@
  * newest first, or deadline, nearest first), through
  * RequestSpecifications; ranges checked as credit-service's history.
  * Same day: the open list hides requests past their deadline.
+ * 2026-10-20: state takes several states, comma-separated (e.g.
+ * state=CREATED,ACCEPTED), so a page can list all active or all finished
+ * requests in one paged query (the author's decision).
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -30,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.Locale;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
@@ -62,8 +66,8 @@ public class RequestsQueryService {
     // and only those whose deadline is still ahead, since the expiry
     // sweep may not have run yet (the author's decision).
     public Page<Requests> openRequests(String state, RequestFilter filter, int page, int size) {
-        OrderStates status = parseState(state);
-        if (status != null && status != OrderStates.CREATED) {
+        EnumSet<OrderStates> states = parseStates(state);
+        if (states != null && !states.equals(EnumSet.of(OrderStates.CREATED))) {
             throw new InvalidRequestException("state must be CREATED");
         }
         return find(allOf(status(OrderStates.CREATED), after("deadline", Instant.now())), filter, page, size);
@@ -83,13 +87,13 @@ public class RequestsQueryService {
     // The caller's requests on one side, optionally in one state.
     public Page<Requests> mine(Long callerId, String role, String state, RequestFilter filter, int page, int size) {
         Specification<Requests> side = parseRole(role) == Role.REQUESTER ? requester(callerId) : courier(callerId);
-        return find(allOf(side, status(parseState(state))), filter, page, size);
+        return find(allOf(side, statusIn(parseStates(state))), filter, page, size);
     }
 
     // Any user's requests, as requester or courier (the admin view; the
     // route is limited to ADMIN / OWNER in SecurityConfig).
     public Page<Requests> involving(Long userId, String state, RequestFilter filter, int page, int size) {
-        return find(allOf(RequestSpecifications.involving(userId), status(parseState(state))), filter, page, size);
+        return find(allOf(RequestSpecifications.involving(userId), statusIn(parseStates(state))), filter, page, size);
     }
 
     // The base query narrowed by the filter, in the filter's order.
@@ -154,17 +158,22 @@ public class RequestsQueryService {
         return PageRequest.of(page, size, sort);
     }
 
-    // null or blank: any state
-    private static OrderStates parseState(String state) {
+    // One state or several, comma-separated ("CREATED,ACCEPTED"); null or
+    // blank: any state. Every listed name must be a state.
+    private static EnumSet<OrderStates> parseStates(String state) {
         if (state == null || state.isBlank()) {
             return null;
         }
-        try {
-            return OrderStates.valueOf(state.trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException e) {
-            throw new InvalidRequestException("state must be one of " + Arrays.stream(OrderStates.values())
-                    .map(Enum::name).collect(Collectors.joining(", ")));
+        EnumSet<OrderStates> states = EnumSet.noneOf(OrderStates.class);
+        for (String name : state.split(",")) {
+            try {
+                states.add(OrderStates.valueOf(name.trim().toUpperCase(Locale.ROOT)));
+            } catch (IllegalArgumentException e) {
+                throw new InvalidRequestException("state must be one or more of " + Arrays.stream(OrderStates.values())
+                        .map(Enum::name).collect(Collectors.joining(", ")) + ", comma-separated");
+            }
         }
+        return states;
     }
 
     private static Role parseRole(String role) {

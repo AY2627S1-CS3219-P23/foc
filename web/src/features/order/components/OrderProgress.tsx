@@ -1,14 +1,16 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Sonnet 5.5), 2026-10-16.
-// Scope: the Created → Accepted → Collected → Delivered → Completed
+// Scope: the Created → Accepted → Collected → Arrived → Completed
 // tracker from my-requests.png — numbered steps on desktop, a segmented
 // bar on mobile.
+// 2026-10-18, Claude Code (Opus 5.5), Aung Ko Khant: typed by order-service's
+// RequestStatus.
 // Author review: [pending]
 
 import { progressOf, progressSteps } from '../status'
-import type { OrderStatus } from '../types'
+import type { RequestStatus } from '../types'
 
-export function OrderProgress({ status }: { status: OrderStatus }) {
+export function OrderProgress({ status }: { status: RequestStatus }) {
   const reached = progressOf(status)
   return (
     <>

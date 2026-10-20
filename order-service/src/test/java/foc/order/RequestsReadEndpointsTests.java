@@ -10,6 +10,7 @@
  * Same day: the filters (supplier, reward range, deadline and created
  * ranges), the sort parameter, and their 400s. Then: the open list hides
  * requests past their deadline, and accepting one is a 409.
+ * 2026-10-20: state takes several states, comma-separated.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order;
@@ -161,6 +162,37 @@ class RequestsReadEndpointsTests {
 	}
 
 	@Test
+	void stateTakesSeveralStatesCommaSeparated() throws Exception {
+		Long created = createdRequest();
+		Long accepted = createdRequest();
+		requestsService.accept(accepted, courier);
+		Long cancelled = createdRequest();
+		requestsService.cancel(cancelled, requester);
+		Long pending = create();
+
+		// all active, then all finished: one paged query each
+		assertEquals(List.of(pending, accepted, created), ids(getJson(
+				"/requests/mine?role=requester&state=PENDING,CREATED,ACCEPTED,COLLECTED,ARRIVED", requester)));
+		assertEquals(List.of(cancelled), ids(getJson(
+				"/requests/mine?role=requester&state=COMPLETED,CANCELLED,EXPIRED,REJECTED", requester)));
+		// spaces and case are forgiven, like a single state
+		assertEquals(List.of(accepted, created),
+				ids(getJson("/requests/mine?role=requester&state=created,%20ACCEPTED", requester)));
+		JsonNode page = getJson("/requests/mine?role=requester&state=CREATED,CANCELLED&size=1", requester);
+		assertEquals(2, page.get("totalElements").longValue(), "paging counts across the states");
+		assertEquals(List.of(accepted),
+				ids(getJson("/users/" + courier + "/requests?state=ACCEPTED,COLLECTED", stranger, "ADMIN")));
+	}
+
+	@Test
+	void openRequestsTakeOnlyCreatedEvenInAList() throws Exception {
+		send(get("/requests?state=CREATED,ACCEPTED"), stranger)
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("state must be CREATED"));
+		send(get("/requests?state=CREATED,created"), stranger).andExpect(status().isOk());
+	}
+
+	@Test
 	void mineNeedsAValidRoleAndState() throws Exception {
 		send(get("/requests/mine"), requester)
 				.andExpect(status().isBadRequest())
@@ -169,6 +201,9 @@ class RequestsReadEndpointsTests {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message").value("role must be requester or courier"));
 		send(get("/requests/mine?role=requester&state=LOST"), requester).andExpect(status().isBadRequest());
+		send(get("/requests/mine?role=requester&state=CREATED,LOST"), requester)
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.endsWith("comma-separated")));
 	}
 
 	@Test

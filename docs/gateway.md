@@ -15,6 +15,10 @@
   /actuator/health mirrored, gateway-origin errors made CORS-readable
   problem+json, the opm package pinned, and the encoded-slash limit
   recorded. Fixes to recorded behavior; no new decisions.
+  2026-10-20, Claude Code (Opus 5.5), Aung Ko Khant: the `/api/order/**`
+  routing row now records the proxied location that replaced the stub
+  (the change logged 2026-10-17), and the stub left the gateway-origin
+  response list. No new decisions. Pending pull request review.
   2026-10-12, Claude Code (Fable 5), PR #179 review (@Sinnez1): G11
   added — per-user session revocation on password reset, decided by
   Leong Wei Zhi via options Q&A — with its request-flow note.
@@ -138,10 +142,10 @@ fresh ones its logins keep minting for 30 days — stay valid.
 | `/api/supplier/**` | `supplier-service:8080` | prefix stripped |
 | `/api/credit/**` | `credit-service:8080` | prefix stripped |
 | `/api/notification/**` | `notification-service:8080` | prefix stripped; WebSocket upgrade + SockJS streaming enabled for `/ws/**` |
-| `/api/order/**` | — | reserved: same auth check as real routes, then a CORS-readable 503 problem+json (incl. answering the preflight itself) until order-service exists |
+| `/api/order/**` | `order-service:8080` | prefix stripped (replaced the reserved 503 stub once order-service existed, as G3 anticipated) |
 | anything else | — | 404 problem+json |
 
-Every gateway-origin response — the Lua 401s, the order stub, the 404,
+Every gateway-origin response — the Lua 401s, the 404,
 and the 502/504 a briefly-restarting backend produces — is problem+json
 with `Access-Control-Allow-Origin`, so the SPA reads a status instead
 of a blocked response (PR #176 review).

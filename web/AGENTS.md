@@ -27,6 +27,12 @@
   notification-center.png row records the shipped Center and its three
   beyond-the-wireframe controls (author decisions via options Q&A).
   Author review: Leong Wei Zhi to review via PR #199.
+  2026-10-18, Claude Code (Opus 5.5), Aung Ko Khant: the my-requests,
+  open-requests, order-history and dispute-flow rows record where the
+  order pages depart from the wireframes now that they run on
+  order-service's real API (adapt-to-the-backend, and the filter /
+  username choices, are the author's decisions via options Q&A).
+  Author review: Aung Ko Khant, pending pull request review.
   2026-10-18, Claude Code (Fable 5), notification sound (follow-up to
   issue #66, no issue yet): the notification-center.png row gains the
   header's sound toggle and the profile.png row the Preferences card
@@ -78,10 +84,10 @@ first**; they cost nothing to read, unlike Figma MCP calls:
 | `docs/wireframes/suppliers.png` | Suppliers — search and category filters, supplier detail panel, empty state (wireframe image still shows a campus-zone filter; team dropped the zone feature, see `docs/supplier-service.md` D4 — the image is directional, not a spec, per this file's own note above) |
 | `docs/wireframes/profile.png` | Profile — account details, edit flows, delete-account modal (built in PR #149; two deviations the shipped #92 endpoints force, same convention as the signup.png note above: **Change Password has no Current Password field** — `POST /users/me/password` takes `{newPassword, confirmPassword, otp}` and the code emailed to the current address *is* the authentication, so the card ends in a code step instead; and a **second code step** the wireframe doesn't draw confirms a new email address from that address before it replaces the old one, F2.1.3; plus a **Preferences card** with the notification-sound switch — the same device-wide preference as the Center header's toggle, not drawn in the wireframe, author decision via options Q&A) |
 | `docs/wireframes/credit-history.png` | Credit history — balances and transaction list (built for issue #174 at `/credits`, reached from the top-bar credits badge and the profile card rather than a nav item; three deviations the read API forces or the team chose, same convention as the signup.png note above: the **"Total lifetime earned" card shows Total** (available + reserved) and there is **no running-balance column**, since `GET /credits/me` and the history rows carry neither; and the **"Amount: All" dropdown is two fields, minimum and maximum**, mapping straight to the API's `minAmount`/`maxAmount`. Not drawn, added for issue #196: the **Available card says when the soonest credits expire** ("5 credits expire by 12 Jan 2027", Singapore dates) and a **notice above the transactions** warns when they expire within 7 days; neither appears on the badge or the profile card) |
-| `docs/wireframes/order-history.png` | Order history — past/current orders |
+| `docs/wireframes/order-history.png` | Order history — past/current orders (built at `/history` on order-service's `GET /requests/mine`; holds only **finished** requests (completed, cancelled, expired, rejected) with a **state filter** the wireframe doesn't draw — All finished by default, one backend query per chip — and rows show the **creation date**, since the API has no completion or cancellation time) |
 | `docs/wireframes/create-request.png` | Create request — new errand form |
-| `docs/wireframes/my-requests.png` | My requests — requester's view of own requests |
-| `docs/wireframes/open-requests.png` | Open requests — courier's browse/accept view |
+| `docs/wireframes/my-requests.png` | My requests — requester's view of own requests (built at `/my-requests`; lists only **active** requests — finished ones are in History — with a **state filter** (All active by default) and the state the wireframe doesn't draw, **Reserving credits** (PENDING); there is **no Dispute or Re-release** button — order-service has neither; the courier's name comes from user-service's public profile) |
+| `docs/wireframes/open-requests.png` | Open requests — courier's browse/accept view (built at `/requests`, nearest deadline first; the API's list items carry no requester, so there is **no "Requested by" line and no own-request state** on the card — order-service refuses a self-accept with a 409, shown as a banner; the "Too far" state is not built) |
 | `docs/wireframes/active-delivery.png` | Active delivery — courier's in-progress order view |
 | `docs/wireframes/admin-dashboard.png` | Admin dashboard — user/vendor management |
 | `docs/wireframes/forgot-password.png` | Forgot/reset password — email step + reset form |
@@ -90,7 +96,7 @@ first**; they cost nothing to read, unlike Figma MCP calls:
 | `docs/wireframes/add-edit-supplier.png` | Add/edit supplier (admin) — form modal + delete confirmation |
 | `docs/wireframes/public-profile.png` | Public profile — another user's minimal profile view |
 | `docs/wireframes/rating-review.png` | Rating & review — post-completion star rating, write-up, report user |
-| `docs/wireframes/dispute-flow.png` | Dispute flow — dispute form + admin resolution panel |
+| `docs/wireframes/dispute-flow.png` | Dispute flow — dispute form + admin resolution panel (**not built**: order-service has no dispute; the earlier placeholder modal was removed) |
 | `docs/wireframes/flow-requester.png` | Requester flow diagram — end-to-end journey map |
 | `docs/wireframes/flow-courier.png` | Courier flow diagram — end-to-end journey map |
 

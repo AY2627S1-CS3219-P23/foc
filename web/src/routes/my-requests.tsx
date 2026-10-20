@@ -1,46 +1,84 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Sonnet 5.5), 2026-10-16.
 // Scope: My Requests — the requester's own errands with a progress tracker,
-// per web/docs/wireframes/my-requests.png. Cancel an open request, confirm
-// or dispute a delivered one, re-release an expired/cancelled one. Every
-// action is enforced by order-service; the buttons only mirror what it
-// will accept. Completed requests live on the history page.
+// per web/docs/wireframes/my-requests.png. Every action is enforced by
+// order-service; the buttons only mirror what it will accept.
+// 2026-10-18, Claude Code (Opus 5.5), Aung Ko Khant: on order-service's real
+// API (GET /requests/mine?role=requester, POST /cancel, /complete). A state
+// filter (one backend query per chip, default All) replaces the "current"
+// scope; PENDING ("reserving credits") and REJECTED are shown; dispute and
+// re-release are gone (no backend); steps answer a message, so the list
+// reloads after one; the courier's name and the auto-complete time come
+// from the request's detail and user-service.
+// 2026-10-19: the filter offers only All, Open, Accepted, Collected,
+// Arrived and Completed (the author's choice).
+// 2026-10-20: only active requests live here (All active by default,
+// sent as one comma-separated state list); completed, cancelled,
+// expired and rejected ones are in History (the author's decision).
+// 2026-10-20: while a request is PENDING the list is refetched every 2
+// seconds (the author's request), until credit reservation settles it.
 // Author review: [pending]
 
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 
-import { Banner } from '@/features/order/components/Banner'
-import { DisputeModal } from '@/features/order/components/DisputeModal'
-import { OrderProgress } from '@/features/order/components/OrderProgress'
-import { StatusChip } from '@/features/order/components/StatusChip'
 import { orderApi } from '@/features/order/api'
+import { Banner } from '@/features/order/components/Banner'
+import { OrderProgress } from '@/features/order/components/OrderProgress'
 import {
+  StateFilter,
+  type FilterOption,
+} from '@/features/order/components/StateFilter'
+import { StatusChip } from '@/features/order/components/StatusChip'
+import {
+  activeStatuses,
   autoCompleteAt,
   credits,
   deadlineLine,
   formatDateTime,
   isTerminal,
+  statusLabels,
 } from '@/features/order/status'
-import type { DisputeInput, Order } from '@/features/order/types'
+import type {
+  RequestDetail,
+  RequestStatus,
+  RequestSummary,
+} from '@/features/order/types'
+import { useUsername } from '@/features/order/useUsername'
 import { errorMessage } from '@/lib/api/http'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import { Pagination } from '@/shared/components/Pagination'
 
 const PAGE_SIZE = 10
+// How often the list is refetched while a request is still PENDING.
+const PENDING_POLL_MS = 2000
+// Active requests only (the author's choice): "All active" also covers
+// PENDING, which has no chip of its own. Finished ones are in History.
+const ALL_ACTIVE: FilterOption = {
+  key: 'ALL',
+  label: 'All active',
+  states: activeStatuses,
+}
+const FILTERS: FilterOption[] = [
+  ALL_ACTIVE,
+  ...(['CREATED', 'ACCEPTED', 'COLLECTED', 'ARRIVED'] as RequestStatus[]).map(
+    (s) => ({ key: s, label: statusLabels[s], states: [s] }),
+  ),
+]
 
 export function MyRequests() {
   const location = useLocation()
-  const [orders, setOrders] = useState<Order[]>([])
+  const [filter, setFilter] = useState<FilterOption>(ALL_ACTIVE)
+  const [requests, setRequests] = useState<RequestSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(
     (location.state as { notice?: string } | null)?.notice ?? null,
   )
   const [busyId, setBusyId] = useState<number | null>(null)
-  const [pendingCancel, setPendingCancel] = useState<Order | null>(null)
-  const [disputing, setDisputing] = useState<Order | null>(null)
-  const [disputeError, setDisputeError] = useState<string | null>(null)
+  const [pendingCancel, setPendingCancel] = useState<RequestSummary | null>(
+    null,
+  )
   const [refreshKey, setRefreshKey] = useState(0)
   const [page, setPage] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
@@ -48,18 +86,18 @@ export function MyRequests() {
   useEffect(() => {
     let cancelled = false
     orderApi
-      .listMyOrders({
-        as: 'requester',
-        scope: 'current',
+      .listMyRequests({
+        role: 'requester',
+        state: filter.states,
         page,
         size: PAGE_SIZE,
       })
       .then((result) => {
         if (cancelled) return
-        setOrders(result.content)
+        setRequests(result.content)
         setTotalPages(result.totalPages)
-        // an action can empty the last page (e.g. a completion leaves
-        // the list); step back instead of showing a blank page
+        // an action can empty the last page (e.g. a cancel under a state
+        // filter); step back instead of showing a blank page
         if (result.content.length === 0 && page > 0) setPage(page - 1)
       })
       .catch((err) => {
@@ -74,61 +112,42 @@ export function MyRequests() {
     return () => {
       cancelled = true
     }
-  }, [page, refreshKey])
+  }, [filter, page, refreshKey])
 
-  // The transition endpoints return the updated order, so a success patches
-  // that row in place (a COMPLETED one leaves this page, which lists
-  // everything but completed). Only the paths where the list's shape is
-  // unknown refetch it: a failure ("see what the order really is now") and
-  // re-release, which adds a new row.
-  function applyUpdated(updated: Order) {
-    const gone = updated.status === 'COMPLETED'
-    setOrders((current) =>
-      gone
-        ? current.filter((o) => o.id !== updated.id)
-        : current.map((o) => (o.id === updated.id ? updated : o)),
-    )
-    // that was the last row of a later page: step back, which refetches
-    if (gone && page > 0 && orders.length === 1) setPage(page - 1)
+  // A PENDING request becomes CREATED or REJECTED once credit-service
+  // answers, so keep refetching while one is shown. Each refetch is timed
+  // from the last response, so a slow one is never cut short.
+  useEffect(() => {
+    if (!requests.some((r) => r.status === 'PENDING')) return
+    const timer = setTimeout(() => setRefreshKey((k) => k + 1), PENDING_POLL_MS)
+    return () => clearTimeout(timer)
+  }, [requests])
+
+  function selectFilter(next: FilterOption) {
+    if (next.key === filter.key) return
+    setLoading(true)
+    setFilter(next)
+    setPage(0)
   }
 
+  // A step answers only a message, so the list is reloaded to show the
+  // request's new state — after a failure too, to show what it really is.
   async function run(
-    order: Order,
-    action: () => Promise<Order>,
+    request: RequestSummary,
+    action: () => Promise<unknown>,
     success: string,
-    refetchOnSuccess = false,
   ) {
-    setBusyId(order.id)
+    setBusyId(request.id)
     setError(null)
     try {
-      const updated = await action()
+      await action()
       setNotice(success)
-      if (refetchOnSuccess) setRefreshKey((k) => k + 1)
-      else applyUpdated(updated)
     } catch (err) {
       setNotice(null)
       setError(errorMessage(err, 'That did not go through. Try again.'))
+    } finally {
+      setBusyId(null)
       setRefreshKey((k) => k + 1)
-    } finally {
-      setBusyId(null)
-    }
-  }
-
-  async function handleDispute(input: DisputeInput) {
-    if (!disputing) return
-    setBusyId(disputing.id)
-    setDisputeError(null)
-    try {
-      const updated = await orderApi.disputeOrder(disputing.id, input)
-      applyUpdated(updated)
-      setNotice(
-        `Dispute filed for Request #${disputing.id}. An admin will review it.`,
-      )
-      setDisputing(null)
-    } catch (err) {
-      setDisputeError(errorMessage(err, 'Could not file the dispute.'))
-    } finally {
-      setBusyId(null)
     }
   }
 
@@ -157,45 +176,46 @@ export function MyRequests() {
         </div>
       </div>
 
+      <StateFilter
+        label="Filter by state"
+        options={FILTERS}
+        value={filter.key}
+        onChange={selectFilter}
+      />
+
       {notice && <Banner kind="success">{notice}</Banner>}
       {error && <Banner kind="error">{error}</Banner>}
 
       {loading ? (
         <p className="text-sm text-gray-500">Loading your requests…</p>
-      ) : orders.length === 0 ? (
+      ) : requests.length === 0 ? (
         <div className="rounded-lg border border-gray-200 bg-white py-10 text-center">
           <p className="font-medium text-gray-900">
-            You have no open or recent requests.
+            {filter.key === ALL_ACTIVE.key
+              ? 'You have no active requests.'
+              : `No ${filter.label.toLowerCase()} requests.`}
           </p>
           <p className="mt-1 text-sm text-gray-500">
-            Need something collected on campus? Create your first request.
+            Finished requests are in{' '}
+            <Link to="/history" className="underline hover:text-gray-900">
+              History
+            </Link>
+            . Need something collected on campus? Create a request.
           </p>
         </div>
       ) : (
         <ul className="space-y-4">
-          {orders.map((order) => (
+          {requests.map((request) => (
             <RequestCard
-              key={order.id}
-              order={order}
-              busy={busyId === order.id}
-              onCancel={() => setPendingCancel(order)}
+              key={request.id}
+              request={request}
+              busy={busyId === request.id}
+              onCancel={() => setPendingCancel(request)}
               onConfirm={() =>
                 run(
-                  order,
-                  () => orderApi.confirmDelivery(order.id),
-                  `Delivery confirmed — ${credits(order.reward)} paid to ${order.courierUsername}.`,
-                )
-              }
-              onDispute={() => {
-                setDisputeError(null)
-                setDisputing(order)
-              }}
-              onReRelease={() =>
-                run(
-                  order,
-                  () => orderApi.reReleaseOrder(order.id),
-                  `Request #${order.id} re-released as a new request.`,
-                  true,
+                  request,
+                  () => orderApi.complete(request.id),
+                  `Delivery confirmed — ${credits(request.creditAmount)} paid to your courier. It is now in History.`,
                 )
               }
             />
@@ -222,56 +242,45 @@ export function MyRequests() {
           danger
           onCancel={() => setPendingCancel(null)}
           onConfirm={async () => {
-            const order = pendingCancel
+            const request = pendingCancel
             await run(
-              order,
-              () => orderApi.cancelOrder(order.id),
-              `Request #${order.id} cancelled — ${credits(order.reward)} released back to your balance.`,
+              request,
+              () => orderApi.cancel(request.id),
+              `Request #${request.id} cancelled — ${credits(request.creditAmount)} released back to your balance. It is now in History.`,
             )
             setPendingCancel(null)
           }}
         >
           <p className="text-sm text-gray-600">
             Request #{pendingCancel.id} will be cancelled and the{' '}
-            {credits(pendingCancel.reward)} reserved for it will be refunded.
+            {credits(pendingCancel.creditAmount)} reserved for it will be
+            refunded.
           </p>
         </ConfirmModal>
-      )}
-
-      {disputing && (
-        <DisputeModal
-          orderId={disputing.id}
-          busy={busyId === disputing.id}
-          error={disputeError}
-          onCancel={() => setDisputing(null)}
-          onSubmit={handleDispute}
-        />
       )}
     </div>
   )
 }
 
 interface RequestCardProps {
-  order: Order
+  request: RequestSummary
   busy: boolean
   onCancel: () => void
   onConfirm: () => void
-  onDispute: () => void
-  onReRelease: () => void
 }
 
-function RequestCard({
-  order,
-  busy,
-  onCancel,
-  onConfirm,
-  onDispute,
-  onReRelease,
-}: RequestCardProps) {
-  const dimmed = order.status === 'CANCELLED' || order.status === 'EXPIRED'
-  const autoAt = autoCompleteAt(order)
+const IN_PROGRESS: RequestStatus[] = ['ACCEPTED', 'COLLECTED', 'ARRIVED']
+
+function RequestCard({ request, busy, onCancel, onConfirm }: RequestCardProps) {
+  const dimmed =
+    request.status === 'CANCELLED' ||
+    request.status === 'EXPIRED' ||
+    request.status === 'REJECTED'
   const outlineButton =
     'rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50'
+  const detail = useDetail(request.id, IN_PROGRESS.includes(request.status))
+  const courier = useUsername(detail?.courierId ?? null)
+  const autoAt = detail ? autoCompleteAt(detail) : null
 
   return (
     <li
@@ -279,34 +288,41 @@ function RequestCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="font-semibold text-gray-900">Request #{order.id}</h2>
-          <StatusChip status={order.status} />
+          <h2 className="font-semibold text-gray-900">Request #{request.id}</h2>
+          <StatusChip status={request.status} />
         </div>
         <span className="font-semibold whitespace-nowrap text-gray-900">
-          {credits(order.reward)}
+          {credits(request.creditAmount)}
         </span>
       </div>
 
       <dl className="mt-4 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
-        <Field label="Item description" value={order.description} strong />
-        <Field label="Deadline" value={deadlineLine(order)} />
-        <Field label="Pickup from" value={order.supplierName} />
-        <Field label="Drop off to" value={order.dropoffLocation} />
+        <Field label="Item" value={request.item} strong />
+        <Field label="Deadline" value={deadlineLine(request)} />
+        <Field label="Pickup from" value={request.supplierName} />
+        <Field label="Drop off to" value={request.dropoffLocation} />
       </dl>
 
-      {order.courierUsername && (
+      {courier && (
         <p className="mt-4 text-sm text-gray-600">
           Assigned courier:{' '}
-          <span className="font-semibold text-gray-900">
-            {order.courierUsername}
-          </span>
+          <span className="font-semibold text-gray-900">{courier}</span>
         </p>
       )}
 
       <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
-        {!isTerminal(order.status) && <OrderProgress status={order.status} />}
+        {!isTerminal(request.status) && request.status !== 'PENDING' && (
+          <OrderProgress status={request.status} />
+        )}
 
-        {order.status === 'OPEN' && (
+        {request.status === 'PENDING' && (
+          <p className="text-sm text-gray-500">
+            Reserving your credits — couriers will see this request once they
+            are held.
+          </p>
+        )}
+
+        {request.status === 'CREATED' && (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-gray-500">
               Waiting for a courier to accept.
@@ -322,60 +338,60 @@ function RequestCard({
           </div>
         )}
 
-        {order.status === 'DELIVERED' && (
+        {request.status === 'ARRIVED' && (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-gray-500">
               Your courier has arrived at the drop-off.
               {autoAt &&
                 ` Auto-completes at ${formatDateTime(autoAt.toISOString())} if you don’t respond.`}
             </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={onDispute}
-                disabled={busy}
-                className="rounded-md border border-gray-900 bg-white px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-50"
-              >
-                Dispute
-              </button>
-              <button
-                type="button"
-                onClick={onConfirm}
-                disabled={busy}
-                className="rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-              >
-                {busy ? 'Working…' : 'Confirm delivery'}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={busy}
+              className="rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {busy ? 'Working…' : 'Confirm delivery'}
+            </button>
           </div>
         )}
 
-        {order.status === 'DISPUTED' && (
-          <p className="text-sm text-red-700">
-            Under dispute — credits stay reserved until an admin resolves it.
+        {request.status === 'REJECTED' && (
+          <p className="text-sm font-medium text-red-700">
+            ✕ REQUEST REJECTED — NOT ENOUGH AVAILABLE CREDITS
           </p>
         )}
 
-        {(order.status === 'CANCELLED' || order.status === 'EXPIRED') && (
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-medium text-gray-500">
-              {order.status === 'CANCELLED'
-                ? '✕ REQUEST CANCELLED — CREDITS REFUNDED'
-                : '⚠ REQUEST EXPIRED — CREDITS REFUNDED'}
-            </p>
-            <button
-              type="button"
-              onClick={onReRelease}
-              disabled={busy}
-              className={outlineButton}
-            >
-              Re-release as new request
-            </button>
-          </div>
+        {(request.status === 'CANCELLED' || request.status === 'EXPIRED') && (
+          <p className="text-sm font-medium text-gray-500">
+            {request.status === 'CANCELLED'
+              ? '✕ REQUEST CANCELLED — CREDITS REFUNDED'
+              : '⚠ REQUEST EXPIRED — CREDITS REFUNDED'}
+          </p>
         )}
       </div>
     </li>
   )
+}
+
+// The list items carry no courier or arrival time, so an in-progress card
+// reads its request's detail once.
+function useDetail(requestId: number, enabled: boolean): RequestDetail | null {
+  const [detail, setDetail] = useState<RequestDetail | null>(null)
+  useEffect(() => {
+    if (!enabled) return
+    let cancelled = false
+    orderApi.getRequest(requestId).then(
+      (d) => {
+        if (!cancelled) setDetail(d)
+      },
+      () => {},
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [requestId, enabled])
+  return enabled ? detail : null
 }
 
 function Field({
