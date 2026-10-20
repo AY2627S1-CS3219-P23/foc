@@ -169,7 +169,7 @@ class AuthControllerTest extends PostgresTestContainer {
     // the last code the mocked sender was handed for this (normalised) email
     private String emailedCode(String email) {
         ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
-        verify(otpEmailSender, atLeastOnce()).sendSignupCode(eq(email), code.capture(), any());
+        verify(otpEmailSender, atLeastOnce()).sendSignupCode(eq(email), code.capture(), any(), eq(false));
         return code.getValue();
     }
 

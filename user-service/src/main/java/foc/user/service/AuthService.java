@@ -284,16 +284,16 @@ public class AuthService {
         String codeHash = otpService.hash(code);
         if (pending == null) {
             pending = new PendingSignup(email, username, passwordEncoder.encode(request.password()),
-                codeHash, now, now.plus(otpService.ttl()));
+                codeHash, now, now.plus(otpService.ttl()), false);
         } else if (expired) {
             pending.replaceExpired(username, passwordEncoder.encode(request.password()),
-                codeHash, now, now.plus(otpService.ttl()));
+                codeHash, now, now.plus(otpService.ttl()), false);
         } else if (spent) {
             // the row's own requester (proven same-request above) gets a
             // fresh code and attempt budget behind the cooldown — but the
             // original expiry: a revival that renewed it could hold the
             // address for ever (the PR #150 re-review rule)
-            pending.reviveSpent(codeHash, now);
+            pending.reviveSpent(codeHash, now, false);
         } else {
             // the resend: a fresh code for the details already stored,
             // with the attempt count carried over, so the limit caps
@@ -302,7 +302,7 @@ public class AuthService {
             // renewed its own expiry could be resent indefinitely, holding
             // an address for ever and making the 409's "try again once it
             // expires" a promise nobody could collect on
-            pending.renewCode(codeHash, now);
+            pending.renewCode(codeHash, now, false);
         }
         // the time actually left, which after a resend is less than a full
         // TTL: both the email and the 202 quote it rather than the TTL, so
@@ -319,7 +319,7 @@ public class AuthService {
         }
 
         try {
-            otpEmailSender.sendSignupCode(email, code, validity);
+            otpEmailSender.sendSignupCode(email, code, validity, false);
         } catch (MailException e) {
             // rolls the pending row back too: no orphan row holding a code
             // nobody received, and a retry is a clean fresh sign-up — for

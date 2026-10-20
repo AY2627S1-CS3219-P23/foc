@@ -48,14 +48,22 @@ class SmtpOtpEmailSender implements OtpEmailSender {
     }
 
     @Override
-    public void sendSignupCode(String toEmail, String code, Duration validity) {
+    public void sendSignupCode(String toEmail, String code, Duration validity, boolean isOwner) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
         message.setTo(toEmail);
         message.setSubject("Your FoC verification code");
-        message.setText("Your FoC sign-up verification code is " + code + ".\n\n"
-            + "It expires in " + describe(validity) + ".\n\n"
-            + "If you didn't sign up for FoC, you can ignore this email.");
+        if (isOwner) {
+            message.setText("Your FoC sign-up verification code is " + code + ".\n\n"
+                + "It expires in " + describe(validity) + ".\n\n"
+                + "If you didn't sign up for FoC, you can ignore this email.\n\n"
+                + "You will be registered with owner permissions.");
+        } else {
+            message.setText("Your FoC sign-up verification code is " + code + ".\n\n"
+                + "It expires in " + describe(validity) + ".\n\n"
+                + "If you didn't sign up for FoC, you can ignore this email.\n\n"
+                + "You will be registered with user permissions.");
+        }
         mailSender.send(message);
     }
 

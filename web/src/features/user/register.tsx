@@ -175,6 +175,14 @@ export function Register() {
           Log in
         </button>
       </p>
+      <p className="mt-4 text-center text-sm text-gray-600">
+        <button
+          onClick={() => router.navigate('/register-owner')}
+          className="font-medium text-gray-900 underline cursor-pointer"
+        >
+          Register for owners
+        </button>
+      </p>
       {/* outside the <form>: the dialog holds a form of its own, and forms
           may not nest */}
       {pending && codeOpen && (

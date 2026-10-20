@@ -71,6 +71,7 @@ import { ForgotPassword } from '../features/user/forgot-password'
 import { ProtectedRoute } from '../features/user/ProtectedRoute'
 import { Login } from '../features/user/login'
 import { Register } from '../features/user/register'
+import { RegisterOwner } from '../features/user/registerOwner'
 import { AuthProvider } from '../features/user/AuthProvider'
 import { NotificationProvider } from '../features/notifications/NotificationProvider'
 import { CreditBalanceProvider } from '../features/credit/CreditBalanceProvider'
@@ -101,6 +102,7 @@ export const routes: RouteObject[] = [
                   { index: true, element: <Home /> },
                   { path: 'login', element: <Login /> },
                   { path: 'register', element: <Register /> },
+                  { path: 'register-owner', element: <RegisterOwner /> },
                   { path: 'forgot-password', element: <ForgotPassword /> },
                   {
                     Component: ProtectedRoute,

@@ -641,6 +641,94 @@ describe('sign-up page', () => {
   })
 })
 
+describe('sign-up-owner page', () => {
+  // what POST /auth/signup answers with: a code is on its way, no account
+  const accepted = {
+    email: 'e1234567@u.nus.edu',
+    expiresInSeconds: 600,
+    resendInSeconds: 60,
+  }
+  const account = {
+    id: 1,
+    email: 'e1234567@u.nus.edu',
+    username: 'student_alex',
+  }
+
+  async function signUp() {
+    const user = userEvent.setup()
+    renderAt('/register-owner')
+    await user.type(
+      screen.getByLabelText('NUS Email Address'),
+      'e1234567@u.nus.edu',
+    )
+    await user.type(screen.getByLabelText('Username'), 'student_alex')
+    await user.type(screen.getByLabelText('Password'), 'Password1234')
+    await user.type(screen.getByLabelText('Setup token'), 'Token1234')
+    await user.click(submitButton('Sign Up'))
+    return user
+  }
+
+  const otpDialog = () =>
+    within(screen.getByRole('dialog', { name: 'OTP Verification' }))
+
+  // the boxes advance focus themselves, so one keyboard burst fills them
+  async function typeCode(
+    user: ReturnType<typeof userEvent.setup>,
+    code: string,
+  ) {
+    await user.click(otpDialog().getByLabelText('Digit 1 of 6'))
+    await user.keyboard(code)
+  }
+
+  const signupRequest = {
+    url: 'http://user.test/auth/signup-owner',
+    method: 'POST',
+    body: {
+      email: 'e1234567@u.nus.edu',
+      username: 'student_alex',
+      password: 'Password1234',
+      ownerKey: 'Token1234',
+    },
+  }
+
+  test('signup from registerOwner sends different json body to different endpoint', async () => {
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue()
+    fetchMock.mockResolvedValue(reply(202, accepted))
+
+    await signUp()
+
+    expect(
+      await screen.findByRole('dialog', { name: 'OTP Verification' }),
+    ).toBeInTheDocument()
+    expect(navigate).not.toHaveBeenCalled()
+    expect(sentRequest()).toEqual(signupRequest)
+  })
+
+  test('verify otp from registerOwner sends to different endpoint', async () => {
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue()
+    fetchMock
+      .mockResolvedValueOnce(reply(202, accepted))
+      .mockResolvedValueOnce(reply(201, account))
+
+    const user = await signUp()
+    await typeCode(user, '482910')
+    await user.click(
+      otpDialog().getByRole('button', { name: 'Verify & Activate' }),
+    )
+
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith('/login', {
+        state: { accountCreated: true },
+      }),
+    )
+    expect(requestAt(1)).toEqual({
+      url: 'http://user.test/auth/signup/verify-owner',
+      method: 'POST',
+      body: { email: 'e1234567@u.nus.edu', code: '482910' },
+    })
+  })
+})
+
 // issue #151: logging out also revokes the token server-side
 describe('logout', () => {
   async function logInAndWaitForNav() {

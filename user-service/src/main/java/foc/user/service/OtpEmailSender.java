@@ -28,7 +28,7 @@ public interface OtpEmailSender {
      *
      * @param validity how long the code stays valid, quoted in the email
      */
-    void sendSignupCode(String toEmail, String code, Duration validity);
+    void sendSignupCode(String toEmail, String code, Duration validity, boolean isOwner);
 
     /**
      * Emails an account-update gate code (#92, F2.1.1) to the account's

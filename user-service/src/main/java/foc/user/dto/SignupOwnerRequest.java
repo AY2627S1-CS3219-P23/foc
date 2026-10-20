@@ -20,7 +20,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-public record SetupOwnerRequest(
+public record SignupOwnerRequest(
     @NotBlank(message = EMAIL_REQUIRED)
     @Pattern(regexp = EMAIL_PATTERN, message = EMAIL_MESSAGE)
     String email,
@@ -33,5 +33,7 @@ public record SetupOwnerRequest(
     @NotBlank(message = PASSWORD_REQUIRED)
     @Size(min = PASSWORD_MIN, max = PASSWORD_MAX, message = PASSWORD_SIZE_MESSAGE)
     @Pattern(regexp = PASSWORD_PATTERN, message = PASSWORD_MESSAGE)
-    String password
+    String password,
+
+    String ownerKey
 ) {}

@@ -19,6 +19,9 @@
   second `---` the #203 entry had introduced was dropped; nothing
   reworded or removed.
   Author review: Leong Wei Zhi to review via pull request.
+  2026-10-20, Copilot SDK in VS Code (model not exposed): added the
+  AuthServiceTest matcher-misuse fix entry below.
+  Author review: Kwey Xiu Xi to review via pull request.
 -->
 
 # AI Usage Log
@@ -39,6 +42,17 @@ Entry template:
 ```
 
 ---
+## 2026-10-20 — Kwey Xiu Xi (user-service: AuthServiceTest stubbing)
+- **Tool:** Copilot SDK in VS Code (model not exposed)
+- **Mode:** debug
+- **Scope:** `user-service/src/test/java/foc/user/service/AuthServiceTest.java`;
+  replaced `eq(false)` matcher values in `PendingSignup` constructors with
+  boolean literals to prevent matcher leakage into repository stubs.
+- **Prompt(s):** "Help resolve test errors
+  org.mockito.exceptions.misusing.PotentialStubbingProblem: Strict stubbing
+  argument mismatch"
+- **Author review:** Targeted `AuthServiceTest` run to verify; review via PR.
+
 ## 2026-10-18 — Aung Ko Khant (web: order pages on the real order API)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, refactor
