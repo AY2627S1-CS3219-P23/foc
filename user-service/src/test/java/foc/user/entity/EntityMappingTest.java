@@ -27,6 +27,8 @@
  * flow) covers createdAt and attempts, and a case pins the
  * one-live-code-per-user index. No unique-hash case on purpose: the
  * credential is an OTP code, whose salted hash is never looked up.
+ * 2026-10-20 (Claude Code, Fable 5), issue #177: pending_signups rows
+ * carry the role they verify into (V8); the round-trip pins it.
  */
 package foc.user.entity;
 
@@ -96,7 +98,7 @@ class EntityMappingTest extends PostgresTestContainer {
     @Test
     void pendingSignupRoundTrip() {
         PendingSignup saved = persistAndFlush(new PendingSignup(
-            "e2234567@u.nus.edu", "pending_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY, ""));
+            "e2234567@u.nus.edu", "pending_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY, Role.USER));
         entityManager.clear();
 
         PendingSignup found = entityManager.find(PendingSignup.class, saved.getId());
@@ -105,21 +107,21 @@ class EntityMappingTest extends PostgresTestContainer {
         assertThat(found.getUsername()).isEqualTo("pending_user");
         assertThat(found.getPasswordHash()).isEqualTo("bcrypt_hash");
         assertThat(found.getCodeHash()).isEqualTo("code_hash");
-        assertThat(found.getOwnerKey()).isEqualTo("");
         assertThat(found.getLastSentAt()).isEqualTo(SENT_AT);
         assertThat(found.getExpiresAt()).isEqualTo(EXPIRY);
         assertThat(found.getAttempts()).isZero();
+        assertThat(found.getRole()).isEqualTo(Role.USER);
     }
 
     @Test
     void pendingSignupEmailIsUnique() {
         persistAndFlush(new PendingSignup(
-            "e2234567@u.nus.edu", "first_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY, ""));
+            "e2234567@u.nus.edu", "first_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY, Role.USER));
 
         // one pending sign-up per email: the second insert must trip the
         // unique index (usernames may repeat — users' index decides those)
         assertThatThrownBy(() -> persistAndFlush(new PendingSignup(
-                "e2234567@u.nus.edu", "second_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY, "")))
+                "e2234567@u.nus.edu", "second_user", "bcrypt_hash", "code_hash", SENT_AT, EXPIRY, Role.USER)))
             .isInstanceOf(PersistenceException.class);
     }
 

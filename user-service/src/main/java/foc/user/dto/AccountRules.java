@@ -5,6 +5,10 @@ Scope: PR #141 review: the field rules and messages SignupRequest and
        SetupOwnerRequest shared as copies, moved here so the two
        account-creation routes can't drift apart. Rules unchanged.
 Author review: Ryan to review via the PR.
+2026-10-20 (Claude Code, Fable 5), issue #177, on the owner-frontend
+branch (xiuxi): the setup-token rules for SignupOwnerRequest — required
+(unlike the branch draft, where a missing key fell through to the 403)
+and bounded, so an oversized guess is a 400 before any compare.
 */
 
 package foc.user.dto;
@@ -35,7 +39,9 @@ public final class AccountRules {
         "Password must contain at least one uppercase letter, one lowercase letter, and one number.";
 
     public static final int OWNER_KEY_MAX = 255;
-    public static final String OWNER_KEY_SIZE_MESSAGE = "Owner key must be at most 255 characters long";
+    public static final String OWNER_KEY_REQUIRED = "Setup token is required";
+    public static final String OWNER_KEY_SIZE_MESSAGE = "Setup token must be at most 255 characters long";
+
     private AccountRules() {
     }
 }

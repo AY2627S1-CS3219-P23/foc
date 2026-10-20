@@ -127,6 +127,21 @@ between the bcrypt check and the locked write (a concurrent reset) —
 the stale verdict is discarded in both directions, and three such
 rounds in a row answer as the 409 the concurrent-update handler
 already renders.
+2026-10-20 (Claude Code, Fable 5), issue #177, consolidating the
+owner-frontend branch (xiuxi) into one flow (shape chosen by Leong Wei
+Zhi via options Q&A): signupOwner is the browser path that replaces the
+curl-only POST /auth/setup-owner — it checks the setup key up front
+(403 wrong, 503 unconfigured, both reusing OwnerSetupService's #154/#162
+decisions: generic 503 detail, the missing setting named in one ERROR
+log per process) and then runs the exact signup pipeline below with
+Role.OWNER stamped on the pending row; verifySignup creates the account
+with the row's stored role. The branch's two drafts are gone with this:
+an ownerKey field on SignupRequest whose verify-time key check 503'd
+every sign-up on deployments without OWNER_SETUP_TOKEN, and a separate
+OwnerSignupService whose /auth/signup/verify-owner never checked the
+key at all — any pending sign-up could verify through it into an OWNER.
+Each accepted sign-up call re-stamps the row's role, so the role is
+always the one the latest accepted call earned.
 */
 
 package foc.user.service;
@@ -137,7 +152,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -151,6 +169,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import foc.user.dto.LoginRequest;
 import foc.user.dto.LoginResponse;
+import foc.user.dto.SignupOwnerRequest;
 import foc.user.dto.SignupRequest;
 import foc.user.dto.SignupResponse;
 import foc.user.dto.SignupVerifyRequest;
@@ -170,6 +189,8 @@ import foc.user.security.JwtIssuer;
 
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     static final int MAX_FAILED_ATTEMPTS = 5;
     static final Duration LOCKOUT = Duration.ofMinutes(15);
@@ -193,7 +214,10 @@ public class AuthService {
     // email takes as long to verify as a wrong code (same trick login
     // used before #146 made its messages revealing; these stay identical)
     private final String unknownPendingCodeHash;
+    // the OWNER_SETUP_TOKEN gating /auth/signup-owner (issue #177); blank
+    // means owner setup is disabled on this deployment (503)
     private final String expectedOwnerKey;
+    private final AtomicBoolean missingOwnerKeyLogged = new AtomicBoolean();
 
     @Autowired
     public AuthService(
@@ -218,7 +242,7 @@ public class AuthService {
             OtpEmailSender otpEmailSender,
             LoginAttempts loginAttempts,
             Clock clock,
-            @Value("${owner.setup.token:}") String expectedOwnerKey) {
+            String expectedOwnerKey) {
         this.userRepository = userRepository;
         this.pendingSignupRepository = pendingSignupRepository;
         this.passwordEncoder = passwordEncoder;
@@ -238,9 +262,29 @@ public class AuthService {
     // commit or roll back together
     @Transactional
     public SignupResponse signup(SignupRequest request) {
-        String email = NewAccountDetails.normalizeEmail(request.email());
-        String username = NewAccountDetails.normalizeUsername(request.username());
-        String ownerKey = request.ownerKey() == null ? "" : request.ownerKey().trim();
+        return signup(request.email(), request.username(), request.password(), Role.USER);
+    }
+
+    // the owner-setup screen's sign-up (issue #177, replacing the
+    // curl-only POST /auth/setup-owner): the setup key is checked before
+    // anything exists — a wrong key creates no pending row and sends no
+    // email (#177's acceptance), and the key itself is never stored. From
+    // there it is the same pipeline as sign-up with OWNER stamped on the
+    // pending row, so the OTP step #88 added applies to owners too (the
+    // question #177 left open, settled this way on the owner-frontend
+    // branch) and verifySignup needs no key check of its own
+    @Transactional
+    public SignupResponse signupOwner(SignupOwnerRequest request) {
+        requireOwnerKey(request.ownerKey());
+        return signup(request.email(), request.username(), request.password(), Role.OWNER);
+    }
+
+    // the shared pipeline; `role` is what the row verifies into, already
+    // earned by the caller (signupOwner checked the key first). Private,
+    // so the public entry points above carry the @Transactional
+    private SignupResponse signup(String rawEmail, String rawUsername, String password, Role role) {
+        String email = NewAccountDetails.normalizeEmail(rawEmail);
+        String username = NewAccountDetails.normalizeUsername(rawUsername);
         NewAccountDetails.ensureUnique(userRepository, email, username);
 
         // one pending row per email, and while it is live it belongs to
@@ -272,7 +316,7 @@ public class AuthService {
         boolean expired = pending != null && !pending.getExpiresAt().isAfter(now);
         boolean spent = pending != null && pending.getAttempts() >= otpService.maxAttempts();
 
-        if (pending != null && !expired && !isSameRequest(request, username, pending)) {
+        if (pending != null && !expired && !isSameRequest(password, username, pending)) {
             // refused, not merged, and not silently replaced: only the
             // request that pended this email can move it along, and it
             // proves that by repeating its own details
@@ -291,17 +335,17 @@ public class AuthService {
         String code = otpService.generateCode();
         String codeHash = otpService.hash(code);
         if (pending == null) {
-            pending = new PendingSignup(email, username, passwordEncoder.encode(request.password()),
-                codeHash, now, now.plus(otpService.ttl()), ownerKey);
+            pending = new PendingSignup(email, username, passwordEncoder.encode(password),
+                codeHash, now, now.plus(otpService.ttl()), role);
         } else if (expired) {
-            pending.replaceExpired(username, passwordEncoder.encode(request.password()),
-                codeHash, now, now.plus(otpService.ttl()), ownerKey);
+            pending.replaceExpired(username, passwordEncoder.encode(password),
+                codeHash, now, now.plus(otpService.ttl()), role);
         } else if (spent) {
             // the row's own requester (proven same-request above) gets a
             // fresh code and attempt budget behind the cooldown — but the
             // original expiry: a revival that renewed it could hold the
             // address for ever (the PR #150 re-review rule)
-            pending.reviveSpent(codeHash, now);
+            pending.reviveSpent(codeHash, now, role);
         } else {
             // the resend: a fresh code for the details already stored,
             // with the attempt count carried over, so the limit caps
@@ -309,8 +353,10 @@ public class AuthService {
             // deliberately not a fresh expiry (PR #150 review): a row that
             // renewed its own expiry could be resent indefinitely, holding
             // an address for ever and making the 409's "try again once it
-            // expires" a promise nobody could collect on
-            pending.renewCode(codeHash, now);
+            // expires" a promise nobody could collect on. The role is
+            // re-stamped like every accepted call's: whichever endpoint
+            // accepted this resend decides what the row verifies into
+            pending.renewCode(codeHash, now, role);
         }
         // the time actually left, which after a resend is less than a full
         // TTL: both the email and the 202 quote it rather than the TTL, so
@@ -346,9 +392,30 @@ public class AuthService {
     // a password matching the stored hash — which nobody but that
     // requester can produce, so it is what stands in for "the same
     // person" without a token to carry between the two calls
-    private boolean isSameRequest(SignupRequest request, String username, PendingSignup pending) {
+    private boolean isSameRequest(String password, String username, PendingSignup pending) {
         return pending.getUsername().equalsIgnoreCase(username)
-            && passwordEncoder.matches(request.password(), pending.getPasswordHash());
+            && passwordEncoder.matches(password, pending.getPasswordHash());
+    }
+
+    // The /auth/signup-owner gate, carried over from OwnerSetupService
+    // (#97): constant-time compare; 403's detail for the form, 503's
+    // detail generic (#154, Ryan's call — ProblemDetailAdvice shows it to
+    // the caller) with the missing setting named in one ERROR log per
+    // process, for the operator (#162 re-review). The SPA keys its
+    // "this deployment cannot do owner setup" copy on the 503 itself
+    private void requireOwnerKey(String providedKey) {
+        if (expectedOwnerKey == null || expectedOwnerKey.isBlank()) {
+            if (missingOwnerKeyLogged.compareAndSet(false, true)) {
+                log.error("Owner setup unavailable: OWNER_SETUP_TOKEN is not configured");
+            }
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Owner setup is unavailable");
+        }
+        byte[] expected = expectedOwnerKey.getBytes(StandardCharsets.UTF_8);
+        byte[] provided = (providedKey == null ? "" : providedKey).getBytes(StandardCharsets.UTF_8);
+        if (!MessageDigest.isEqual(expected, provided)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid or missing setup token");
+        }
     }
 
     // noRollbackFor: a wrong code must still commit its attempt counter
@@ -428,13 +495,11 @@ public class AuthService {
             pendingSignupRepository.delete(pending);
             throw new SignupIdentifierTakenException(e);
         }
-        // the hash stored at sign-up is already BCrypt: never re-encode
-        User user = new User(email, pending.getUsername(), pending.getPasswordHash(), Role.USER);
-        // check ownerKey for owner setup
-        if (checkOwnerKey(pending.getOwnerKey())) {
-            user = new User(email, pending.getUsername(), pending.getPasswordHash(), Role.OWNER);
-        }
-
+        // the hash stored at sign-up is already BCrypt: never re-encode.
+        // The role is the row's own (issue #177): USER from /auth/signup,
+        // OWNER only if /auth/signup-owner validated the setup key when it
+        // stamped the row — verify itself never sees the key
+        User user = new User(email, pending.getUsername(), pending.getPasswordHash(), pending.getRole());
         try {
             user = userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException e) {
@@ -513,19 +578,5 @@ public class AuthService {
         return identifier.contains("@")
             ? userRepository.findByEmail(identifier.toLowerCase())
             : userRepository.findByUsernameIgnoreCase(identifier);
-    }
-
-    private boolean checkOwnerKey(String providedOwnerKey) {
-        if (expectedOwnerKey == null || expectedOwnerKey.isBlank()) {
-            throw new ResponseStatusException(
-                HttpStatus.SERVICE_UNAVAILABLE,
-                "Owner setup is disabled: OWNER_SETUP_TOKEN is not configured"
-            );
-        }
-
-        byte[] expected = expectedOwnerKey.getBytes(StandardCharsets.UTF_8);
-        byte[] provided = (providedOwnerKey == null ? "" : providedOwnerKey).getBytes(StandardCharsets.UTF_8);
-
-        return MessageDigest.isEqual(expected, provided);
     }
 }

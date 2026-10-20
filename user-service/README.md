@@ -87,6 +87,13 @@
   (nothing), next to what admin removal does — the login section's
   "no admin powers ride along" claim was true only of removal.
   Accepted as-is (option C) by Leong Wei Zhi via options Q&A.
+  2026-10-20, Claude Code (Fable 5), issue #177, on the owner-frontend
+  branch (xiuxi): the owner-bootstrap endpoint is now POST
+  /auth/signup-owner — the /register-owner screen's sign-up, the same
+  OTP flow with the setup token in the body (403 wrong / 503 unset) and
+  OWNER stamped on the pending row (V8); the curl-only
+  /auth/setup-owner and its X-Setup-Token header are gone.
+  Consolidation chosen by Leong Wei Zhi via options Q&A.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -101,8 +108,9 @@ Spring Boot 4 · Java 21 · Maven.
 Currently: actuator health endpoint, `POST /auth/signup` /
 `POST /auth/signup/verify` and
 `POST /auth/login` (#87/#89/#88, JWT issuance #90 — see below),
-`POST /auth/setup-owner` (creates an
-OWNER for any caller with the setup token, #97), `GET /users/me` /
+`POST /auth/signup-owner` (the owner-setup screen's sign-up: the same
+OTP flow with the setup token in the body, verifying into an OWNER,
+#97/#177), `GET /users/me` /
 `GET /users/{id}` (own and public profile, #95), `DELETE /users/me`
 (self-deletion, #93), the account-update flows `POST /users/me/otp` /
 `PATCH /users/me` / `POST /users/me/email/verify` /
@@ -445,6 +453,9 @@ identifies the row by email), the `kind` discriminator dropped
 (recovery carries no emailed credential), plus `created_at` (the
 resend cooldown's origin), `attempts` (the 5-guess cap) and a
 one-row-per-account unique index.
+`V8__pending_signup_role` adds `pending_signups.role` — the role a
+pending sign-up verifies into, stamped OWNER only by
+`POST /auth/signup-owner` after its setup-token check (#177).
 Schema changes go in
 a new `V<n>__<name>.sql`, never by editing an applied one.
 

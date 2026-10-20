@@ -39,6 +39,11 @@ added to the chain so notification-service's ingest-time username
 lookups can authenticate with a shared secret — the author's zero-trust
 decision (D31): GET /users/{id} keeps its authenticated() rule instead
 of opening to the compose network.
+2026-10-20 (Claude Code, Fable 5), issue #177: the CORS bean's "no
+gateway" comment corrected — stale since the #176 cutover, which #177
+calls out. Config unchanged: the new /auth/signup-owner carries its
+setup token in the JSON body, so the allowed-headers list needed no
+X-Setup-Token entry after all.
 */
 
 package foc.user.config;
@@ -75,7 +80,9 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    // the SPA calls this service directly from the browser (no gateway)
+    // the SPA reaches this service through the API gateway since the #176
+    // cutover, but the browser's preflights still land here and are
+    // answered by this config for the web origin
     @Bean
     public CorsConfigurationSource corsConfigurationSource(
             @Value("${user.web-allowed-origin}") String webAllowedOrigin) {

@@ -25,6 +25,8 @@ Reviewed by: Leong Wei Zhi (via pull request).
        follows PasswordResetOtp (V7 remakes the account_tokens scaffold
        for the reset flow), and a case covers the expired-reset-code
        hygiene sweep the same run now performs.
+2026-10-20 (Claude Code, Fable 5), issue #177: pending rows built with
+the new role parameter (sweep behaviour unchanged).
 */
 
 package foc.user.service;
@@ -144,10 +146,10 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
     @DisplayName("Should sweep expired pending sign-ups and keep live ones")
     void sweepsExpiredPendingSignups() {
         pendingSignupRepository.save(new PendingSignup("e4444444@u.nus.edu", "expired_pending",
-            "password_hash", "code_hash", Instant.now().minusSeconds(660), Instant.now().minusSeconds(60), ""));
+            "password_hash", "code_hash", Instant.now().minusSeconds(660), Instant.now().minusSeconds(60), Role.USER));
         PendingSignup live = pendingSignupRepository.save(
             new PendingSignup("e5555555@u.nus.edu", "live_pending",
-                "password_hash", "code_hash", Instant.now(), Instant.now().plusSeconds(600), ""));
+                "password_hash", "code_hash", Instant.now(), Instant.now().plusSeconds(600), Role.USER));
         pendingSignupRepository.flush();
 
         scheduler.purgeExpiredDeletedAccounts();

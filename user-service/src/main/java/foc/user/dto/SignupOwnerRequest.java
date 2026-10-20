@@ -8,7 +8,10 @@ whitespace-tolerant (redundant @Email dropped, as it rejects
 padded input and the pattern already fixes the format); password size message now states both bounds (PR #126 review).
 2026-09-29 (Claude Code, Opus 5.5), PR #141 review: rules and messages
 moved to AccountRules, shared with SignupRequest (unchanged).
-
+2026-10-20 (Claude Code, Fable 5), issue #177, on the owner-frontend
+branch (xiuxi): ownerKey is required and size-bounded (AccountRules) —
+AuthService.signupOwner checks it against OWNER_SETUP_TOKEN before the
+sign-up runs, so it is never stored.
 */
 
 
@@ -35,5 +38,7 @@ public record SignupOwnerRequest(
     @Pattern(regexp = PASSWORD_PATTERN, message = PASSWORD_MESSAGE)
     String password,
 
+    @NotBlank(message = OWNER_KEY_REQUIRED)
+    @Size(max = OWNER_KEY_MAX, message = OWNER_KEY_SIZE_MESSAGE)
     String ownerKey
 ) {}

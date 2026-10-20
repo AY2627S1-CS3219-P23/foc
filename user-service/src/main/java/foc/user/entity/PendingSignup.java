@@ -24,12 +24,21 @@ Reviewed by: Leong Wei Zhi (via pull request).
 2026-10-05 (Claude Code, Fable 5), PR #157 Copilot re-review: reviveSpent
 added — a spent row revives only for its own requester, with fresh code
 and attempts but the original expiry (no forever-hold).
+2026-10-20 (Claude Code, Fable 5), issue #177: role column added — the
+role the row verifies into, stamped by whichever sign-up endpoint
+accepted the call (OWNER only after /auth/signup-owner validated the
+setup key). Every mutation path re-stamps it, so a row can never carry a
+role a later accepted call did not earn. Replaces the owner_key draft on
+the owner-frontend branch, which stored the raw key and let
+verify-owner grant OWNER without checking it.
 */
 
 package foc.user.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -86,21 +95,28 @@ public class PendingSignup {
     @Column(nullable = false)
     private int attempts = 0;
 
-    @Column(name = "owner_key")
-    private String ownerKey;
+    // The role this row verifies into (issue #177). OWNER appears here
+    // only after /auth/signup-owner checked the setup key, and every
+    // accepted repeat re-stamps it (renewCode/reviveSpent/replaceExpired
+    // included), so switching endpoints between sign-up and resend always
+    // leaves the role the latest accepted call earned — a plain re-sign-up
+    // demotes an owner row, never the other way around without the key
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Role role = Role.USER;
 
     protected PendingSignup() {
     }
 
     public PendingSignup(String email, String username, String passwordHash,
-            String codeHash, Instant sentAt, Instant expiresAt, String ownerKey) {
+            String codeHash, Instant sentAt, Instant expiresAt, Role role) {
         this.email = email;
         this.username = username;
         this.passwordHash = passwordHash;
         this.codeHash = codeHash;
         this.lastSentAt = sentAt;
         this.expiresAt = expiresAt;
-        this.ownerKey = ownerKey;
+        this.role = role;
     }
 
     /**
@@ -122,9 +138,10 @@ public class PendingSignup {
      * <p>Renewal in place rather than delete-and-insert, so the row never
      * leaves its unique index slot.
      */
-    public void renewCode(String codeHash, Instant sentAt) {
+    public void renewCode(String codeHash, Instant sentAt, Role role) {
         this.codeHash = codeHash;
         this.lastSentAt = sentAt;
+        this.role = role;
     }
 
     /**
@@ -140,14 +157,14 @@ public class PendingSignup {
      * revives only for its own requester via {@link #reviveSpent}.
      */
     public void replaceExpired(String username, String passwordHash, String codeHash,
-            Instant sentAt, Instant expiresAt, String ownerKey) {
+            Instant sentAt, Instant expiresAt, Role role) {
         this.username = username;
         this.passwordHash = passwordHash;
         this.codeHash = codeHash;
         this.lastSentAt = sentAt;
         this.expiresAt = expiresAt;
         this.attempts = 0;
-        this.ownerKey = ownerKey;
+        this.role = role;
     }
 
     /**
@@ -162,10 +179,11 @@ public class PendingSignup {
      * cooldown until the row dies for real (PR #157 Copilot review,
      * shape chosen by Leong Wei Zhi via options Q&A).
      */
-    public void reviveSpent(String codeHash, Instant sentAt) {
+    public void reviveSpent(String codeHash, Instant sentAt, Role role) {
         this.codeHash = codeHash;
         this.lastSentAt = sentAt;
         this.attempts = 0;
+        this.role = role;
     }
 
     public Long getId() {
@@ -205,7 +223,8 @@ public class PendingSignup {
         this.attempts++;
     }
 
-    public String getOwnerKey() {
-        return ownerKey;
+    /** The role verify creates the account with (see the field's note). */
+    public Role getRole() {
+        return role;
     }
 }

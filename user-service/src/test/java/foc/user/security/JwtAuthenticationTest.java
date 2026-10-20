@@ -16,6 +16,8 @@ Scope: integration tests for the JWT filter chain (issue #91) against the
        the role, so its fresh logins still reach GET /users (owner
        decision, option C, via options Q&A).
 Author review: Ryan to review via the PR.
+2026-10-20 (Claude Code, Fable 5), issue #177: the public-route case
+follows /auth/setup-owner's replacement by /auth/signup-owner.
 */
 
 package foc.user.security;
@@ -358,7 +360,7 @@ class JwtAuthenticationTest extends PostgresTestContainer {
 
         assertThat(filter.shouldNotFilter(new MockHttpServletRequest("POST", "/auth/login"))).isTrue();
         assertThat(filter.shouldNotFilter(new MockHttpServletRequest("POST", "/auth/signup"))).isTrue();
-        assertThat(filter.shouldNotFilter(new MockHttpServletRequest("POST", "/auth/setup-owner"))).isTrue();
+        assertThat(filter.shouldNotFilter(new MockHttpServletRequest("POST", "/auth/signup-owner"))).isTrue();
         assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", "/actuator/health"))).isTrue();
 
         // logout reads the caller's token (#90)

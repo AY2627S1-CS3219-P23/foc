@@ -315,8 +315,8 @@ services:
       USER_DB_NAME: ${USER_DB_NAME:-user}
       USER_DB_USER: ${USER_DB_USER:-user}
       USER_DB_PASSWORD: ${USER_DB_PASSWORD:?set in .env}
-      # Shared secret gating POST /auth/setup-owner (issue #97); the
-      # endpoint answers 503 while it is unset.
+      # Shared secret gating POST /auth/signup-owner — the owner-setup
+      # screen's sign-up (issues #97/#177); it answers 503 while unset.
       OWNER_SETUP_TOKEN: ${OWNER_SETUP_TOKEN:-}
       # Recovery window / purge cadence for soft-deleted accounts
       # (issue #93, day-31 purge scheduler).

@@ -56,6 +56,11 @@ Same day, PR #179 Copilot review: a case pins the stale-credential
 retry — a reset committing between the bcrypt check and the row lock
 must not let the OLD password finish logging in; the verdict is
 discarded and the login re-checks against the fresh hash.
+2026-10-20 (Claude Code, Fable 5), issue #177: owner sign-up cases — the
+upfront key gate (403 wrong / 503 unconfigured, nothing else runs), the
+OWNER stamp on the pending row, a plain repeat re-stamping it USER, and
+verify creating the row's stored role. The service constructor gains
+the owner-key pin.
 */
 
 package foc.user.service;
@@ -84,6 +89,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -96,6 +102,7 @@ import org.springframework.web.server.ResponseStatusException;
 import foc.user.controller.ProblemTypes;
 import foc.user.dto.LoginRequest;
 import foc.user.dto.LoginResponse;
+import foc.user.dto.SignupOwnerRequest;
 import foc.user.dto.SignupRequest;
 import foc.user.dto.SignupResponse;
 import foc.user.dto.SignupVerifyRequest;
@@ -123,6 +130,8 @@ class AuthServiceTest {
     private static final Duration OTP_TTL = Duration.ofMinutes(10);
     private static final int OTP_MAX_ATTEMPTS = 5;
     private static final Duration OTP_RESEND_COOLDOWN = Duration.ofSeconds(60);
+    // the owner.setup.token the service compares /auth/signup-owner keys to
+    private static final String OWNER_KEY = "test-owner-setup-token";
 
     // stores "hashed:<raw>", so tests can build users with a known password
     private static final PasswordEncoder PLAIN_ENCODER = new PasswordEncoder() {
@@ -159,8 +168,8 @@ class AuthServiceTest {
             new OtpService(PLAIN_ENCODER, OTP_TTL, OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN);
         authService = new AuthService(userRepository, pendingSignupRepository, PLAIN_ENCODER,
             issuer, otpService, otpEmailSender,
-            new LoginAttempts(userRepository, entityManager, 30), Clock.fixed(NOW, ZoneOffset.UTC), 
-            "expected-owner-key");
+            new LoginAttempts(userRepository, entityManager, 30), Clock.fixed(NOW, ZoneOffset.UTC),
+            OWNER_KEY);
 
         user = new User("e1234567@u.nus.edu", "student_alex", PLAIN_ENCODER.encode(PASSWORD), Role.USER);
         ReflectionTestUtils.setField(user, "id", 42L);
@@ -186,7 +195,7 @@ class AuthServiceTest {
             .thenAnswer(inv -> inv.getArgument(0));
 
         SignupResponse response = authService.signup(
-            new SignupRequest(" E1234567@U.NUS.EDU ", " student_alex ", PASSWORD, ""));
+            new SignupRequest(" E1234567@U.NUS.EDU ", " student_alex ", PASSWORD));
 
         ArgumentCaptor<PendingSignup> saved = ArgumentCaptor.forClass(PendingSignup.class);
         verify(pendingSignupRepository).saveAndFlush(saved.capture());
@@ -211,14 +220,14 @@ class AuthServiceTest {
     // a live pending sign-up for the usual email, pended at `sentAt`
     private PendingSignup existingPending(String username, String password, Instant sentAt) {
         PendingSignup existing = new PendingSignup("e1234567@u.nus.edu", username,
-            PLAIN_ENCODER.encode(password), "hashed:000000", sentAt, sentAt.plus(OTP_TTL), "");
+            PLAIN_ENCODER.encode(password), "hashed:000000", sentAt, sentAt.plus(OTP_TTL), Role.USER);
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(existing));
         return existing;
     }
 
     private SignupResponse signupAgain(String username, String password) {
-        return authService.signup(new SignupRequest("e1234567@u.nus.edu", username, password, ""));
+        return authService.signup(new SignupRequest("e1234567@u.nus.edu", username, password));
     }
 
     @Test
@@ -406,7 +415,7 @@ class AuthServiceTest {
         when(userRepository.existsByEmail("e1234567@u.nus.edu")).thenReturn(true);
 
         Throwable thrown = catchThrowable(() -> authService.signup(
-            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD, "")));
+            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD)));
 
         assertBadRequest(thrown, "Email is already registered");
         verify(pendingSignupRepository, never()).saveAndFlush(any());
@@ -418,7 +427,7 @@ class AuthServiceTest {
         when(userRepository.existsByUsernameIgnoreCase("student_alex")).thenReturn(true);
 
         Throwable thrown = catchThrowable(() -> authService.signup(
-            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD, "")));
+            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD)));
 
         assertBadRequest(thrown, "Username is already taken");
     }
@@ -430,7 +439,7 @@ class AuthServiceTest {
             .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
         Throwable thrown = catchThrowable(() -> authService.signup(
-            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD, "")));
+            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD)));
 
         // the same answer as finding the row up front: the situation is
         // identical, the race only made it arrive half a millisecond later
@@ -450,7 +459,7 @@ class AuthServiceTest {
             .when(otpEmailSender).sendSignupCode(any(), any(), any());
 
         Throwable thrown = catchThrowable(() -> authService.signup(
-            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD, "")));
+            new SignupRequest("e1234567@u.nus.edu", "student_alex", PASSWORD)));
 
         assertThat(thrown).isInstanceOf(ResponseStatusException.class);
         ResponseStatusException e = (ResponseStatusException) thrown;
@@ -465,11 +474,79 @@ class AuthServiceTest {
         assertThat(e.getReason()).isEqualTo(reason);
     }
 
+    // ---- owner sign-up (issue #177) ----
+
+    private SignupOwnerRequest ownerRequest(String key) {
+        return new SignupOwnerRequest("e1234567@u.nus.edu", "the_owner", PASSWORD, key);
+    }
+
+    @Test
+    @DisplayName("A wrong setup key is 403 before anything runs: no lookup, no row, no email")
+    void signupOwner_wrongKeyRefusedUpfront() {
+        Throwable thrown = catchThrowable(() -> authService.signupOwner(ownerRequest("not-the-key")));
+
+        assertThat(thrown).isInstanceOf(ResponseStatusException.class);
+        ResponseStatusException e = (ResponseStatusException) thrown;
+        assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(e.getReason()).isEqualTo("Invalid or missing setup token");
+        verifyNoInteractions(pendingSignupRepository, otpEmailSender, userRepository);
+    }
+
+    @Test
+    @DisplayName("No configured setup token answers 503 whatever key is sent, even the right-looking one")
+    void signupOwner_unconfiguredIs503() {
+        AuthService disabled = new AuthService(userRepository, pendingSignupRepository, PLAIN_ENCODER,
+            new JwtIssuer("test-jwt-secret-that-is-at-least-32-bytes-long", Duration.ofHours(1)),
+            new OtpService(PLAIN_ENCODER, OTP_TTL, OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN),
+            otpEmailSender, new LoginAttempts(userRepository, entityManager, 30),
+            Clock.fixed(NOW, ZoneOffset.UTC), "");
+
+        Throwable thrown = catchThrowable(() -> disabled.signupOwner(ownerRequest(OWNER_KEY)));
+
+        assertThat(thrown).isInstanceOf(ResponseStatusException.class);
+        ResponseStatusException e = (ResponseStatusException) thrown;
+        assertThat(e.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        // generic on purpose (#154): the log names OWNER_SETUP_TOKEN, the caller is not told
+        assertThat(e.getReason()).isEqualTo("Owner setup is unavailable");
+        verifyNoInteractions(pendingSignupRepository, otpEmailSender, userRepository);
+    }
+
+    @Test
+    @DisplayName("The valid key pends a row stamped OWNER — the key itself is never stored")
+    void signupOwner_pendsOwnerRole() {
+        when(pendingSignupRepository.saveAndFlush(any(PendingSignup.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+
+        authService.signupOwner(ownerRequest(OWNER_KEY));
+
+        ArgumentCaptor<PendingSignup> saved = ArgumentCaptor.forClass(PendingSignup.class);
+        verify(pendingSignupRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getRole()).isEqualTo(Role.OWNER);
+        assertThat(saved.getValue().getEmail()).isEqualTo("e1234567@u.nus.edu");
+        verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("A plain repeat of an owner pending row re-stamps it USER: the resend showed no key")
+    void signupOwner_plainRepeatDemotes() {
+        PendingSignup existing = new PendingSignup("e1234567@u.nus.edu", "the_owner",
+            PLAIN_ENCODER.encode(PASSWORD), "hashed:000000", NOW.minusSeconds(90),
+            NOW.minusSeconds(90).plus(OTP_TTL), Role.OWNER);
+        when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
+            .thenReturn(Optional.of(existing));
+        when(pendingSignupRepository.saveAndFlush(any(PendingSignup.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+
+        authService.signup(new SignupRequest("e1234567@u.nus.edu", "the_owner", PASSWORD));
+
+        assertThat(existing.getRole()).isEqualTo(Role.USER);
+    }
+
     // ---- sign-up verify ----
 
     private PendingSignup pendingWithCode(String code) {
         PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
-            "hashed:" + PASSWORD, "hashed:" + code, NOW, NOW.plus(OTP_TTL), "");
+            "hashed:" + PASSWORD, "hashed:" + code, NOW, NOW.plus(OTP_TTL), Role.USER);
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(pending));
         return pending;
@@ -497,6 +574,24 @@ class AuthServiceTest {
         assertThat(saved.getValue().getRole()).isEqualTo(Role.USER);
         assertThat(response.role()).isEqualTo("USER");
         verify(pendingSignupRepository).delete(pending);
+    }
+
+    @Test
+    @DisplayName("Verify creates the account with the role the pending row was stamped with (issue #177)")
+    void verify_usesPendingRole() {
+        PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "the_owner",
+            "hashed:" + PASSWORD, "hashed:123456", NOW, NOW.plus(OTP_TTL), Role.OWNER);
+        when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
+            .thenReturn(Optional.of(pending));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UserResponse response = authService.verifySignup(
+            new SignupVerifyRequest("e1234567@u.nus.edu", "123456"));
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getRole()).isEqualTo(Role.OWNER);
+        assertThat(response.role()).isEqualTo("OWNER");
     }
 
     @Test
@@ -530,7 +625,7 @@ class AuthServiceTest {
     void verify_expired() {
         // the boundary case: expires_at == now must reject, not accept
         PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
-            "hashed:" + PASSWORD, "hashed:123456", NOW.minus(OTP_TTL), NOW, "");
+            "hashed:" + PASSWORD, "hashed:123456", NOW.minus(OTP_TTL), NOW, Role.USER);
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(pending));
 
@@ -548,7 +643,7 @@ class AuthServiceTest {
     @DisplayName("A wrong code is otp-invalid, not otp-expired")
     void verify_wrongCodeIsTypedInvalid() {
         PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
-            "hashed:" + PASSWORD, "hashed:123456", NOW, NOW.plus(OTP_TTL), "");
+            "hashed:" + PASSWORD, "hashed:123456", NOW, NOW.plus(OTP_TTL), Role.USER);
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(pending));
 
@@ -885,29 +980,4 @@ class AuthServiceTest {
             .isInstanceOf(LoginFailedException.class)
             .hasMessage("No account found for that username or email.");
     }
-
-    @Test
-    @DisplayName("The right ownerKey creates an owner and clears the pending row")
-    void verify_createsOwner() {
-        PendingSignup pending = new PendingSignup("e1234567@u.nus.edu", "student_alex",
-            "hashed:" + PASSWORD, "hashed:" + "123456", NOW, NOW.plus(OTP_TTL), "expected-owner-key");
-        when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
-            .thenReturn(Optional.of(pending));
-        
-        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        UserResponse response = authService.verifySignup(
-            new SignupVerifyRequest(" E1234567@U.NUS.EDU ", "123456"));
-
-        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).saveAndFlush(saved.capture());
-        assertThat(saved.getValue().getEmail()).isEqualTo("e1234567@u.nus.edu");
-        assertThat(saved.getValue().getUsername()).isEqualTo("student_alex");
-        // the hash from sign-up is carried over, never re-encoded
-        assertThat(saved.getValue().getPasswordHash()).isEqualTo("hashed:" + PASSWORD);
-        assertThat(saved.getValue().getRole()).isEqualTo(Role.OWNER);
-        assertThat(response.role()).isEqualTo("OWNER");
-        verify(pendingSignupRepository).delete(pending);
-    }
-
 }

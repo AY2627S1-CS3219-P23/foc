@@ -39,6 +39,36 @@ Entry template:
 ```
 
 ---
+## 2026-10-20 — Leong Wei Zhi (user-service + web: owner registration, issue #177)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor + generate
+- **Scope:** on the owner-frontend branch (xiuxi's draft): owner sign-up
+  consolidated into `AuthService` — `POST /auth/signup-owner` checks the
+  setup key upfront (403 wrong / 503 unconfigured, reusing the old
+  OwnerSetupService's #154/#162 decisions) and runs the shared sign-up
+  pipeline with OWNER stamped on the pending row (`V8`,
+  `pending_signups.role`); `/auth/signup/verify` creates the row's stored
+  role. Deleted: the branch's `OwnerSignupService`/`OwnerSignupController`
+  pair (its `/auth/signup/verify-owner` never checked the key — any
+  pending sign-up could verify into an OWNER), the `ownerKey` field on
+  the plain `SignupRequest` (its verify-time check 503'd every sign-up on
+  deployments without `OWNER_SETUP_TOKEN`), the in-place edit of applied
+  migration `V3` (Flyway checksum), and the copied owner OTP modal —
+  `registerOwner.tsx` reuses `OtpVerificationModal`, whose resend follows
+  the snapshot's `ownerKey` back to `/auth/signup-owner`. `/register` is
+  restored to main (the owner page is URL-only, per #177); its 503 copy
+  names the missing `OWNER_SETUP_TOKEN`. Stale `/auth/setup-owner`
+  references updated (README, compose, .env.example, application.yaml,
+  SecurityConfig's pre-#176 "no gateway" CORS comment, tests, UserTable).
+- **Prompt(s):** "On top of owner-frontend branch, resolve #177 and
+  create PR on github." Consolidation vs keeping the branch's separate
+  service, 403-upfront vs silent-fail on a wrong key, and restoring the
+  public register page were asked as neutral options; the author chose
+  consolidation, 403, restore.
+- **Author review:** `./mvnw clean test` (user-service, 352 tests after
+  the additions) and `npm run build`/`lint` (web) green; compose e2e per
+  #177's acceptance before the PR. To be reviewed via pull request.
+
 ## 2026-10-18 — Aung Ko Khant (order-service: hide past-deadline requests)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate

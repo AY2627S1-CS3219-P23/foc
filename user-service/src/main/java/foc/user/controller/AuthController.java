@@ -40,6 +40,13 @@ Author review: Leong Wei Zhi to review via the PR.
 2026-09-30 (Claude Code, Fable 5), issue #92: the three OTP handlers moved
 to ProblemDetailAdvice, shared with the account-update routes (same statuses,
 same details; they now also carry problem+json type URIs).
+2026-10-20 (Claude Code, Fable 5), issue #177, on the owner-frontend
+branch (xiuxi): POST /auth/signup-owner — the owner-setup screen's
+sign-up, replacing the curl-only POST /auth/setup-owner. Same 202 shape
+as /auth/signup (the OTP flow is shared; /auth/signup/verify finishes
+both), plus 403 for a wrong setup key and 503 when none is configured.
+Consolidation into AuthService chosen by Leong Wei Zhi via options Q&A
+over the branch's separate controller/service pair.
 */
 
 package foc.user.controller;
@@ -60,6 +67,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import foc.user.dto.LoginRequest;
 import foc.user.dto.LoginResponse;
+import foc.user.dto.SignupOwnerRequest;
 import foc.user.dto.SignupRequest;
 import foc.user.dto.SignupResponse;
 import foc.user.dto.SignupVerifyRequest;
@@ -90,6 +98,16 @@ public class AuthController {
     @ResponseStatus(HttpStatus.ACCEPTED)
     public SignupResponse signup(@Valid @RequestBody SignupRequest request) {
         return authService.signup(request);
+    }
+
+    // sign-up for the owner-setup screen (issue #177): the same 202/OTP
+    // flow with the setup key checked first — 403 wrong, 503 none
+    // configured — and OWNER stamped on the pending row. Verification is
+    // /auth/signup/verify, shared with plain sign-up
+    @PostMapping(value = "/signup-owner", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public SignupResponse signupOwner(@Valid @RequestBody SignupOwnerRequest request) {
+        return authService.signupOwner(request);
     }
 
     @PostMapping(value = "/signup/verify", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)

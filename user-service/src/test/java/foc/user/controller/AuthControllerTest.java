@@ -50,6 +50,12 @@ POST /users/me/recover.
 2026-10-12 (Claude Code, Fable 5), PR #179 review (@Sinnez1): that case's
 deletedAt is truncated to microseconds — Postgres stores no finer, so a
 sub-microsecond clock (Windows) read back rounded and failed the compare.
+2026-10-20 (Claude Code, Fable 5), issue #177: the /auth/signup-owner
+cases — OWNER created end to end and logging in, a wrong key 403
+creating nothing (no row, no email), a blank key 400, the unconfigured
+503 (the key blanked and restored by reflection behind the proxy), the
+cross-endpoint role re-stamp in both directions, and 409 parity with
+plain sign-up.
 */
 
 package foc.user.controller;
@@ -76,6 +82,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -84,6 +91,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.util.AopTestUtils;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import static org.hamcrest.Matchers.allOf;
@@ -102,6 +111,7 @@ import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
+import foc.user.service.AuthService;
 import foc.user.service.OtpEmailSender;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -117,6 +127,8 @@ class AuthControllerTest extends PostgresTestContainer {
     private static final String JWT_SECRET = "test-jwt-secret-that-is-at-least-32-bytes-long";
     private static final String WEB_ORIGIN = "http://localhost:5173";
     private static final String PASSWORD = "ValidPassword123";
+    // the owner.setup.token PostgresTestContainer pins
+    private static final String SETUP_TOKEN = "test-owner-setup-token";
     private static final String UNKNOWN_ACCOUNT = "No account found for that username or email.";
     private static final String LOCKED = "Your account is locked due to too many failed login"
         + " attempts. Try again in 15 minutes.";
@@ -140,6 +152,11 @@ class AuthControllerTest extends PostgresTestContainer {
     @MockitoBean
     private OtpEmailSender otpEmailSender;
 
+    // only for the unconfigured-token case, which blanks its key and puts
+    // it back (the pinned property can't vary within one context)
+    @Autowired
+    private AuthService authService;
+
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
     @BeforeEach
@@ -155,7 +172,7 @@ class AuthControllerTest extends PostgresTestContainer {
     }
 
     private ResultActions signup(String email, String username, String password) throws Exception {
-        return postJson("/auth/signup", Map.of("email", email, "username", username, "password", password, "ownerKey", ""));
+        return postJson("/auth/signup", Map.of("email", email, "username", username, "password", password));
     }
 
     private ResultActions verifySignup(String email, String code) throws Exception {
@@ -438,6 +455,101 @@ class AuthControllerTest extends PostgresTestContainer {
         mockMvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.detail").value("Request body is missing or malformed"));
+    }
+
+    // ---- owner sign-up (issue #177) ----
+
+    private ResultActions signupOwner(String email, String username, String password, String ownerKey)
+            throws Exception {
+        return postJson("/auth/signup-owner", Map.of(
+            "email", email, "username", username, "password", password, "ownerKey", ownerKey));
+    }
+
+    @Test
+    @DisplayName("Owner sign-up with the setup key runs the same OTP flow and verifies into an OWNER who can log in")
+    void signupOwner_verifyFlow() throws Exception {
+        signupOwner("e1234567@u.nus.edu", "the_owner", PASSWORD, SETUP_TOKEN)
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.email").value("e1234567@u.nus.edu"));
+
+        verifySignup("e1234567@u.nus.edu", emailedCode("e1234567@u.nus.edu"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.role").value("OWNER"));
+
+        assertThat(userRepository.findByUsernameIgnoreCase("the_owner").orElseThrow().getRole())
+            .isEqualTo(Role.OWNER);
+        login("the_owner", PASSWORD).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("A wrong setup key is 403 and creates nothing — no pending row, no email (#177 acceptance)")
+    void signupOwner_wrongKey() throws Exception {
+        signupOwner("e1234567@u.nus.edu", "the_owner", PASSWORD, "not-the-token")
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.detail").value("Invalid or missing setup token"));
+
+        assertThat(pendingSignupRepository.findByEmail("e1234567@u.nus.edu")).isEmpty();
+        verifyNoInteractions(otpEmailSender);
+    }
+
+    @Test
+    @DisplayName("A blank setup key is a validation 400, before any compare")
+    void signupOwner_blankKey() throws Exception {
+        signupOwner("e1234567@u.nus.edu", "the_owner", PASSWORD, "")
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value(containsString("Setup token is required")));
+        verifyNoInteractions(otpEmailSender);
+    }
+
+    @Test
+    @DisplayName("With no OWNER_SETUP_TOKEN configured, owner sign-up is 503 with a generic reason (#154)")
+    void signupOwner_unconfigured() throws Exception {
+        // the singleton behind the @Transactional proxy, restored after:
+        // this context is shared with every test in the class
+        AuthService target = AopTestUtils.getUltimateTargetObject(authService);
+        ReflectionTestUtils.setField(target, "expectedOwnerKey", "");
+        try {
+            signupOwner("e1234567@u.nus.edu", "the_owner", PASSWORD, SETUP_TOKEN)
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.detail").value("Owner setup is unavailable"));
+            assertThat(pendingSignupRepository.findByEmail("e1234567@u.nus.edu")).isEmpty();
+        } finally {
+            ReflectionTestUtils.setField(target, "expectedOwnerKey", SETUP_TOKEN);
+        }
+    }
+
+    @Test
+    @DisplayName("A plain re-sign-up re-stamps an owner pending row USER: verify grants what the last accepted call earned")
+    void signupOwner_plainResendDemotes() throws Exception {
+        signupOwner("e1234567@u.nus.edu", "the_owner", PASSWORD, SETUP_TOKEN)
+            .andExpect(status().isAccepted());
+        // the same details through the plain endpoint (no cooldown in this
+        // file's config): an ordinary resend, but one that never showed a key
+        signup("e1234567@u.nus.edu", "the_owner", PASSWORD).andExpect(status().isAccepted());
+
+        verifySignup("e1234567@u.nus.edu", emailedCode("e1234567@u.nus.edu"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.role").value("USER"));
+    }
+
+    @Test
+    @DisplayName("An owner re-sign-up of a plain pending row promotes it — that call did show the key")
+    void signupOwner_ownerResendPromotes() throws Exception {
+        signup("e1234567@u.nus.edu", "the_owner", PASSWORD).andExpect(status().isAccepted());
+        signupOwner("e1234567@u.nus.edu", "the_owner", PASSWORD, SETUP_TOKEN)
+            .andExpect(status().isAccepted());
+
+        verifySignup("e1234567@u.nus.edu", emailedCode("e1234567@u.nus.edu"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.role").value("OWNER"));
+    }
+
+    @Test
+    @DisplayName("Owner sign-up cannot take over someone else's live pending sign-up: the shared 409")
+    void signupOwner_conflictParity() throws Exception {
+        signup("e1234567@u.nus.edu", "student_alex", PASSWORD).andExpect(status().isAccepted());
+        signupOwner("e1234567@u.nus.edu", "the_owner", "OtherPassword123", SETUP_TOKEN)
+            .andExpect(status().isConflict());
     }
 
     @Test

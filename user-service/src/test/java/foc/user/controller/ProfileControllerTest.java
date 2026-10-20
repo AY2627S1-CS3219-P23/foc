@@ -26,6 +26,8 @@ Author review: Ryan reviewed and ensured tests run successfully.
        (D31, author's zero-trust decision) — the shared secret reads the
        public profile, and nothing else: wrong token, /users/me and the
        admin list all answer 401.
+2026-10-20 (Claude Code, Fable 5), issue #177: a comment's
+/auth/setup-owner reference follows the rename (no behaviour change).
 */
 
 package foc.user.controller;
@@ -139,7 +141,7 @@ class ProfileControllerTest extends PostgresTestContainer {
     @DisplayName("DELETE /users/me should let an OWNER delete their own account")
     void deleteOwnAccount_owner() throws Exception {
         // team decision: owners self-delete like anyone else; a new owner
-        // can still be created through /auth/setup-owner
+        // can still be created through /auth/signup-owner
         User owner = userRepository.save(
             new User("owner@u.nus.edu", "the_owner", "hashed_password", Role.OWNER));
 

@@ -163,8 +163,9 @@ user:
 
 owner:
   setup:
-    # Shared secret required to call POST /auth/setup-owner. Must be set via
-    # the OWNER_SETUP_TOKEN env var before first deploy. Setup is disabled
-    # (503) while it is unset, so the endpoint can't be reached. Each call
-    # with the token creates another OWNER.
+    # Shared secret gating POST /auth/signup-owner — the owner-setup
+    # screen's sign-up (issue #177, replacing /auth/setup-owner). Must be
+    # set via the OWNER_SETUP_TOKEN env var before first deploy; owner
+    # sign-up answers 503 while it is unset. Each verified sign-up with
+    # the token creates another OWNER.
     token: ${OWNER_SETUP_TOKEN:}

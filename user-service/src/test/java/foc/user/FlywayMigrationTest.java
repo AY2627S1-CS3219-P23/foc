@@ -29,6 +29,9 @@ Scope: issue #147. Runs the Flyway migrations against their own schemas in
        per-operation naming), each decided by the owner via options
        Q&A.
 Author review: Ryan to review via the PR.
+2026-10-20, Claude Code (Fable 5), issue #177: V8 joins them
+(pending_signups.role, the role a pending sign-up verifies into), moving
+the counts to 7 and 8.
 */
 
 package foc.user;
@@ -56,7 +59,7 @@ import org.springframework.core.io.ClassPathResource;
 class FlywayMigrationTest extends PostgresTestContainer {
 
     // scripts in db/migration; a new V<n> bumps this
-    private static final int MIGRATION_SCRIPTS = 7;
+    private static final int MIGRATION_SCRIPTS = 8;
 
     // the application's Flyway, built from application.yaml's spring.flyway
     @Autowired
@@ -119,7 +122,7 @@ class FlywayMigrationTest extends PostgresTestContainer {
 
             MigrateResult result = migrate(schema);
 
-            // V1 is recorded as the baseline, not run again; V2..V6 run
+            // V1 is recorded as the baseline, not run again; V2..V8 run
             assertThat(result.migrationsExecuted).isEqualTo(MIGRATION_SCRIPTS - 1);
             assertThat(usernamesByEmail(statement)).containsExactly(
                 Map.entry("e1000001@u.nus.edu", "Bob"),
