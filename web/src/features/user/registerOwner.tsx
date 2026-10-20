@@ -1,12 +1,32 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
-// Copied from register.tsx which was AI-assisted 
+// Tool: Claude (Sonnet 5), 2026-10-12, issue #177: the owner-setup screen,
+// copied from register.tsx (itself AI-assisted) on the owner-frontend
+// branch (xiuxi).
+// 2026-10-20, Claude Code (Fable 5), issue #177 rework (shapes chosen by
+// Leong Wei Zhi via options Q&A): posts to the consolidated
+// /auth/signup-owner and reuses OtpVerificationModal in place of the
+// branch's copied owner modal — the pending snapshot carries ownerKey,
+// which is what routes the dialog's resend back to this endpoint. Per
+// #177: the page is reachable by URL only (no link from /register), and
+// the refusals are told apart — a 403 shows the server's wrong-token
+// sentence, a 503 says the deployment has no OWNER_SETUP_TOKEN configured
+// (the person at this form cannot fix that, so "try again" would be a
+// lie); everything else is errorMessage's usual problem+json detail.
+// Author review: Leong Wei Zhi to review via the PR.
 
 import React, { useState } from 'react'
-import { apiFetch, errorMessage } from '@/lib/api/http'
+import { ApiError, apiFetch, errorMessage } from '@/lib/api/http'
 import { router } from '../../routes/index'
-import { OwnerOtpVerificationModal } from './components/OwnerOtpVerificationModal'
+import { OtpVerificationModal } from './components/OtpVerificationModal'
 import { PasswordChecklist } from './PasswordChecklist'
-import type { SignupAccepted, OwnerSignupPending } from './types'
+import type { SignupAccepted, SignupPending } from './types'
+
+// A 503 from /auth/signup-owner means the deployment has no
+// OWNER_SETUP_TOKEN set (the server's own detail is deliberately generic,
+// #154) — nothing typed into this form can change that, so say so
+const SETUP_DISABLED =
+  'Owner setup is not available: this deployment has no OWNER_SETUP_TOKEN configured.' +
+  ' Ask whoever runs it to set one.'
 
 export function RegisterOwner() {
   const [email, setEmail] = useState('')
@@ -19,10 +39,9 @@ export function RegisterOwner() {
   // code dies and when it may be resent. A snapshot rather than a read of
   // the live fields, so a resend repeats the identical request even if the
   // form is edited behind the dialog — anything else would be refused 409
-  const [pending, setPending] = useState<OwnerSignupPending | null>(null)
+  const [pending, setPending] = useState<SignupPending | null>(null)
   // dismissing the dialog hides it but keeps the pending sign-up, so the
-  // code already emailed can still be entered — closing it used to strand
-  // that code behind a cooldown and a pointless resend (PR #150 review)
+  // code already emailed can still be entered (PR #150 review)
   const [codeOpen, setCodeOpen] = useState(false)
 
   const register = async (event: React.SyntheticEvent) => {
@@ -47,7 +66,8 @@ export function RegisterOwner() {
       })
       setCodeOpen(true)
     } catch (error: unknown) {
-      setError(errorMessage(error, 'Could not register. Try again.'))
+      const disabled = error instanceof ApiError && error.status === 503
+      setError(disabled ? SETUP_DISABLED : errorMessage(error, 'Could not register. Try again.'))
     } finally {
       setSubmitting(false)
     }
@@ -69,7 +89,7 @@ export function RegisterOwner() {
     <div className="mx-auto mt-16 w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <h2 className="text-2xl font-semibold text-gray-900">Create Owner Account</h2>
       <p className="mt-1 text-sm text-gray-500">
-        Join NUS peer-to-peer errand network.
+        For deployment owners only — a setup token is required.
       </p>
       {error && (
         <p
@@ -114,7 +134,7 @@ export function RegisterOwner() {
         <label className="block text-sm font-medium text-gray-700">
           Setup token
           <input
-            type="text"
+            type="password"
             value={ownerKey}
             onChange={(e) => setOwnerKey(e.target.value)}
             className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 font-normal focus:border-gray-400 focus:outline-none"
@@ -149,18 +169,10 @@ export function RegisterOwner() {
           Log in
         </button>
       </p>
-      <p className="mt-4 text-center text-sm text-gray-600">
-        <button
-          onClick={() => router.navigate('/register')}
-          className="font-medium text-gray-900 underline cursor-pointer"
-        >
-          Register for users
-        </button>
-      </p>      
       {/* outside the <form>: the dialog holds a form of its own, and forms
           may not nest */}
       {pending && codeOpen && (
-        <OwnerOtpVerificationModal
+        <OtpVerificationModal
           pending={pending}
           // hidden, not discarded: "Enter your code" brings it back
           onClose={() => setCodeOpen(false)}

@@ -21,6 +21,11 @@
 // LoginResponse — login no longer silently recovers a deleted account;
 // this field (when present) is what sends the session to the
 // account-recovery screen.
+// 2026-10-20, Claude Code (Fable 5), issue #177, on the owner-frontend
+// branch (xiuxi): SignupPending carries an optional ownerKey — set only
+// by the owner-setup page, and what routes the OTP dialog's resend to
+// /auth/signup-owner (reuse chosen by Leong Wei Zhi via options Q&A over
+// the branch's copied OwnerSignupPending/owner modal).
 // Reviewed by: Ryan Ang
 
 // POST /auth/login body (user-service's LoginResponse DTO) — the
@@ -54,6 +59,10 @@ export interface SignupPending {
   email: string
   username: string
   password: string
+  // the setup token the owner-setup page sent (issue #177): present only
+  // there, and what sends the dialog's resend to /auth/signup-owner —
+  // the resend must repeat the identical body, token included
+  ownerKey?: string
   expiresAt: number // epoch ms
   resendAt: number // epoch ms
 }

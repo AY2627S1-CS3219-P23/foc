@@ -52,7 +52,8 @@ const linkClass =
   'text-sm font-medium text-gray-900 hover:underline disabled:cursor-not-allowed disabled:opacity-50'
 
 // The owner account can't be promoted, demoted or removed here: it is
-// created once via setup-owner and is not managed from this screen.
+// created via the owner-setup screen (/auth/signup-owner, #177) and is
+// not managed from this screen.
 // Admins can't remove themselves here either (user-service rejects it;
 // own-account deletion is DELETE /users/me).
 function UserActions({

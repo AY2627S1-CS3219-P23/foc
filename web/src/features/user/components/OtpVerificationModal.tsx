@@ -37,6 +37,12 @@
 // dialog stayed open over a sign-up only the form could fix. problemType()
 // reports `about:blank` as untyped now (problemTypes.ts), which is the
 // whole fix; the check here is unchanged.
+// 2026-10-20, Claude Code (Fable 5), issue #177, on the owner-frontend
+// branch (xiuxi): the dialog now serves the owner-setup page too — a
+// pending snapshot carrying ownerKey resends to /auth/signup-owner with
+// the token in the body (the server demands the identical request), and
+// verify stays /auth/signup/verify for both flows. Reuse chosen by Leong
+// Wei Zhi via options Q&A over the branch's copied owner modal.
 // Author review: Leong Wei Zhi to review via the PR.
 
 import { useState } from 'react'
@@ -150,21 +156,25 @@ export function OtpVerificationModal({
     }
   }
 
-  // A resend is the same POST /auth/signup with the same body — the server
-  // treats a repeat of the identical request as the resend, and refuses
-  // anything else, which is why the page holds the sent values rather than
-  // this dialog reading the form behind it.
+  // A resend is the same POST with the same body — the server treats a
+  // repeat of the identical request as the resend, and refuses anything
+  // else, which is why the page holds the sent values rather than this
+  // dialog reading the form behind it. An owner-setup sign-up (issue
+  // #177) repeats to /auth/signup-owner, setup token included: the plain
+  // endpoint would accept the repeat but re-stamp the row USER.
   const resend = async () => {
     setResending(true)
     setError('')
     setNotice('')
     try {
-      const accepted = await apiFetch<SignupAccepted>('user', '/auth/signup', {
+      const path = pending.ownerKey ? '/auth/signup-owner' : '/auth/signup'
+      const accepted = await apiFetch<SignupAccepted>('user', path, {
         method: 'POST',
         body: JSON.stringify({
           email: pending.email,
           username: pending.username,
           password: pending.password,
+          ...(pending.ownerKey ? { ownerKey: pending.ownerKey } : {}),
         }),
       })
       onResent({
