@@ -906,5 +906,19 @@ Copilot SDK in VS Code (model not exposed) corrected Mockito matcher
 misuse in the user-service `AuthServiceTest`: boolean constructor values
 are now literals, preventing matcher leakage into repository stubs.
 
+Claude Code (Fable 5) removed the system's only synchronous
+inter-service call (issue #221): notification-service's ingest-time
+username enrichment and its internal-token credential
+(`docs/notification-service.md` D30/D31) are superseded by D32 —
+notifications store party IDs only, and the web resolves `courierId` to
+a username at read time through the gateway with the caller's own JWT
+(`web/src/features/user/usernames.ts`: per-id lookups behind a TTL
+cache with in-flight dedupe), the actor-less copy doubling as the
+loading and lookup-failed rendering. The design (per-id + SPA cache
+over a batch endpoint, removing the token machinery in the same PR,
+ignoring the stored name keys of old rows) was decided by Leong Wei Zhi
+via neutral options Q&A, recorded in the design doc and
+`ai/usage-log.md`.
+
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

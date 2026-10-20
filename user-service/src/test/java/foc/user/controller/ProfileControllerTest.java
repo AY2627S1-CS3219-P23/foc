@@ -26,6 +26,9 @@ Author review: Ryan reviewed and ensured tests run successfully.
        (D31, author's zero-trust decision) — the shared secret reads the
        public profile, and nothing else: wrong token, /users/me and the
        admin list all answer 401.
+2026-10-19 (Claude Code, Fable 5), issue #221: the four internal-token
+       cases removed with the filter (D32 supersedes D30/D31) — the JWT
+       cases for GET /users/{id} stay; it is now the web's hydration route.
 */
 
 package foc.user.controller;
@@ -259,40 +262,4 @@ class ProfileControllerTest extends PostgresTestContainer {
             .andExpect(jsonPath("$.detail").value("Invalid request parameter"));
     }
 
-    // internal service token (issue #66, D31): sibling services may read
-    // the public profile with the shared secret instead of a user JWT —
-    // and with nothing else
-
-    @Test
-    @DisplayName("GET /users/{id} with the internal service token should return the username")
-    void getPublicProfile_internalServiceToken() throws Exception {
-        mockMvc.perform(get("/users/{id}", alex.getId())
-                .header("X-Internal-Token", "test-internal-service-token"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.username").value("student_alex"));
-    }
-
-    @Test
-    @DisplayName("GET /users/{id} with a wrong internal token should return 401")
-    void getPublicProfile_wrongInternalToken() throws Exception {
-        mockMvc.perform(get("/users/{id}", alex.getId())
-                .header("X-Internal-Token", "not-the-secret"))
-            .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    @DisplayName("GET /users/me with the internal service token should return 401, not a profile")
-    void ownProfile_internalServiceToken_rejected() throws Exception {
-        mockMvc.perform(get("/users/me")
-                .header("X-Internal-Token", "test-internal-service-token"))
-            .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    @DisplayName("GET /users (admin list) with the internal service token should return 401")
-    void adminList_internalServiceToken_rejected() throws Exception {
-        mockMvc.perform(get("/users")
-                .header("X-Internal-Token", "test-internal-service-token"))
-            .andExpect(status().isUnauthorized());
-    }
 }
