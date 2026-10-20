@@ -188,7 +188,8 @@
   parties check, the credit legend) by Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
   2026-10-20: AI Use Summary extended for the order lists' state groups
-  and My Requests' PENDING refetch by Claude Code (Opus 5.5).
+  and My Requests' PENDING refetch, and for lost races answered 409, by
+  Claude Code (Opus 5.5).
   Author review: Aung Ko Khant, pending pull request review.
 -->
 
@@ -735,7 +736,9 @@ state filters and keeping the mock chosen by the author; and the
 comma-separated `state` list on order-service's request lists, with My
 Requests holding the active requests and History the finished ones, and
 My Requests refetching every 2 seconds while a request is PENDING, as
-the author chose.
+the author chose; and a step that loses a race on a request (caught by
+the `@Version` check) answered 409 "This request's state has changed",
+with tests staging the races, the code and message chosen by the author.
 
 The issue #67 remaining scope (the server-side STOMP push gateway had
 merged earlier in PR #74): the web notification client

@@ -5749,3 +5749,20 @@ Entry template:
 - **Verification:** `vitest run src/test/orders.test.tsx` (23 passed),
   `tsc -b`, eslint and prettier clean.
 - **Author review:** Aung Ko Khant, pending pull request review.
+
+## 2026-10-20 — Aung Ko Khant (order-service: lost races answered 409)
+- **Tool:** Claude Code (Opus 5.5).
+- **Prompt(s):** "map errors to 409, say these request's state has changed?"
+  (after asking how order-service handles two couriers accepting at once,
+  and a cancel racing an accept).
+- **Scope:** `RequestsController` answers an
+  `OptimisticLockingFailureException` (a step that lost a race, caught by
+  the `@Version` check) with 409 "This request's state has changed"
+  instead of a 500. New `RequestsControllerConflictTests` (the mapping,
+  service mocked); two `RequestsServiceTests` staging the real races —
+  accept vs accept and accept vs cancel — where the loser is refused and
+  leaves no state change or outbox event. The status code and message
+  were the author's decision.
+- **Verification:** order-service `mvn test` in a
+  maven:3.9-eclipse-temurin-21 container (103 passed).
+- **Author review:** Aung Ko Khant, pending pull request review.
