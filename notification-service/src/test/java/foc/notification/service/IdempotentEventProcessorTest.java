@@ -17,6 +17,9 @@
  * and the names now come from the ingest-time UserDirectory lookup —
  * stubbed here per D11, with cases for the enriched payload and for
  * the unknown-user degradation (no name keys stored).
+ * 2026-10-19, Claude Code (Fable 5), issue #221: UserDirectory stub and
+ * enrichment cases removed with the lookup (D32 supersedes D30/D31) —
+ * the payload test now pins IDs-only storage, no name keys ever.
  */
 package foc.notification.service;
 
@@ -30,14 +33,10 @@ import foc.notification.repository.ProcessedEventRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -78,20 +77,6 @@ class IdempotentEventProcessorTest {
 				requestId, "usr-req-1001", "Techno Edge", "COM3-01-19", "hi");
 	}
 
-	/** The D11 stub: the two fixture parties resolve, anyone else doesn't. */
-	@TestConfiguration
-	static class StubUserDirectoryConfig {
-
-		@Bean
-		@Primary
-		UserDirectory stubUserDirectory() {
-			Map<String, String> names = Map.of(
-					"usr-req-1001", "maya",
-					"usr-cou-2002", "marcus");
-			return userId -> Optional.ofNullable(names.get(userId));
-		}
-	}
-
 	@Test
 	void createsOneNotificationPerParty() {
 		eventProcessor.process(accepted("e-1", "req-1", List.of("usr-req-1001", "usr-cou-2002")));
@@ -118,26 +103,15 @@ class IdempotentEventProcessorTest {
 		assertThat(payload).containsExactlyInAnyOrderEntriesOf(Map.of(
 				"requestId", "req-1",
 				"requesterId", "usr-req-1001",
-				"requesterName", "maya",
 				"pickupLocation", "Techno Edge",
 				"dropoffLocation", "COM3-01-19",
 				"note", "hi"));
-		// Transport metadata never leaks into the client-facing payload.
+		// Transport metadata never leaks into the client-facing payload,
+		// and party fields stay IDs — the web hydrates names at read
+		// time (D32), so no display-name key is ever stored.
 		assertThat(payload).doesNotContainKeys("eventId", "eventType", "parties",
-				"producer", "correlationId", "occurredAt");
-	}
-
-	@Test
-	void unknownPartyStoresNoNameKey() {
-		eventProcessor.process(new RequestCreated("e-unknown", OCCURRED_AT, "order-service", "c-1",
-				List.of("usr-ghost"), "req-9", "usr-ghost", "Techno Edge", "COM3-01-19", null));
-
-		String stored = notifications.findAll().get(0).getPayload();
-		Map<String, Object> payload = objectMapper.readValue(stored, Map.class);
-		// an unresolvable party degrades to an absent key (never a null):
-		// the web's templates fall back to actor-less copy
-		assertThat(payload).doesNotContainKey("requesterName");
-		assertThat(payload).containsEntry("requesterId", "usr-ghost");
+				"producer", "correlationId", "occurredAt",
+				"requesterName", "courierName");
 	}
 
 	@Test

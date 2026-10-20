@@ -39,6 +39,10 @@ added to the chain so notification-service's ingest-time username
 lookups can authenticate with a shared secret — the author's zero-trust
 decision (D31): GET /users/{id} keeps its authenticated() rule instead
 of opening to the compose network.
+2026-10-19 (Claude Code, Fable 5), issue #221: InternalServiceTokenFilter
+removed with its last caller — D32 (options Q&A) supersedes D30/D31; the
+web hydrates names at read time with the caller's own JWT, so
+GET /users/{id} keeps only its authenticated() rule.
 */
 
 package foc.user.config;
@@ -62,7 +66,6 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import foc.user.security.InternalServiceTokenFilter;
 import foc.user.security.JwtAuthenticationFilter;
 import foc.user.security.JwtVerifier;
 import foc.user.security.SecurityProblemResponses;
@@ -94,8 +97,7 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtVerifier jwtVerifier,
-            SecurityProblemResponses problems,
-            @Value("${user.internal.service-token}") String internalServiceToken) throws Exception {
+            SecurityProblemResponses problems) throws Exception {
         return http
             .csrf(AbstractHttpConfigurer::disable)
             // uses the corsConfigurationSource bean; answers preflights
@@ -106,11 +108,6 @@ public class SecurityConfig {
             // the caller comes from the Authorization header (design doc §3)
             .addFilterBefore(new JwtAuthenticationFilter(jwtVerifier, problems),
                 UsernamePasswordAuthenticationFilter.class)
-            // sibling services authenticate username lookups with the
-            // shared internal token instead of a user JWT (issue #66,
-            // D31 — zero trust: the route stays authenticated())
-            .addFilterBefore(new InternalServiceTokenFilter(internalServiceToken),
-                JwtAuthenticationFilter.class)
             // 401 without usable credentials, 403 for the wrong role, both
             // problem+json like the controllers' errors
             .exceptionHandling(errors -> errors

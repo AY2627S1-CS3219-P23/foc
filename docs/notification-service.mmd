@@ -12,10 +12,15 @@ title: "FoC Notification Service — Component-Level Architecture"
 %% 2026-10-17, Claude Code (Fable 5), issue #66: user directory node +
 %% lookup edge added for the ingest-time name enrichment (author
 %% decisions D30/D31 via options Q&A).
+%% 2026-10-19, Claude Code (Fable 5), issue #221: user directory node and
+%% internal-token edge removed with the enrichment (author decision D32
+%% via options Q&A — the web hydrates names at read time through the
+%% gateway); the Web App node notes the lookup instead.
 %% Legend, decisions and traceability: see docs/notification-service.md
 flowchart TB
     ORDER_SVC["<b>Order Service</b> (order-service/)<br/>publishes a typed event on every<br/>request state transition"]
-    WEB["<b>Web App</b> (web/)<br/>in-app notification list + toasts"]
+    WEB["<b>Web App</b> (web/)<br/>in-app notification list + toasts;<br/>hydrates courier names at read time (D32)"]
+    USER_SVC["<b>User Service</b> (user-service/)<br/>public profile: username"]
 
     subgraph RABBIT ["RabbitMQ (shared broker — queues below are dedicated to the Notification Service)"]
         EXCH{{"<b>request-events</b><br/>topic exchange, durable"}}
@@ -26,8 +31,7 @@ flowchart TB
 
     subgraph NOTIF ["Notification Service (notification-service/) — Java + Spring Boot"]
         LISTENER["<b>AMQP listener</b><br/>dispatch on body eventType;<br/>manual ack after DB commit"]
-        PROCESSOR["<b>Idempotent event processor</b><br/>dedupe by event ID;<br/>one notification per party;<br/>name enrichment at ingest (D30)"]
-        DIRECTORY["<b>User directory</b><br/>GET /users/{id} + TTL cache;<br/>internal token (D31), best-effort"]
+        PROCESSOR["<b>Idempotent event processor</b><br/>dedupe by event ID;<br/>one notification per party;<br/>payloads keep party IDs (D32)"]
         API["<b>Notification REST API</b><br/>list + unread count + mark<br/>read/unread (JWT, /notifications/me)"]
         PUSH["<b>STOMP push gateway</b><br/>per-user destinations"]
         PURGE["<b>Retention purge scheduler</b>"]
@@ -43,12 +47,11 @@ flowchart TB
     WORKQ ==>|"after max attempts, or<br/>unconvertible on first rejection"| DLQ
 
     LISTENER -->|"typed event"| PROCESSOR
-    PROCESSOR -->|"party IDs → usernames"| DIRECTORY
-    DIRECTORY -.->|"X-Internal-Token"| USER_SVC["<b>User Service</b> (user-service/)<br/>public profile: username"]
     PROCESSOR ---|"insert notification + event ID<br/>in one transaction"| NOTIF_DB
     PROCESSOR -->|"stored notification"| PUSH
     PUSH ==>|"STOMP push to each<br/>party's /user destination"| WEB
     WEB -->|"REST: list, mark read/unread"| API
+    WEB -.->|"GET /users/{id} via gateway,<br/>caller's JWT + SPA cache (D32)"| USER_SVC
     API ---|"read/update rows"| NOTIF_DB
     PURGE ---|"delete rows older<br/>than retention window"| NOTIF_DB
 

@@ -41,6 +41,10 @@
 # user.password-reset.ttl for a link-shaped credential; the owner
 # revisited that to an OTP code via options Q&A and the knob went.
 # Reviewed by: Leong Wei Zhi (via pull request).
+# 2026-10-19, Claude Code (Fable 5), issue #221: user.internal.service-token
+# (added for issue #66's D31 lookups) removed with the
+# InternalServiceTokenFilter — D32 supersedes D30/D31; the web hydrates
+# names at read time with the caller's own JWT.
 
 spring:
   application:
@@ -126,13 +130,6 @@ user:
     # startup, skipping any already present (DemoAccountsSeeder). Local
     # testing and demos only: their passwords are public, in the README.
     demo: ${USER_SEED_DEMO:false}
-  internal:
-    # Shared secret sibling services present (X-Internal-Token) for the
-    # ingest-time username lookups on GET /users/{id} (issue #66, D31 —
-    # zero trust: the route stays authenticated instead of opening to
-    # the compose network). Empty default disables the filter: without
-    # INTERNAL_SERVICE_TOKEN set, no header ever authenticates.
-    service-token: ${INTERNAL_SERVICE_TOKEN:}
   jwt:
     # Shared HS256 secret (at least 32 bytes) that every service verifies
     # tokens with. Empty default: startup fails with a clear message
