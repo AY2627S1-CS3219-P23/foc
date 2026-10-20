@@ -185,6 +185,8 @@
   2026-10-18: AI Use Summary extended for the issue #165 follow-ups
   (a duplicate reservation resends its reply, the contract test's
   parties check, the credit legend) by Claude Code (Opus 5.5).
+  2026-10-19: AI Use Summary extended for the credit outbox retention
+  purge (issue #218) by Claude Code (Opus 5.5).
   2026-10-19: AI Use Summary extended for the supplier bookmarks N8
   documentation (issues #225-#227) by Claude Code (Sonnet 5.5); same
   day, extended for D13 (how the supplier list flags and orders
@@ -640,7 +642,14 @@ window and how often the web app reads it decided by the team and
 recorded there, and its web half (the Available card's line for the
 soonest credits to expire and a notice when they expire within 7
 days, in Singapore dates, with their tests), where they are shown and
-the wording also decided by the team.
+the wording also decided by the team; and the outbox retention purge
+(issue #218: a daily job deleting sent replies past the retention
+window, its bulk delete, the V3 partial index on `sent_at`, the
+configuration in compose and `.env.example`, and their unit and
+Postgres tests), written to D13 of `docs/credit-service.md`, with
+which rows go, the column the window counts from, the window and
+schedule, the startup check, the index and keeping every other table
+decided by the team and recorded there.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their

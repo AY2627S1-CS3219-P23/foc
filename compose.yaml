@@ -78,6 +78,9 @@
 # 2026-10-11, Claude Code (Opus 5.5), issue #169: CREDIT_SIGN_UP_CREDITS
 # and CREDIT_EARNED_CREDIT_LIFETIME_MONTHS passed to the credit service
 # (D4, D6); the values are the team's.
+# 2026-10-19, Claude Code (Opus 5.5), issue #218:
+# CREDIT_OUTBOX_RETENTION_DAYS and CREDIT_OUTBOX_PURGE_CRON passed to the
+# credit service (D13); the values are the team's.
 # 2026-10-10, Claude Code (Opus 5.5): order-service + order-db wiring
 # added, following the notification-service pattern (RabbitMQ env and
 # depends_on included; no listener/JWT settings). Host ports 8088/5437 (DB moved off 5436 on 2026-10-14, which credit-service uses),
@@ -431,6 +434,9 @@ services:
       # sign-up credits and earned-credit lifetime (D6, D4)
       CREDIT_SIGN_UP_CREDITS: ${CREDIT_SIGN_UP_CREDITS:-5}
       CREDIT_EARNED_CREDIT_LIFETIME_MONTHS: ${CREDIT_EARNED_CREDIT_LIFETIME_MONTHS:-3}
+      # how long a sent reply stays in the outbox, and when it is purged (D13)
+      CREDIT_OUTBOX_RETENTION_DAYS: ${CREDIT_OUTBOX_RETENTION_DAYS:-30}
+      CREDIT_OUTBOX_PURGE_CRON: "${CREDIT_OUTBOX_PURGE_CRON:-0 0 3 * * *}"
       # verifies login tokens; the secret user-service signs them with
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       # Browser origin allowed by CORS, shared with the other services.

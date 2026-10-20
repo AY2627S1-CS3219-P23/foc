@@ -18,6 +18,8 @@
 # timeout, also the pause before a requeue (the team's value); the
 # max-attempts comment updated now that the listener reads it. Re-review:
 # the confirm timeout takes CREDIT_RETRY_CONFIRM_TIMEOUT_MS.
+# 2026-10-19, issue #218: the outbox retention window and purge cron
+# (the values are the team's).
 # Author review: Ryan Ang, pending pull request review.
 
 spring:
@@ -100,6 +102,13 @@ credit:
       # it is due again. Until then the poll does not read it, so
       # replies no queue takes cannot fill every batch.
       unroutable-retry-delay-ms: 30000
+    retention:
+      # Days a reply is kept after it was sent (D13). At least 1; a
+      # smaller value fails startup. Unsent replies are never purged.
+      days: ${CREDIT_OUTBOX_RETENTION_DAYS:30}
+      # When the purge runs, in Asia/Singapore time. Default: daily at
+      # 03:00, away from the 00:00 expiry routine.
+      purge-cron: "${CREDIT_OUTBOX_PURGE_CRON:0 0 3 * * *}"
   # Origin the browser calls this service from (no API gateway)
   web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
   jwt:
