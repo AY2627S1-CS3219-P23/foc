@@ -101,15 +101,19 @@ export function OwnerOtpVerificationModal({
     setError('')
     setNotice('')
     try {
-      const accepted = await apiFetch<SignupAccepted>('user', '/auth/signup-owner', {
-        method: 'POST',
-        body: JSON.stringify({
-          email: pending.email,
-          username: pending.username,
-          password: pending.password,
-          ownerKey: pending.ownerKey
-        }),
-      })
+      const accepted = await apiFetch<SignupAccepted>(
+        'user',
+        '/auth/signup-owner',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            email: pending.email,
+            username: pending.username,
+            password: pending.password,
+            ownerKey: pending.ownerKey,
+          }),
+        },
+      )
       onResent({
         ...pending,
         expiresAt: Date.now() + accepted.expiresInSeconds * 1000,

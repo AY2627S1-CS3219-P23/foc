@@ -1,5 +1,5 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
-// Copied from register.tsx which was AI-assisted 
+// Copied from register.tsx which was AI-assisted
 
 import React, { useState } from 'react'
 import { apiFetch, errorMessage } from '@/lib/api/http'
@@ -29,10 +29,14 @@ export function RegisterOwner() {
     event.preventDefault()
     setSubmitting(true)
     try {
-      const accepted = await apiFetch<SignupAccepted>('user', '/auth/signup-owner', {
-        method: 'POST',
-        body: JSON.stringify({ email, username, password, ownerKey }),
-      })
+      const accepted = await apiFetch<SignupAccepted>(
+        'user',
+        '/auth/signup-owner',
+        {
+          method: 'POST',
+          body: JSON.stringify({ email, username, password, ownerKey }),
+        },
+      )
 
       setError('')
       // no account exists yet, and nothing is cleared: the dialog takes
@@ -67,7 +71,9 @@ export function RegisterOwner() {
 
   return (
     <div className="mx-auto mt-16 w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 className="text-2xl font-semibold text-gray-900">Create Owner Account</h2>
+      <h2 className="text-2xl font-semibold text-gray-900">
+        Create Owner Account
+      </h2>
       <p className="mt-1 text-sm text-gray-500">
         Join NUS peer-to-peer errand network.
       </p>
@@ -156,7 +162,7 @@ export function RegisterOwner() {
         >
           Register for users
         </button>
-      </p>      
+      </p>
       {/* outside the <form>: the dialog holds a form of its own, and forms
           may not nest */}
       {pending && codeOpen && (

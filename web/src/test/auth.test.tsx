@@ -687,7 +687,7 @@ describe('sign-up-owner page', () => {
       email: 'e1234567@u.nus.edu',
       username: 'student_alex',
       password: 'Password1234',
-      ownerKey: 'Token1234'
+      ownerKey: 'Token1234',
     },
   }
 

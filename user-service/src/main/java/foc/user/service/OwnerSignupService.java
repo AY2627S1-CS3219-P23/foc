@@ -142,7 +142,7 @@ public class OwnerSignupService {
         }
 
         // Check if ownerKey matches, let user know in otp email
-        // If wrong ownerKey, user has to wait for otp expiry
+        // User can submit a different ownerKey with different otp after a delay
         boolean isOwner = checkOwnerKey(request.ownerKey());
 
         // Generate otp
