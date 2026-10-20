@@ -16,6 +16,17 @@
 // issue #66, no issue yet): header sound-toggle cases — default on,
 // click flips aria-pressed and the stored key and silences/restores the
 // (mocked) chime, a pre-seeded 'false' renders off.
+// 2026-10-19, Claude Code (Fable 5), issue #221: fixtures carry
+// courierId instead of the retired enriched courierName (D32 supersedes
+// D30/D31) — the stub answers GET /users/{id} from a per-test name map,
+// name-bearing titles are awaited (hydration adds a round-trip), and
+// the degrade case is an id the map doesn't know (settled 404 →
+// actor-less copy). clearUsernameCache() runs per test: the resolver's
+// module-scoped cache would otherwise bleed names across tests.
+// 2026-10-19, Claude Code (Fable 5), PR #222 review (@Sinnez1): the
+// degrade case now waits for the usr-ghost lookup to settle before
+// asserting — the same copy renders pre-settle, so the old assertion
+// could not fail on the behaviour it checked.
 
 import {
   act,
@@ -33,6 +44,7 @@ import type {
   NotificationDto,
   PageResponse,
 } from '@/features/notifications/types'
+import { clearUsernameCache } from '@/features/user/usernames'
 import { routes } from '../routes'
 
 vi.mock('@/lib/api/config', () => ({
@@ -96,6 +108,9 @@ function notification(
 }
 
 // per-test server state the dispatching fetch stub answers from
+// id → username the public-profile route answers; unknown ids 404 and
+// the row keeps its actor-less copy (D32 read-time hydration)
+let usernamesOnServer: Record<string, string> = {}
 let pages: Array<PageResponse<NotificationDto>> = []
 let unreadPages: Array<PageResponse<NotificationDto>> = []
 let unreadCountOnServer = 0
@@ -155,6 +170,10 @@ beforeEach(() => {
   localStorage.clear()
   chime.playChime.mockClear()
   stomp.instances.length = 0
+  // the resolver's cache is module-scoped; a leftover entry would let a
+  // test pass on a name some earlier test resolved
+  clearUsernameCache()
+  usernamesOnServer = { 'usr-cou-2002': 'courier_maya' }
   pages = [pageOf([], 0, 0, 0)]
   unreadPages = [pageOf([], 0, 0, 0)]
   unreadCountOnServer = 0
@@ -176,6 +195,16 @@ beforeEach(() => {
         role: 'USER',
         createdAt: '2026-09-01T00:00:00Z',
       })
+    }
+    // the hydration route (D32): after the /users/me branch on purpose,
+    // so `me` can never fall through to an id lookup
+    const profile = /^http:\/\/user\.test\/users\/([^/?]+)$/.exec(url)
+    if (profile) {
+      const username = usernamesOnServer[decodeURIComponent(profile[1])]
+      if (username === undefined) {
+        return jsonResponse(404, { status: 404, detail: 'User not found' })
+      }
+      return jsonResponse(200, { username })
     }
     if (url.includes('/notifications/me/unread-count')) {
       // the count the server would have reported when the request
@@ -287,12 +316,13 @@ function connectPush() {
 const pushFrame = (dto: NotificationDto) =>
   ({ body: JSON.stringify(dto) }) as Parameters<messageCallbackType>[0]
 
-// "Request #1048 accepted by courier_maya"
+// "Request #1048 accepted by courier_maya" once usr-cou-2002 hydrates
+// (the beforeEach name map knows it)
 const acceptedBy = (id: number) =>
   notification(
     id,
     'request.accepted',
-    { requestId: '1048', courierName: 'courier_maya' },
+    { requestId: '1048', courierId: 'usr-cou-2002' },
     false,
   )
 
@@ -306,7 +336,7 @@ describe('notification center page', () => {
           notification(
             3,
             'request.accepted',
-            { requestId: '1048', courierName: 'courier_maya' },
+            { requestId: '1048', courierId: 'usr-cou-2002' },
             false,
           ),
           notification(
@@ -332,8 +362,9 @@ describe('notification center page', () => {
     unreadCountOnServer = 2
     await renderCenter()
 
-    // display-name copy (backend D29) and the catalog templates
-    const unreadRow = screen.getByRole('button', {
+    // display-name copy hydrates from courierId at read time (D32) —
+    // awaited, since the lookup is a round-trip behind the first paint
+    const unreadRow = await screen.findByRole('button', {
       name: 'Request #1048 accepted by courier_maya — unread, select to mark read',
     })
     expect(unreadRow).toBeEnabled()
@@ -356,11 +387,17 @@ describe('notification center page', () => {
           notification(
             2,
             'request.dropped',
-            { requestId: '1051', courierName: 'courier_maya' },
+            { requestId: '1051', courierId: 'usr-cou-2002' },
             false,
           ),
-          // enrichment can fail (D30): the copy degrades, never breaks
-          notification(1, 'request.dropped', { requestId: '1052' }, false),
+          // a lookup can fail (D32: deleted user, 404): the copy
+          // degrades, never breaks — usr-ghost is not in the name map
+          notification(
+            1,
+            'request.dropped',
+            { requestId: '1052', courierId: 'usr-ghost' },
+            false,
+          ),
         ],
         0,
         1,
@@ -370,9 +407,19 @@ describe('notification center page', () => {
     unreadCountOnServer = 2
     await renderCenter()
 
-    screen.getByRole('button', {
+    await screen.findByRole('button', {
       name: 'Request #1051 dropped by courier_maya — unread, select to mark read',
     })
+    // wait for the usr-ghost lookup itself to settle: the actor-less
+    // copy also renders before the 404 lands, so asserting it without
+    // this could never fail (PR #222 review)
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/users/usr-ghost'),
+        expect.anything(),
+      ),
+    )
+    await act(async () => {})
     screen.getByRole('button', {
       name: 'Request #1052 was dropped by its courier — unread, select to mark read',
     })
@@ -563,19 +610,22 @@ describe('notification center page', () => {
           notification(
             99,
             'request.accepted',
-            { requestId: '1048', courierName: 'courier_maya' },
+            { requestId: '1048', courierId: 'usr-cou-2002' },
             false,
           ),
         ),
       } as Parameters<messageCallbackType>[0])
     })
 
-    const list = screen.getByRole('list')
-    const rows = within(list).getAllByRole('button')
-    expect(rows[0]).toHaveAccessibleName(
-      'Request #1048 accepted by courier_maya — unread, select to mark read',
-    )
-    expect(rows).toHaveLength(2)
+    // the pushed frame carries IDs only; its name hydrates through the
+    // same seam as the fetched rows (D32) — await the resolved copy
+    await waitFor(() => {
+      const rows = within(screen.getByRole('list')).getAllByRole('button')
+      expect(rows[0]).toHaveAccessibleName(
+        'Request #1048 accepted by courier_maya — unread, select to mark read',
+      )
+      expect(rows).toHaveLength(2)
+    })
   })
 
   test('a failed list load shows the problem+json detail in the error banner', async () => {
@@ -683,11 +733,13 @@ describe('notification center page', () => {
       held.release()
     })
 
-    const rows = listRows()
-    expect(rows).toHaveLength(2)
-    // newest on top, and not replaced away by the stale page
-    expect(rows[0]).toHaveAccessibleName(
-      'Request #1048 accepted by courier_maya — unread, select to mark read',
+    expect(listRows()).toHaveLength(2)
+    // newest on top, and not replaced away by the stale page; the name
+    // arrives when the courierId hydrates
+    await waitFor(() =>
+      expect(listRows()[0]).toHaveAccessibleName(
+        'Request #1048 accepted by courier_maya — unread, select to mark read',
+      ),
     )
   })
 

@@ -21,6 +21,12 @@
  * PR #205 review: the lookup moved OUTSIDE the transaction (programmatic
  * TransactionTemplate replaces @Transactional) so a user-service stall
  * can no longer hold a pooled DB connection mid-ingest.
+ * 2026-10-19, Claude Code (Fable 5), issue #221: ingest-time name
+ * enrichment removed per the author's D32 decision (options Q&A,
+ * superseding D30/D31) — payloads carry party IDs only and the web
+ * hydrates names at read time. Reverted to @Transactional: the
+ * lookup-before-transaction ordering was the sole reason for the
+ * programmatic TransactionTemplate.
  */
 package foc.notification.service;
 
@@ -32,7 +38,7 @@ import foc.notification.repository.ProcessedEventRepository;
 import java.util.Map;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -55,70 +61,42 @@ import tools.jackson.databind.ObjectMapper;
  * STOMP push gateway) receive it only after the commit, and discarded
  * events publish nothing.
  *
- * <p>Everything else comes from the event alone (F1.1, amended by
- * D30): the one outward call is the best-effort username lookup per
- * party-id field, through {@link UserDirectory} — cached, finite
- * timeouts, and empty on any failure, so it can slow an ingest but
- * never fail one. The lookup runs BEFORE the transaction opens (PR
- * #205 review), so a stalled user-service delays the listener thread
- * but never holds a pooled DB connection; the price is that duplicate
- * deliveries resolve names too, which the adapter's cache absorbs.
- * That ordering is why the transaction is programmatic
- * ({@link TransactionTemplate}): with {@code @Transactional} on this
- * method the lookup would sit inside it.
+ * <p>Everything comes from the event alone (F1.1) — this processor
+ * makes no outward calls. Party-id fields (requesterId, courierId)
+ * stay IDs in the stored payload; the web resolves them to usernames
+ * at read time (D32, superseding D30's ingest-time enrichment).
  */
 @Service
 class IdempotentEventProcessor implements EventProcessor {
-
-	/** Party-id payload fields and the display-name field each feeds (D30). */
-	private static final Map<String, String> PARTY_NAME_FIELDS = Map.of(
-			"requesterId", "requesterName",
-			"courierId", "courierName");
 
 	private final ProcessedEventRepository processedEvents;
 	private final NotificationRepository notifications;
 	private final ObjectMapper objectMapper;
 	private final ApplicationEventPublisher eventPublisher;
-	private final UserDirectory userDirectory;
-	private final TransactionTemplate transactionTemplate;
 
 	IdempotentEventProcessor(ProcessedEventRepository processedEvents,
 			NotificationRepository notifications,
 			ObjectMapper objectMapper,
-			ApplicationEventPublisher eventPublisher,
-			UserDirectory userDirectory,
-			TransactionTemplate transactionTemplate) {
+			ApplicationEventPublisher eventPublisher) {
 		this.processedEvents = processedEvents;
 		this.notifications = notifications;
 		this.objectMapper = objectMapper;
 		this.eventPublisher = eventPublisher;
-		this.userDirectory = userDirectory;
-		this.transactionTemplate = transactionTemplate;
 	}
 
 	@Override
+	@Transactional
 	public void process(DomainEvent event) {
-		// the one outward call, before any connection is held: a slow
-		// user-service may stall this listener thread, never the DB pool
-		Map<String, Object> fields = businessFields(event);
-		PARTY_NAME_FIELDS.forEach((idField, nameField) -> {
-			if (fields.get(idField) instanceof String userId) {
-				userDirectory.usernameOf(userId).ifPresent(name -> fields.put(nameField, name));
-			}
-		});
-		String payloadJson = objectMapper.writeValueAsString(fields);
-
-		transactionTemplate.executeWithoutResult(status -> {
-			if (processedEvents.existsById(event.eventId())) {
-				return;
-			}
-			processedEvents.save(new ProcessedEvent(event.eventId()));
-			for (String party : event.parties()) {
-				Notification saved = notifications.save(new Notification(party, event.eventId(),
-						event.eventType(), payloadJson, event.occurredAt()));
-				eventPublisher.publishEvent(new NotificationStoredEvent(saved));
-			}
-		});
+		if (processedEvents.existsById(event.eventId())) {
+			return;
+		}
+		processedEvents.save(new ProcessedEvent(event.eventId()));
+		String payloadJson = objectMapper.writeValueAsString(businessFields(event));
+		for (String party : event.parties()) {
+			Notification saved = notifications.save(new Notification(party, event.eventId(),
+					event.eventType(), payloadJson, event.occurredAt()));
+			eventPublisher.publishEvent(new NotificationStoredEvent(saved));
+		}
 	}
 
 	@SuppressWarnings("unchecked")

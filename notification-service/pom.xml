@@ -36,6 +36,9 @@
   ingest-time username lookups (author decision D30 via options Q&A) —
   Boot 4 ships RestClient.Builder auto-config in its own starter.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-10-19, Claude Code (Fable 5), issue #221: starter-restclient
+  removed with the RestUserDirectory adapter (D32 supersedes D30/D31 —
+  the web hydrates names at read time; no sync user-service call).
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -91,10 +94,6 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-redis</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-restclient</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

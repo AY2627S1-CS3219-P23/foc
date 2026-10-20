@@ -25,6 +25,9 @@
  * author's D30 (options Q&A): the fields left the records again, and
  * the pushed frame's names now prove the ingest-time UserDirectory
  * enrichment (stubbed, like the denylist) reaches the live push.
+ * 2026-10-19, Claude Code (Fable 5), issue #221: UserDirectory stub
+ * removed with the lookup (D32 supersedes D30/D31) — the frame
+ * assertion now pins an IDs-only payload; the web hydrates names.
  */
 package foc.notification.messaging.stomp;
 
@@ -37,7 +40,6 @@ import foc.contracts.events.request.RequestCollected;
 import foc.notification.security.TokenDenylist;
 import foc.notification.service.EventProcessor;
 import foc.notification.service.NotificationDto;
-import foc.notification.service.UserDirectory;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.lang.reflect.Type;
@@ -122,23 +124,6 @@ class StompPushIntegrationTest {
 					return cutoff != null && issuedAt.isBefore(cutoff);
 				}
 			};
-		}
-	}
-
-	/**
-	 * Stubs the D30 ingest-time username lookup (the REST adapter has
-	 * its own unit test): the frame assertions prove enriched names
-	 * reach the pushed payload.
-	 */
-	@TestConfiguration
-	static class StubUserDirectoryConfig {
-		@Bean
-		@Primary
-		UserDirectory stubUserDirectory() {
-			Map<String, String> names = Map.of(
-					"usr-req-1001", "maya",
-					"usr-cou-2002", "marcus");
-			return userId -> java.util.Optional.ofNullable(names.get(userId));
 		}
 	}
 
@@ -255,12 +240,12 @@ class StompPushIntegrationTest {
 		assertThat(frame).isNotNull();
 		assertThat(frame.id()).isNotNull();
 		assertThat(frame.eventType()).isEqualTo("request.accepted");
+		// Party fields stay IDs — no display-name keys in the frame; the
+		// web hydrates courierId at read time (D32).
 		assertThat(frame.payload()).isEqualTo(Map.of(
 				"requestId", "ord-push-1",
 				"requesterId", "usr-req-1001",
-				"requesterName", "maya",
 				"courierId", "usr-cou-2002",
-				"courierName", "marcus",
 				"pickupLocation", "Techno Edge",
 				"dropoffLocation", "COM3-01-19",
 				"note", "push"));

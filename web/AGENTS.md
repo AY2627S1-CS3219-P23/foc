@@ -39,6 +39,12 @@
   with the same switch — neither is drawn; both surfaces were the
   author's call via options Q&A.
   Author review: Leong Wei Zhi to review via the PR.
+  2026-10-19, Claude Code (Fable 5), issue #221: the
+  notification-center.png row notes that courier names now hydrate
+  client-side (D32, read-time lookup) — a row can render actor-less for
+  a beat and then name its courier in place (title and aria-label
+  update together). Author decision via options Q&A.
+  Author review: Leong Wei Zhi to review via the PR.
 -->
 
 # web/ — Frontend Agent Guide
@@ -86,7 +92,7 @@ first**; they cost nothing to read, unlike Figma MCP calls:
 | `docs/wireframes/admin-dashboard.png` | Admin dashboard — user/vendor management |
 | `docs/wireframes/forgot-password.png` | Forgot/reset password — email step + reset form |
 | `docs/wireframes/account-recovery.png` | Account recovery — restore a deleted account within 30 days |
-| `docs/wireframes/notification-center.png` | Notification center — bell with unread badge, read/unread list, empty state (built in the web half of issue #66: rows, blue unread dot, grayed read rows, "Mark all as read", empty-state copy as drawn; three additions the wireframe doesn't show, each an author decision via options Q&A — an **All/Unread filter toggle**, a **"Load more"** button (the wireframe draws no paging control; the REST list is paged), and **clicking an unread row marks it read** (no per-row control is drawn; mark-unread exists in the API but has no UI affordance); a fourth addition from the notification-sound follow-up — a **header sound toggle** muting the arrival chime, mirrored by the profile page's Preferences switch (author decision via options Q&A)) |
+| `docs/wireframes/notification-center.png` | Notification center — bell with unread badge, read/unread list, empty state (built in the web half of issue #66: rows, blue unread dot, grayed read rows, "Mark all as read", empty-state copy as drawn; three additions the wireframe doesn't show, each an author decision via options Q&A — an **All/Unread filter toggle**, a **"Load more"** button (the wireframe draws no paging control; the REST list is paged), and **clicking an unread row marks it read** (no per-row control is drawn; mark-unread exists in the API but has no UI affordance); a fourth addition from the notification-sound follow-up — a **header sound toggle** muting the arrival chime, mirrored by the profile page's Preferences switch (author decision via options Q&A); and one rendering note from issue #221 — **courier names hydrate client-side** (D32 read-time lookup through the gateway), so a freshly loaded or pushed row can show the actor-less copy briefly before the name resolves in place) |
 | `docs/wireframes/add-edit-supplier.png` | Add/edit supplier (admin) — form modal + delete confirmation |
 | `docs/wireframes/public-profile.png` | Public profile — another user's minimal profile view |
 | `docs/wireframes/rating-review.png` | Rating & review — post-completion star rating, write-up, report user |

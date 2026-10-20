@@ -186,6 +186,12 @@
   2026-10-18: AI Use Summary extended for the issue #165 follow-ups
   (a duplicate reservation resends its reply, the contract test's
   parties check, the credit legend) by Claude Code (Opus 5.5).
+  2026-10-19: AI Use Summary extended for the credit outbox retention
+  purge (issue #218) by Claude Code (Opus 5.5).
+  2026-10-19: AI Use Summary extended for the supplier bookmarks N8
+  documentation (issues #225-#227) by Claude Code (Sonnet 5.5); same
+  day, extended for D13 (how the supplier list flags and orders
+  bookmarks).
   Author review: Ryan Ang, pending pull request review.
   2026-10-20: AI Use Summary extended for the order lists' state groups
   and My Requests' PENDING refetch, and for lost races answered 409, by
@@ -210,7 +216,7 @@ withdrawn, or exchanged for money, and only circulate within the platform.
 | Name | Service In-Charge | Nice-to-have |
 | ----- | ----- | ----- |
 | Kwey Xiu Xi | User Service | Cloud Deployment and DevOps |
-| Alastair Tan Choon Wei | Supplier Service | — |
+| Alastair Tan Choon Wei | Supplier Service | Supplier Bookmarks |
 | Aung Ko Khant | Order Service | Centralized Logging |
 | Ryan Ang Jun Wen | Credit Service | Order History |
 | Leong Wei Zhi | Notification Service | Rating System |
@@ -636,7 +642,14 @@ window and how often the web app reads it decided by the team and
 recorded there, and its web half (the Available card's line for the
 soonest credits to expire and a notice when they expire within 7
 days, in Singapore dates, with their tests), where they are shown and
-the wording also decided by the team.
+the wording also decided by the team; and the outbox retention purge
+(issue #218: a daily job deleting sent replies past the retention
+window, its bulk delete, the V3 partial index on `sent_at`, the
+configuration in compose and `.env.example`, and their unit and
+Postgres tests), written to D13 of `docs/credit-service.md`, with
+which rows go, the column the window counts from, the window and
+schedule, the startup check, the index and keeping every other table
+decided by the team and recorded there.
 
 The logout denylist and API gateway (issue #151): the user-service
 logout endpoint, Redis denylist writer and V6 migration with their
@@ -887,6 +900,30 @@ Zhi's PR #212 review suggestions: the Credit F2.1.3 requirement text
 restored and left in "Requirements to revise" for the team, the resent
 reply's comments and docs corrected, and the reserve and `parties()`
 comments extended.
+
+Claude Code (Sonnet 5.5) drafted the documentation for the supplier
+bookmarks nice-to-have (N8, issues #225-#227): this README's team table,
+`docs/architecture.md`, `docs/supplier-service.md` and its diagram. It
+transcribed only what Alastair Tan Choon Wei decided (bookmarks owned by
+supplier-service, a 5-bookmark cap enforced in both frontend and backend
+with a 409 response, a bookmark removed when its supplier is deleted, and how the supplier
+list flags and orders bookmarks);
+the mechanism for cleaning up bookmarks when an account is purged is
+marked open for the team.
+
+Claude Code (Fable 5) removed the system's only synchronous
+inter-service call (issue #221): notification-service's ingest-time
+username enrichment and its internal-token credential
+(`docs/notification-service.md` D30/D31) are superseded by D32 —
+notifications store party IDs only, and the web resolves `courierId` to
+a username at read time through the gateway with the caller's own JWT
+(`web/src/features/user/usernames.ts`: per-id lookups behind a TTL
+cache with in-flight dedupe), the actor-less copy doubling as the
+loading and lookup-failed rendering. The design (per-id + SPA cache
+over a batch endpoint, removing the token machinery in the same PR,
+ignoring the stored name keys of old rows) was decided by Leong Wei Zhi
+via neutral options Q&A, recorded in the design doc and
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

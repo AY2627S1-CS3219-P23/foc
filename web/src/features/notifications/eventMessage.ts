@@ -15,6 +15,11 @@
 // degrade-without-name pattern as request.accepted); pending pull
 // request review.
 // Reviewed by: Leong Wei Zhi (via pull request).
+// 2026-10-19, Claude Code (Fable 5), issue #221: read-time hydration per
+// the author's D32 decision (options Q&A, supersedes D30/D31) — payloads
+// carry courierId only; the caller passes a resolved-name map and the
+// stored requesterName/courierName keys of pre-D32 rows are ignored.
+// The actor-less copy doubles as the loading/lookup-failed rendering.
 
 import type { NotificationDto } from './types'
 
@@ -37,9 +42,18 @@ function requestLabel(payload: Record<string, unknown>): string {
   return /^\d+$/.test(id) ? `Request #${id}` : `Request ${id}`
 }
 
+// The courier party field — the only id the templates render today
+// (requesterId rides on every request event but no copy uses it).
+export function courierIdOf(payload: Record<string, unknown>): string | null {
+  return text(payload, 'courierId')
+}
+
 const templates: Record<
   string,
-  (payload: Record<string, unknown>) => NotificationMessage
+  (
+    payload: Record<string, unknown>,
+    courier: string | null,
+  ) => NotificationMessage
 > = {
   'request.created': (p) => ({
     icon: '📝',
@@ -58,24 +72,18 @@ const templates: Record<
         : `${requestLabel(p)} rejected`,
     }
   },
-  'request.accepted': (p) => {
-    const courier = text(p, 'courierName')
-    return {
-      icon: '✅',
-      title: courier
-        ? `${requestLabel(p)} accepted by ${courier}`
-        : `${requestLabel(p)} accepted`,
-    }
-  },
-  'request.collected': (p) => {
-    const courier = text(p, 'courierName')
-    return {
-      icon: '📦',
-      title: courier
-        ? `${requestLabel(p)} collected by ${courier}`
-        : `${requestLabel(p)} collected`,
-    }
-  },
+  'request.accepted': (p, courier) => ({
+    icon: '✅',
+    title: courier
+      ? `${requestLabel(p)} accepted by ${courier}`
+      : `${requestLabel(p)} accepted`,
+  }),
+  'request.collected': (p, courier) => ({
+    icon: '📦',
+    title: courier
+      ? `${requestLabel(p)} collected by ${courier}`
+      : `${requestLabel(p)} collected`,
+  }),
   'request.courier-arrived': (p) => ({
     icon: '📍',
     title: `Courier has arrived at drop-off for ${requestLabel(p)}`,
@@ -84,15 +92,12 @@ const templates: Record<
     icon: '✔️',
     title: `${requestLabel(p)} marked as completed`,
   }),
-  'request.dropped': (p) => {
-    const courier = text(p, 'courierName')
-    return {
-      icon: '↩️',
-      title: courier
-        ? `${requestLabel(p)} dropped by ${courier}`
-        : `${requestLabel(p)} was dropped by its courier`,
-    }
-  },
+  'request.dropped': (p, courier) => ({
+    icon: '↩️',
+    title: courier
+      ? `${requestLabel(p)} dropped by ${courier}`
+      : `${requestLabel(p)} was dropped by its courier`,
+  }),
   'request.cancelled': (p) => ({
     icon: '🚫',
     title: `${requestLabel(p)} cancelled`,
@@ -103,11 +108,19 @@ const templates: Record<
   }),
 }
 
+// names: courierId → username, resolved at read time by the caller
+// (D32). A missing entry — still loading, lookup failed, user deleted —
+// falls through to the actor-less copy, exactly like D30's absent key.
 export function notificationMessage(
   notification: NotificationDto,
+  names: ReadonlyMap<string, string> = new Map(),
 ): NotificationMessage {
   const template = templates[notification.eventType]
-  if (template) return template(notification.payload)
+  if (template) {
+    const courierId = courierIdOf(notification.payload)
+    const courier = courierId === null ? null : (names.get(courierId) ?? null)
+    return template(notification.payload, courier)
+  }
   // an unknown type still renders (D18: new types need no web release) —
   // name the type rather than invent a claim about it
   return { icon: '🔔', title: `Update: ${notification.eventType}` }

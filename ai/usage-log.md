@@ -68,6 +68,91 @@ Entry template:
   reserved -> Open), accept, pick up, arrive, confirm; balances moved
   5 -> 2 (requester) and 5 -> 8 (courier); History checked at 390 px. To
   be reviewed via pull request.
+## 2026-10-19 — Leong Wei Zhi (issue #221: D32 read-time name hydration, supersedes D30/D31)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** refactor
+- **Scope:** removed the system's only synchronous inter-service call —
+  notification-service's ingest-time username enrichment (D30) and its
+  `X-Internal-Token` credential (D31). notification-service: `UserDirectory`
+  port, `RestUserDirectory` adapter (+ test) deleted; `IdempotentEventProcessor`
+  stores IDs-only payloads and reverted to `@Transactional` (the
+  lookup-before-transaction ordering was `TransactionTemplate`'s only
+  reason); `notification.user-service.*` yaml keys and
+  `spring-boot-starter-restclient` dropped. user-service:
+  `InternalServiceTokenFilter`, its SecurityConfig wiring,
+  `user.internal.service-token` and the four token tests deleted
+  (`GET /users/{id}` stays authenticated — now the web's hydration source).
+  web: new `features/user/usernames.ts` (per-id `GET /api/user/users/{id}`
+  via the gateway, 10 m/30 s TTL cache, in-flight dedupe, `useUsernames`
+  hook + unit tests); `eventMessage.ts` reads `courierId` against a
+  resolved-name map (stored name keys of old rows ignored);
+  `NotificationCenter` hydrates REST rows and STOMP frames at one seam.
+  compose.yaml/.env.example: `USER_SERVICE_BASE_URL` +
+  `INTERNAL_SERVICE_TOKEN` plumbing removed. docs/notification-service.md:
+  D32 row, "Display names (D32)" section, catalog/config notes.
+- **Prompt(s):** "check if synchronous communication between microservices
+  exist", "is this anti pattern? what are the alternatives", "what would
+  industry do?", then "/plan make a plan to remove this synchronous call
+  using [read-time hydration industry pattern]. Create a new github issue
+  for the created pr to resolve." Design decided by the author via neutral
+  options Q&A: per-id lookups + SPA cache (no batch endpoint), internal-token
+  machinery removed in the same PR, web always hydrates (ignores stored
+  name keys, no migration), Claude opens the PR closing #221.
+- **Author review:** Leong Wei Zhi to review via the PR. Verified:
+  notification-service + user-service `./mvnw clean test`, web `npm test`
+  (279) + `npm run build`, compose config parse, dead-reference grep.
+
+## 2026-10-19 — Ryan Ang (PR #224 review: outbox retention purge off in tests)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + docs)
+- **Prompt(s):** asked to review the PR #224 comments, then to apply the
+  fix for the one inline finding.
+- **Scope:** `credit-service/`. PR review found the purge's
+  cron live in every test context, unlike the other two scheduled
+  components. Following the reviewer's suggestion and the existing
+  pattern: `OutboxRetentionScheduler` gains
+  `@ConditionalOnProperty(credit.outbox.retention.enabled, matchIfMissing
+  = true)` and its "off in tests" javadoc line; `application-test.yaml`
+  sets it to `false`; the service's `AGENTS.md` and README note it.
+  Deployed behaviour is unchanged (the property is unset there).
+- **Verification:** full credit-service suite (`./mvnw test`): 268
+  tests, 0 failures, 0 errors, 0 skipped.
+- **Author review:** Ryan Ang, pending pull request review.
+
+## 2026-10-19 — Ryan Ang (credit-service: outbox retention purge, issue #218)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate (code + tests + docs)
+- **Source:** the team's decisions on issue #218: only sent rows are
+  purged, the window counts from `sent_at`, 30 days and 03:00
+  Asia/Singapore as `CREDIT_OUTBOX_RETENTION_DAYS` /
+  `CREDIT_OUTBOX_PURGE_CRON`, a partial index on `sent_at`, a new
+  migration, the window refused below 1 at startup, and nothing but
+  `outbox_event` purged.
+- **Scope:** `credit-service/`, `docs/credit-service.md`, `compose.yaml`,
+  `.env.example`.
+  - `V3__outbox_event_sent_index.sql`: partial index on
+    `outbox_event (sent_at) where sent_at is not null`.
+  - `OutboxEventRepository.deleteSentBefore`: one bulk delete of the
+    sent rows before a cutoff.
+  - `service/OutboxRetentionScheduler`: daily cron in Singapore time,
+    cutoff = now minus the window; a window below 1 fails construction.
+    Follows notification-service's `RetentionPurgeScheduler`.
+  - `application.yaml`, `compose.yaml`, `.env.example`: the two settings.
+  - Tests: `OutboxEventRepositoryTest` (3 new, real Postgres: sent before
+    the cutoff deleted, at or after it kept, unsent never deleted, the
+    V3 index present) and `OutboxRetentionSchedulerTest` (3: the cutoff,
+    0 and -1 refused).
+  - Docs: D13 in the design doc (with the team's reasons, including why
+    the ledger tables are kept unlike Notification's `processed_events`),
+    the components, the `outbox_event` row and a failure-table row; the
+    service's `AGENTS.md` and README; the README AI Use Summary.
+- **Prompt(s):** Implement credit outbox purge, following schedule of Notification 
+    Service.
+- **Verification:** full credit-service suite (`./mvnw test`,
+  Testcontainers Postgres and RabbitMQ): 268 tests, 0 failures, 0
+  errors, 0 skipped. `docker compose config` renders both settings;
+  `git diff --check` clean.
+- **Author review:** Ryan Ang, pending pull request review.
 
 ## 2026-10-18 — Aung Ko Khant (order-service: hide past-deadline requests)
 - **Tool:** Claude Code (Opus 5.5)
@@ -5766,3 +5851,34 @@ Entry template:
 - **Verification:** order-service `mvn test` in a
   maven:3.9-eclipse-temurin-21 container (103 passed).
 - **Author review:** Aung Ko Khant, pending pull request review.
+## 2026-10-19 — Alastair Tan Choon Wei (docs: supplier bookmarks N8)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** docs
+- **Scope:** `README.md` (team table, AI Use Summary),
+  `docs/architecture.md` (scope paragraph, open decision),
+  `docs/supplier-service.md` (N8 requirements, D9-D12, component, entity)
+  and `docs/supplier-service.mmd` (bookmark API and table). Issue #226.
+- **Prompt(s):** "help me add the new N2H feature to the required docs,
+  in a separate branch." Only the author's decisions from #225 were
+  transcribed (supplier-service owns the table; 409 on a sixth
+  bookmark, cap enforced in frontend and backend; bookmark removed when
+  its supplier is deleted; no gateway change). Endpoint paths, column
+  names and the account-purge cleanup mechanism were not decided, so
+  they are marked TBD.
+- **Author review:** Alastair Tan Choon Wei to review before opening
+  the PR.
+
+## 2026-10-19 — Alastair Tan Choon Wei (docs: supplier bookmarks D13)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** docs
+- **Scope:** `docs/supplier-service.md` (D13, N8.3/N8.4, browse/search
+  component, bookmark entity), `docs/supplier-service.mmd` (browse/search
+  label), `README.md` (AI Use Summary and header line). Issue #226.
+- **Prompt(s):** "ill stick to option 1. help me update the relevant
+  docs." The tool compared the two options and the changes option 1
+  needs in `GET /suppliers`; the author chose option 1 and decided the
+  ordering: bookmarked first by default, most recently bookmarked first,
+  and no bookmark precedence once a filter such as nearest-to-me is
+  applied. Only those decisions were transcribed.
+- **Author review:** Alastair Tan Choon Wei to review before opening
+  the PR.
