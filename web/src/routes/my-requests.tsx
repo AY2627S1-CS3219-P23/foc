@@ -12,6 +12,11 @@
 // from the request's detail and user-service.
 // 2026-10-19: the filter offers only All, Open, Accepted, Collected,
 // Arrived and Completed (the author's choice).
+// 2026-10-20: only active requests live here (All active by default,
+// sent as one comma-separated state list); completed, cancelled,
+// expired and rejected ones are in History (the author's decision).
+// 2026-10-20: while a request is PENDING the list is refetched every 2
+// seconds (the author's request), until credit reservation settles it.
 // Author review: [pending]
 
 import { useEffect, useState } from 'react'
@@ -20,9 +25,13 @@ import { Link, useLocation } from 'react-router'
 import { orderApi } from '@/features/order/api'
 import { Banner } from '@/features/order/components/Banner'
 import { OrderProgress } from '@/features/order/components/OrderProgress'
-import { StateFilter } from '@/features/order/components/StateFilter'
+import {
+  StateFilter,
+  type FilterOption,
+} from '@/features/order/components/StateFilter'
 import { StatusChip } from '@/features/order/components/StatusChip'
 import {
+  activeStatuses,
   autoCompleteAt,
   credits,
   deadlineLine,
@@ -41,20 +50,25 @@ import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import { Pagination } from '@/shared/components/Pagination'
 
 const PAGE_SIZE = 10
-// The states a requester follows a request through (the author's choice);
-// PENDING, REJECTED, CANCELLED and EXPIRED still show under All.
-const FILTERS: (RequestStatus | undefined)[] = [
-  undefined,
-  'CREATED',
-  'ACCEPTED',
-  'COLLECTED',
-  'ARRIVED',
-  'COMPLETED',
+// How often the list is refetched while a request is still PENDING.
+const PENDING_POLL_MS = 2000
+// Active requests only (the author's choice): "All active" also covers
+// PENDING, which has no chip of its own. Finished ones are in History.
+const ALL_ACTIVE: FilterOption = {
+  key: 'ALL',
+  label: 'All active',
+  states: activeStatuses,
+}
+const FILTERS: FilterOption[] = [
+  ALL_ACTIVE,
+  ...(['CREATED', 'ACCEPTED', 'COLLECTED', 'ARRIVED'] as RequestStatus[]).map(
+    (s) => ({ key: s, label: statusLabels[s], states: [s] }),
+  ),
 ]
 
 export function MyRequests() {
   const location = useLocation()
-  const [state, setState] = useState<RequestStatus | undefined>(undefined)
+  const [filter, setFilter] = useState<FilterOption>(ALL_ACTIVE)
   const [requests, setRequests] = useState<RequestSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -72,7 +86,12 @@ export function MyRequests() {
   useEffect(() => {
     let cancelled = false
     orderApi
-      .listMyRequests({ role: 'requester', state, page, size: PAGE_SIZE })
+      .listMyRequests({
+        role: 'requester',
+        state: filter.states,
+        page,
+        size: PAGE_SIZE,
+      })
       .then((result) => {
         if (cancelled) return
         setRequests(result.content)
@@ -93,12 +112,21 @@ export function MyRequests() {
     return () => {
       cancelled = true
     }
-  }, [state, page, refreshKey])
+  }, [filter, page, refreshKey])
 
-  function selectState(next: RequestStatus | undefined) {
-    if (next === state) return
+  // A PENDING request becomes CREATED or REJECTED once credit-service
+  // answers, so keep refetching while one is shown. Each refetch is timed
+  // from the last response, so a slow one is never cut short.
+  useEffect(() => {
+    if (!requests.some((r) => r.status === 'PENDING')) return
+    const timer = setTimeout(() => setRefreshKey((k) => k + 1), PENDING_POLL_MS)
+    return () => clearTimeout(timer)
+  }, [requests])
+
+  function selectFilter(next: FilterOption) {
+    if (next.key === filter.key) return
     setLoading(true)
-    setState(next)
+    setFilter(next)
     setPage(0)
   }
 
@@ -151,8 +179,8 @@ export function MyRequests() {
       <StateFilter
         label="Filter by state"
         options={FILTERS}
-        value={state}
-        onChange={selectState}
+        value={filter.key}
+        onChange={selectFilter}
       />
 
       {notice && <Banner kind="success">{notice}</Banner>}
@@ -163,12 +191,16 @@ export function MyRequests() {
       ) : requests.length === 0 ? (
         <div className="rounded-lg border border-gray-200 bg-white py-10 text-center">
           <p className="font-medium text-gray-900">
-            {state
-              ? `No ${statusLabels[state].toLowerCase()} requests.`
-              : 'You have no requests yet.'}
+            {filter.key === ALL_ACTIVE.key
+              ? 'You have no active requests.'
+              : `No ${filter.label.toLowerCase()} requests.`}
           </p>
           <p className="mt-1 text-sm text-gray-500">
-            Need something collected on campus? Create a request.
+            Finished requests are in{' '}
+            <Link to="/history" className="underline hover:text-gray-900">
+              History
+            </Link>
+            . Need something collected on campus? Create a request.
           </p>
         </div>
       ) : (
@@ -183,7 +215,7 @@ export function MyRequests() {
                 run(
                   request,
                   () => orderApi.complete(request.id),
-                  `Delivery confirmed — ${credits(request.creditAmount)} paid to your courier.`,
+                  `Delivery confirmed — ${credits(request.creditAmount)} paid to your courier. It is now in History.`,
                 )
               }
             />
@@ -214,7 +246,7 @@ export function MyRequests() {
             await run(
               request,
               () => orderApi.cancel(request.id),
-              `Request #${request.id} cancelled — ${credits(request.creditAmount)} released back to your balance.`,
+              `Request #${request.id} cancelled — ${credits(request.creditAmount)} released back to your balance. It is now in History.`,
             )
             setPendingCancel(null)
           }}

@@ -10,6 +10,8 @@
 // list parameters. Where the two differed the frontend was adapted to the
 // backend (author decision); dispute and re-release are gone, since the
 // backend has neither.
+// 2026-10-20: ListMineParams.state is a list (order-service takes several
+// states, comma-separated).
 // Author review: [pending]
 
 // order-service's OrderStates, by name
@@ -75,7 +77,8 @@ export interface ListOpenParams {
 
 export interface ListMineParams extends ListOpenParams {
   role: RequestRole
-  state?: RequestStatus // omitted: every state
+  // any of these states, sent comma-separated; omitted: every state
+  state?: RequestStatus[]
 }
 
 export interface SupplierOption {

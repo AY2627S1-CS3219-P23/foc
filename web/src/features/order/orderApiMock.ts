@@ -19,6 +19,7 @@
 // deadline is a 409; the open list is CREATED with the deadline ahead; and
 // the expiry and 1-hour auto-complete timers run on every call. It is NOT a
 // spec for the backend: order-service is.
+// 2026-10-20: the state filter takes several states.
 // Author review: [pending]
 
 import { adminUserApi } from '@/features/user/adminApi'
@@ -259,7 +260,7 @@ export const mockOrderApi = {
         (r) =>
           (params.role === 'requester' ? r.requesterId : r.courierId) ===
             meId &&
-          (params.state === undefined || r.status === params.state),
+          (params.state === undefined || params.state.includes(r.status)),
       ),
       params,
     )

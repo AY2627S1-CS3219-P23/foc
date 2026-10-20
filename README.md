@@ -187,6 +187,9 @@
   (a duplicate reservation resends its reply, the contract test's
   parties check, the credit legend) by Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-20: AI Use Summary extended for the order lists' state groups
+  and My Requests' PENDING refetch by Claude Code (Opus 5.5).
+  Author review: Aung Ko Khant, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -728,7 +731,11 @@ chosen by the author; and past-deadline requests hidden from the open list
 and refused on accept (409), as the author chose; and the order pages in `web/` moved onto
 order-service's real API (types, calls, states, the dev mock and tests
 rewritten; dispute and re-release removed), with the username lookup, the
-state filters and keeping the mock chosen by the author.
+state filters and keeping the mock chosen by the author; and the
+comma-separated `state` list on order-service's request lists, with My
+Requests holding the active requests and History the finished ones, and
+My Requests refetching every 2 seconds while a request is PENDING, as
+the author chose.
 
 The issue #67 remaining scope (the server-side STOMP push gateway had
 merged earlier in PR #74): the web notification client

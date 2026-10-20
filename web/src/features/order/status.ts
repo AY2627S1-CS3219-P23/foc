@@ -6,6 +6,7 @@
 // (PENDING and REJECTED added; OPEN / PICKED_UP / DELIVERED renamed
 // CREATED / COLLECTED / ARRIVED; DISPUTED removed), and the date lines use
 // the fields the backend has (no updatedAt).
+// 2026-10-20: activeStatuses / finishedStatuses, the two pages' groups.
 // Author review: [pending]
 
 import type { RequestDetail, RequestStatus, RequestSummary } from './types'
@@ -36,13 +37,16 @@ export const statusChipClasses: Record<RequestStatus, string> = {
   REJECTED: 'bg-red-50 text-red-700',
 }
 
-// every state, in lifecycle order, for the filter chips
-export const allStatuses: RequestStatus[] = [
+// A requester follows these on My Requests; the rest live in History.
+export const activeStatuses: RequestStatus[] = [
   'PENDING',
   'CREATED',
   'ACCEPTED',
   'COLLECTED',
   'ARRIVED',
+]
+
+export const finishedStatuses: RequestStatus[] = [
   'COMPLETED',
   'CANCELLED',
   'EXPIRED',

@@ -1,13 +1,20 @@
 // AI-assisted (CS3219 AI Usage Policy disclosure):
 // Tool: Claude Code (Opus 5.5), 2026-10-18.
 // Scope: the state filter chips on My Requests and Request History.
-// order-service filters a list by one state (GET /requests/mine?state=),
-// so each chip is one backend query and paging stays exact (the author's
+// Each chip is one backend query, so paging stays exact (the author's
 // choice over merging several calls).
+// 2026-10-20: a chip stands for a set of states — one state, or a group
+// such as "all active" / "all finished" — which order-service takes as a
+// comma-separated state list (the author's decision).
 // Author review: [pending]
 
-import { statusLabels } from '../status'
 import type { RequestStatus } from '../types'
+
+export interface FilterOption {
+  key: string
+  label: string
+  states: RequestStatus[]
+}
 
 export function StateFilter({
   options,
@@ -15,19 +22,18 @@ export function StateFilter({
   onChange,
   label,
 }: {
-  // undefined is "All"
-  options: (RequestStatus | undefined)[]
-  value: RequestStatus | undefined
-  onChange: (next: RequestStatus | undefined) => void
+  options: FilterOption[]
+  value: string // the selected option's key
+  onChange: (next: FilterOption) => void
   label: string
 }) {
   return (
     <div role="group" aria-label={label} className="flex flex-wrap gap-2">
       {options.map((option) => {
-        const selected = option === value
+        const selected = option.key === value
         return (
           <button
-            key={option ?? 'ALL'}
+            key={option.key}
             type="button"
             aria-pressed={selected}
             onClick={() => onChange(option)}
@@ -37,7 +43,7 @@ export function StateFilter({
                 : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
             }`}
           >
-            {option ? statusLabels[option] : 'All'}
+            {option.label}
           </button>
         )
       })}

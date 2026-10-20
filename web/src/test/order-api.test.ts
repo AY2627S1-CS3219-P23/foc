@@ -6,6 +6,7 @@
 // order-service's real contract — paths, query parameters and bodies;
 // its {"message"} error bodies surfaced as the ApiError's message; the id
 // read from /create's message; usernames from user-service, cached.
+// 2026-10-20: several states sent comma-separated.
 // Author review: [pending]
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -170,11 +171,21 @@ describe('orderApi against order-service', () => {
     respond(200, page)
     await orderApi.listMyRequests({
       role: 'requester',
-      state: 'ARRIVED',
+      state: ['ARRIVED'],
       page: 0,
       size: 10,
     })
     expect(lastCall().url).toContain('state=ARRIVED')
+
+    respond(200, page)
+    await orderApi.listMyRequests({
+      role: 'requester',
+      state: ['COMPLETED', 'CANCELLED'],
+      page: 0,
+      size: 10,
+    })
+    // several states go comma-separated (URL-encoded)
+    expect(lastCall().url).toContain('state=COMPLETED%2CCANCELLED')
   })
 
   it("surfaces order-service's {message} error as the ApiError message", async () => {

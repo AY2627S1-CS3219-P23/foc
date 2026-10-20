@@ -34,7 +34,7 @@ function loadActiveDeliveries(): Promise<RequestSummary[]> {
   return Promise.all(
     ACTIVE.map((state) =>
       orderApi
-        .listMyRequests({ role: 'courier', state, page: 0, size: 20 })
+        .listMyRequests({ role: 'courier', state: [state], page: 0, size: 20 })
         .then((page) => page.content),
     ),
   )

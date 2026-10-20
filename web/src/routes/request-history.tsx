@@ -9,6 +9,9 @@
 // offers only the states a courier's request can end in. The backend has
 // no completion or cancellation time, so each row shows when it was
 // created (and an expiry its deadline).
+// 2026-10-20: History holds every finished request — All finished by
+// default, sent as one comma-separated state list — while active ones
+// stay on My Requests (the author's decision).
 // Author review: [pending]
 
 import { useEffect, useState } from 'react'
@@ -16,9 +19,16 @@ import { Link } from 'react-router'
 
 import { orderApi } from '@/features/order/api'
 import { Banner } from '@/features/order/components/Banner'
-import { StateFilter } from '@/features/order/components/StateFilter'
+import {
+  StateFilter,
+  type FilterOption,
+} from '@/features/order/components/StateFilter'
 import { StatusChip } from '@/features/order/components/StatusChip'
-import { formatDateTime, statusLabels } from '@/features/order/status'
+import {
+  finishedStatuses,
+  formatDateTime,
+  statusLabels,
+} from '@/features/order/status'
 import type {
   RequestRole,
   RequestStatus,
@@ -34,11 +44,23 @@ const tabs: { role: RequestRole; label: string }[] = [
   { role: 'courier', label: 'As Courier (Deliveries)' },
 ]
 
+const chip = (s: RequestStatus): FilterOption => ({
+  key: s,
+  label: statusLabels[s],
+  states: [s],
+})
+
 // A courier is only on a request from acceptance on: theirs can't be
 // cancelled (only an unaccepted request can) or rejected.
-const filters: Record<RequestRole, (RequestStatus | undefined)[]> = {
-  requester: ['COMPLETED', 'CANCELLED', 'EXPIRED', 'REJECTED', undefined],
-  courier: ['COMPLETED', 'EXPIRED', undefined],
+const filters: Record<RequestRole, FilterOption[]> = {
+  requester: [
+    { key: 'ALL', label: 'All finished', states: finishedStatuses },
+    ...(['COMPLETED', 'CANCELLED', 'EXPIRED', 'REJECTED'] as const).map(chip),
+  ],
+  courier: [
+    { key: 'ALL', label: 'All finished', states: ['COMPLETED', 'EXPIRED'] },
+    ...(['COMPLETED', 'EXPIRED'] as const).map(chip),
+  ],
 }
 
 function dateLine(r: RequestSummary): string {
@@ -58,7 +80,9 @@ function creditEffect(r: RequestSummary, role: RequestRole): string {
 
 export function RequestHistory() {
   const [role, setRole] = useState<RequestRole>('requester')
-  const [state, setState] = useState<RequestStatus | undefined>('COMPLETED')
+  const [filterKey, setFilterKey] = useState('ALL')
+  const filter =
+    filters[role].find((f) => f.key === filterKey) ?? filters[role][0]
   const [page, setPage] = useState(0)
   const [requests, setRequests] = useState<RequestSummary[]>([])
   const [total, setTotal] = useState(0)
@@ -69,7 +93,7 @@ export function RequestHistory() {
   useEffect(() => {
     let cancelled = false
     orderApi
-      .listMyRequests({ role, state, page, size: PAGE_SIZE })
+      .listMyRequests({ role, state: filter.states, page, size: PAGE_SIZE })
       .then((result) => {
         if (cancelled) return
         setRequests(result.content)
@@ -93,21 +117,21 @@ export function RequestHistory() {
     return () => {
       cancelled = true
     }
-  }, [role, state, page])
+  }, [role, filter, page])
 
   function selectRole(next: RequestRole) {
     if (next === role) return
     setLoading(true)
     setRole(next)
-    // keep the state if the other side offers it, else back to Completed
-    if (!filters[next].includes(state)) setState('COMPLETED')
+    // keep the chip if the other side offers it, else back to All finished
+    if (!filters[next].some((f) => f.key === filterKey)) setFilterKey('ALL')
     setPage(0)
   }
 
-  function selectState(next: RequestStatus | undefined) {
-    if (next === state) return
+  function selectFilter(next: FilterOption) {
+    if (next.key === filterKey) return
     setLoading(true)
-    setState(next)
+    setFilterKey(next.key)
     setPage(0)
   }
 
@@ -157,8 +181,8 @@ export function RequestHistory() {
       <StateFilter
         label="Filter by state"
         options={filters[role]}
-        value={state}
-        onChange={selectState}
+        value={filter.key}
+        onChange={selectFilter}
       />
 
       {error && <Banner kind="error">{error}</Banner>}
@@ -169,9 +193,9 @@ export function RequestHistory() {
         <div className="rounded-lg border border-gray-200 bg-white py-10 text-center">
           <p className="font-medium text-gray-900">Nothing here yet.</p>
           <p className="mt-1 text-sm text-gray-500">
-            {state
-              ? `${statusLabels[state]} ${role === 'requester' ? 'requests' : 'deliveries'} will show up here.`
-              : `Your ${role === 'requester' ? 'requests' : 'deliveries'} will show up here.`}
+            {filter.key === 'ALL'
+              ? `Finished ${role === 'requester' ? 'requests' : 'deliveries'} will show up here.`
+              : `${filter.label} ${role === 'requester' ? 'requests' : 'deliveries'} will show up here.`}
           </p>
         </div>
       ) : (

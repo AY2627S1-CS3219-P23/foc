@@ -9,6 +9,10 @@
 // filter, PENDING / REJECTED messages, cancel and confirm, History's
 // default Completed filter, and usernames from user-service.
 // 2026-10-19: My Requests' filter offers only the lifecycle states.
+// 2026-10-20: My Requests lists active states, History finished ones, each
+// as one state list.
+// 2026-10-20: My Requests refetches every 2 seconds while a request is
+// PENDING, and stops once none is.
 // Author review: [pending]
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -234,7 +238,7 @@ describe('open requests', () => {
       .spyOn(orderApi, 'listMyRequests')
       .mockImplementation(async (params) =>
         pageOf(
-          params.state === 'COLLECTED'
+          params.state?.includes('COLLECTED')
             ? [
                 {
                   ...summary,
@@ -252,7 +256,7 @@ describe('open requests', () => {
       name: 'Your active deliveries',
     })
     expect(within(strip).getByText(/Printed notes/)).toBeInTheDocument()
-    expect(mine.mock.calls.map(([p]) => p.state).sort()).toEqual([
+    expect(mine.mock.calls.map(([p]) => p.state?.join()).sort()).toEqual([
       'ACCEPTED',
       'ARRIVED',
       'COLLECTED',
@@ -393,7 +397,7 @@ describe('active delivery', () => {
 })
 
 describe('my requests', () => {
-  it('lists every state by default and filters by one state per chip', async () => {
+  it('lists the active states by default and filters by one state per chip', async () => {
     const user = userEvent.setup()
     const mine = vi
       .spyOn(orderApi, 'listMyRequests')
@@ -403,7 +407,7 @@ describe('my requests', () => {
     await screen.findByText('Request #1')
     expect(mine).toHaveBeenLastCalledWith({
       role: 'requester',
-      state: undefined,
+      state: ['PENDING', 'CREATED', 'ACCEPTED', 'COLLECTED', 'ARRIVED'],
       page: 0,
       size: 10,
     })
@@ -418,12 +422,12 @@ describe('my requests', () => {
     )
     await waitFor(() =>
       expect(mine).toHaveBeenLastCalledWith(
-        expect.objectContaining({ state: 'ARRIVED', page: 0 }),
+        expect.objectContaining({ state: ['ARRIVED'], page: 0 }),
       ),
     )
   })
 
-  it('offers only the lifecycle states as filters, after All', async () => {
+  it('offers only the active states as filters, after All active', async () => {
     vi.spyOn(orderApi, 'listMyRequests').mockResolvedValue(pageOf([summary]))
     renderAt('/my-requests')
 
@@ -432,7 +436,7 @@ describe('my requests', () => {
       within(group)
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['All', 'Open', 'Accepted', 'Collected', 'Arrived', 'Completed'])
+    ).toEqual(['All active', 'Open', 'Accepted', 'Collected', 'Arrived'])
   })
 
   it('explains a PENDING and a REJECTED request', async () => {
@@ -451,6 +455,30 @@ describe('my requests', () => {
     expect(
       screen.queryByRole('button', { name: 'Cancel request' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('refetches every 2 seconds while a request is PENDING, then stops', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const mine = vi
+        .spyOn(orderApi, 'listMyRequests')
+        .mockResolvedValueOnce(pageOf([{ ...summary, status: 'PENDING' }]))
+        .mockResolvedValue(pageOf([summary]))
+      renderAt('/my-requests')
+
+      await screen.findByText(/Reserving your credits/)
+      expect(mine).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(2000)
+      await screen.findByText('Waiting for a courier to accept.')
+      expect(mine).toHaveBeenCalledTimes(2)
+
+      // nothing is PENDING any more, so no further refetch
+      await vi.advanceTimersByTimeAsync(6000)
+      expect(mine).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('cancels a CREATED request and reloads the list', async () => {
@@ -525,7 +553,7 @@ describe('my requests', () => {
 })
 
 describe('request history', () => {
-  it('starts on Completed and switches sides', async () => {
+  it('starts on all finished requests and switches sides', async () => {
     const user = userEvent.setup()
     const mine = vi
       .spyOn(orderApi, 'listMyRequests')
@@ -536,7 +564,7 @@ describe('request history', () => {
     expect((await screen.findAllByText('−3 credits')).length).toBeGreaterThan(0)
     expect(mine).toHaveBeenLastCalledWith({
       role: 'requester',
-      state: 'COMPLETED',
+      state: ['COMPLETED', 'CANCELLED', 'EXPIRED', 'REJECTED'],
       page: 0,
       size: 10,
     })
@@ -545,8 +573,17 @@ describe('request history', () => {
 
     expect((await screen.findAllByText('+3 credits')).length).toBeGreaterThan(0)
     expect(mine).toHaveBeenLastCalledWith(
-      expect.objectContaining({ role: 'courier', state: 'COMPLETED' }),
+      expect.objectContaining({
+        role: 'courier',
+        state: ['COMPLETED', 'EXPIRED'],
+      }),
     )
+    // a courier's request can't be cancelled or rejected
+    expect(
+      within(screen.getByRole('group', { name: 'Filter by state' }))
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['All finished', 'Completed', 'Expired'])
   })
 
   it('steps back a page when the requested page no longer exists', async () => {

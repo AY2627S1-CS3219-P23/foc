@@ -14,6 +14,8 @@
 // Usernames come from user-service's GET /users/{id}, cached (the author's
 // decision; order-service returns ids only). Dispute and re-release are
 // gone: the backend has neither.
+// 2026-10-20: a list's state filter is sent as several states,
+// comma-separated.
 // Author review: [pending]
 
 import { creditApi } from '@/features/credit/api'
@@ -97,7 +99,9 @@ const httpOrderApi = {
   listMyRequests(
     params: ListMineParams,
   ): Promise<PagedResponse<RequestSummary>> {
-    return orderFetch(`/requests/mine${query({ ...params })}`)
+    return orderFetch(
+      `/requests/mine${query({ ...params, state: params.state?.join(',') })}`,
+    )
   },
 
   getRequest(id: number): Promise<RequestDetail> {

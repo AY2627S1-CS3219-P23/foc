@@ -5722,3 +5722,30 @@ Entry template:
   explicit request. File-header attribution remains accurate.
 - **Verification:** Comment-only change; `git diff --check` passed.
 - **Author review:** Leong Wei Zhi to review via PR #197.
+
+## 2026-10-20 — Aung Ko Khant (order lists: active / finished state groups)
+- **Tool:** Claude Code (Opus 5.5).
+- **Scope:** order-service's `state` parameter on the request lists takes
+  several states, comma-separated (`RequestsQueryService.parseStates`,
+  `RequestSpecifications.statusIn`, two endpoint tests; the open list
+  still takes only CREATED). In `web/`, My Requests lists only active
+  requests (All active by default) and History only finished ones (All
+  finished by default), each sent as one state list; `StateFilter` chips
+  stand for a set of states; the mock, types, tests and `web/AGENTS.md`
+  wireframe rows updated. The grouping and the comma-separated form were
+  the author's decisions.
+- **Verification:** web vitest (282 passed), order-service `mvn test` in a
+  maven:3.9-eclipse-temurin-21 container (100 passed).
+- **Author review:** Aung Ko Khant, pending pull request review.
+
+## 2026-10-20 — Aung Ko Khant (My Requests PENDING polling)
+- **Tool:** Claude Code (Opus 5.5).
+- **Prompt(s):** "For order service I would like to refetch order list every
+  2 seconds when an order is in pending state."
+- **Scope:** `web/src/routes/my-requests.tsx` refetches the list 2 seconds
+  after each response while any shown request is PENDING, and stops once
+  none is; a test in `web/src/test/orders.test.tsx` covers the refetch and
+  the stop. File headers updated.
+- **Verification:** `vitest run src/test/orders.test.tsx` (23 passed),
+  `tsc -b`, eslint and prettier clean.
+- **Author review:** Aung Ko Khant, pending pull request review.
