@@ -8,5 +8,6 @@
   "requestId": "req-20260919-0042",
   "requesterId": "usr-req-1001",
   "amount": 2,
-  "reason": "insufficient available credits"
+  "reason": "insufficient available credits",
+  "reasonCode": "INSUFFICIENT_CREDITS"
 }

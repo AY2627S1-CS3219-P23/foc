@@ -19,6 +19,8 @@
  * submission already decided enqueues its reply again.
  * PR #212 review (Leong Wei Zhi), reviewer's suggestion: that reply is
  * described as rebuilt from the event, with the record's decision.
+ * 2026-10-21, issue #234: the rejection carries reasonCode beside the
+ * reason text (team decision, DSP-12).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -104,8 +106,9 @@ public class RequestEventHandler {
                 newEventId(), Instant.now(), PRODUCER, e.correlationId(), List.of(),
                 e.requestId(), e.requesterId(), e.reward());
             case REJECTED_INSUFFICIENT_CREDITS, ALREADY_REJECTED_INSUFFICIENT_CREDITS ->
-                rejected(e, INSUFFICIENT_CREDITS);
-            case REJECTED_INVALID_AMOUNT, ALREADY_REJECTED_INVALID_AMOUNT -> rejected(e, REWARD_BELOW_ONE);
+                rejected(e, INSUFFICIENT_CREDITS, CreditReservationRejected.INSUFFICIENT_CREDITS);
+            case REJECTED_INVALID_AMOUNT, ALREADY_REJECTED_INVALID_AMOUNT ->
+                rejected(e, REWARD_BELOW_ONE, CreditReservationRejected.INVALID_AMOUNT);
             // settled: the request has moved past its reservation
             case DUPLICATE -> null;
         };
@@ -115,10 +118,10 @@ public class RequestEventHandler {
         return Outcome.HANDLED;
     }
 
-    private static CreditReservationRejected rejected(RequestSubmitted e, String reason) {
+    private static CreditReservationRejected rejected(RequestSubmitted e, String reason, String reasonCode) {
         return new CreditReservationRejected(
             newEventId(), Instant.now(), PRODUCER, e.correlationId(), List.of(),
-            e.requestId(), e.requesterId(), e.reward(), reason);
+            e.requestId(), e.requesterId(), e.reward(), reason, reasonCode);
     }
 
     // no default: a new SettleResult does not compile until it is given an outcome

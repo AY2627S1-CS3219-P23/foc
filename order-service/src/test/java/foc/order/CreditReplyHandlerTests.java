@@ -7,6 +7,9 @@
  * naming no known request is reported for dead-lettering.
  * 2026-10-16: statuses compared as OrderStates constants.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-21, Claude Code (Opus 5.5), issue #234: the test rejection carries
+ * the new reasonCode component (team decision, DSP-12); author review:
+ * Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -105,6 +108,7 @@ class CreditReplyHandlerTests {
 
 	private static CreditReservationRejected rejected(String requestId, String reason) {
 		return new CreditReservationRejected(UUID.randomUUID().toString(), Instant.now(), "credit-service",
-				requestId, List.of(), requestId, "1", 3, reason);
+				requestId, List.of(), requestId, "1", 3, reason,
+				CreditReservationRejected.INSUFFICIENT_CREDITS);
 	}
 }

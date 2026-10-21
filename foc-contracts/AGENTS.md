@@ -11,6 +11,10 @@
   review: Ryan Ang, pending pull request review.
   2026-10-09, Claude Code (Opus 5.5): nullable-components note updated
   for note (author's decision, issue #165).
+  2026-10-21, Claude Code (Opus 5.5), issue #234: module map and
+  nullable-components note updated for the two dispute events and
+  reasonCode (team decisions DSP-12, D18); author review: Ryan Ang,
+  pending pull request review.
 -->
 
 # foc-contracts/ — Agent Guide
@@ -29,7 +33,7 @@ design authority is
 | Package / path | Contents |
 | --- | --- |
 | `events/core/` | `DomainEvent` (base interface; `eventType()` derives the identity from the registry), `EventContracts` (shared names: `REQUEST_EVENTS_EXCHANGE`, `CREDIT_EVENTS_EXCHANGE`), `EventTypeRegistry` (single class↔identity source, D18), `Nullable` (marks optional wire fields) |
-| `events/request/` | `RequestEvent` (domain marker) + the nine records: `RequestCreated`, `RequestAccepted`, `RequestCollected`, `RequestCompleted`, `RequestCancelled`, `RequestExpired`, `CourierArrived`, `RequestSubmitted`, `RequestRejected` |
+| `events/request/` | `RequestEvent` (domain marker) + the twelve records: `RequestCreated`, `RequestAccepted`, `RequestCollected`, `RequestCompleted`, `RequestCancelled`, `RequestDropped`, `RequestExpired`, `CourierArrived`, `RequestSubmitted`, `RequestRejected`, `RequestDisputed`, `RequestDisputeResolved` |
 | `events/credit/` | `CreditEvent` (domain marker) + the two records: `CreditReserved`, `CreditReservationRejected` |
 | `src/main/resources/contracts/` | One canonical fixture per event, `<identity dots→hyphens>.example.json` (e.g. `request-courier-arrived.example.json`) — shipped on the jar's classpath |
 | `src/test/java/` | `EventTypeRegistryTest`, `RequestEventRecordsTest` — registry-driven: a new registry entry without a fixture (or vice versa) fails loudly |
@@ -55,8 +59,20 @@ design authority is
   internal config belong to their service, not here.
 - Currently the `@Nullable` components are
   `RequestCancelled.courierId` (a pre-acceptance cancel has no
-  courier) and every request record's `note` (a request may have
-  none, issue #165); `RequestEventRecordsTest` holds the latter.
+  courier), every request record's `note` (a request may have
+  none, issue #165; `RequestEventRecordsTest` holds it),
+  `RequestDisputed.disputeNote` and `RequestDisputeResolved.resolutionNote`
+  (optional texts), and `CreditReservationRejected.reasonCode` (added
+  to an existing event, so nullable per D18: credit-service always sets
+  it, older messages lack it).
+- `note` always means the request's own note. A record needing other
+  free text gives it its own name (`disputeNote`, `resolutionNote`).
+- **Fixed-value fields are `String`, never an enum**: the record holds
+  each value as a `String` constant plus one `Set` of them all
+  (`RequestEventRecordsTest` checks the two match). Consumers convert at
+  the edge, tolerate unknown values and give every `switch` a logging
+  `default`; APIs refuse values outside the set (README, "The typed
+  event contracts").
 
 ## Adding a new event
 

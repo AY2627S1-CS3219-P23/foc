@@ -8,6 +8,8 @@
  * a short retry delay and a batch of two, and the case the review
  * found: replies no queue takes must not hold back the ones behind
  * them.
+ * 2026-10-21, issue #234: test records built with the new reasonCode
+ * component (team decision, DSP-12).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
@@ -122,7 +124,8 @@ class OutboxPublisherIntegrationTest extends PostgresTestContainer {
 	@Test
 	void aReplyPublishedWithNoQueueBoundStaysUnsentUntilOneIs(CapturedOutput output) {
 		CreditReservationRejected reply = new CreditReservationRejected(UUID.randomUUID().toString(), Instant.now(),
-				"credit-service", "corr-2", List.of(), "r-2", "u-req", 9, "insufficient available credits");
+				"credit-service", "corr-2", List.of(), "r-2", "u-req", 9, "insufficient available credits",
+				CreditReservationRejected.INSUFFICIENT_CREDITS);
 
 		transaction.executeWithoutResult(status -> outbox.enqueue(reply));
 
@@ -221,7 +224,8 @@ class OutboxPublisherIntegrationTest extends PostgresTestContainer {
 
 	private static CreditReservationRejected rejected(Instant occurredAt, String requestId) {
 		return new CreditReservationRejected(UUID.randomUUID().toString(), occurredAt, "credit-service",
-				"corr-" + requestId, List.of(), requestId, "u-req", 9, "insufficient available credits");
+				"corr-" + requestId, List.of(), requestId, "u-req", 9, "insufficient available credits",
+				CreditReservationRejected.INSUFFICIENT_CREDITS);
 	}
 
 	// a row with a chosen created_at, which enqueue always sets to now:

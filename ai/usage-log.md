@@ -42,6 +42,41 @@ Entry template:
 ```
 
 ---
+## 2026-10-21 — Ryan Ang (feat: N3 dispute event contracts, issue #234)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** `foc-contracts` (`RequestDisputed` new, with its
+  `CATEGORIES` value set; `RequestDisputeResolved` new;
+  `CreditReservationRejected.reasonCode` and its `REASON_CODES` value
+  set; `EventTypeRegistry`; two new fixtures and the rejection fixture;
+  `EventTypeRegistryTest`; `RequestEventRecordsTest` (value-set check);
+  `README.md`, `AGENTS.md`), credit-service (`RequestEventHandler` sets
+  `reasonCode`; `RequestEventHandlerTest`, `ReplyOutboxServiceTest`,
+  `OutboxPublisherIntegrationTest`), order-service tests
+  (`CreditReplyHandlerTests`, `DomainEventMessageConverterTests`),
+  `docs/credit-service.md`, `docs/notification-service.md`,
+  `docs/disputes.md`, `README.md` (AI Use Summary and header line).
+- **Prompt(s):** The author asked the tool to review issue #234. 
+  Before writing code the tool reported two conflicts with standing 
+  team rules: a required `reasonCode` breaks D18's additive-only rule, 
+  and DSP-12's dispute `note` would repurpose the request `note` that 
+  the PR #166 rule puts on every request record. The team decided: 
+  `reasonCode` is `@Nullable` (always set by Credit; Order leaves
+  `close_reason` null when it is missing), and both new records keep 
+  the standard `note` and carry `pickupLocation`/`dropoffLocation`, 
+  with `disputeNote` and `resolutionNote` as separate nullable fields. 
+  The tool implemented those decisions. It had also held the fixed values
+  as `String` constants on the records and reported this as its own
+  choice; the author confirmed it over plain strings and enums and
+  decided the rules around it: a `Set` of all values on each record
+  (checked by a test), services converting to their own enums at the
+  edge with a fallback for unknown or null values, API input checked
+  against the set (400), and a logging default branch in every consumer
+  `switch`.
+- **Author review:** Ryan to review before opening the PR. All
+  suites pass locally with Docker: foc-contracts 12, order-service 104,
+  credit-service 268, notification-service 88 tests, none skipped.
+
 ## 2026-10-20 — Kwey Xiu Xi (user-service: AuthServiceTest stubbing)
 - **Tool:** Copilot SDK in VS Code (model not exposed)
 - **Mode:** debug

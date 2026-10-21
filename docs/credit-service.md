@@ -105,6 +105,9 @@
   a partial index on `sent_at`, and nothing but `outbox_event` purged,
   with the reason); the components, the `outbox_event` table row and
   the failure table updated to match.
+  2026-10-21, issue #234, team decisions transcribed: the rejection
+  reply carries `reasonCode` beside `reason` (DSP-12, @Nullable per
+  D18).
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -673,7 +676,10 @@ tests.
 - **A reward below 1** is recorded as `REJECTED`, like an insufficient
   balance. The reserve result says which
   (`REJECTED_INVALID_AMOUNT` or `REJECTED_INSUFFICIENT_CREDITS`), and
-  the reply's `reason` follows the result.
+  the reply's `reason` and `reasonCode` (`INVALID_AMOUNT` or
+  `INSUFFICIENT_CREDITS`) follow the result. `reasonCode` is for code,
+  `reason` for people; the contract marks `reasonCode` `@Nullable`
+  (D18), but this service always sets it.
 - **A request event with no handler** is acknowledged and logged with
   its type and `eventId`, not dead-lettered: only the four bound events
   reach the queue, so it was published there by hand. A test fails the

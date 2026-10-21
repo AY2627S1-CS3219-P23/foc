@@ -19,6 +19,9 @@
  * 2026-10-18, Claude Code (Fable 5): request.dropped entry for the
  * courier-withdrawal notification (event name the author's decision,
  * via options Q&A); pending pull request review.
+ * 2026-10-21, Claude Code (Opus 5.5), issue #234: request.disputed and
+ * request.dispute-resolved entries for N3 (team decision, DSP-12);
+ * author review: Ryan Ang, pending pull request review.
  */
 package foc.contracts.events.core;
 
@@ -30,6 +33,8 @@ import foc.contracts.events.request.RequestCancelled;
 import foc.contracts.events.request.RequestCollected;
 import foc.contracts.events.request.RequestCompleted;
 import foc.contracts.events.request.RequestCreated;
+import foc.contracts.events.request.RequestDisputeResolved;
+import foc.contracts.events.request.RequestDisputed;
 import foc.contracts.events.request.RequestDropped;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestRejected;
@@ -77,6 +82,8 @@ public final class EventTypeRegistry {
 			new Entry(CourierArrived.class, "request.courier-arrived"),
 			new Entry(RequestSubmitted.class, "request.submitted"),
 			new Entry(RequestRejected.class, "request.rejected"),
+			new Entry(RequestDisputed.class, "request.disputed"),
+			new Entry(RequestDisputeResolved.class, "request.dispute-resolved"),
 			new Entry(CreditReserved.class, "credit.reserved"),
 			new Entry(CreditReservationRejected.class, "credit.reservation-rejected"));
 
