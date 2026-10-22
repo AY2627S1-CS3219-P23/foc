@@ -11,15 +11,17 @@
 # and the SPA origin (this file replaces the main yaml in tests).
 # Same day: the expiry and auto-complete sweeps off, like the pending one.
 # Reviewed by: Ko-Khan (via pull request).
+# 2026-10-22, Claude Code (Opus 5.5), issue #238: H2 replaced by
+# Testcontainers Postgres (PostgresTestContainer), built by Flyway and
+# validated, as in production. Author review: Ryan Ang, pending pull
+# request review.
 
 spring:
-  datasource:
-    url: jdbc:h2:mem:order;DB_CLOSE_DELAY=-1
-    username: sa
-    password: ""
+  # The datasource comes from PostgresTestContainer's @ServiceConnection.
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      # Flyway builds the schema, as in production
+      ddl-auto: validate
   rabbitmq:
     listener:
       simple:

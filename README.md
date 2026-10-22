@@ -210,6 +210,10 @@
   docs/disputes.md (the N3 decisions, transcribed), by Claude Code
   (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-22: AI Use Summary extended for order-service's Flyway
+  baseline (issue #238) and the PR #243 review follow-ups, by Claude
+  Code (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -967,6 +971,18 @@ note (adding `disputeNote` and `resolutionNote`) are team decisions
 with D18 and the PR #166 note rule; they are recorded in
 `ai/usage-log.md`. The team's full N3 decision list (DSP-1 to DSP-17,
 with the reasons given) was transcribed into `docs/disputes.md`.
+
+Claude Code (Opus 5.5) moved order-service onto Flyway (issue #238,
+team decision DSP-16): a `V1__baseline.sql` reproducing the schema
+Hibernate had generated (checked against an existing `order-db`), with
+Hibernate now only validating it, and the order-service tests moved
+from H2 to Testcontainers Postgres. In the same branch it applied the
+PR #243 review follow-ups: distinct names for credit-service's
+rejection reason texts, `RequestDropped` in the foc-contracts README,
+a note on the contracts value-set test, a notification-service check
+that fixtures use a value from their record's value set, and matching
+reason/code pairs in an order-service test helper. Recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

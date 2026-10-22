@@ -5,6 +5,9 @@
  * PendingTimeoutSweeperTests: only requests ARRIVED for longer than the
  * delay are completed.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-22, Claude Code (Opus 5.5), issue #238: runs against
+ * Testcontainers Postgres built by Flyway (extends PostgresTestContainer)
+ * instead of H2. Author review: Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -20,7 +23,7 @@ import java.time.temporal.ChronoUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
-class AutoCompleteSweeperTests {
+class AutoCompleteSweeperTests extends PostgresTestContainer {
 
 	private static final long DELAY_MS = 3_600_000;
 	private static final Long COURIER_ID = 7L;

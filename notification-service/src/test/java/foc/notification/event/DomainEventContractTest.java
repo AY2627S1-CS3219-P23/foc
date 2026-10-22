@@ -19,6 +19,10 @@
  * suggestion): a request event's parties is still required non-empty;
  * only credit events may have none.
  * Author review: Ryan Ang, pending pull request review.
+ * 2026-10-22, Claude Code (Opus 5.5), PR #243 review follow-up: a
+ * fixture's fixed value (category, reasonCode) must be in its record's
+ * value set, so a typo cannot become the documented example. Author
+ * review: Ryan Ang, pending pull request review.
  */
 package foc.notification.event;
 
@@ -31,6 +35,10 @@ import foc.contracts.events.request.RequestAccepted;
 import foc.contracts.events.request.RequestEvent;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.RecordComponent;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.json.JsonTest;
@@ -83,6 +91,48 @@ class DomainEventContractTest {
 			}
 			assertThat(requestIdOf(event)).isEqualTo("req-20260919-0042");
 		}
+	}
+
+	/**
+	 * A record with fixed values holds them as one public static final
+	 * Set (e.g. RequestDisputed.CATEGORIES). Its fixture must carry one of
+	 * them in exactly one String component, so a misspelt value fails here
+	 * rather than becoming the documented example.
+	 */
+	@Test
+	void everyFixtureUsesAValueFromItsRecordsValueSet() throws Exception {
+		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
+			Set<?> values = valueSetOf(entry.eventClass());
+			if (values == null) {
+				continue;
+			}
+			String path = "/contracts/" + entry.eventType().replace('.', '-') + ".example.json";
+			DomainEvent event;
+			try (InputStream fixture = getClass().getResourceAsStream(path)) {
+				event = objectMapper.readValue(fixture, entry.eventClass());
+			}
+
+			int matches = 0;
+			for (RecordComponent component : entry.eventClass().getRecordComponents()) {
+				if (component.getType() == String.class
+						&& values.contains(component.getAccessor().invoke(event))) {
+					matches++;
+				}
+			}
+			assertThat(matches).as("%s: String components holding a value from %s", path, values)
+					.isEqualTo(1);
+		}
+	}
+
+	private static Set<?> valueSetOf(Class<?> recordClass) throws IllegalAccessException {
+		for (Field field : recordClass.getDeclaredFields()) {
+			int modifiers = field.getModifiers();
+			if (field.getType() == Set.class && Modifier.isPublic(modifiers)
+					&& Modifier.isStatic(modifiers) && Modifier.isFinal(modifiers)) {
+				return (Set<?>) field.get(null);
+			}
+		}
+		return null;
 	}
 
 	private static String expectedProducer(DomainEvent event) {

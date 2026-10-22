@@ -42,6 +42,41 @@ Entry template:
 ```
 
 ---
+## 2026-10-22 — Ryan Ang (feat: Order Flyway baseline, issue #238; PR #243 follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, refactor, docs
+- **Scope:** order-service (`pom.xml`: Flyway, Testcontainers Postgres,
+  H2 removed; `db/migration/V1__baseline.sql` new; `application.yaml`
+  main and test: `ddl-auto: validate`; `PostgresTestContainer` new, and
+  the ten `@SpringBootTest` classes extend it; `Requests.java`: the
+  hand-written status CHECK removed from `columnDefinition`;
+  `RequestsServiceTests`: the state-list test removed with it;
+  `CreditReplyHandlerTests`: the rejection helper takes the reasonCode;
+  `README.md`: Schema section and the one-off `order-db` reset).
+  PR #243 review follow-ups: credit-service (`RequestEventHandler` reason
+  text constants renamed `*_TEXT`; `RequestEventHandlerTest`),
+  foc-contracts (`README.md` record list gains `RequestDropped`;
+  `RequestEventRecordsTest` javadoc), notification-service
+  (`DomainEventContractTest`: a fixture's fixed value must be in its
+  record's value set). `README.md` (AI Use Summary and header line).
+- **Prompt(s):** Implement issue #238 as written there (team decision
+  DSP-16), and address the PR #243 review follow-ups in the same branch.
+  V1 was taken from Hibernate's PostgreSQL DDL export of the current
+  entities and checked against the schema `ddl-auto: update` had built
+  in an existing `order-db` volume: the same columns and types, with
+  the status CHECK written once and named `requests_status_check`
+  (Hibernate had emitted it twice). The test base class follows
+  credit-service's and user-service's (skips without Docker). For the
+  follow-ups the tool took the reviewer's suggested fixes; where two
+  were offered for the constant names it took the rename, the smaller
+  one. The follow-up about mapping `reasonCode` to `close_reason` in one
+  place is left for issue #240, where `close_reason` is added.
+- **Author review:** 
+  All suites pass locally with Docker: foc-contracts 12, order-service
+  103 (the removed state-list test was the 104th), credit-service 268,
+  notification-service 89 tests, none skipped. A misspelt fixture
+  category made the new fixture test fail.
+
 ## 2026-10-21 — Ryan Ang (feat: N3 dispute event contracts, issue #234)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs

@@ -10,6 +10,12 @@
  * 2026-10-21, Claude Code (Opus 5.5), issue #234: the test rejection carries
  * the new reasonCode component (team decision, DSP-12); author review:
  * Ryan Ang, pending pull request review.
+ * 2026-10-22, Claude Code (Opus 5.5), issue #238: runs against
+ * Testcontainers Postgres built by Flyway (extends PostgresTestContainer)
+ * instead of H2. Same day, PR #243 review follow-up: the rejection
+ * helper takes the reasonCode with the reason, so every test rejection
+ * is a pair credit-service would publish. Author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.order;
 
@@ -30,7 +36,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
-class CreditReplyHandlerTests {
+class CreditReplyHandlerTests extends PostgresTestContainer {
 
 	@Autowired
 	private CreditReplyHandler handler;
@@ -60,7 +66,8 @@ class CreditReplyHandlerTests {
 		Long id = newRequest();
 
 		assertEquals(CreditReplyHandler.Outcome.HANDLED,
-				handler.handle(rejected(id.toString(), "insufficient available credits")));
+				handler.handle(rejected(id.toString(), "insufficient available credits",
+						CreditReservationRejected.INSUFFICIENT_CREDITS)));
 
 		assertEquals(OrderStates.REJECTED, status(id));
 	}
@@ -73,7 +80,8 @@ class CreditReplyHandlerTests {
 
 		// a late reservation after the timeout, then a repeated rejection
 		assertEquals(CreditReplyHandler.Outcome.HANDLED, handler.handle(reserved(id.toString())));
-		assertEquals(CreditReplyHandler.Outcome.HANDLED, handler.handle(rejected(id.toString(), "late")));
+		assertEquals(CreditReplyHandler.Outcome.HANDLED, handler.handle(rejected(id.toString(),
+				"insufficient available credits", CreditReservationRejected.INSUFFICIENT_CREDITS)));
 
 		assertEquals(OrderStates.CANCELLED, status(id));
 		assertEquals(eventsBefore, outboxEvents.count());
@@ -106,9 +114,9 @@ class CreditReplyHandlerTests {
 				List.of(), requestId, "1", 3);
 	}
 
-	private static CreditReservationRejected rejected(String requestId, String reason) {
+	// reason and reasonCode passed as a pair credit-service would publish
+	private static CreditReservationRejected rejected(String requestId, String reason, String reasonCode) {
 		return new CreditReservationRejected(UUID.randomUUID().toString(), Instant.now(), "credit-service",
-				requestId, List.of(), requestId, "1", 3, reason,
-				CreditReservationRejected.INSUFFICIENT_CREDITS);
+				requestId, List.of(), requestId, "1", 3, reason, reasonCode);
 	}
 }

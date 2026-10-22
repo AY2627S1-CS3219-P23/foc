@@ -20,6 +20,9 @@
   the expiry and auto-complete timers. Then the read endpoints, and their
   filters and sort; past-deadline requests hidden from the open list.
   Reviewed by: Ko-Khan (via pull request).
+  2026-10-22, Claude Code (Opus 5.5), issue #238: the Schema section
+  (Flyway, the one-off order-db reset) and the tests on Testcontainers
+  Postgres. Author review: Ryan Ang, pending pull request review.
 -->
 
 # Order Service
@@ -38,6 +41,30 @@ with its repository, the request state machine
 to stored requests, the HTTP endpoints below, and the saga with the
 Credit Service (next section); no authentication or input validation
 yet.
+
+## Schema
+
+Flyway owns the schema (`src/main/resources/db/migration`), as in
+credit-service; Hibernate only validates the entities against it at
+startup (`ddl-auto: validate`). A schema change is a new `V<n>__*.sql`
+file; an applied migration is never edited.
+
+- **Flyway V1** (`V1__baseline.sql`, issue #238): the `requests` and
+  `outbox_event` tables as `ddl-auto: update` built them, with the
+  status CHECK (`requests_status_check`) listing every `OrderStates`
+  name. A new state needs a migration that replaces that CHECK.
+
+**If the service fails to start after pulling V1** (Flyway reports a
+non-empty schema with no history table, or Hibernate validation fails):
+your `order-db` volume was built by `ddl-auto: update` before Flyway.
+It held no real data, so recreate it once. This deletes the order
+database only:
+
+```sh
+docker compose rm -sf order-service order-db
+docker volume rm foc_order-db-data
+docker compose up -d order-service
+```
 
 ## Saga with the Credit Service
 
@@ -155,7 +182,8 @@ A range whose lower bound is not below its upper (`minCredit` above
 # contracts library into your local Maven repository
 cd ../foc-contracts && ./mvnw install && cd ../order-service
 
-# Tests (in-memory H2, no PostgreSQL or RabbitMQ needed)
+# Tests (Postgres in a Testcontainers container, built by Flyway; need
+# Docker, and are skipped without it. No RabbitMQ needed)
 ./mvnw test
 
 # Run locally (needs PostgreSQL; health reports DOWN without RabbitMQ)

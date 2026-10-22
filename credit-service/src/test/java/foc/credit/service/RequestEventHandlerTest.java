@@ -14,6 +14,8 @@
  * submission already decided enqueues its reply again.
  * 2026-10-21, issue #234: each rejection is checked for its reasonCode
  * (team decision, DSP-12).
+ * 2026-10-22, PR #243 review follow-up: the reason text constants
+ * renamed (_TEXT).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -105,7 +107,7 @@ class RequestEventHandlerTest {
             assertThat(reply.amount()).isEqualTo(9);
             assertThat(reply.correlationId()).isEqualTo("corr-1");
             assertThat(reply.parties()).isEmpty();
-            assertThat(reply.reason()).isEqualTo(RequestEventHandler.INSUFFICIENT_CREDITS);
+            assertThat(reply.reason()).isEqualTo(RequestEventHandler.INSUFFICIENT_CREDITS_TEXT);
             assertThat(reply.reasonCode()).isEqualTo(CreditReservationRejected.INSUFFICIENT_CREDITS);
         });
     }
@@ -118,7 +120,7 @@ class RequestEventHandlerTest {
 
         assertThat(enqueuedReply()).isInstanceOfSatisfying(CreditReservationRejected.class,
             reply -> {
-                assertThat(reply.reason()).isEqualTo(RequestEventHandler.REWARD_BELOW_ONE);
+                assertThat(reply.reason()).isEqualTo(RequestEventHandler.REWARD_BELOW_ONE_TEXT);
                 assertThat(reply.reasonCode()).isEqualTo(CreditReservationRejected.INVALID_AMOUNT);
             });
     }
@@ -132,7 +134,7 @@ class RequestEventHandlerTest {
 
         assertThat(enqueuedReply()).isInstanceOfSatisfying(CreditReservationRejected.class,
             reply -> {
-                assertThat(reply.reason()).isEqualTo(RequestEventHandler.INSUFFICIENT_CREDITS);
+                assertThat(reply.reason()).isEqualTo(RequestEventHandler.INSUFFICIENT_CREDITS_TEXT);
                 assertThat(reply.reasonCode()).isEqualTo(CreditReservationRejected.INSUFFICIENT_CREDITS);
             });
     }
@@ -152,9 +154,9 @@ class RequestEventHandlerTest {
 
     @ParameterizedTest
     @CsvSource({
-        "ALREADY_REJECTED_INSUFFICIENT_CREDITS, " + RequestEventHandler.INSUFFICIENT_CREDITS
+        "ALREADY_REJECTED_INSUFFICIENT_CREDITS, " + RequestEventHandler.INSUFFICIENT_CREDITS_TEXT
             + ", " + CreditReservationRejected.INSUFFICIENT_CREDITS,
-        "ALREADY_REJECTED_INVALID_AMOUNT, " + RequestEventHandler.REWARD_BELOW_ONE
+        "ALREADY_REJECTED_INVALID_AMOUNT, " + RequestEventHandler.REWARD_BELOW_ONE_TEXT
             + ", " + CreditReservationRejected.INVALID_AMOUNT })
     void redeliveredRefusedSubmissionEnqueuesTheRejectionAgain(ReserveResult result, String reason,
             String reasonCode) {

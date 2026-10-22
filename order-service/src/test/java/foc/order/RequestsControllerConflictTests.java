@@ -6,6 +6,9 @@
  * changed" (the author's decision). RequestsService is mocked to throw
  * what JPA throws then; RequestsServiceTests stages the real race.
  * Author review: Aung Ko Khant, pending pull request review.
+ * 2026-10-22, Claude Code (Opus 5.5), issue #238: runs against
+ * Testcontainers Postgres built by Flyway (extends PostgresTestContainer)
+ * instead of H2. Author review: Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -33,7 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class RequestsControllerConflictTests {
+class RequestsControllerConflictTests extends PostgresTestContainer {
 
 	// order.jwt.secret in the test application.yaml
 	private static final String SECRET = "test-jwt-secret-that-is-at-least-32-bytes-long";
