@@ -13,6 +13,10 @@
  * 2026-10-08, Claude Code (Opus 5.5): domain-marker test widened to the credit domain
  * (team design, docs/credit-service.md D7-D8); author review: Ryan Ang,
  * pending pull request review.
+ * 2026-10-21, Claude Code (Opus 5.5), issue #234: a record's value
+ * constants must match its value set (team decision: String constants
+ * plus a set of all values); author review: Ryan Ang, pending pull
+ * request review.
  */
 package foc.contracts.events.request;
 
@@ -26,6 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.RecordComponent;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -111,6 +117,39 @@ class RequestEventRecordsTest {
 						entry.eventClass() + "." + component.getName()
 								+ " looks like a display name — events carry IDs only (D30)");
 			}
+		}
+	}
+
+	/**
+	 * A record's fixed values are String constants plus one Set of all of
+	 * them (e.g. RequestDisputed.CATEGORIES), which a service checks API
+	 * input against. A constant left out of the set would be refused as
+	 * invalid; a set holding a value with no constant has no shared name.
+	 */
+	@Test
+	void everyValueConstantIsInItsRecordsValueSet() throws Exception {
+		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
+			Set<Object> constants = new HashSet<>();
+			Set<Object> setValues = new HashSet<>();
+			int sets = 0;
+			for (Field field : entry.eventClass().getDeclaredFields()) {
+				int modifiers = field.getModifiers();
+				if (!Modifier.isPublic(modifiers) || !Modifier.isStatic(modifiers) || !Modifier.isFinal(modifiers)) {
+					continue;
+				}
+				if (field.getType() == String.class) {
+					constants.add(field.get(null));
+				} else if (field.getType() == Set.class) {
+					setValues.addAll((Set<?>) field.get(null));
+					sets++;
+				}
+			}
+			if (constants.isEmpty()) {
+				assertEquals(0, sets, entry.eventClass() + " has a value set but no value constants");
+				continue;
+			}
+			assertEquals(1, sets, entry.eventClass() + " must declare exactly one Set of its values");
+			assertEquals(constants, setValues, entry.eventClass() + "'s value set must hold exactly its constants");
 		}
 	}
 

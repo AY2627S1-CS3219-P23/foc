@@ -17,6 +17,13 @@
   2026-10-09, Claude Code (Opus 5.5): the list of @Nullable components
   now includes every request record's note (author's decision, issue
   #165).
+  2026-10-21, Claude Code (Opus 5.5), issue #234: record list and
+  @Nullable list updated for request.disputed, request.dispute-resolved
+  and the rejection's reasonCode (team decisions DSP-12, D18), and the
+  team's rules for fixed-value String fields (constants + value set,
+  convert at the edge, strict API / tolerant consumers, logging default
+  branch) transcribed; author review: Ryan Ang, pending pull request
+  review.
 -->
 
 # foc-contracts
@@ -35,7 +42,27 @@ Only things that are a *contract between services* belong here:
   broker event — `RequestCreated`, `RequestAccepted`,
   `RequestCollected`, `RequestCompleted`, `RequestCancelled`,
   `RequestExpired`, `CourierArrived`, `RequestSubmitted`,
-  `RequestRejected`, `CreditReserved`, `CreditReservationRejected`.
+  `RequestRejected`, `RequestDisputed`, `RequestDisputeResolved`,
+  `CreditReserved`, `CreditReservationRejected`. Where a field takes a
+  fixed set of values, the field is a `String` and the record holds
+  each value as a `String` constant plus one `Set` of them all
+  (`RequestDisputed.NOT_DELIVERED`, …, `RequestDisputed.CATEGORIES`;
+  `CreditReservationRejected.INSUFFICIENT_CREDITS`, …,
+  `CreditReservationRejected.REASON_CODES`). Services use them as
+  follows (team decision, issue #234):
+  - **Convert at the edge.** A service may keep its own enum for its
+    database and logic, and converts the contract string when a message
+    comes in. An unknown or missing value maps to a fallback (e.g. an
+    unknown or null `reasonCode` → a null `close_reason`), never an
+    exception.
+  - **API input is strict, incoming messages are tolerant.** A REST
+    endpoint taking one of these values answers 400 for anything outside
+    the record's `Set`; a consumer never rejects a message for an
+    unknown value.
+  - **Every consumer `switch` on these strings has a `default` branch
+    that logs and carries on**, never throws — otherwise one new value
+    dead-letters messages, the problem an enum in the contract would
+    have caused.
 - **The `EventTypeRegistry`** (D18): the single source of truth
   pairing each record class with its canonical identity string
   (e.g. `request.accepted`), which serves as both the JSON body's
@@ -103,7 +130,11 @@ Leong Wei Zhi — D16–D19 in
    migration and is retired in a later release. Every record
    component is **required on the wire** unless marked with the
    contracts' `@Nullable` annotation (currently
-   `RequestCancelled.courierId` and every request record's `note`);
+   `RequestCancelled.courierId`, every request record's `note`,
+   `RequestDisputed.disputeNote`, `RequestDisputeResolved.resolutionNote`
+   and `CreditReservationRejected.reasonCode` — the last always set by
+   credit-service from this version on, null only on messages published
+   before it);
    consumers reject events with
    missing required fields as conversion failures. An unknown event
    *type* is likewise a conversion failure — which is also how a

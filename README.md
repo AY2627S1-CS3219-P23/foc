@@ -205,6 +205,11 @@
   2026-10-20: AI Use Summary extended for the D3 demo Postman
   collection (docs/postman/) by Claude Code (Fable 5).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-21: AI Use Summary extended for the N3 dispute event
+  contracts and the rejection's reasonCode (issue #234), and
+  docs/disputes.md (the N3 decisions, transcribed), by Claude Code
+  (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -948,6 +953,20 @@ from the wiki page (polls for the sleeps, captured ids, delta balance
 checks, a sequential accept pair, the real seeded account names,
 2-credit cancel/drop amounts) are listed in `docs/postman/README.md`
 and recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) wrote the `foc-contracts` side of N3 dispute
+resolution (issue #234): the `RequestDisputed` and
+`RequestDisputeResolved` records with their registry entries and
+fixtures, and a `reasonCode` on `CreditReservationRejected`, which
+credit-service now sets; the tests in foc-contracts, credit-service and
+order-service, and the contract docs, were updated to match. The fields,
+their nullability, the category and code values, and the choice to make
+`reasonCode` `@Nullable` under D18 and to keep `note` as the request's
+note (adding `disputeNote` and `resolutionNote`) are team decisions
+(DSP-12), made after the tool flagged where the first draft conflicted
+with D18 and the PR #166 note rule; they are recorded in
+`ai/usage-log.md`. The team's full N3 decision list (DSP-1 to DSP-17,
+with the reasons given) was transcribed into `docs/disputes.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

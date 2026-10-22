@@ -6,6 +6,10 @@
  * eventType, a credit reply binds to its record, and a reply missing a
  * required field or naming an unknown type is refused.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-21, Claude Code (Opus 5.5), issue #234: a rejection published
+ * before reasonCode existed still binds, with a null code (D18), and one
+ * carrying the code binds it; author review: Ryan Ang, pending pull
+ * request review.
  */
 package foc.order.messaging.rabbitmq;
 
@@ -54,6 +58,21 @@ class DomainEventMessageConverterTests {
 		CreditReservationRejected rejected = assertInstanceOf(CreditReservationRejected.class, event);
 		assertEquals("5", rejected.requestId());
 		assertEquals("insufficient available credits", rejected.reason());
+		// published before reasonCode existed: still bound, not refused (D18)
+		assertNull(rejected.reasonCode());
+	}
+
+	@Test
+	void rejectionBindsItsReasonCode() {
+		Object event = converter.fromMessage(message("""
+				{"eventType": "credit.reservation-rejected", "eventId": "e4",
+				 "occurredAt": "2026-10-15T08:00:01Z", "producer": "credit-service",
+				 "correlationId": "5", "parties": [], "requestId": "5", "requesterId": "1",
+				 "amount": 3, "reason": "insufficient available credits",
+				 "reasonCode": "INSUFFICIENT_CREDITS"}"""));
+
+		CreditReservationRejected rejected = assertInstanceOf(CreditReservationRejected.class, event);
+		assertEquals(CreditReservationRejected.INSUFFICIENT_CREDITS, rejected.reasonCode());
 	}
 
 	@Test

@@ -61,6 +61,10 @@
   lookup, its adapter and the internal token are removed. D30/D31 rows
   removed (superseded-decision convention), the enrichment section
   rewritten as "Display names (D32)", catalog/config notes updated.
+  2026-10-21, Claude Code (Opus 5.5), issue #234: event catalog notes
+  extended with the two N3 dispute events and the rejection's nullable
+  reasonCode (team decisions DSP-12, D18); author review: Ryan Ang,
+  pending pull request review.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -196,12 +200,16 @@ carry `requestId`, `requesterId`, `pickupLocation`, `dropoffLocation`,
 and `note` (nullable: a request may have none); the post-acceptance events add `courierId` (nullable on
 `request.cancelled` — a pre-acceptance cancel has no courier),
 `request.submitted` adds `reward` and `request.rejected` adds
-`reason`. Display names are deliberately **not** event fields — and not
+`reason`. The N3 dispute events (issue #234) add, on
+`request.disputed`, `category` and a nullable `disputeNote`, and on
+`request.dispute-resolved`, `courierAmount`, `requesterAmount` and a
+nullable `resolutionNote`; both carry `courierId` and `parties` =
+requester and courier. Display names are deliberately **not** event fields — and not
 stored payload fields either (D32, superseding D30): payloads keep the
 party IDs as-is and the web resolves `courierId` to a username at read
 time — see [Display names](#display-names-d32). The credit domain's `credit.reserved` and
 `credit.reservation-rejected` carry `requestId`, `requesterId` and
-`amount` (plus `reason` on the rejection) and go to the separate
+`amount` (plus `reason` and a nullable `reasonCode` on the rejection) and go to the separate
 `credit-events` exchange, which this service does not bind. Adding
 an event type is a contracts release (record + registry entry +
 fixture) plus a consumer jar bump — the `request.#` binding never

@@ -6,6 +6,8 @@
  * outside one.
  * 2026-10-13, Claude Code (Opus 5.5), PR #188 review (Leong Wei Zhi):
  * a repeated event ID is refused and leaves the stored reply alone.
+ * 2026-10-21, issue #234: test records built with the new reasonCode
+ * component (team decision, DSP-12).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -80,7 +82,8 @@ class ReplyOutboxServiceTest extends PostgresTestContainer {
     void aRejectionKeepsItsReason() {
         transaction.executeWithoutResult(status -> outbox.enqueue(new CreditReservationRejected(
             eventId.toString(), OCCURRED_AT, "credit-service", "corr-1", List.of(),
-            "r-1", "u-req", 9, "insufficient available credits")));
+            "r-1", "u-req", 9, "insufficient available credits",
+            CreditReservationRejected.INSUFFICIENT_CREDITS)));
 
         OutboxEvent stored = outboxEvents.findById(eventId).orElseThrow();
         assertThat(stored.getEventType()).isEqualTo("credit.reservation-rejected");

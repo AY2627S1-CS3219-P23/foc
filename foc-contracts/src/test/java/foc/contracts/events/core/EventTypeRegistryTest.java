@@ -11,6 +11,9 @@
  * pending pull request review.
  * 2026-10-18, Claude Code (Fable 5): count bumped for request.dropped;
  * pending pull request review.
+ * 2026-10-21, Claude Code (Opus 5.5), issue #234: count bumped for
+ * request.disputed and request.dispute-resolved; author review: Ryan
+ * Ang, pending pull request review.
  */
 package foc.contracts.events.core;
 
@@ -27,8 +30,8 @@ import org.junit.jupiter.api.Test;
 class EventTypeRegistryTest {
 
 	@Test
-	void catalogsExactlyTwelveEvents() {
-		assertEquals(12, EventTypeRegistry.entries().size());
+	void catalogsExactlyFourteenEvents() {
+		assertEquals(14, EventTypeRegistry.entries().size());
 	}
 
 	@Test
