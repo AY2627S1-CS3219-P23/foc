@@ -15,6 +15,11 @@
  * 2026-10-22, Claude Code (Opus 5.5), issue #238: runs against
  * Testcontainers Postgres built by Flyway (extends PostgresTestContainer)
  * instead of H2. Author review: Ryan Ang, pending pull request review.
+ * 2026-10-23, Claude Code (Opus 5.5), issue #240: the admin list (state,
+ * closeReason, the shared filters; 403/400), closeReason in lists and the
+ * detail, the batch status lookup (null for an unknown id, {} for none,
+ * its 400s) and retry settlement over HTTP. Author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.order;
 
@@ -325,7 +330,126 @@ class RequestsReadEndpointsTests extends PostgresTestContainer {
 		expectBadRequest(mine + "page=first", "Invalid value for page");
 	}
 
+	// --- admin tools (issue #240, DSP-5 and DSP-10)
+
+	@Test
+	void adminListFiltersEveryUsersRequestsByStateAndCloseReason() throws Exception {
+		long supplier = NEXT_USER.incrementAndGet(); // scopes the all-users list to this test
+		Long cancelled = createdRequestWith(requester, supplier);
+		requestsService.cancel(cancelled, requester);
+		Long timedOut = createWith(stranger, supplier, 5, "2099-01-01T00:00:00Z");
+		requestsService.timeout(timedOut);
+		Long open = createdRequestWith(requester, supplier);
+		String all = "/requests/admin?supplierId=" + supplier;
+
+		assertEquals(List.of(open, timedOut, cancelled), ids(getJson(all, stranger, "ADMIN")));
+		assertEquals(List.of(timedOut, cancelled), ids(getJson(all + "&state=CANCELLED", stranger, "ADMIN")));
+		assertEquals(List.of(timedOut),
+				ids(getJson(all + "&closeReason=RESERVATION_TIMEOUT", stranger, "OWNER")));
+		// several, comma-separated, case forgiven, like state
+		assertEquals(List.of(timedOut, cancelled), ids(getJson(
+				all + "&closeReason=requester_cancelled,%20RESERVATION_TIMEOUT", stranger, "ADMIN")));
+		// a blank closeReason matches every request, as a blank state does
+		assertEquals(List.of(open, timedOut, cancelled), ids(getJson(all + "&closeReason=", stranger, "ADMIN")));
+		// the shared filters apply too
+		assertEquals(List.of(timedOut), ids(getJson(all + "&state=CANCELLED&minCredit=5", stranger, "ADMIN")));
+	}
+
+	@Test
+	void listsAndTheDetailShowTheCloseReason() throws Exception {
+		Long cancelled = createdRequest();
+		requestsService.cancel(cancelled, requester);
+		Long open = createdRequest();
+
+		JsonNode page = getJson("/requests/mine?role=requester", requester);
+		assertEquals("REQUESTER_CANCELLED", item(page, cancelled).get("closeReason").stringValue());
+		assertTrue(item(page, open).get("closeReason").isNull(), "present, null while active");
+		assertEquals("REQUESTER_CANCELLED", getJson("/requests/" + cancelled, requester).get("closeReason").stringValue());
+		assertTrue(getJson("/requests/" + open, requester).get("closeReason").isNull());
+	}
+
+	@Test
+	void adminListIsForAdminsAndChecksItsParameters() throws Exception {
+		send(get("/requests/admin"), requester).andExpect(status().isForbidden());
+		mockMvc.perform(get("/requests/admin")).andExpect(status().isUnauthorized());
+		send(get("/requests/admin?closeReason=LOST"), stranger, "ADMIN")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith(
+						"closeReason must be one or more of REQUESTER_CANCELLED, RESERVATION_TIMEOUT")));
+		send(get("/requests/admin?state=LOST"), stranger, "ADMIN").andExpect(status().isBadRequest());
+		send(get("/requests/admin?minCredit=0"), stranger, "ADMIN")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("minCredit must be at least 1"));
+	}
+
+	@Test
+	void statusesAnswersEachIdOnceWithNullForAnUnknownOne() throws Exception {
+		Long open = createdRequest();
+		Long cancelled = createdRequest();
+		requestsService.cancel(cancelled, requester);
+
+		JsonNode statuses = postJson("/requests/admin/statuses",
+				"{\"ids\": [" + open + ", \"" + cancelled + "\", 999999999, " + open + "]}", "ADMIN");
+
+		assertEquals(3, statuses.size());
+		assertEquals("CREATED", statuses.get(open.toString()).stringValue());
+		assertEquals("CANCELLED", statuses.get(cancelled.toString()).stringValue());
+		assertTrue(statuses.get("999999999").isNull(), "an unknown id is present, as null");
+		assertEquals(0, postJson("/requests/admin/statuses", "{\"ids\": []}", "OWNER").size());
+	}
+
+	@Test
+	void statusesChecksItsIdsAndIsForAdmins() throws Exception {
+		String tooMany = "{\"ids\": [" + String.join(", ", java.util.Collections.nCopies(101, "1")) + "]}";
+		expectStatusesBadRequest(tooMany, "ids must have at most 100 entries");
+		expectStatusesBadRequest("{\"ids\": [\"abc\"]}", "ids must be request ids (numbers)");
+		expectStatusesBadRequest("{\"ids\": [null]}", "ids must be request ids (numbers)");
+		expectStatusesBadRequest("{}", "ids is required");
+		send(post("/requests/admin/statuses").contentType(MediaType.APPLICATION_JSON).content("{\"ids\": []}"),
+				requester).andExpect(status().isForbidden());
+	}
+
+	@Test
+	void retrySettlementOverHttp() throws Exception {
+		Long cancelled = createdRequest();
+		requestsService.cancel(cancelled, requester);
+		Long open = createdRequest();
+
+		sendRetry(cancelled, "ADMIN")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.message").value("Request " + cancelled + " settlement queued for retry"));
+		sendRetry(open, "OWNER")
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value("Request " + open + " is not finished"));
+		sendRetry(999_999_999L, "ADMIN").andExpect(status().isNotFound());
+		sendRetry(cancelled, "USER").andExpect(status().isForbidden());
+	}
+
 	// --- helpers
+
+	private ResultActions sendRetry(Long requestId, String role) throws Exception {
+		return send(post("/retry-settlement").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"requestId\": " + requestId + "}"), stranger, role);
+	}
+
+	private void expectStatusesBadRequest(String body, String message) throws Exception {
+		send(post("/requests/admin/statuses").contentType(MediaType.APPLICATION_JSON).content(body), stranger, "ADMIN")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(message));
+	}
+
+	private JsonNode postJson(String path, String body, String role) throws Exception {
+		String response = send(post(path).contentType(MediaType.APPLICATION_JSON).content(body), stranger, role)
+				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		return jsonMapper.readTree(response);
+	}
+
+	// A CREATED request by the user from the supplier.
+	private Long createdRequestWith(long user, long supplierId) throws Exception {
+		Long id = createWith(user, supplierId, 3, "2099-01-01T00:00:00Z");
+		requestsService.reserve(id);
+		return id;
+	}
 
 	private void expectBadRequest(String path, String message) throws Exception {
 		send(get(path), requester)
@@ -335,10 +459,15 @@ class RequestsReadEndpointsTests extends PostgresTestContainer {
 
 	// Creates a request as the requester with the given supplier, reward and deadline.
 	private Long createWith(long supplierId, int credit, String deadline) throws Exception {
+		return createWith(requester, supplierId, credit, deadline);
+	}
+
+	// Likewise, as the given user.
+	private Long createWith(long user, long supplierId, int credit, String deadline) throws Exception {
 		send(post("/create").contentType(MediaType.APPLICATION_JSON).content(
 				"{\"supplierId\": " + supplierId + ", \"supplierName\": \"The Deck\", "
 						+ "\"dropoffLocation\": \"COM3 Level 2\", \"item\": \"Chicken rice\", "
-						+ "\"creditAmount\": " + credit + ", \"deadline\": \"" + deadline + "\"}"), requester)
+						+ "\"creditAmount\": " + credit + ", \"deadline\": \"" + deadline + "\"}"), user)
 				.andExpect(status().isOk());
 		return requestsRepository.findAll().stream()
 				.map(r -> r.getId()).max(Comparator.naturalOrder()).orElseThrow();

@@ -16,6 +16,11 @@
  * state=CREATED,ACCEPTED), so a page can list all active or all finished
  * requests in one paged query (the author's decision).
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-23, Claude Code (Opus 5.5), issue #240: the admin list (every
+ * user's requests by state and closeReason, both comma-separated, plus
+ * the shared filters) and the batch status lookup (an unknown id answers
+ * null; at most 100 ids). Both shapes are team decisions (DSP-5). Author
+ * review: Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -34,7 +39,10 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
@@ -50,6 +58,9 @@ public class RequestsQueryService {
     }
 
     static final int MAX_PAGE_SIZE = 100;
+
+    // most ids in one batch status lookup (DSP-5)
+    static final int MAX_STATUS_IDS = 100;
 
     // the id breaks ties so pages never overlap
     private static final Sort NEWEST_FIRST = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
@@ -94,6 +105,43 @@ public class RequestsQueryService {
     // route is limited to ADMIN / OWNER in SecurityConfig).
     public Page<Requests> involving(Long userId, String state, RequestFilter filter, int page, int size) {
         return find(allOf(RequestSpecifications.involving(userId), statusIn(parseStates(state))), filter, page, size);
+    }
+
+    // Every user's requests, optionally in some states and with some
+    // close reasons (the admin list; ADMIN / OWNER in SecurityConfig).
+    // The dispute queue is state=DISPUTED (#239).
+    public Page<Requests> admin(String state, String closeReason, RequestFilter filter, int page, int size) {
+        return find(allOf(statusIn(parseStates(state)), closeReasonIn(parseCloseReasons(closeReason))),
+                filter, page, size);
+    }
+
+    // The current state of each id, in the order asked; an id no request
+    // has maps to null, so the caller can tell it apart from a dropped
+    // one. Ids are decimal strings, as JSON may carry them either way; a
+    // repeated id is answered once.
+    public Map<Long, OrderStates> statuses(List<String> ids) {
+        if (ids == null) {
+            throw new InvalidRequestException("ids is required");
+        }
+        if (ids.size() > MAX_STATUS_IDS) {
+            throw new InvalidRequestException("ids must have at most " + MAX_STATUS_IDS + " entries");
+        }
+        Map<Long, OrderStates> statuses = new LinkedHashMap<>();
+        for (String id : ids) {
+            statuses.put(parseId(id), null);
+        }
+        for (Requests request : requestsRepository.findAllById(statuses.keySet())) {
+            statuses.put(request.getId(), request.getStatus());
+        }
+        return statuses;
+    }
+
+    private static Long parseId(String id) {
+        try {
+            return Long.valueOf(id.trim());
+        } catch (NullPointerException | NumberFormatException e) {
+            throw new InvalidRequestException("ids must be request ids (numbers)");
+        }
     }
 
     // The base query narrowed by the filter, in the filter's order.
@@ -161,19 +209,28 @@ public class RequestsQueryService {
     // One state or several, comma-separated ("CREATED,ACCEPTED"); null or
     // blank: any state. Every listed name must be a state.
     private static EnumSet<OrderStates> parseStates(String state) {
-        if (state == null || state.isBlank()) {
+        return parseNames("state", state, OrderStates.class);
+    }
+
+    // Likewise for close reasons ("RESERVATION_TIMEOUT,DEADLINE_PASSED").
+    private static EnumSet<CloseReason> parseCloseReasons(String closeReason) {
+        return parseNames("closeReason", closeReason, CloseReason.class);
+    }
+
+    private static <E extends Enum<E>> EnumSet<E> parseNames(String parameter, String value, Class<E> type) {
+        if (value == null || value.isBlank()) {
             return null;
         }
-        EnumSet<OrderStates> states = EnumSet.noneOf(OrderStates.class);
-        for (String name : state.split(",")) {
+        EnumSet<E> constants = EnumSet.noneOf(type);
+        for (String name : value.split(",")) {
             try {
-                states.add(OrderStates.valueOf(name.trim().toUpperCase(Locale.ROOT)));
+                constants.add(Enum.valueOf(type, name.trim().toUpperCase(Locale.ROOT)));
             } catch (IllegalArgumentException e) {
-                throw new InvalidRequestException("state must be one or more of " + Arrays.stream(OrderStates.values())
-                        .map(Enum::name).collect(Collectors.joining(", ")) + ", comma-separated");
+                throw new InvalidRequestException(parameter + " must be one or more of " + Arrays.stream(
+                        type.getEnumConstants()).map(Enum::name).collect(Collectors.joining(", ")) + ", comma-separated");
             }
         }
-        return states;
+        return constants;
     }
 
     private static Role parseRole(String role) {

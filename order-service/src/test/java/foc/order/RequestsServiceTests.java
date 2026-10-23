@@ -39,9 +39,14 @@
  * 2026-10-23, Claude Code (Opus 5.5), PR #244 review: that test restored,
  * now against Flyway V1's CHECK. Author review: Ryan Ang, pending pull
  * request review.
+ * 2026-10-23, Claude Code (Opus 5.5), issue #240: close_reason for each
+ * ending and its CHECK, request_id on every outbox row, and retry
+ * settlement (same event id; 409 cases; unknown request). Author review:
+ * Ryan Ang, pending pull request review.
  */
 package foc.order;
 
+import foc.order.model.OutboxEvent;
 import foc.order.model.Requests;
 import foc.order.repository.OutboxEventRepository;
 import foc.order.repository.RequestsRepository;
@@ -219,7 +224,7 @@ class RequestsServiceTests extends PostgresTestContainer {
 	void rejectMovesPendingToRejectedAndWritesTheReason() {
 		Long id = newRequest();
 
-		requestsService.reject(id, "insufficient available credits");
+		requestsService.reject(id, "insufficient available credits", CloseReason.INSUFFICIENT_CREDITS);
 
 		assertEquals(OrderStates.REJECTED, stored(id).getStatus());
 		JsonNode rejected = eventsFor(id).get(1);
@@ -617,6 +622,136 @@ class RequestsServiceTests extends PostgresTestContainer {
 		assertTrue(eventTypes(id).contains("request.cancelled"));
 	}
 
+	// --- close_reason (DSP-1)
+
+	@Test
+	void eachAbnormalEndingRecordsItsCloseReason() {
+		Long cancelled = newCreatedRequest();
+		requestsService.cancel(cancelled, REQUESTER_ID);
+		Long timedOut = newRequest();
+		requestsService.timeout(timedOut);
+		Long expired = newCreatedRequest();
+		requestsService.expire(expired);
+		Long rejected = newRequest();
+		requestsService.reject(rejected, "reward must be at least 1", CloseReason.INVALID_REWARD);
+
+		assertEquals(CloseReason.REQUESTER_CANCELLED, stored(cancelled).getCloseReason());
+		assertEquals(CloseReason.RESERVATION_TIMEOUT, stored(timedOut).getCloseReason());
+		assertEquals(CloseReason.DEADLINE_PASSED, stored(expired).getCloseReason());
+		assertEquals(CloseReason.INVALID_REWARD, stored(rejected).getCloseReason());
+	}
+
+	@Test
+	void rejectionWithoutAReasonCodeLeavesCloseReasonNull() {
+		Long id = newRequest();
+
+		requestsService.reject(id, "insufficient available credits", null);
+
+		assertEquals(OrderStates.REJECTED, stored(id).getStatus());
+		assertNull(stored(id).getCloseReason());
+		// the reason text still goes out
+		assertEquals("insufficient available credits", event(id, "request.rejected").get("reason").stringValue());
+	}
+
+	@Test
+	void activeAndCompletedRequestsHaveNoCloseReason() {
+		Long active = newCreatedRequest();
+		requestsService.accept(active, COURIER_ID);
+
+		assertNull(stored(active).getCloseReason());
+		assertNull(stored(newCompletedRequest()).getCloseReason());
+	}
+
+	// The CHECK is written by hand in Flyway's V2; this fails if a reason
+	// is added to CloseReason without a migration replacing it.
+	@Test
+	void databaseAcceptsEveryCloseReason() {
+		Long id = newRequest();
+
+		for (CloseReason reason : CloseReason.values()) {
+			jdbcTemplate.update("update requests set close_reason = ? where id = ?", reason.name(), id);
+			assertEquals(reason, stored(id).getCloseReason());
+		}
+	}
+
+	@Test
+	void databaseRejectsACloseReasonThatIsNotACloseReason() {
+		Long id = newRequest();
+
+		assertThrows(DataIntegrityViolationException.class,
+				() -> jdbcTemplate.update("update requests set close_reason = 'BOGUS' where id = ?", id));
+
+		assertNull(stored(id).getCloseReason());
+	}
+
+	// --- outbox request_id (DSP-17)
+
+	@Test
+	void everyOutboxRowCarriesItsRequestsId() {
+		Long id = newCompletedRequest();
+
+		List<OutboxEvent> rows = outboxRows(id);
+		assertEquals(List.of("request.submitted", "request.created", "request.accepted", "request.collected",
+				"request.courier-arrived", "request.completed"), rows.stream().map(OutboxEvent::getEventType).toList());
+		for (OutboxEvent row : rows) {
+			assertEquals(id, row.getRequestId(), row.getEventType());
+		}
+	}
+
+	// --- retry settlement (DSP-10)
+
+	@Test
+	void retrySettlementMarksTheFinalEventUnsentWithTheSameEventId() {
+		Long id = newCompletedRequest();
+		OutboxEvent completed = outboxRow(id, "request.completed");
+		markAllSent(id);
+
+		OutboxEvent retried = requestsService.retrySettlement(id);
+
+		assertEquals(completed.getEventId(), retried.getEventId());
+		OutboxEvent stored = outboxEvents.findById(completed.getEventId()).orElseThrow();
+		assertNull(stored.getSentAt());
+		assertNull(stored.getNextAttemptAt());
+		// the request's other events stay sent
+		outboxRows(id).stream().filter(e -> !e.getEventId().equals(completed.getEventId()))
+				.forEach(e -> assertNotNull(e.getSentAt(), e.getEventType()));
+	}
+
+	@Test
+	void retrySettlementWorksForCancelledAndExpiredRequests() {
+		Long cancelled = newCreatedRequest();
+		requestsService.cancel(cancelled, REQUESTER_ID);
+		Long expired = newCreatedRequest();
+		requestsService.expire(expired);
+
+		assertEquals("request.cancelled", requestsService.retrySettlement(cancelled).getEventType());
+		assertEquals("request.expired", requestsService.retrySettlement(expired).getEventType());
+	}
+
+	@Test
+	void retrySettlementRefusesAnActiveRequest() {
+		Long id = newCreatedRequest();
+		requestsService.accept(id, COURIER_ID);
+
+		IllegalStateException e = assertThrows(IllegalStateException.class, () -> requestsService.retrySettlement(id));
+		assertEquals("Request " + id + " is not finished", e.getMessage());
+	}
+
+	@Test
+	void retrySettlementRefusesAFinishedRequestWithNoSettlementEvent() {
+		// nothing was held, so request.rejected settles nothing
+		Long id = newRequest();
+		requestsService.reject(id, "insufficient available credits", CloseReason.INSUFFICIENT_CREDITS);
+
+		IllegalStateException e = assertThrows(IllegalStateException.class, () -> requestsService.retrySettlement(id));
+		assertEquals("Request " + id + " has no settlement event", e.getMessage());
+	}
+
+	@Test
+	void retrySettlementOfAnUnknownRequestThrows() {
+		assertThrows(NoSuchElementException.class, () -> requestsService.retrySettlement(999_999_999L));
+	}
+
 	// Two callers overlapping: first's transaction reads the request, then
 	// other runs and commits in its own transaction on another thread,
 	// then first carries on with the copy it read — so first writes last,
@@ -653,8 +788,35 @@ class RequestsServiceTests extends PostgresTestContainer {
 		return id;
 	}
 
+	// A request taken through every step to COMPLETED.
+	private Long newCompletedRequest() {
+		Long id = newCreatedRequest();
+		requestsService.accept(id, COURIER_ID);
+		requestsService.collect(id, COURIER_ID);
+		requestsService.arrive(id, COURIER_ID);
+		requestsService.complete(id, REQUESTER_ID);
+		return id;
+	}
+
 	private Requests stored(Long id) {
 		return requestsRepository.findById(id).orElseThrow();
+	}
+
+	// The outbox rows whose request_id is this request, oldest first.
+	private List<OutboxEvent> outboxRows(Long id) {
+		return outboxEvents.findAll().stream()
+				.filter(e -> id.equals(e.getRequestId()))
+				.sorted((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
+				.toList();
+	}
+
+	private OutboxEvent outboxRow(Long id, String type) {
+		return outboxRows(id).stream().filter(e -> type.equals(e.getEventType())).findFirst().orElseThrow();
+	}
+
+	// As if the publisher had sent every event of the request.
+	private void markAllSent(Long id) {
+		jdbcTemplate.update("update outbox_event set sent_at = now() where request_id = ?", id);
 	}
 
 	// The outbox events for one request, oldest first.

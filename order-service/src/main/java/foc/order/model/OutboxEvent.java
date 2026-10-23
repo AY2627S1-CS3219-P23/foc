@@ -10,6 +10,9 @@
  * payload declared text, as credit-service's V1 has it, so Flyway's V1
  * can say text and still validate. Author review: Ryan Ang, pending
  * pull request review.
+ * 2026-10-23, Claude Code (Opus 5.5), issue #240: requestId (DSP-17;
+ * bigint, set by the caller, team decision). Author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.order.model;
 
@@ -45,6 +48,11 @@ public class OutboxEvent {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    // the request the event is about (DSP-17); null only on a row the
+    // V2 back-fill could not read
+    @Column(name = "request_id", updatable = false)
+    private Long requestId;
+
     // null = not yet published
     @Column(name = "sent_at")
     private Instant sentAt;
@@ -56,11 +64,12 @@ public class OutboxEvent {
     protected OutboxEvent() {
     }
 
-    public OutboxEvent(UUID eventId, String eventType, String payload, Instant createdAt) {
+    public OutboxEvent(UUID eventId, String eventType, String payload, Instant createdAt, Long requestId) {
         this.eventId = eventId;
         this.eventType = eventType;
         this.payload = payload;
         this.createdAt = createdAt;
+        this.requestId = requestId;
     }
 
     public UUID getEventId() {
@@ -77,6 +86,10 @@ public class OutboxEvent {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Long getRequestId() {
+        return requestId;
     }
 
     public Instant getSentAt() {
