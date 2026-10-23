@@ -23,6 +23,10 @@
   2026-10-22, Claude Code (Opus 5.5), issue #238: the Schema section
   (Flyway, the one-off order-db reset) and the tests on Testcontainers
   Postgres. Author review: Ryan Ang, pending pull request review.
+  2026-10-23, Claude Code (Opus 5.5), PR #244 review: the reset now
+  recreates every volume, since Credit's reservations are keyed by
+  order ids; V1 gains the outbox index. Author review: Ryan Ang,
+  pending pull request review.
 -->
 
 # Order Service
@@ -52,19 +56,30 @@ file; an applied migration is never edited.
 - **Flyway V1** (`V1__baseline.sql`, issue #238): the `requests` and
   `outbox_event` tables as `ddl-auto: update` built them, with the
   status CHECK (`requests_status_check`) listing every `OrderStates`
-  name. A new state needs a migration that replaces that CHECK.
+  name, `payload` as `text` (as in credit-service), and the partial
+  index `idx_outbox_event_unsent` for the publisher's poll. A new state
+  needs a migration that replaces that CHECK
+  (`databaseAcceptsEveryOrderState` fails until it does).
 
 **If the service fails to start after pulling V1** (Flyway reports a
 non-empty schema with no history table, or Hibernate validation fails):
 your `order-db` volume was built by `ddl-auto: update` before Flyway.
-It held no real data, so recreate it once. This deletes the order
-database only:
+It held no real data, so recreate it once, **together with the other
+services' volumes**:
 
 ```sh
-docker compose rm -sf order-service order-db
-docker volume rm foc_order-db-data
-docker compose up -d order-service
+docker compose down -v
+docker compose up -d
 ```
+
+Resetting `order-db` alone is not enough. A fresh `order-db` numbers
+requests from 1 again, but `credit-db` still holds the old run's
+reservations keyed by those ids, and Credit treats a repeated id as the
+same request: the new request either gets no reply (cancelled by the
+PENDING sweep after 30 s) or is confirmed against the old run's hold.
+`down -v` also clears the demo accounts; they are seeded again on start
+when `USER_SEED_DEMO=true` is set, as
+[`docs/postman/README.md`](../docs/postman/README.md) describes.
 
 ## Saga with the Credit Service
 

@@ -214,6 +214,9 @@
   baseline (issue #238) and the PR #243 review follow-ups, by Claude
   Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-23: AI Use Summary extended for the PR #244 review fixes, by
+  Claude Code (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -982,7 +985,11 @@ rejection reason texts, `RequestDropped` in the foc-contracts README,
 a note on the contracts value-set test, a notification-service check
 that fixtures use a value from their record's value set, and matching
 reason/code pairs in an order-service test helper. Recorded in
-`ai/usage-log.md`.
+`ai/usage-log.md`. For the PR #244 review it then added the outbox
+index and the `text` payload to V1 (team decisions), restored the test
+that every order state passes the status CHECK, made the documented
+volume reset recreate every service's volume, ran CI's skipped-tests
+guard on every Java module, and tightened the fixture value-set test.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

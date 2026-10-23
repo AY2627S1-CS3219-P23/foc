@@ -36,6 +36,9 @@
  * instead of H2; the test that every OrderStates name passes the
  * hand-written check removed with that check. Author review: Ryan Ang,
  * pending pull request review.
+ * 2026-10-23, Claude Code (Opus 5.5), PR #244 review: that test restored,
+ * now against Flyway V1's CHECK. Author review: Ryan Ang, pending pull
+ * request review.
  */
 package foc.order;
 
@@ -110,6 +113,18 @@ class RequestsServiceTests extends PostgresTestContainer {
 		Long id = requestsRepository.saveAndFlush(request).getId();
 
 		assertNotNull(stored(id).getCreatedAt());
+	}
+
+	// The CHECK is written by hand in a Flyway migration; this fails if a
+	// state is added to OrderStates without a migration replacing it.
+	@Test
+	void databaseAcceptsEveryOrderState() {
+		Long id = newRequest();
+
+		for (OrderStates state : OrderStates.values()) {
+			jdbcTemplate.update("update requests set status = ? where id = ?", state.name(), id);
+			assertEquals(state, stored(id).getStatus());
+		}
 	}
 
 	@Test

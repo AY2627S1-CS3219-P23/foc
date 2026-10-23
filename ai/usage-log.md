@@ -42,6 +42,31 @@ Entry template:
 ```
 
 ---
+## 2026-10-23 — Ryan Ang (fix: PR #244 review findings)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** order-service (`V1__baseline.sql`: `outbox_event.payload`
+  as `text` and the partial index `idx_outbox_event_unsent`;
+  `OutboxEvent.java`: `payload` declared `text`; `RequestsServiceTests`:
+  `databaseAcceptsEveryOrderState` restored; `README.md`: the reset
+  recreates every volume, with the reason). `.github/workflows/ci.yml`:
+  the skipped-tests guard runs on every Java leg. notification-service
+  (`DomainEventContractTest`: the fixed value is read from a named
+  component per record). `README.md` (AI Use Summary and header line).
+- **Prompt(s):** Review and explain the six PR #244 review findings. 
+  Team decisions: add the outbox index now, partial on `created_at` 
+  where `sent_at is null` (Order's sent rows are kept and the poll runs 
+  every second), without credit-service's `idx_outbox_event_sent`, since 
+  Order has no purge; make `payload` `text` so both outbox copies behave 
+  the same; edit V1 directly rather than adding a V2, as no deployment has
+  applied it yet. The other four fixes followed the reviewer's
+  suggestions.
+- **Author review:** 
+  order-service 104 tests (the restored test is the 104th) and
+  notification-service 89 pass locally with Docker, none skipped. A
+  fixture with a misspelt category and the correct value in another
+  component now fails the fixture test.
+
 ## 2026-10-22 — Ryan Ang (feat: Order Flyway baseline, issue #238; PR #243 follow-ups)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, refactor, docs

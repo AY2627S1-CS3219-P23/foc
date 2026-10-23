@@ -8,6 +8,8 @@
 -- enum check plus the hand-written one in Requests.columnDefinition), and
 -- the columns are in entity order. Later schema changes are new
 -- migrations (V2 and V3 for N3, issues #240 and #239).
+-- Same day, PR #244 review (team decision): outbox_event.payload is text,
+-- as in credit-service, and the partial index for the publisher's poll.
 -- Author review: Ryan Ang, pending pull request review.
 
 -- One row per errand request. status holds an OrderStates name; a state
@@ -40,9 +42,14 @@ create table requests (
 create table outbox_event (
     event_id uuid not null,
     event_type varchar(255) not null,
-    payload varchar(32600) not null,
+    payload text not null,
     created_at timestamp(6) with time zone not null,
     sent_at timestamp(6) with time zone,
     next_attempt_at timestamp(6) with time zone,
     primary key (event_id)
 );
+
+-- the publisher's poll: unsent events, oldest first. Partial, so the
+-- index stays small no matter how many sent rows accumulate (sent rows
+-- are kept; Order has no purge).
+create index idx_outbox_event_unsent on outbox_event (created_at) where sent_at is null;
