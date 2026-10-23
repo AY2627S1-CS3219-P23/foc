@@ -42,6 +42,66 @@ Entry template:
 ```
 
 ---
+## 2026-10-23 — Ryan Ang (fix: PR #244 review findings)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** order-service (`V1__baseline.sql`: `outbox_event.payload`
+  as `text` and the partial index `idx_outbox_event_unsent`;
+  `OutboxEvent.java`: `payload` declared `text`; `RequestsServiceTests`:
+  `databaseAcceptsEveryOrderState` restored; `README.md`: the reset
+  recreates every volume, with the reason). `.github/workflows/ci.yml`:
+  the skipped-tests guard runs on every Java leg. notification-service
+  (`DomainEventContractTest`: the fixed value is read from a named
+  component per record). `README.md` (AI Use Summary and header line).
+- **Prompt(s):** Review and explain the six PR #244 review findings. 
+  Team decisions: add the outbox index now, partial on `created_at` 
+  where `sent_at is null` (Order's sent rows are kept and the poll runs 
+  every second), without credit-service's `idx_outbox_event_sent`, since 
+  Order has no purge; make `payload` `text` so both outbox copies behave 
+  the same; edit V1 directly rather than adding a V2, as no deployment has
+  applied it yet. The other four fixes followed the reviewer's
+  suggestions.
+- **Author review:** 
+  order-service 104 tests (the restored test is the 104th) and
+  notification-service 89 pass locally with Docker, none skipped. A
+  fixture with a misspelt category and the correct value in another
+  component now fails the fixture test.
+
+## 2026-10-22 — Ryan Ang (feat: Order Flyway baseline, issue #238; PR #243 follow-ups)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, refactor, docs
+- **Scope:** order-service (`pom.xml`: Flyway, Testcontainers Postgres,
+  H2 removed; `db/migration/V1__baseline.sql` new; `application.yaml`
+  main and test: `ddl-auto: validate`; `PostgresTestContainer` new, and
+  the ten `@SpringBootTest` classes extend it; `Requests.java`: the
+  hand-written status CHECK removed from `columnDefinition`;
+  `RequestsServiceTests`: the state-list test removed with it;
+  `CreditReplyHandlerTests`: the rejection helper takes the reasonCode;
+  `README.md`: Schema section and the one-off `order-db` reset).
+  PR #243 review follow-ups: credit-service (`RequestEventHandler` reason
+  text constants renamed `*_TEXT`; `RequestEventHandlerTest`),
+  foc-contracts (`README.md` record list gains `RequestDropped`;
+  `RequestEventRecordsTest` javadoc), notification-service
+  (`DomainEventContractTest`: a fixture's fixed value must be in its
+  record's value set). `README.md` (AI Use Summary and header line).
+- **Prompt(s):** Implement issue #238 as written there (team decision
+  DSP-16), and address the PR #243 review follow-ups in the same branch.
+  V1 was taken from Hibernate's PostgreSQL DDL export of the current
+  entities and checked against the schema `ddl-auto: update` had built
+  in an existing `order-db` volume: the same columns and types, with
+  the status CHECK written once and named `requests_status_check`
+  (Hibernate had emitted it twice). The test base class follows
+  credit-service's and user-service's (skips without Docker). For the
+  follow-ups the tool took the reviewer's suggested fixes; where two
+  were offered for the constant names it took the rename, the smaller
+  one. The follow-up about mapping `reasonCode` to `close_reason` in one
+  place is left for issue #240, where `close_reason` is added.
+- **Author review:** 
+  All suites pass locally with Docker: foc-contracts 12, order-service
+  103 (the removed state-list test was the 104th), credit-service 268,
+  notification-service 89 tests, none skipped. A misspelt fixture
+  category made the new fixture test fail.
+
 ## 2026-10-21 — Ryan Ang (feat: N3 dispute event contracts, issue #234)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs

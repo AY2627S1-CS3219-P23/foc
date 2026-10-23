@@ -31,6 +31,14 @@
  * refused by the @Version check and leaves no trace; pending pull
  * request review.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-22, Claude Code (Opus 5.5), issue #238: runs against
+ * Testcontainers Postgres built by Flyway (extends PostgresTestContainer)
+ * instead of H2; the test that every OrderStates name passes the
+ * hand-written check removed with that check. Author review: Ryan Ang,
+ * pending pull request review.
+ * 2026-10-23, Claude Code (Opus 5.5), PR #244 review: that test restored,
+ * now against Flyway V1's CHECK. Author review: Ryan Ang, pending pull
+ * request review.
  */
 package foc.order;
 
@@ -58,7 +66,7 @@ import java.util.concurrent.CompletableFuture;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
-class RequestsServiceTests {
+class RequestsServiceTests extends PostgresTestContainer {
 
 	private static final Long REQUESTER_ID = 1L;
 	private static final Long COURIER_ID = 7L;
@@ -107,18 +115,8 @@ class RequestsServiceTests {
 		assertNotNull(stored(id).getCreatedAt());
 	}
 
-	@Test
-	void databaseRejectsAStatusThatIsNotAnOrderState() {
-		Long id = newRequest();
-
-		assertThrows(DataIntegrityViolationException.class,
-				() -> jdbcTemplate.update("update requests set status = 'BOGUS' where id = ?", id));
-
-		assertEquals(OrderStates.PENDING, stored(id).getStatus());
-	}
-
-	// The check in Requests.status is written by hand; this fails if a
-	// state is added to OrderStates but not to the check.
+	// The CHECK is written by hand in a Flyway migration; this fails if a
+	// state is added to OrderStates without a migration replacing it.
 	@Test
 	void databaseAcceptsEveryOrderState() {
 		Long id = newRequest();
@@ -127,6 +125,16 @@ class RequestsServiceTests {
 			jdbcTemplate.update("update requests set status = ? where id = ?", state.name(), id);
 			assertEquals(state, stored(id).getStatus());
 		}
+	}
+
+	@Test
+	void databaseRejectsAStatusThatIsNotAnOrderState() {
+		Long id = newRequest();
+
+		assertThrows(DataIntegrityViolationException.class,
+				() -> jdbcTemplate.update("update requests set status = 'BOGUS' where id = ?", id));
+
+		assertEquals(OrderStates.PENDING, stored(id).getStatus());
 	}
 
 	@Test

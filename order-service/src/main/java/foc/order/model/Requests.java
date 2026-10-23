@@ -13,6 +13,9 @@
  * by the author's decision, with a hand-written check constraint on
  * the text column (the author's choice over dropping columnDefinition).
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-22, Claude Code (Opus 5.5), issue #238: the hand-written check
+ * removed from status's columnDefinition; Flyway's V1 holds it now.
+ * Author review: Ryan Ang, pending pull request review.
  */
 package foc.order.model;
 
@@ -56,13 +59,10 @@ public class Requests {
     @Column(nullable = false)
     private Integer creditAmount;
 
-    // Stored as the constant's name, e.g. "PENDING" (F0.1). The check
-    // lists every OrderStates constant by hand: add a new state here too
-    // (RequestsServiceTests fails if one is missing).
+    // Stored as the constant's name, e.g. "PENDING" (F0.1); the allowed
+    // names are a CHECK in the Flyway migrations (db/migration)
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, columnDefinition = "text check (status in ("
-            + "'PENDING', 'CREATED', 'ACCEPTED', 'COLLECTED', 'ARRIVED', "
-            + "'COMPLETED', 'CANCELLED', 'EXPIRED', 'REJECTED'))")
+    @Column(nullable = false, columnDefinition = "text")
     private OrderStates status;
 
     // Must be in the future at creation (F1.1.2)

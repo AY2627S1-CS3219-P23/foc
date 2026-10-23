@@ -6,6 +6,9 @@
  * one is pushed back by the retry delay and left unsent, and a broker
  * failure stops the poll.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-22, Claude Code (Opus 5.5), issue #238: runs against
+ * Testcontainers Postgres built by Flyway (extends PostgresTestContainer)
+ * instead of H2. Author review: Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -25,7 +28,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
-class OutboxPublisherTests {
+class OutboxPublisherTests extends PostgresTestContainer {
 
 	private static final long RETRY_DELAY_MS = 30_000;
 

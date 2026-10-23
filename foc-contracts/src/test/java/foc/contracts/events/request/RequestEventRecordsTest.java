@@ -17,6 +17,9 @@
  * constants must match its value set (team decision: String constants
  * plus a set of all values); author review: Ryan Ang, pending pull
  * request review.
+ * 2026-10-22, Claude Code (Opus 5.5), PR #243 review follow-up: the
+ * value-set test's javadoc says its strictness is deliberate; author
+ * review: Ryan Ang, pending pull request review.
  */
 package foc.contracts.events.request;
 
@@ -125,6 +128,12 @@ class RequestEventRecordsTest {
 	 * them (e.g. RequestDisputed.CATEGORIES), which a service checks API
 	 * input against. A constant left out of the set would be refused as
 	 * invalid; a set holding a value with no constant has no shared name.
+	 *
+	 * <p>Deliberately stricter than that rule: every public static final
+	 * String on a record counts as a value constant, and a record may
+	 * declare at most one Set. A record that needs an unrelated String
+	 * constant, or a second fixed-value field with its own set, must
+	 * change this test first (the one-Set rule is in AGENTS.md).
 	 */
 	@Test
 	void everyValueConstantIsInItsRecordsValueSet() throws Exception {

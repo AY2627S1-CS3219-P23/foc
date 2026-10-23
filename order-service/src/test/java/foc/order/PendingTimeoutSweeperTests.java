@@ -6,6 +6,9 @@
  * PENDING request and a CREATED one are left alone.
  * 2026-10-16: statuses compared as OrderStates constants.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-22, Claude Code (Opus 5.5), issue #238: runs against
+ * Testcontainers Postgres built by Flyway (extends PostgresTestContainer)
+ * instead of H2. Author review: Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -21,7 +24,7 @@ import java.time.temporal.ChronoUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
-class PendingTimeoutSweeperTests {
+class PendingTimeoutSweeperTests extends PostgresTestContainer {
 
 	private static final long TIMEOUT_MS = 30_000;
 

@@ -12,6 +12,9 @@
  * requests past their deadline, and accepting one is a 409.
  * 2026-10-20: state takes several states, comma-separated.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-22, Claude Code (Opus 5.5), issue #238: runs against
+ * Testcontainers Postgres built by Flyway (extends PostgresTestContainer)
+ * instead of H2. Author review: Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -46,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class RequestsReadEndpointsTests {
+class RequestsReadEndpointsTests extends PostgresTestContainer {
 
 	// order.jwt.secret in the test application.yaml
 	private static final String SECRET = "test-jwt-secret-that-is-at-least-32-bytes-long";

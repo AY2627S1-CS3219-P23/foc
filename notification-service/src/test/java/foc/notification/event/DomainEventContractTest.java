@@ -19,6 +19,14 @@
  * suggestion): a request event's parties is still required non-empty;
  * only credit events may have none.
  * Author review: Ryan Ang, pending pull request review.
+ * 2026-10-22, Claude Code (Opus 5.5), PR #243 review follow-up: a
+ * fixture's fixed value (category, reasonCode) must be in its record's
+ * value set, so a typo cannot become the documented example. Author
+ * review: Ryan Ang, pending pull request review.
+ * 2026-10-23, Claude Code (Opus 5.5), PR #244 review: the value is read
+ * from the component named for each record, not from whichever String
+ * component holds one. Author review: Ryan Ang, pending pull request
+ * review.
  */
 package foc.notification.event;
 
@@ -27,10 +35,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import foc.contracts.events.core.DomainEvent;
 import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.credit.CreditEvent;
+import foc.contracts.events.credit.CreditReservationRejected;
 import foc.contracts.events.request.RequestAccepted;
+import foc.contracts.events.request.RequestDisputed;
 import foc.contracts.events.request.RequestEvent;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.RecordComponent;
+import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.json.JsonTest;
@@ -56,6 +71,11 @@ import tools.jackson.databind.ObjectMapper;
  */
 @JsonTest
 class DomainEventContractTest {
+
+	// the component holding each value-set record's fixed value
+	private static final Map<Class<?>, String> VALUE_COMPONENTS = Map.of(
+			CreditReservationRejected.class, "reasonCode",
+			RequestDisputed.class, "category");
 
 	@Autowired
 	private ObjectMapper objectMapper;
@@ -83,6 +103,50 @@ class DomainEventContractTest {
 			}
 			assertThat(requestIdOf(event)).isEqualTo("req-20260919-0042");
 		}
+	}
+
+	/**
+	 * A record with fixed values holds them as one public static final
+	 * Set (e.g. RequestDisputed.CATEGORIES). Its fixture must carry one of
+	 * them in the component VALUE_COMPONENTS names, so a misspelt value
+	 * fails here rather than becoming the documented example. A new
+	 * value-set record fails until it is added to that map.
+	 */
+	@Test
+	void everyFixtureUsesAValueFromItsRecordsValueSet() throws Exception {
+		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
+			Set<?> values = valueSetOf(entry.eventClass());
+			if (values == null) {
+				continue;
+			}
+			String path = "/contracts/" + entry.eventType().replace('.', '-') + ".example.json";
+			DomainEvent event;
+			try (InputStream fixture = getClass().getResourceAsStream(path)) {
+				event = objectMapper.readValue(fixture, entry.eventClass());
+			}
+
+			String name = VALUE_COMPONENTS.get(entry.eventClass());
+			assertThat(name).as("%s has a value set but no entry in VALUE_COMPONENTS",
+					entry.eventClass().getSimpleName()).isNotNull();
+			Object value = null;
+			for (RecordComponent component : entry.eventClass().getRecordComponents()) {
+				if (component.getName().equals(name)) {
+					value = component.getAccessor().invoke(event);
+				}
+			}
+			assertThat(value).as("%s: %s from %s", path, name, values).isIn(values);
+		}
+	}
+
+	private static Set<?> valueSetOf(Class<?> recordClass) throws IllegalAccessException {
+		for (Field field : recordClass.getDeclaredFields()) {
+			int modifiers = field.getModifiers();
+			if (field.getType() == Set.class && Modifier.isPublic(modifiers)
+					&& Modifier.isStatic(modifiers) && Modifier.isFinal(modifiers)) {
+				return (Set<?>) field.get(null);
+			}
+		}
+		return null;
 	}
 
 	private static String expectedProducer(DomainEvent event) {

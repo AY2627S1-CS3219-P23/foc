@@ -24,6 +24,9 @@
   convert at the edge, strict API / tolerant consumers, logging default
   branch) transcribed; author review: Ryan Ang, pending pull request
   review.
+  2026-10-22, Claude Code (Opus 5.5), PR #243 review follow-up:
+  RequestDropped added to the record list (it was missing). Author
+  review: Ryan Ang, pending pull request review.
 -->
 
 # foc-contracts
@@ -41,7 +44,7 @@ Only things that are a *contract between services* belong here:
   `RequestEvent` / `CreditEvent` interfaces and one flat record per
   broker event — `RequestCreated`, `RequestAccepted`,
   `RequestCollected`, `RequestCompleted`, `RequestCancelled`,
-  `RequestExpired`, `CourierArrived`, `RequestSubmitted`,
+  `RequestDropped`, `RequestExpired`, `CourierArrived`, `RequestSubmitted`,
   `RequestRejected`, `RequestDisputed`, `RequestDisputeResolved`,
   `CreditReserved`, `CreditReservationRejected`. Where a field takes a
   fixed set of values, the field is a `String` and the record holds

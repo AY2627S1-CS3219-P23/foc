@@ -21,6 +21,9 @@
  * described as rebuilt from the event, with the record's decision.
  * 2026-10-21, issue #234: the rejection carries reasonCode beside the
  * reason text (team decision, DSP-12).
+ * 2026-10-22, PR #243 review follow-up: the reason text constants
+ * renamed with a _TEXT suffix, so they no longer share a name with the
+ * reasonCode constants passed beside them.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -65,8 +68,10 @@ public class RequestEventHandler {
     private static final Logger log = LoggerFactory.getLogger(RequestEventHandler.class);
 
     static final String PRODUCER = "credit-service";
-    static final String INSUFFICIENT_CREDITS = "insufficient available credits";
-    static final String REWARD_BELOW_ONE = "reward must be at least 1 credit";
+    // the rejection's reason text, for people; its reasonCode is the
+    // matching CreditReservationRejected constant
+    static final String INSUFFICIENT_CREDITS_TEXT = "insufficient available credits";
+    static final String REWARD_BELOW_ONE_TEXT = "reward must be at least 1 credit";
 
     private final CreditOperations operations;
     private final ReplyOutbox outbox;
@@ -106,9 +111,9 @@ public class RequestEventHandler {
                 newEventId(), Instant.now(), PRODUCER, e.correlationId(), List.of(),
                 e.requestId(), e.requesterId(), e.reward());
             case REJECTED_INSUFFICIENT_CREDITS, ALREADY_REJECTED_INSUFFICIENT_CREDITS ->
-                rejected(e, INSUFFICIENT_CREDITS, CreditReservationRejected.INSUFFICIENT_CREDITS);
+                rejected(e, INSUFFICIENT_CREDITS_TEXT, CreditReservationRejected.INSUFFICIENT_CREDITS);
             case REJECTED_INVALID_AMOUNT, ALREADY_REJECTED_INVALID_AMOUNT ->
-                rejected(e, REWARD_BELOW_ONE, CreditReservationRejected.INVALID_AMOUNT);
+                rejected(e, REWARD_BELOW_ONE_TEXT, CreditReservationRejected.INVALID_AMOUNT);
             // settled: the request has moved past its reservation
             case DUPLICATE -> null;
         };
