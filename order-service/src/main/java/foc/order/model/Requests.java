@@ -16,9 +16,13 @@
  * 2026-10-22, Claude Code (Opus 5.5), issue #238: the hand-written check
  * removed from status's columnDefinition; Flyway's V1 holds it now.
  * Author review: Ryan Ang, pending pull request review.
+ * 2026-10-23, Claude Code (Opus 5.5), issue #240: closeReason (DSP-1),
+ * mapped like status. Author review: Ryan Ang, pending pull request
+ * review.
  */
 package foc.order.model;
 
+import foc.order.CloseReason;
 import foc.order.OrderStates;
 import jakarta.persistence.*;
 
@@ -64,6 +68,13 @@ public class Requests {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, columnDefinition = "text")
     private OrderStates status;
+
+    // Why the request ended without completing (DSP-1); null while it is
+    // active, once COMPLETED, and for rows from before the column. Stored
+    // by name; the allowed names are a CHECK in Flyway's V2
+    @Enumerated(EnumType.STRING)
+    @Column(columnDefinition = "text")
+    private CloseReason closeReason;
 
     // Must be in the future at creation (F1.1.2)
     @Column(nullable = false)
@@ -158,6 +169,14 @@ public class Requests {
 
     public void setStatus(OrderStates status) {
         this.status = status;
+    }
+
+    public CloseReason getCloseReason() {
+        return closeReason;
+    }
+
+    public void setCloseReason(CloseReason closeReason) {
+        this.closeReason = closeReason;
     }
 
     public Instant getDeadline() {

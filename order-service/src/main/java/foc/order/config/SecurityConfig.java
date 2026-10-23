@@ -9,6 +9,9 @@
  * Same day: GET /users/{id}/requests limited to ADMIN / OWNER, with
  * credit-service's RestAccessDeniedHandler for the 403.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-23, Claude Code (Opus 5.5), issue #240: the admin list, the
+ * batch status lookup and retry settlement limited to ADMIN / OWNER
+ * (DSP-5). Author review: Ryan Ang, pending pull request review.
  */
 package foc.order.config;
 
@@ -70,6 +73,10 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health").permitAll()
                         // any user's requests: the admin view
                         .requestMatchers(HttpMethod.GET, "/users/*/requests").hasAnyRole("ADMIN", "OWNER")
+                        // every user's requests, their states, and resending a
+                        // settlement: admin tools (DSP-5)
+                        .requestMatchers("/requests/admin", "/requests/admin/**").hasAnyRole("ADMIN", "OWNER")
+                        .requestMatchers(HttpMethod.POST, "/retry-settlement").hasAnyRole("ADMIN", "OWNER")
                         // every request route acts as the caller
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling

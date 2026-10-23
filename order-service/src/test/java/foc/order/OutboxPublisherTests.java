@@ -9,6 +9,9 @@
  * 2026-10-22, Claude Code (Opus 5.5), issue #238: runs against
  * Testcontainers Postgres built by Flyway (extends PostgresTestContainer)
  * instead of H2. Author review: Ryan Ang, pending pull request review.
+ * 2026-10-23, Claude Code (Opus 5.5), issue #240: a retried settlement is
+ * published again with its original event id (DSP-10). Author review:
+ * Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -78,6 +81,26 @@ class OutboxPublisherTests extends PostgresTestContainer {
 		assertNull(outboxEvents.findById(published.get(0).getEventId()).orElseThrow().getSentAt());
 	}
 
+	// DSP-10: the resent message is the same event, so Notification
+	// deduplicates it and the users are not told twice
+	@Test
+	void retriedSettlementIsPublishedAgainWithItsOriginalEventId() {
+		drain();
+		Long id = newRequest();
+		requestsService.timeout(id);
+		List<OutboxEvent> first = poll(event -> EventPublisher.Result.SENT);
+		OutboxEvent cancelled = first.stream()
+				.filter(e -> e.getEventType().equals("request.cancelled")).findFirst().orElseThrow();
+
+		requestsService.retrySettlement(id);
+		List<OutboxEvent> again = poll(event -> EventPublisher.Result.SENT);
+
+		assertEquals(1, again.size());
+		assertEquals(cancelled.getEventId(), again.get(0).getEventId());
+		assertEquals(cancelled.getPayload(), again.get(0).getPayload());
+		assertNotNull(outboxEvents.findById(cancelled.getEventId()).orElseThrow().getSentAt());
+	}
+
 	// The test classes share one database, and the others leave unsent
 	// events behind: send everything due first, so each test sees only
 	// its own events.
@@ -97,7 +120,7 @@ class OutboxPublisherTests extends PostgresTestContainer {
 		return handed;
 	}
 
-	private void newRequest() {
+	private Long newRequest() {
 		Requests request = new Requests();
 		request.setRequesterId(1L);
 		request.setSupplierId(2L);
@@ -106,6 +129,6 @@ class OutboxPublisherTests extends PostgresTestContainer {
 		request.setItem("Chicken rice");
 		request.setCreditAmount(3);
 		request.setDeadline(Instant.now().plus(1, ChronoUnit.HOURS));
-		requestsService.create(request);
+		return requestsService.create(request).getId();
 	}
 }

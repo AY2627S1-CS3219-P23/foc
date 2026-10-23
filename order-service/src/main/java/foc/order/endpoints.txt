@@ -8,12 +8,16 @@ Answers: 200 success, 400 invalid /create fields, 401 no or invalid token, 404 u
 /drop request id (assigned courier only) -> returns success or error message (no event: the credits stay held)
 /cancel request id (requester only) -> returns success or error message + publish event for credit service to release funds to the requester
 /complete request id (requester only) -> returns success or error message + publish event for credit service to pay the courier
+/retry-settlement request id (ADMIN/OWNER) -> the request's newest settlement event (completed / cancelled / expired / dispute-resolved) sent again with the same event id; 409 if the request is active or has no such event
 
 Reads (GET, newest first, paged: page from 0, size 1-100, default 20):
 /requests?state=CREATED (any logged-in user) -> open errands for couriers, trimmed items; only CREATED, deadline still ahead
 /requests/{id} (requester, assigned courier, or ADMIN/OWNER; else 404) -> the full request
 /requests/mine?role=requester|courier&state= (the caller) -> the caller's requests on that side
 /users/{id}/requests?state= (ADMIN/OWNER; else 403) -> that user's requests as requester or courier
+/requests/admin?state=&closeReason= (ADMIN/OWNER; else 403) -> every user's requests; closeReason comma-separated like state
+POST /requests/admin/statuses {"ids": [...]} (ADMIN/OWNER; else 403) -> {id: state}, null for an unknown id; at most 100 ids
+Every list item and the full request carry closeReason: null unless the request ended without completing
 Filters on every list (optional, combined): supplierId, minCredit, maxCredit, deadlineAfter, deadlineBefore, createdFrom, createdTo; sort=createdAt (newest first, default) or deadline (nearest first)
 
 Not endpoints (timers inside the service):

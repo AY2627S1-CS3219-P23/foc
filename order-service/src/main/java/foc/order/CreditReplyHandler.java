@@ -9,6 +9,12 @@
  * dead-letter queue (the tool's reading, for the author to confirm).
  * 2026-10-16: compares the OrderStates enum status directly.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-23, Claude Code (Opus 5.5), issue #240: a rejection's
+ * reasonCode mapped to its close_reason here, the one place the two
+ * vocabularies meet (DSP-1, DSP-12; PR #243 review follow-up); an
+ * unknown or null code maps to null, logged, never thrown (foc-contracts
+ * README, fixed-value fields). Author review: Ryan Ang, pending pull
+ * request review.
  */
 package foc.order;
 
@@ -69,7 +75,7 @@ public class CreditReplyHandler {
         }
         switch (reply) {
             case CreditReserved r -> requestsService.reserve(id);
-            case CreditReservationRejected r -> requestsService.reject(id, r.reason());
+            case CreditReservationRejected r -> requestsService.reject(id, r.reason(), closeReasonOf(r));
             // a credit event this service has no part in: only the two
             // replies are bound to the queue, so this was published to it
             // by hand. Acknowledged, but logged so it can be traced.
@@ -77,6 +83,29 @@ public class CreditReplyHandler {
                     reply.getClass().getSimpleName(), reply.eventId());
         }
         return Outcome.HANDLED;
+    }
+
+    // The rejection's reasonCode as this service's close_reason: the one
+    // place Credit's codes map to Order's reasons. The below-1 reward is
+    // INVALID_AMOUNT in the contract but INVALID_REWARD here (DSP-1).
+    // Null (a reply from before reasonCode existed) or a code this
+    // service does not know leaves close_reason null; the request is
+    // still rejected.
+    static CloseReason closeReasonOf(CreditReservationRejected rejection) {
+        String code = rejection.reasonCode();
+        if (code == null) {
+            return null;
+        }
+        switch (code) {
+            case CreditReservationRejected.INSUFFICIENT_CREDITS:
+                return CloseReason.INSUFFICIENT_CREDITS;
+            case CreditReservationRejected.INVALID_AMOUNT:
+                return CloseReason.INVALID_REWARD;
+            default:
+                log.warn("Rejection for request {} (eventId {}) has unknown reasonCode {}; close_reason left null",
+                        rejection.requestId(), rejection.eventId(), code);
+                return null;
+        }
     }
 
     private static Optional<Long> parseId(String requestId) {

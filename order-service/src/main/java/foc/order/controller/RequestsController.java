@@ -37,10 +37,15 @@
  * answered 409 "This request's state has changed" instead of a 500 (the
  * author's decision).
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-23, Claude Code (Opus 5.5), issue #240: the admin endpoints of
+ * team decision DSP-5 (GET /requests/admin, POST /requests/admin/statuses,
+ * POST /retry-settlement), ADMIN / OWNER in SecurityConfig. Author review:
+ * Ryan Ang, pending pull request review.
  */
 package foc.order.controller;
 
 import foc.order.InvalidRequestException;
+import foc.order.OrderStates;
 import foc.order.RequestFilter;
 import foc.order.RequestsQueryService;
 import foc.order.RequestsService;
@@ -63,6 +68,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 @RestController
@@ -75,6 +82,11 @@ public class RequestsController {
     }
 
     public record RequestIdBody(Long requestId) {
+    }
+
+    // Strings, so a non-numeric id gets the service's 400 message rather
+    // than a JSON parse error; JSON numbers bind here too.
+    public record IdsBody(List<String> ids) {
     }
 
     // Body of every response, success or error.
@@ -129,6 +141,27 @@ public class RequestsController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return PageResponse.of(queries.involving(userId, state, filter, page, size), RequestSummary::of);
+    }
+
+    // Every user's requests by state and close reason (both may list
+    // several, comma-separated) and the shared filters: ADMIN / OWNER
+    // only (SecurityConfig). Matched before /requests/{id}, being literal.
+    @GetMapping("/requests/admin")
+    public PageResponse<RequestSummary> adminRequests(
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false) String closeReason,
+            RequestFilter filter,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return PageResponse.of(queries.admin(state, closeReason, filter, page, size), RequestSummary::of);
+    }
+
+    // The current state of up to 100 requests, {"42": "COMPLETED", "99":
+    // null}; an unknown id answers null (ADMIN / OWNER, for the stuck
+    // reservations check).
+    @PostMapping("/requests/admin/statuses")
+    public Map<Long, OrderStates> statuses(@RequestBody IdsBody body) {
+        return queries.statuses(body.ids());
     }
 
     // --- request steps
@@ -190,6 +223,14 @@ public class RequestsController {
     @PostMapping("/complete")
     public MessageResponse complete(@RequestBody RequestIdBody body, Authentication caller) {
         return message(requestsService.complete(body.requestId(), callerId(caller)), "completed");
+    }
+
+    // A finished request's settlement event sent again (ADMIN / OWNER,
+    // DSP-10); 409 if the request is still active or has no such event.
+    @PostMapping("/retry-settlement")
+    public MessageResponse retrySettlement(@RequestBody RequestIdBody body) {
+        requestsService.retrySettlement(body.requestId());
+        return new MessageResponse("Request " + body.requestId() + " settlement queued for retry");
     }
 
     // A new request with missing fields or invalid values; the message

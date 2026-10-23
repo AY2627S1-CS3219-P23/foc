@@ -42,6 +42,48 @@ Entry template:
 ```
 
 ---
+## 2026-10-23 — Ryan Ang (feat: Order failed-order management, issue #240)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** order-service (`db/migration/V2__close_reason_outbox_request_id.sql`
+  new; `CloseReason.java` new; `Requests.java`: `closeReason`;
+  `OutboxEvent.java`, `EventOutbox.java`, `OutboxEventRepository.java`:
+  `request_id`, the newest settlement event and its reset;
+  `RequestsService.java`: close reasons on cancel / timeout / reject /
+  expire, `retrySettlement`; `CreditReplyHandler.java`: `reasonCode` →
+  `CloseReason`; `RequestsQueryService.java`, `RequestSpecifications.java`:
+  admin list and batch statuses; `RequestSummary.java`,
+  `RequestDetail.java`: `closeReason`; `RequestsController.java`,
+  `SecurityConfig.java`: `GET /requests/admin`, `POST
+  /requests/admin/statuses`, `POST /retry-settlement`, ADMIN / OWNER;
+  `README.md`, `endpoints.txt`; tests: `RequestsServiceTests`,
+  `CreditReplyHandlerTests`, `RequestsReadEndpointsTests`,
+  `OutboxPublisherTests`, `FlywayMigrationTests` new).
+  `docs/disputes.md` (DSP-1, DSP-5, DSP-17 amended; #240 revision entry).
+  `README.md` (AI Use Summary and header line).
+- **Prompt(s):** Implement issue #240 as written there (team decisions
+  DSP-1, DSP-5, DSP-10, DSP-17). Before coding, the tool listed four
+  points the issue left open; the team decided them: `closeReason` as a
+  nullable field in both `RequestSummary` and `RequestDetail`; the admin
+  list takes `state`, `closeReason` (comma-separated, unknown value 400)
+  and the shared `RequestFilter`; batch statuses answer an unknown id
+  with `null`, an empty list with `{}`, and more than 100 or a
+  non-numeric id with 400, a repeated id once; `close_reason` as text
+  with a named CHECK, `request_id` as `bigint` with no foreign key,
+  passed to `EventOutbox.enqueue` by the caller rather than parsed from
+  `correlationId`. These were transcribed into `docs/disputes.md`. The
+  `reasonCode` → `close_reason` mapping sits in one place in
+  `CreditReplyHandler` (the PR #243 review follow-up left for this
+  issue). The tool chose, as implementation details: "finished" for
+  retry settlement means a terminal state in `OrderStateMachine`, so a
+  REJECTED request gets the "no settlement event" 409; the settlement
+  event types come from `EventTypeRegistry`; the reset is a `@Modifying`
+  update; the batch-status ids bind as strings so a non-numeric id gets
+  the service's 400 message.
+- **Author review:** 
+  order-service 126 tests pass locally with Docker, none skipped
+  (V2 back-fill tested on a separate schema migrated V1 → rows → V2).
+
 ## 2026-10-23 — Ryan Ang (fix: PR #244 review findings)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs

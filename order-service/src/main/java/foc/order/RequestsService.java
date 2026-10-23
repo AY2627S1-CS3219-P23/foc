@@ -44,10 +44,23 @@
  * factory explicitly, so the enqueue no longer has to precede the
  * field clear.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-23, Claude Code (Opus 5.5), issue #240: each abnormal ending
+ * records its close_reason (DSP-1: cancel, timeout, reject with the
+ * reason the reply handler mapped, expire); every outbox row gets its
+ * request's id (DSP-17); retrySettlement marks the request's newest final
+ * event unsent again (DSP-10). Author review: Ryan Ang, pending pull
+ * request review.
  */
 package foc.order;
 
+import foc.contracts.events.core.EventTypeRegistry;
+import foc.contracts.events.request.RequestCancelled;
+import foc.contracts.events.request.RequestCompleted;
+import foc.contracts.events.request.RequestDisputeResolved;
+import foc.contracts.events.request.RequestExpired;
+import foc.order.model.OutboxEvent;
 import foc.order.model.Requests;
+import foc.order.repository.OutboxEventRepository;
 import foc.order.repository.RequestsRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,16 +69,26 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.stream.Stream;
 
 @Service
 public class RequestsService {
 
+    // The events that settle a request's held reward with the Credit
+    // Service (DSP-10); request.dispute-resolved joins them with #239.
+    static final List<String> SETTLEMENT_EVENT_TYPES = Stream.of(
+                    RequestCompleted.class, RequestCancelled.class, RequestExpired.class, RequestDisputeResolved.class)
+            .map(EventTypeRegistry::routingKeyFor).toList();
+
     private final RequestsRepository requestsRepository;
     private final EventOutbox outbox;
+    private final OutboxEventRepository outboxEvents;
 
-    public RequestsService(RequestsRepository requestsRepository, EventOutbox outbox) {
+    public RequestsService(RequestsRepository requestsRepository, EventOutbox outbox,
+            OutboxEventRepository outboxEvents) {
         this.requestsRepository = requestsRepository;
         this.outbox = outbox;
+        this.outboxEvents = outboxEvents;
     }
 
     // CREATE: the caller fills in the request's own fields; status and
@@ -77,7 +100,7 @@ public class RequestsService {
         request.setStatus(OrderStateMachine.INITIAL_STATE);
         request.setCreatedAt(Instant.now());
         Requests saved = requestsRepository.save(request);
-        outbox.enqueue(RequestEvents.submitted(saved));
+        outbox.enqueue(RequestEvents.submitted(saved), saved.getId());
         return saved;
     }
 
@@ -85,15 +108,19 @@ public class RequestsService {
     @Transactional
     public Requests reserve(Long requestId) {
         Requests request = transition(requestId, OrderEvents.RESERVE);
-        outbox.enqueue(RequestEvents.created(request));
+        outbox.enqueue(RequestEvents.created(request), request.getId());
         return request;
     }
 
     // REJECT: the reward could not be reserved; the request ends here.
+    // reason is the Credit Service's text, passed on in request.rejected;
+    // closeReason is what CreditReplyHandler mapped from the reply's
+    // reasonCode, null when the reply had none.
     @Transactional
-    public Requests reject(Long requestId, String reason) {
+    public Requests reject(Long requestId, String reason, CloseReason closeReason) {
         Requests request = transition(requestId, OrderEvents.REJECT);
-        outbox.enqueue(RequestEvents.rejected(request, reason));
+        request.setCloseReason(closeReason);
+        outbox.enqueue(RequestEvents.rejected(request, reason), request.getId());
         return request;
     }
 
@@ -102,7 +129,8 @@ public class RequestsService {
     @Transactional
     public Requests timeout(Long requestId) {
         Requests request = transition(requestId, OrderEvents.TIMEOUT);
-        outbox.enqueue(RequestEvents.cancelled(request));
+        request.setCloseReason(CloseReason.RESERVATION_TIMEOUT);
+        outbox.enqueue(RequestEvents.cancelled(request), request.getId());
         return request;
     }
 
@@ -121,7 +149,7 @@ public class RequestsService {
         }
         request.setCourierId(courierId);
         request.setAcceptedAt(Instant.now());
-        outbox.enqueue(RequestEvents.accepted(request));
+        outbox.enqueue(RequestEvents.accepted(request), request.getId());
         return request;
     }
 
@@ -129,7 +157,7 @@ public class RequestsService {
     public Requests collect(Long requestId, Long callerId) {
         Requests request = transition(asCourier(requestId, callerId), OrderEvents.COLLECT);
         request.setCollectedAt(Instant.now());
-        outbox.enqueue(RequestEvents.collected(request));
+        outbox.enqueue(RequestEvents.collected(request), request.getId());
         return request;
     }
 
@@ -139,7 +167,7 @@ public class RequestsService {
     public Requests arrive(Long requestId, Long callerId) {
         Requests request = transition(asCourier(requestId, callerId), OrderEvents.ARRIVE);
         request.setArrivedAt(Instant.now());
-        outbox.enqueue(RequestEvents.courierArrived(request));
+        outbox.enqueue(RequestEvents.courierArrived(request), request.getId());
         return request;
     }
 
@@ -148,7 +176,8 @@ public class RequestsService {
     @Transactional
     public Requests cancel(Long requestId, Long callerId) {
         Requests request = transition(asRequester(requestId, callerId), OrderEvents.CANCEL);
-        outbox.enqueue(RequestEvents.cancelled(request));
+        request.setCloseReason(CloseReason.REQUESTER_CANCELLED);
+        outbox.enqueue(RequestEvents.cancelled(request), request.getId());
         return request;
     }
 
@@ -163,7 +192,7 @@ public class RequestsService {
         Long courierId = request.getCourierId();
         request.setCourierId(null);
         request.setAcceptedAt(null);
-        outbox.enqueue(RequestEvents.dropped(request, courierId));
+        outbox.enqueue(RequestEvents.dropped(request, courierId), request.getId());
         return request;
     }
 
@@ -172,7 +201,8 @@ public class RequestsService {
     @Transactional
     public Requests expire(Long requestId) {
         Requests request = transition(requestId, OrderEvents.EXPIRE);
-        outbox.enqueue(RequestEvents.expired(request));
+        request.setCloseReason(CloseReason.DEADLINE_PASSED);
+        outbox.enqueue(RequestEvents.expired(request), request.getId());
         return request;
     }
 
@@ -192,8 +222,27 @@ public class RequestsService {
     }
 
     private Requests completed(Requests request) {
-        outbox.enqueue(RequestEvents.completed(request));
+        outbox.enqueue(RequestEvents.completed(request), request.getId());
         return request;
+    }
+
+    // RETRY SETTLEMENT (ADMIN / OWNER, DSP-10): the request's newest final
+    // event is made unsent again with its original event ID, so the
+    // publisher sends it once more; Notification deduplicates it and
+    // Credit is idempotent. An active request has nothing to settle yet,
+    // and a finished one without such an event (e.g. REJECTED: nothing was
+    // held) has nothing to resend: both IllegalStateException (409).
+    @Transactional
+    public OutboxEvent retrySettlement(Long requestId) {
+        Requests request = requestsRepository.findById(requestId).orElseThrow();
+        if (!OrderStateMachine.isTerminal(request.getStatus())) {
+            throw new IllegalStateException("Request " + requestId + " is not finished");
+        }
+        OutboxEvent event = outboxEvents
+                .findFirstByRequestIdAndEventTypeInOrderByCreatedAtDesc(requestId, SETTLEMENT_EVENT_TYPES)
+                .orElseThrow(() -> new IllegalStateException("Request " + requestId + " has no settlement event"));
+        outboxEvents.markUnsent(event.getEventId());
+        return event;
     }
 
     // The caller-supplied fields of a new request: the NOT NULL columns

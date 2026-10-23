@@ -5,6 +5,10 @@
  * (docs/credit-service.md D10) folded into one class, with the names
  * changed; copied, not shared, by the author's decision.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-23, Claude Code (Opus 5.5), issue #240: enqueue takes the
+ * request's id and stores it as the row's request_id (DSP-17; passed in,
+ * not parsed from correlationId: team decision). Author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.order;
 
@@ -42,12 +46,14 @@ public class EventOutbox {
     }
 
     // MANDATORY: a call outside a transaction fails instead of committing
-    // an event with no state change behind it
+    // an event with no state change behind it. requestId is the request
+    // the event is about, stored as the row's request_id for retry
+    // settlement.
     @Transactional(propagation = Propagation.MANDATORY)
-    public void enqueue(DomainEvent event) {
+    public void enqueue(DomainEvent event, Long requestId) {
         ObjectNode body = (ObjectNode) jsonMapper.valueToTree(event);
         body.put(EVENT_TYPE_FIELD, event.eventType());
-        outboxEvents.insert(new OutboxEvent(
-                UUID.fromString(event.eventId()), event.eventType(), jsonMapper.writeValueAsString(body), Instant.now()));
+        outboxEvents.insert(new OutboxEvent(UUID.fromString(event.eventId()), event.eventType(),
+                jsonMapper.writeValueAsString(body), Instant.now(), requestId));
     }
 }
