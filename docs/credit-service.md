@@ -114,6 +114,15 @@
   events do on a RESOLVED record; and the rule above the event table
   (a matching event is a duplicate, a contradicting one INVALID_STATE),
   in the team's words.
+  2026-10-25, issue #236, team decisions transcribed: GET
+  /credits/admin/reservations/held in the admin routes (HELD only,
+  olderThan an ISO-8601 duration that is not negative, default PT1H,
+  held at or before the cutoff, oldest first, at most 100, an object
+  around the list) and its 400s. Same day, PR #247 review follow-ups,
+  the review's suggestions taken by the team: the listener and handler
+  rows name the resolution, D9 points to DSP-4, the slice row says what
+  a slice records after a resolution, and V5's CHECK keeps
+  `courier_share` to RESOLVED records.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -136,7 +145,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D6 | Account provisioning | **Get or create method inside Credit Service**. Call is made idempotent by a unique user ID. Account with 5 available credits is created the first time a trusted ID is seen; the amount is configuration (`CREDIT_SIGN_UP_CREDITS`, default 5) and applies to accounts created after it is set. Every path that writes a row referencing a user get-or-creates that user's account first: a balance or history read (the JWT's user), reserve (the requester), release, including the amount-0 `RELEASED` record (the requester), and transfer (the courier; the requester's already exists, since the `HELD` record references it). | F1.1, F1.1.1, F1.1.2 |
 | D7 | Cross-service consistency | **Saga between the Order and Credit Services, by choreography.** Each service reacts to the other's events, and the request's status in the Order Service is the saga's state. No synchronous call exists between the two services. | F2, F3, NFR2 |
 | D8 | Reservation | Saga step 1. The Credit Service consumes `request.submitted`, reserves or refuses, and replies with `credit.reserved` or `credit.reservation-rejected`. | F2.1, F2.1.2, F2.1.3 |
-| D9 | Transfer and release | Saga endings. `request.completed` transfers the held credits. `request.cancelled` and `request.expired` release them, with release being the compensation for a reservation. | F2.1.1, F3.1, NFR1.1 |
+| D9 | Transfer and release | Saga endings. `request.completed` transfers the held credits. `request.cancelled` and `request.expired` release them, with release being the compensation for a reservation. A disputed request has a third ending, `request.dispute-resolved`, which divides them (DSP-4, `docs/disputes.md`). | F2.1.1, F3.1, NFR1.1 |
 | D10 | Reply publishing | **Transactional outbox.** The reply is written to an outbox table in the same transaction as the balance change, and a publisher sends it to the broker with publisher confirms and the mandatory flag: a reply is marked sent only when the broker confirmed it and did not return it as unroutable. The publisher polls every 1 s, as a fixed delay so that one poll never overlaps the next, publishes at most 100 replies in a poll and waits up to 5 s for each confirm. A reply returned as unroutable is not due again for 30 s, and a poll reads only the unsent replies that are due, so replies no queue takes cannot fill every batch and hold back the ones behind them. | NFR2.1 |
 | D11 | Event failure handling | Transient failures go to a retry queue and are redelivered after a short delay, up to a fixed number of attempts, then to a dead-letter queue. Events that conflict with the recorded state go straight to the dead-letter queue. A `request.completed` with no record is not such a conflict: its reservation may not have been applied yet, so it is retried like a transient failure. The queue layout is the Notification Service's (a work, a retry and a dead-letter queue), with two differences: the five consumed routing keys are bound one by one instead of `request.#`, and the retry delay is 2 s with up to 5 attempts (`CREDIT_RETRY_TTL_MS`, `CREDIT_RETRY_MAX_ATTEMPTS`). The service declares both the `request-events` and `credit-events` exchanges, so it starts without the Order Service. | F5.1.1, NFR2.1 |
 | D12 | Scheduler | Done by a **cron job** through use of `@Scheduled`. One routine runs daily at 00:00 Asia/Singapore time and once at startup: the expiry sweep, then, if the current Singapore month has no `redistribution_run` row, that month's redistribution. The order inside the routine puts what expired into the pool before it is shared out, so the redistribution happens at 00:00 on the 1st, straight after that night's sweep. A month that is missed (the service down) or whose run fails is completed by the next run, at startup or the next day. The expiry is one transaction per account. A month is recorded in `redistribution_run` even when the pool is empty. | F6.1.1, F6.1.2 |
@@ -174,8 +183,8 @@ Web App; every balance change arrives as a request event. Its state lives only i
 | Component | Responsibility |
 | --- | --- |
 | **Credit account REST API** (Spring Boot) | For the Web App, authenticated by the user's JWT: returns the caller's available and reserved balance (F4.1) and their transaction history with amount and date-range filters (F4.1.2, F4.1.3), and the caller's credits that will expire, with their dates (F6.1, issue #196). The routes and shapes are in "Read API contract". |
-| **Request event listener** (Spring AMQP) | Consumes `request.submitted`, `request.completed`, `request.cancelled` and `request.expired` from the Credit Service's own queue, hands each to the request event handler, and settles the delivery on its answer: acknowledge after the commit, dead-letter an event that conflicts with the request's record, and send any failure to the retry queue (D11). |
-| **Request event handler** (Spring Boot, `@Transactional`) | Owns the transaction for one event. Turns it into a reserve (F2.1), transfer (F3.1) or release (F2.1.1) operation and, for a reservation, writes the reply to the outbox in the same transaction (D10). Imports no broker types. |
+| **Request event listener** (Spring AMQP) | Consumes `request.submitted`, `request.completed`, `request.cancelled`, `request.expired` and `request.dispute-resolved` from the Credit Service's own queue, hands each to the request event handler, and settles the delivery on its answer: acknowledge after the commit, dead-letter an event that conflicts with the request's record, and send any failure to the retry queue (D11). |
+| **Request event handler** (Spring Boot, `@Transactional`) | Owns the transaction for one event. Turns it into a reserve (F2.1), transfer (F3.1), release (F2.1.1) or resolve (DSP-4) operation and, for a reservation, writes the reply to the outbox in the same transaction (D10). Imports no broker types. |
 | **Error mapping** (Spring Boot, `@RestControllerAdvice`) | Maps invalid query parameters on the read API (for example the history's amount and date-range filters) to HTTP error responses. Event-path failures never reach it: they are refused with a reply or dead-lettered (see "How each event is handled"). |
 | **Idempotent credit operations service** (Spring Boot, `@Transactional`) | Core logic: provisions accounts with 5 available / 0 reserved, once per user (F1.1.1, F1.1.2). It reserves only if available credit >= amount needed (F2.1, F2.1.2, F2.1.3) and releases, transfers or divides (a resolved dispute, DSP-4) each request's held credits at most once (F2.1.1, F3.1.1, F3.1.2, NFR2.2.1). It spends lots in soonest-expiry order, with the never-expiring sign-up lot last, returns released credits to the lots they came from (D4), and commits balance change, held-credits status, lots, history rows and the outgoing reply in one transaction (F5.1, NFR2.1). It logs one line per operation that changes credits (the request, the users affected, the amount and the outcome) and one per account created, each written after the transaction commits. |
 | **Credit history** (Spring Boot) | Appends one immutable row per transaction such as account provision, reservation, release, transfer, expiry, redistribution, with timestamps and request reference (F4.1.1). It will also serve the filtered history queries (F4.1.2, F4.1.3). |
@@ -220,7 +229,7 @@ erDiagram
         varchar courier_id FK "null until transfer, required when TRANSFERRED or RESOLVED"
         integer amount "CHECK > 0 while HELD; REJECTED keeps the reward as requested"
         varchar status "HELD, REJECTED, TRANSFERRED, RELEASED, RESOLVED"
-        integer courier_share "null unless RESOLVED; CHECK between 0 and amount"
+        integer courier_share "CHECK null unless RESOLVED, and between 0 and amount when RESOLVED"
         timestamptz created_at
         timestamptz settled_at "when the record became final; null while HELD"
     }
@@ -271,7 +280,7 @@ erDiagram
 | --- | --- | --- |
 | `credit_account` (`CreditAccount`) | **A user's credit balances.** One row per user. | The primary key on `user_id` makes get-or-create happen once per user (D6). `available` and `reserved` are columns so that the balance read is one row and the non-negative rule is a `CHECK` (F2.1.2). |
 | `credit_reservation` (`Reserved`) | **The reservation for one order.** One row per request. | The primary key on `request_ref` is the duplicate check (D3, NFR2.2.1). `status` records the outcome; `REJECTED` records a refusal so a redelivery gets the same answer. `courier_id` is filled in at transfer. `RESOLVED` records a dispute settled by dividing the reward (DSP-4): `courier_share` is the courier's part and the requester's is `amount - courier_share`; the courier is recorded even when their share is 0, and the stored split lets a repeated resolution be told from a conflicting one (DSP-13). `amount` is checked only while `HELD`: a `REJECTED` row holds the reward as it was requested, including zero or negative, and the amount-0 `RELEASED` row holds 0. `settled_at` is the moment the record became final, so it is set on a `REJECTED` row when it is written. |
-| `credit_reservation_slice` | Which lots a reservation's credits came from. | Lets a release return credits to the lot they came from, with its expiry and place in the spend order (D4). `lot_id` references that lot; `amount` is always positive. Indexed by `request_ref`, which is how a release reads them back. Slices are kept after the request is settled, as the record of which lot funded it. |
+| `credit_reservation_slice` | Which lots a reservation's credits came from. | Lets a release return credits to the lot they came from, with its expiry and place in the spend order (D4). `lot_id` references that lot; `amount` is always positive. Indexed by `request_ref`, which is how a release and a resolution read them back. Slices are kept after the request is settled, as the record of how much was taken from each lot at reservation time: a resolution that refunds part of a slice leaves its `amount` as it was. |
 | `credit_lot` (`CreditLot`) | A user's available credits, split by expiry date. | Needed for 3-month expiry (F6.1). A null `expires_at` marks the sign-up credits, which never expire. A row is kept when spent to zero: its slices reference it and a release may refill it. The spend order and the expiry run only look at lots with something remaining, which is what both lot indexes cover. |
 | `credit_history` (`CreditHistoryEntry`) | **The record of every credit operation.** Append-only. | One row per affected account per operation (F4.1.1). `amount` is always positive and `type` says which way it moved. Indexed by user and time for the history view (F4.1.2, F4.1.3). |
 | `common_pool` | Expired credits awaiting redistribution. | A single row, enforced by `CHECK (id = 1)` (F6.1). |
@@ -313,9 +322,10 @@ reservations instead.
    scheduler too.
 3. **Database constraints.** A negative balance, a second reservation
    for the same request, a held reservation with no amount, a
-   transfer with no courier, or a resolution with no courier or a
-   courier share outside its amount is rejected by PostgreSQL even if
-   the service code is wrong.
+   transfer with no courier, a resolution with no courier or a
+   courier share outside its amount, or a courier share on a record
+   that is not `RESOLVED` is rejected by PostgreSQL even if the service
+   code is wrong.
 4. **Two invariants** that every operation preserves, and that can be
    checked at any time (each check must return no rows):
    - a `HELD` reservation whose `amount` differs from the sum of its
@@ -501,7 +511,7 @@ parameters, so its only error is the 401 below.
 ### Admin routes
 
 For the admin dashboard; the token's `role` must be `ADMIN` or `OWNER`.
-Neither route writes anything.
+None of the routes writes anything.
 
 #### `GET /credits/admin/pool`
 
@@ -537,11 +547,42 @@ history route. No other parameters.
 `distributed` counts every credit taken from the pool, the remainder
 included.
 
+#### `GET /credits/admin/reservations/held`
+
+The reservations still `HELD` that were made at or before now minus
+`olderThan`, oldest first, at most 100 (DSP-5). The dashboard checks
+them against the Order Service in one batch call and flags the ones
+whose order has finished (DSP-11). `olderThan` is an ISO-8601 duration,
+default `PT1H`; it must not be negative, and `PT0S` lists every
+reservation held so far. There is no status parameter and no paging.
+
+```json
+{
+  "items": [
+    { "requestId": "42", "requesterId": "7", "amount": 3, "heldSince": "2026-10-25T03:12:00Z" }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `requestId` | The Order Service's request ID (`request_ref`) |
+| `requesterId` | Whose credits are held |
+| `amount` | How many are held |
+| `heldSince` | When the reservation was made |
+
+- **The list is an object**, as on `/credits/me/expiries`, so fields
+  can be added without breaking clients.
+- Reservations made at the same instant are ordered by `requestId`, so
+  two reads of an unchanged table list the same 100.
+
+Nothing held is 200 with `"items": []`.
+
 ### Errors
 
 | Status | When |
 | --- | --- |
-| 400 problem+json | An amount that is not an integer or is below 1; `minAmount` above `maxAmount`; `from` or `to` not a full instant with an offset; `from` not before `to`; `page` below 0; `size` outside 1 to 100 |
+| 400 problem+json | An amount that is not an integer or is below 1; `minAmount` above `maxAmount`; `from` or `to` not a full instant with an offset; `from` not before `to`; `page` below 0; `size` outside 1 to 100; `olderThan` not an ISO-8601 duration, or negative |
 | 401 problem+json | A missing or invalid token |
 | 403 problem+json | An admin route called with a role other than `ADMIN` or `OWNER` |
 

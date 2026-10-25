@@ -11,6 +11,8 @@
  * needs its lot, a drained lot is allowed and a negative one is not, the
  * lot indexes skip drained lots); the slice amount case gives its slice
  * a lot.
+ * 2026-10-25, Claude Code (Opus 5.5), PR #247 review follow-up: a
+ * courier share on a record that is not RESOLVED is rejected (V5).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit;
@@ -102,6 +104,17 @@ class CreditServiceApplicationTests extends PostgresTestContainer {
 				"insert into credit_lot (owner_id, remaining, earned_at) values ('u-drained', 0, now())")).isEqualTo(1);
 		assertThatThrownBy(() -> jdbc.update(
 				"insert into credit_lot (owner_id, remaining, earned_at) values ('u-drained', -1, now())"))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	@Transactional
+	void aCourierShareNeedsAResolvedRecord() {
+		jdbc.update("insert into credit_account (user_id, available, reserved, created_at) values ('u-share', 0, 0, now())");
+
+		assertThatThrownBy(() -> jdbc.update(
+				"insert into credit_reservation (request_ref, requester_id, courier_id, courier_share, amount, status,"
+						+ " created_at, settled_at) values ('r-share', 'u-share', 'u-share', 1, 3, 'TRANSFERRED', now(), now())"))
 				.isInstanceOf(DataIntegrityViolationException.class);
 	}
 

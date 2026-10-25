@@ -19,6 +19,8 @@
  * dispute (team decisions DSP-4, DSP-8, DSP-13): refund, payout, split,
  * slice order, repeats, missing fields, a repeated delivery racing, and
  * the other events on a RESOLVED record (team decision).
+ * PR #247 review follow-up: a resolution racing another resolution, and
+ * a transfer, in the opposite direction, which pins its lock order (D2).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -826,6 +828,37 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
         assertThat(results).containsExactly(SettleResult.SETTLED, SettleResult.SETTLED);
         assertBalance(requester, 4, 0);
         assertBalance(courier, 6, 0);
+    }
+
+    // a resolution locks both accounts in the same order as a transfer (D2)
+    @RepeatedTest(RACE_REPETITIONS)
+    void resolutionsInOppositeDirectionsDoNotDeadlock() throws Exception {
+        String back = request + "-back";
+        operations.reserve(request, requester, 3);
+        operations.reserve(back, courier, 2);
+
+        List<Object> results = race(
+            () -> operations.resolve(request, courier, 1, 2),
+            () -> operations.resolve(back, requester, 1, 1));
+
+        assertThat(results).containsExactly(SettleResult.SETTLED, SettleResult.SETTLED);
+        assertBalance(requester, 5, 0);
+        assertBalance(courier, 5, 0);
+    }
+
+    @RepeatedTest(RACE_REPETITIONS)
+    void aResolutionAndATransferInOppositeDirectionsDoNotDeadlock() throws Exception {
+        String back = request + "-back";
+        operations.reserve(request, requester, 3);
+        operations.reserve(back, courier, 2);
+
+        List<Object> results = race(
+            () -> operations.resolve(request, courier, 1, 2),
+            () -> operations.transfer(back, requester));
+
+        assertThat(results).containsExactly(SettleResult.SETTLED, SettleResult.SETTLED);
+        assertBalance(requester, 6, 0);
+        assertBalance(courier, 4, 0);
     }
 
     // ---- helpers ----
