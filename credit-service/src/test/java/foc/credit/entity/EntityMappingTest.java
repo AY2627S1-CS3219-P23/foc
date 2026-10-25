@@ -8,6 +8,8 @@
  * and reads back its lot_id.
  * 2026-10-13, Claude Code (Opus 5.5), PR #188 review (Leong Wei Zhi):
  * the outbox case saves and reads back next_attempt_at (V2).
+ * 2026-10-25, Claude Code (Opus 5.5), issue #235: a RESOLVED record
+ * saves and reads back courier_share (V4).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.entity;
@@ -124,6 +126,25 @@ class EntityMappingTest extends PostgresTestContainer {
         assertThat(transferred.getCourierId()).isEqualTo(COURIER);
         assertThat(transferred.getSettledAt()).isEqualTo(LATER);
         assertThat(transferred.getCreatedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void resolvedReservationKeepsItsCourierShare() {
+        reservations.save(new Reserved(REQUEST, REQUESTER, 3, ReservationStatus.HELD, NOW));
+        flushAndClear();
+        assertThat(reservations.findById(REQUEST).orElseThrow().getCourierShare()).isNull();
+
+        Reserved held = reservations.findById(REQUEST).orElseThrow();
+        held.setStatus(ReservationStatus.RESOLVED);
+        held.setCourierId(COURIER);
+        held.setCourierShare(0);
+        held.setSettledAt(LATER);
+        flushAndClear();
+
+        Reserved resolved = reservations.findById(REQUEST).orElseThrow();
+        assertThat(resolved.getStatus()).isEqualTo(ReservationStatus.RESOLVED);
+        assertThat(resolved.getCourierId()).isEqualTo(COURIER);
+        assertThat(resolved.getCourierShare()).isZero();
     }
 
     @Test

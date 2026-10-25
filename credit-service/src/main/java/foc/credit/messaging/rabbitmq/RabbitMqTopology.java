@@ -5,6 +5,8 @@
  * notification-service's RabbitMqTopology. The queue names, the four
  * bound keys, declaring both exchanges and the retry values are the
  * author's decisions (docs/credit-service.md D11).
+ * 2026-10-25, Claude Code (Opus 5.5), issue #235: request.dispute-resolved
+ * bound as a fifth consumed event (team decision, DSP-4).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
@@ -26,13 +28,14 @@ import foc.contracts.events.core.EventContracts;
 import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.request.RequestCancelled;
 import foc.contracts.events.request.RequestCompleted;
+import foc.contracts.events.request.RequestDisputeResolved;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestSubmitted;
 
 /**
  * The saga's topology (docs/credit-service.md D7, D11): this service's
  * durable work queue on the {@code request-events} exchange, bound to
- * the four events it acts on, and the {@code credit-events} exchange
+ * the five events it acts on, and the {@code credit-events} exchange
  * its replies go to. Both exchanges are declared here, as durable topic
  * exchanges like every other declarer's, so the service starts whether
  * or not the Order Service has.
@@ -65,7 +68,8 @@ public class RabbitMqTopology {
 	 * with {@code request.#}, so no other request event reaches the queue.
 	 */
 	static final List<Class<?>> CONSUMED_EVENTS = List.of(
-			RequestSubmitted.class, RequestCompleted.class, RequestCancelled.class, RequestExpired.class);
+			RequestSubmitted.class, RequestCompleted.class, RequestCancelled.class, RequestExpired.class,
+			RequestDisputeResolved.class);
 
 	/** The broker's default exchange routes by queue name. */
 	private static final String DEFAULT_EXCHANGE = "";

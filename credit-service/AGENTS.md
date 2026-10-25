@@ -45,6 +45,8 @@
   2026-10-19, Claude Code (Opus 5.5), issue #218: the package map and
   invariants updated for the outbox retention purge and V3. Same day,
   PR #224 review (Leong Wei Zhi): the purge off in the test profile.
+  2026-10-25, Claude Code (Opus 5.5), issue #235: V4 in the entity
+  invariant and five bindings in the package map.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -67,7 +69,7 @@ IDs (D1–D13) when touching related code.
 | `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
 | `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API, `PoolQueryService`, the admin routes' reads, and `ExpiryAndRedistributionScheduler` with `LotExpiryService` and `RedistributionService` (D12), and `EarnedCreditLifetime`, the earned-credit expiry both the transfer and the redistribution use (D4), and `OutboxRetentionScheduler`, the daily purge of sent replies (D13) |
-| `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the four bindings, both exchanges), `RabbitMqTopologyInitializer`, `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), `RequestEventsListener` (settles each request event on the handler's outcome: ack, dead-letter, or a confirmed republish to the retry queue), and `DomainEventMessageConverter`, a copy of notification-service's |
+| `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the five bindings, both exchanges), `RabbitMqTopologyInitializer`, `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), `RequestEventsListener` (settles each request event on the handler's outcome: ack, dead-letter, or a confirmed republish to the retry queue), and `DomainEventMessageConverter`, a copy of notification-service's |
 
 ## Invariants — do not break
 
@@ -77,8 +79,9 @@ IDs (D1–D13) when touching related code.
   but the tests; from here on it is fixed.
 - **The schema follows the design doc's "Database" section**: a schema
   change is a design change, so update the doc with it.
-- **Entities mirror the migrations** (V1, and V2 for
-  `outbox_event.next_attempt_at`; V3 adds only an index). With `ddl-auto: none` nothing validates the
+- **Entities mirror the migrations** (V1, V2 for
+  `outbox_event.next_attempt_at`, and V4 for
+  `credit_reservation.courier_share`; V3 adds only an index). With `ddl-auto: none` nothing validates the
   mappings at startup; `EntityMappingTest` saves and reads each one back.
   A new column needs a migration, the entity field and that test.
 - **A reply is enqueued inside the transaction that owes it.**

@@ -13,6 +13,9 @@
  * no-record result (team decision).
  * PR #212 review (Leong Wei Zhi): reserve's comment states its result
  * per existing record status (reviewer's suggestion).
+ * 2026-10-25, issue #235: resolve, the split settlement of a resolved
+ * dispute (team decisions DSP-4, DSP-8, DSP-13); reserve on a RESOLVED
+ * record is DUPLICATE (team decision).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -46,7 +49,7 @@ public interface CreditOperations {
      * {@link ReserveResult#ALREADY_REJECTED_INVALID_AMOUNT} for a recorded
      * amount below 1, otherwise
      * {@link ReserveResult#ALREADY_REJECTED_INSUFFICIENT_CREDITS};
-     * {@code TRANSFERRED} or {@code RELEASED} is
+     * {@code TRANSFERRED}, {@code RELEASED} or {@code RESOLVED} is
      * {@link ReserveResult#DUPLICATE}.
      */
     ReserveResult reserve(String requestRef, String requesterId, int amount);
@@ -71,4 +74,21 @@ public interface CreditOperations {
      * is no account for the record to reference.
      */
     SettleResult release(String requestRef, String requesterId);
+
+    /**
+     * Settles a resolved dispute by dividing a request's held credits
+     * (DSP-4): {@code courierAmount} to the courier as a new lot,
+     * {@code requesterAmount} back to the requester's lots, latest expiry
+     * first. A share of 0 writes no history row for that side.
+     *
+     * <p>With no record it is {@link SettleResult#NO_RESERVATION} and
+     * nothing is written, as for {@link #transfer}. A {@code RESOLVED}
+     * record with the same courier and split is
+     * {@link SettleResult#DUPLICATE}; a different courier or split, or
+     * any other status, is {@link SettleResult#INVALID_STATE} (DSP-13).
+     * So is a null or blank courier, a null or negative share, whatever
+     * the record, and shares that do not add up to the held amount
+     * (DSP-8).
+     */
+    SettleResult resolve(String requestRef, String courierId, Integer courierAmount, Integer requesterAmount);
 }

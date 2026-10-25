@@ -35,6 +35,8 @@
   2026-10-19, Claude Code (Opus 5.5), issue #218: V3 and the outbox
   retention purge. Same day, PR #224 review (Leong Wei Zhi): off in
   tests.
+  2026-10-25, Claude Code (Opus 5.5), issue #235: V4 and the split
+  settlement of request.dispute-resolved.
   Author review: Ryan Ang, pending pull request review.
   2026-10-11, Claude Code (Fable 5), PR #176 Copilot review: the run
   section's service URL updated for the gateway cutover (#151) — the
@@ -52,8 +54,8 @@ handler, the reply outbox with its publisher, the expiry and
 redistribution scheduler, and the broker topology.** The service
 starts, applies the schema, declares its queues and verifies login
 tokens. A signed-in user can read their balance and history. A request
-event published to `request-events` now reserves, transfers or releases
-credits, and a reservation's reply is published to `credit-events`.
+event published to `request-events` now reserves, transfers, releases
+or (for a resolved dispute) divides credits, and a reservation's reply is published to `credit-events`.
 Nothing publishes those events until the Order Service does. Earned
 credits expire into the common pool daily, and the pool is shared out
 monthly.
@@ -69,10 +71,15 @@ What is here:
   the service; an existing `credit-db` volume is kept.
 - **Flyway V3** (`V3__outbox_event_sent_index.sql`): a partial index on
   `outbox_event.sent_at` over the sent rows, for the retention purge.
+- **Flyway V4** (`V4__reservation_resolved.sql`): the `RESOLVED`
+  reservation status and `courier_share`, the courier's part of a
+  resolved dispute (DSP-4).
 - **Entities and repositories** (`entity/`, `repository/`): one JPA
   entity per table and a Spring Data repository for each.
 - **Credit operations** (`service/CreditOperationsService`): get-or-create
-  (the sign-up credits, once per user), reserve, transfer and release,
+  (the sign-up credits, once per user), reserve, transfer, release and
+  resolve (a disputed request's reward divided between courier and
+  requester, DSP-4),
   each in one transaction under row locks, with the outcomes of the
   design doc's "What each operation answers". Each one that changes credits logs one line with
   the request, the users, the amount and the outcome, written after the
@@ -172,7 +179,7 @@ What is here:
 - **Broker topology** (`messaging/rabbitmq/`): at startup the service
   declares the `request-events` and `credit-events` exchanges and its
   own work, retry and dead-letter queues
-  (`credit-service.request-events`, `.retry`, `.dlq`), bound to the four
+  (`credit-service.request-events`, `.retry`, `.dlq`), bound to the five
   events it acts on. It therefore needs RabbitMQ to start. The retry
   delay (`CREDIT_RETRY_TTL_MS`, default 2000) is fixed into the retry
   queue when it is declared; changing it means deleting that queue.
