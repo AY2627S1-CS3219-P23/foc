@@ -16,6 +16,10 @@
  * helper takes the reasonCode with the reason, so every test rejection
  * is a pair credit-service would publish. Author review: Ryan Ang,
  * pending pull request review.
+ * 2026-10-23, Claude Code (Opus 5.5), issue #240: a rejection's reasonCode
+ * sets close_reason; a null or unknown code rejects with none; every
+ * contract code is mapped. Author review: Ryan Ang, pending pull request
+ * review.
  */
 package foc.order;
 
@@ -73,6 +77,48 @@ class CreditReplyHandlerTests extends PostgresTestContainer {
 	}
 
 	@Test
+	void rejectionsReasonCodeBecomesTheCloseReason() {
+		Long poor = newRequest();
+		Long belowOne = newRequest();
+
+		handler.handle(rejected(poor.toString(), "insufficient available credits",
+				CreditReservationRejected.INSUFFICIENT_CREDITS));
+		handler.handle(rejected(belowOne.toString(), "reward must be at least 1",
+				CreditReservationRejected.INVALID_AMOUNT));
+
+		assertEquals(CloseReason.INSUFFICIENT_CREDITS, closeReason(poor));
+		// the contract's INVALID_AMOUNT is Order's INVALID_REWARD (DSP-1)
+		assertEquals(CloseReason.INVALID_REWARD, closeReason(belowOne));
+	}
+
+	@Test
+	void rejectionWithNoOrAnUnknownReasonCodeStillRejectsWithNoCloseReason() {
+		// null: a reply published before reasonCode existed (D18)
+		Long old = newRequest();
+		// unknown: a code added to the contract that this service does not know yet
+		Long newer = newRequest();
+
+		assertEquals(CreditReplyHandler.Outcome.HANDLED,
+				handler.handle(rejected(old.toString(), "insufficient available credits", null)));
+		assertEquals(CreditReplyHandler.Outcome.HANDLED,
+				handler.handle(rejected(newer.toString(), "account frozen", "ACCOUNT_FROZEN")));
+
+		assertEquals(OrderStates.REJECTED, status(old));
+		assertNull(closeReason(old));
+		assertEquals(OrderStates.REJECTED, status(newer));
+		assertNull(closeReason(newer));
+	}
+
+	// Every code the contract defines has a close reason, so a new one in
+	// foc-contracts fails here until it is mapped.
+	@Test
+	void everyContractReasonCodeIsMapped() {
+		for (String code : CreditReservationRejected.REASON_CODES) {
+			assertNotNull(CreditReplyHandler.closeReasonOf(rejected("1", "any", code)), code);
+		}
+	}
+
+	@Test
 	void replyForRequestNoLongerPendingIsIgnored() {
 		Long id = newRequest();
 		requestsService.timeout(id);
@@ -107,6 +153,10 @@ class CreditReplyHandlerTests extends PostgresTestContainer {
 
 	private OrderStates status(Long id) {
 		return requestsRepository.findById(id).orElseThrow().getStatus();
+	}
+
+	private CloseReason closeReason(Long id) {
+		return requestsRepository.findById(id).orElseThrow().getCloseReason();
 	}
 
 	private static CreditReserved reserved(String requestId) {

@@ -27,6 +27,9 @@
   recreates every volume, since Credit's reservations are keyed by
   order ids; V1 gains the outbox index. Author review: Ryan Ang,
   pending pull request review.
+  2026-10-23, Claude Code (Opus 5.5), issue #240: Flyway V2, closeReason
+  in the reads, and the admin endpoints (team decisions DSP-1, DSP-5,
+  DSP-10, DSP-17). Author review: Ryan Ang, pending pull request review.
 -->
 
 # Order Service
@@ -60,6 +63,20 @@ file; an applied migration is never edited.
   index `idx_outbox_event_unsent` for the publisher's poll. A new state
   needs a migration that replaces that CHECK
   (`databaseAcceptsEveryOrderState` fails until it does).
+- **Flyway V2** (`V2__close_reason_outbox_request_id.sql`, issue #240):
+  `requests.close_reason` (nullable text, why a request ended without
+  completing, DSP-1) with the CHECK `requests_close_reason_check` over
+  the `CloseReason` names (`databaseAcceptsEveryCloseReason` fails until
+  a new reason has a migration); `outbox_event.request_id` (nullable
+  bigint, indexed, no foreign key, DSP-17), back-filled from each
+  existing row's payload `correlationId`.
+
+`close_reason` is set when a request ends abnormally: `/cancel` →
+`REQUESTER_CANCELLED`, the pending timeout → `RESERVATION_TIMEOUT`, the
+expiry sweep → `DEADLINE_PASSED`, and a Credit rejection → the reply's
+`reasonCode` mapped in `CreditReplyHandler` (`INSUFFICIENT_CREDITS` →
+`INSUFFICIENT_CREDITS`, `INVALID_AMOUNT` → `INVALID_REWARD`; a null or
+unknown code leaves it null). `DISPUTE_RESOLVED` is set by #239.
 
 **If the service fails to start after pulling V1** (Flyway reports a
 non-empty schema with no history table, or Hibernate validation fails):
@@ -158,13 +175,23 @@ must be at least 1"}`.
 | `/drop` | `requestId` | the assigned courier |
 | `/cancel` | `requestId` | the requester |
 | `/complete` | `requestId` | the requester |
+| `/retry-settlement` | `requestId` | ADMIN / OWNER; anyone else 403 |
+
+`/retry-settlement` (DSP-10) makes the request's newest settlement event
+(`request.completed`, `request.cancelled`, `request.expired` or
+`request.dispute-resolved`) unsent again, keeping its event id, so the
+outbox publisher sends the same message once more and consumers
+deduplicate it. 409 if the request is still active (`is not finished`)
+or finished without such an event, e.g. REJECTED (`has no settlement
+event`); 404 for an unknown id.
 
 ### Reads
 
 All need a bearer token. Lists are newest first and paged like the
 supplier listing: `page` (from 0, default 0) and `size` (1-100, default
 20), answered as `{"content": [...], "page", "size", "totalElements",
-"totalPages"}`, each item trimmed to `id`, `status`, `supplierName`,
+"totalPages"}`, each item trimmed to `id`, `status`, `closeReason`
+(null unless the request ended without completing), `supplierName`,
 `dropoffLocation`, `item`, `creditAmount`, `deadline`, `createdAt`. A bad
 `state`, `role`, `page` or `size` is a 400 with a `message`.
 
@@ -185,10 +212,12 @@ A range whose lower bound is not below its upper (`minCredit` above
 | Path | Returns | Who may call it |
 | --- | --- | --- |
 | `GET /requests?state=CREATED&page=&size=` | open errands for couriers (F2.1): CREATED requests whose deadline is still ahead; `state` may only be `CREATED` (the default) | any logged-in user |
-| `GET /requests/{id}` | the request in full (every column, incl. `requesterId`, `courierId` and the step timestamps) | its requester, its assigned courier, or ADMIN / OWNER; anyone else 404 |
+| `GET /requests/{id}` | the request in full (every column, incl. `requesterId`, `courierId`, `closeReason` and the step timestamps) | its requester, its assigned courier, or ADMIN / OWNER; anyone else 404 |
 | `GET /requests/mine?role=requester&state=` | the caller's requests as requester, optionally in one state | the caller |
 | `GET /requests/mine?role=courier&state=` | the caller's assigned deliveries | the caller |
 | `GET /users/{id}/requests?state=` | that user's requests as requester or courier (admin view) | ADMIN / OWNER; anyone else 403 |
+| `GET /requests/admin?state=&closeReason=` | every user's requests; `closeReason` takes one or more `CloseReason` names, comma-separated like `state` (the dispute queue will be `state=DISPUTED`, #239) | ADMIN / OWNER; anyone else 403 |
+| `POST /requests/admin/statuses` `{"ids": [42, 99]}` | each id's current state, `{"42": "COMPLETED", "99": null}`: an unknown id is `null`, a repeated one answered once, `[]` gives `{}`; more than 100 ids or a non-numeric id is a 400 | ADMIN / OWNER; anyone else 403 |
 
 ## Run
 

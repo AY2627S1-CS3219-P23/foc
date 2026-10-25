@@ -7,9 +7,13 @@
  * Same day: after(), for hiding past-deadline requests from the open list.
  * 2026-10-20: statusIn(), for a list filtered by several states.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-23, Claude Code (Opus 5.5), issue #240: closeReasonIn(), for the
+ * admin list's closeReason filter. Author review: Ryan Ang, pending pull
+ * request review.
  */
 package foc.order.repository;
 
+import foc.order.CloseReason;
 import foc.order.OrderStates;
 import foc.order.model.Requests;
 import org.springframework.data.jpa.domain.Specification;
@@ -38,6 +42,11 @@ public final class RequestSpecifications {
     /** In any of the states; null matches every state. */
     public static Specification<Requests> statusIn(Collection<OrderStates> states) {
         return states == null ? null : (root, query, cb) -> root.get("status").in(states);
+    }
+
+    /** With any of the close reasons; null matches every request. */
+    public static Specification<Requests> closeReasonIn(Collection<CloseReason> reasons) {
+        return reasons == null ? null : (root, query, cb) -> root.get("closeReason").in(reasons);
     }
 
     public static Specification<Requests> requester(Long userId) {

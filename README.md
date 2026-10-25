@@ -217,6 +217,9 @@
   2026-10-23: AI Use Summary extended for the PR #244 review fixes, by
   Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-23: AI Use Summary extended for order-service failed-order
+  management (issue #240), by Claude Code (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -990,6 +993,16 @@ index and the `text` payload to V1 (team decisions), restored the test
 that every order state passes the status CHECK, made the documented
 volume reset recreate every service's volume, ran CI's skipped-tests
 guard on every Java module, and tightened the fixture value-set test.
+
+Claude Code (Opus 5.5) implemented order-service's failed-order
+management (issue #240, team decisions DSP-1, DSP-5, DSP-10, DSP-17):
+Flyway V2 with `requests.close_reason` and `outbox_event.request_id`
+(back-filled), the close reason recorded on each abnormal ending and
+returned in the request lists and detail, the rejection's `reasonCode`
+mapped in one place, and three ADMIN / OWNER endpoints (all-users list,
+batch statuses, retry settlement with the original event id). The four
+API and schema points the issue left open were decided by the team and
+transcribed into `docs/disputes.md`. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
