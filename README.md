@@ -220,6 +220,10 @@
   2026-10-23: AI Use Summary extended for order-service failed-order
   management (issue #240), by Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-25: AI Use Summary extended for credit-service's split
+  settlement of request.dispute-resolved (issue #235), by Claude Code
+  (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1003,6 +1007,16 @@ mapped in one place, and three ADMIN / OWNER endpoints (all-users list,
 batch statuses, retry settlement with the original event id). The four
 API and schema points the issue left open were decided by the team and
 transcribed into `docs/disputes.md`. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) implemented credit-service's split settlement
+of `request.dispute-resolved` (issue #235, team decisions DSP-4, DSP-8,
+DSP-13): Flyway V4 with the `RESOLVED` status and `courier_share`, the
+reward divided between a new lot for the courier and the requester's
+slices latest expiry first, repeats and conflicts answered from the
+stored split, and the event bound to the work queue. What the other
+events do on a `RESOLVED` record, and the duplicate-or-contradiction
+rule behind the event table, were decided by the team and transcribed
+into `docs/credit-service.md`. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

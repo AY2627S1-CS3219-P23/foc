@@ -108,6 +108,12 @@
   2026-10-21, issue #234, team decisions transcribed: the rejection
   reply carries `reasonCode` beside `reason` (DSP-12, @Nullable per
   D18).
+  2026-10-25, issue #235, team decisions transcribed: the RESOLVED
+  status, `courier_share` and the split settlement of
+  `request.dispute-resolved` (DSP-4, DSP-8, DSP-13); what the other
+  events do on a RESOLVED record; and the rule above the event table
+  (a matching event is a duplicate, a contradicting one INVALID_STATE),
+  in the team's words.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -132,7 +138,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D8 | Reservation | Saga step 1. The Credit Service consumes `request.submitted`, reserves or refuses, and replies with `credit.reserved` or `credit.reservation-rejected`. | F2.1, F2.1.2, F2.1.3 |
 | D9 | Transfer and release | Saga endings. `request.completed` transfers the held credits. `request.cancelled` and `request.expired` release them, with release being the compensation for a reservation. | F2.1.1, F3.1, NFR1.1 |
 | D10 | Reply publishing | **Transactional outbox.** The reply is written to an outbox table in the same transaction as the balance change, and a publisher sends it to the broker with publisher confirms and the mandatory flag: a reply is marked sent only when the broker confirmed it and did not return it as unroutable. The publisher polls every 1 s, as a fixed delay so that one poll never overlaps the next, publishes at most 100 replies in a poll and waits up to 5 s for each confirm. A reply returned as unroutable is not due again for 30 s, and a poll reads only the unsent replies that are due, so replies no queue takes cannot fill every batch and hold back the ones behind them. | NFR2.1 |
-| D11 | Event failure handling | Transient failures go to a retry queue and are redelivered after a short delay, up to a fixed number of attempts, then to a dead-letter queue. Events that conflict with the recorded state go straight to the dead-letter queue. A `request.completed` with no record is not such a conflict: its reservation may not have been applied yet, so it is retried like a transient failure. The queue layout is the Notification Service's (a work, a retry and a dead-letter queue), with two differences: the four consumed routing keys are bound one by one instead of `request.#`, and the retry delay is 2 s with up to 5 attempts (`CREDIT_RETRY_TTL_MS`, `CREDIT_RETRY_MAX_ATTEMPTS`). The service declares both the `request-events` and `credit-events` exchanges, so it starts without the Order Service. | F5.1.1, NFR2.1 |
+| D11 | Event failure handling | Transient failures go to a retry queue and are redelivered after a short delay, up to a fixed number of attempts, then to a dead-letter queue. Events that conflict with the recorded state go straight to the dead-letter queue. A `request.completed` with no record is not such a conflict: its reservation may not have been applied yet, so it is retried like a transient failure. The queue layout is the Notification Service's (a work, a retry and a dead-letter queue), with two differences: the five consumed routing keys are bound one by one instead of `request.#`, and the retry delay is 2 s with up to 5 attempts (`CREDIT_RETRY_TTL_MS`, `CREDIT_RETRY_MAX_ATTEMPTS`). The service declares both the `request-events` and `credit-events` exchanges, so it starts without the Order Service. | F5.1.1, NFR2.1 |
 | D12 | Scheduler | Done by a **cron job** through use of `@Scheduled`. One routine runs daily at 00:00 Asia/Singapore time and once at startup: the expiry sweep, then, if the current Singapore month has no `redistribution_run` row, that month's redistribution. The order inside the routine puts what expired into the pool before it is shared out, so the redistribution happens at 00:00 on the 1st, straight after that night's sweep. A month that is missed (the service down) or whose run fails is completed by the next run, at startup or the next day. The expiry is one transaction per account. A month is recorded in `redistribution_run` even when the pool is empty. | F6.1.1, F6.1.2 |
 | D13 | Outbox retention | A **scheduled purge** deletes the replies sent more than 30 days ago (`CREDIT_OUTBOX_RETENTION_DAYS`, default 30, at least 1 or the service does not start), daily at 03:00 Asia/Singapore time (`CREDIT_OUTBOX_PURGE_CRON`), away from the 00:00 routine of D12. Only sent rows (`sent_at` not null) are deleted: an unsent row is a reply the Order Service is still waiting for, and deleting it would leave that request stuck in pending. The window counts from `sent_at`, since a row's job ends at delivery. A partial index on `sent_at` covers the sent rows, so the purge's condition matches it exactly. Nothing but `outbox_event` is purged: `credit_reservation`, `credit_history`, `credit_lot` and `credit_reservation_slice` are the ledger and are kept. This differs from the Notification Service, which purges its `processed_events`: there that table is only a duplicate check, while here the duplicate check is `credit_reservation`, which is also the record of every request's credits. | NFR2.1 |
 
@@ -171,7 +177,7 @@ Web App; every balance change arrives as a request event. Its state lives only i
 | **Request event listener** (Spring AMQP) | Consumes `request.submitted`, `request.completed`, `request.cancelled` and `request.expired` from the Credit Service's own queue, hands each to the request event handler, and settles the delivery on its answer: acknowledge after the commit, dead-letter an event that conflicts with the request's record, and send any failure to the retry queue (D11). |
 | **Request event handler** (Spring Boot, `@Transactional`) | Owns the transaction for one event. Turns it into a reserve (F2.1), transfer (F3.1) or release (F2.1.1) operation and, for a reservation, writes the reply to the outbox in the same transaction (D10). Imports no broker types. |
 | **Error mapping** (Spring Boot, `@RestControllerAdvice`) | Maps invalid query parameters on the read API (for example the history's amount and date-range filters) to HTTP error responses. Event-path failures never reach it: they are refused with a reply or dead-lettered (see "How each event is handled"). |
-| **Idempotent credit operations service** (Spring Boot, `@Transactional`) | Core logic: provisions accounts with 5 available / 0 reserved, once per user (F1.1.1, F1.1.2). It reserves only if available credit >= amount needed (F2.1, F2.1.2, F2.1.3) and releases or transfers each request's held credits at most once (F2.1.1, F3.1.1, F3.1.2, NFR2.2.1). It spends lots in soonest-expiry order, with the never-expiring sign-up lot last, returns released credits to the lots they came from (D4), and commits balance change, held-credits status, lots, history rows and the outgoing reply in one transaction (F5.1, NFR2.1). It logs one line per operation that changes credits (the request, the users affected, the amount and the outcome) and one per account created, each written after the transaction commits. |
+| **Idempotent credit operations service** (Spring Boot, `@Transactional`) | Core logic: provisions accounts with 5 available / 0 reserved, once per user (F1.1.1, F1.1.2). It reserves only if available credit >= amount needed (F2.1, F2.1.2, F2.1.3) and releases, transfers or divides (a resolved dispute, DSP-4) each request's held credits at most once (F2.1.1, F3.1.1, F3.1.2, NFR2.2.1). It spends lots in soonest-expiry order, with the never-expiring sign-up lot last, returns released credits to the lots they came from (D4), and commits balance change, held-credits status, lots, history rows and the outgoing reply in one transaction (F5.1, NFR2.1). It logs one line per operation that changes credits (the request, the users affected, the amount and the outcome) and one per account created, each written after the transaction commits. |
 | **Credit history** (Spring Boot) | Appends one immutable row per transaction such as account provision, reservation, release, transfer, expiry, redistribution, with timestamps and request reference (F4.1.1). It will also serve the filtered history queries (F4.1.2, F4.1.3). |
 | **Outbox publisher** (Spring Boot, `@Scheduled`) | Reads the unsent replies that are due from the outbox table, publishes them to the `credit-events` exchange with the mandatory flag, and marks each one sent once the broker confirms it without returning it. A returned reply stays unsent and is due again 30 s later (D10); until then no poll reads it. It is logged with its event ID and the poll goes on to the next reply, since a return is the one failure that is about a single reply. Any other failure stops the poll: the broker cannot be reached, the connection is lost, the broker nacks the reply, or no confirm arrives within 5 s. Each means the broker is in trouble, so every other reply would fail the same way. The replies not yet sent stay unsent for the next poll. There is no cap on attempts. |
 | **Outbox retention purge** (Spring Boot, `@Scheduled`) | Once a day, deletes the replies sent longer ago than the retention window, in one statement. Unsent replies and every other table are left alone (D13). |
@@ -211,9 +217,10 @@ erDiagram
     credit_reservation {
         varchar request_ref PK "the order's ID"
         varchar requester_id FK
-        varchar courier_id FK "null until transfer, required when TRANSFERRED"
+        varchar courier_id FK "null until transfer, required when TRANSFERRED or RESOLVED"
         integer amount "CHECK > 0 while HELD; REJECTED keeps the reward as requested"
-        varchar status "HELD, REJECTED, TRANSFERRED, RELEASED"
+        varchar status "HELD, REJECTED, TRANSFERRED, RELEASED, RESOLVED"
+        integer courier_share "null unless RESOLVED; CHECK between 0 and amount"
         timestamptz created_at
         timestamptz settled_at "when the record became final; null while HELD"
     }
@@ -263,7 +270,7 @@ erDiagram
 | Table (entity) | Represents | Why  |
 | --- | --- | --- |
 | `credit_account` (`CreditAccount`) | **A user's credit balances.** One row per user. | The primary key on `user_id` makes get-or-create happen once per user (D6). `available` and `reserved` are columns so that the balance read is one row and the non-negative rule is a `CHECK` (F2.1.2). |
-| `credit_reservation` (`Reserved`) | **The reservation for one order.** One row per request. | The primary key on `request_ref` is the duplicate check (D3, NFR2.2.1). `status` records the outcome; `REJECTED` records a refusal so a redelivery gets the same answer. `courier_id` is filled in at transfer. `amount` is checked only while `HELD`: a `REJECTED` row holds the reward as it was requested, including zero or negative, and the amount-0 `RELEASED` row holds 0. `settled_at` is the moment the record became final, so it is set on a `REJECTED` row when it is written. |
+| `credit_reservation` (`Reserved`) | **The reservation for one order.** One row per request. | The primary key on `request_ref` is the duplicate check (D3, NFR2.2.1). `status` records the outcome; `REJECTED` records a refusal so a redelivery gets the same answer. `courier_id` is filled in at transfer. `RESOLVED` records a dispute settled by dividing the reward (DSP-4): `courier_share` is the courier's part and the requester's is `amount - courier_share`; the courier is recorded even when their share is 0, and the stored split lets a repeated resolution be told from a conflicting one (DSP-13). `amount` is checked only while `HELD`: a `REJECTED` row holds the reward as it was requested, including zero or negative, and the amount-0 `RELEASED` row holds 0. `settled_at` is the moment the record became final, so it is set on a `REJECTED` row when it is written. |
 | `credit_reservation_slice` | Which lots a reservation's credits came from. | Lets a release return credits to the lot they came from, with its expiry and place in the spend order (D4). `lot_id` references that lot; `amount` is always positive. Indexed by `request_ref`, which is how a release reads them back. Slices are kept after the request is settled, as the record of which lot funded it. |
 | `credit_lot` (`CreditLot`) | A user's available credits, split by expiry date. | Needed for 3-month expiry (F6.1). A null `expires_at` marks the sign-up credits, which never expire. A row is kept when spent to zero: its slices reference it and a release may refill it. The spend order and the expiry run only look at lots with something remaining, which is what both lot indexes cover. |
 | `credit_history` (`CreditHistoryEntry`) | **The record of every credit operation.** Append-only. | One row per affected account per operation (F4.1.1). `amount` is always positive and `type` says which way it moved. Indexed by user and time for the history view (F4.1.2, F4.1.3). |
@@ -305,9 +312,10 @@ reservations instead.
    are read and changed only under that user's account lock, by the
    scheduler too.
 3. **Database constraints.** A negative balance, a second reservation
-   for the same request, a held reservation with no amount, or a
-   transfer with no courier is rejected by PostgreSQL even if the
-   service code is wrong.
+   for the same request, a held reservation with no amount, a
+   transfer with no courier, or a resolution with no courier or a
+   courier share outside its amount is rejected by PostgreSQL even if
+   the service code is wrong.
 4. **Two invariants** that every operation preserves, and that can be
    checked at any time (each check must return no rows):
    - a `HELD` reservation whose `amount` differs from the sum of its
@@ -558,19 +566,27 @@ applies it in **one transaction**, including any reply written to the
 outbox. The operation locks the held-credits record by request
 reference, then the affected accounts in ascending user ID order. The
 listener acknowledges the event only after the commit.
+
+The rule behind every cell: an event that matches what already
+happened to the reservation is a duplicate (acknowledge, change
+nothing). An event that contradicts it is `INVALID_STATE`
+(dead-letter for a person to inspect).
  
-| Event | No record | `HELD` | `REJECTED` | `TRANSFERRED` | `RELEASED` |
-| --- | --- | --- | --- | --- | --- |
-| `request.submitted` | Enough balance: reserve, write `HELD`, reply `credit.reserved`. Otherwise write `REJECTED`, reply `credit.reservation-rejected`. | Reply `credit.reserved` again; nothing else changes | Reply `credit.reservation-rejected` again, with the reason worked out from the recorded reward; nothing else changes | Nothing (duplicate) | Nothing: the request was already cancelled |
-| `request.completed` | Retry; dead-letter after the maximum attempts | Transfer to the courier; set `TRANSFERRED` | Dead-letter | Same courier: nothing (duplicate). A different courier: dead-letter | Dead-letter |
-| `request.cancelled`, `request.expired` | Get-or-create the requester's account, then write `RELEASED` with amount 0, so a late `request.submitted` is ignored | Release to the requester; set `RELEASED` | Nothing | Dead-letter | Nothing (duplicate) |
+| Event | No record | `HELD` | `REJECTED` | `TRANSFERRED` | `RELEASED` | `RESOLVED` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `request.submitted` | Enough balance: reserve, write `HELD`, reply `credit.reserved`. Otherwise write `REJECTED`, reply `credit.reservation-rejected`. | Reply `credit.reserved` again; nothing else changes | Reply `credit.reservation-rejected` again, with the reason worked out from the recorded reward; nothing else changes | Nothing (duplicate) | Nothing: the request was already cancelled | Nothing (duplicate) |
+| `request.completed` | Retry; dead-letter after the maximum attempts | Transfer to the courier; set `TRANSFERRED` | Dead-letter | Same courier: nothing (duplicate). A different courier: dead-letter | Dead-letter | Dead-letter |
+| `request.cancelled`, `request.expired` | Get-or-create the requester's account, then write `RELEASED` with amount 0, so a late `request.submitted` is ignored | Release to the requester; set `RELEASED` | Nothing | Dead-letter | Nothing (duplicate) | Dead-letter |
+| `request.dispute-resolved` | Retry; dead-letter after the maximum attempts | Shares adding up to the amount: divide it between courier and requester; set `RESOLVED`. Otherwise dead-letter (DSP-8) | Dead-letter | Dead-letter | Dead-letter | Same courier and split: nothing (duplicate). Otherwise dead-letter (DSP-13) |
  
 Reserve gets or creates the requester's account, consumes lots
 soonest-expiry first and stores the slices on the record. Transfer gets
 or creates the courier's account and adds the amount as a new lot.
 Release returns each slice to the lot it came from; with no
 record it gets or creates the requester's account before writing the
-amount-0 `RELEASED` record (D6). Each writes its history rows in the
+amount-0 `RELEASED` record (D6). A resolution gets or creates both
+accounts, the courier's even for a share of 0, since the record
+references it. Each writes its history rows in the
 same transaction, including the sign-up lot and `PROVISION` row of an
 account it creates.
 
@@ -627,6 +643,25 @@ above end as they began, with their expiry and spend order unchanged.
 requester's lots stay as the reservation left them, and the slices
 remain as the record of which lots funded the request.
 
+**Resolution** (DSP-4). The courier's share is one new lot, as in a
+transfer, and the requester's share goes back through the slices
+latest expiry first. In detail:
+
+1. **A courier share of 0 creates no lot**, as a share of 0 on either
+   side writes no history row for it. The courier's account is still
+   created and locked, since the record references it.
+2. **A slice is refilled in part** where the requester's share runs
+   out inside it.
+3. **"Latest expiry first" puts the never-expiring sign-up credits
+   first**: the reverse of the spend order, so the requester gets back
+   the credits that last longest.
+4. **Refunded credits go back into their original lots**; if a lot
+   expired while the credits were held, the next midnight sweep moves
+   them to the pool, the same as a release (below).
+
+With the three slices above and a requester's share of 3, lot 3 gets
+back 2 and lot 2 gets back 1; lot 1 stays at 0.
+
 **A lot that expires while its credits are held.** The expiry run only
 moves what remains in a lot, so held credits are untouched. On a
 release they return to the lot, which is now past its expiry:
@@ -656,7 +691,7 @@ tests.
 | transfer | `HELD` | `SETTLED` |
 | transfer | `TRANSFERRED`, same courier | `DUPLICATE` |
 | transfer | `TRANSFERRED`, different courier | `INVALID_STATE` |
-| transfer | `REJECTED` or `RELEASED` | `INVALID_STATE` |
+| transfer | `REJECTED`, `RELEASED` or `RESOLVED` | `INVALID_STATE` |
 | transfer | none (writes nothing) | `NO_RESERVATION` |
 | transfer | any or none, the event names no courier (null or blank) | `INVALID_STATE` |
 | release | `HELD` | `SETTLED` |
@@ -664,7 +699,14 @@ tests.
 | release | any record, the event names no requester (null or blank) | As for that record's status: a `HELD` record is `SETTLED` from the record |
 | release | none, the event names no requester (writes nothing) | `INVALID_STATE` |
 | release | `RELEASED` or `REJECTED` | `DUPLICATE` |
-| release | `TRANSFERRED` | `INVALID_STATE` |
+| release | `TRANSFERRED` or `RESOLVED` | `INVALID_STATE` |
+| resolve | `HELD`, shares adding up to the amount | `SETTLED` |
+| resolve | `HELD`, shares not adding up to the amount (writes nothing) | `INVALID_STATE` |
+| resolve | `RESOLVED`, same courier and split | `DUPLICATE` |
+| resolve | `RESOLVED`, a different courier or split | `INVALID_STATE` |
+| resolve | `REJECTED`, `TRANSFERRED` or `RELEASED` | `INVALID_STATE` |
+| resolve | none (writes nothing) | `NO_RESERVATION` |
+| resolve | any or none, the event names no courier, or a share is null or negative | `INVALID_STATE` |
 
 - **Replies.** Only `RESERVED` and the two `REJECTED_*` results write a
   reply. A `DUPLICATE` writes none: a record exists, and its reply, if
@@ -681,7 +723,7 @@ tests.
   `reason` for people; the contract marks `reasonCode` `@Nullable`
   (D18), but this service always sets it.
 - **A request event with no handler** is acknowledged and logged with
-  its type and `eventId`, not dead-lettered: only the four bound events
+  its type and `eventId`, not dead-lettered: only the five bound events
   reach the queue, so it was published there by hand. A test fails the
   build if an event is bound without a handler.
 - **A refusal** still gets or creates the requester's account, which the
@@ -703,6 +745,12 @@ tests.
   release of a `HELD` record would leave its credits held with nothing
   to settle them. A `request.submitted` naming no requester is for the
   listener to reject before it reaches the operations (#171).
+- **A resolution** checks the courier and both shares before it looks
+  the record up, as a transfer checks its courier, so a resolution
+  missing one is dead-lettered at once instead of retried. Whether the
+  shares add up to the amount needs the record, so that is checked
+  after. With no record it is retried like a completion: its
+  `request.submitted` may still be in the retry queue.
 - **Log lines** are written after the transaction commits, so an
   attempt that rolls back leaves none from the operations; the listener
   logs the failure and the retry.
@@ -735,6 +783,8 @@ tests.
 | Credit Service is down when a request is submitted | The request stays `pending` and the event waits in the durable queue. It is confirmed when the Credit Service is back, or cancelled if the Order Service's waiting time runs out first. |
 | The Order Service gives up on a `pending` request, then the reservation happens anyway | The Order Service has already published `request.cancelled`, which releases the reservation. It ignores the late `credit.reserved`. |
 | A `request.completed` arrives before its reservation (its `request.submitted` is still in the retry queue) | Retried, then dead-lettered after the attempt cap. A retry that finds the `HELD` record transfers it as usual |
+| A `request.dispute-resolved` arrives before its reservation | Retried, then dead-lettered after the attempt cap, as for `request.completed` (DSP-13) |
+| A `request.dispute-resolved` whose shares do not add up to the held amount | Dead-lettered at once; nothing changes and the credits stay held (DSP-8) |
 | Credit Service is down when delivery is confirmed | The Order Service completes the request regardless. The transfer runs when the Credit Service is back. |
 | Database is briefly unavailable while an event is processed | The event goes to the retry queue and is redelivered after the retry delay (2 s); after the maximum attempts (5) it is dead-lettered for inspection |
 | An event failed, and the broker returns its copy for the retry queue as unroutable (the retry queue does not exist) | The original is dead-lettered at once. No retry can succeed while the queue is missing, so nothing loops on it. If the dead-letter queue is missing too, the broker discards the event, as it would for any other dead-letter |

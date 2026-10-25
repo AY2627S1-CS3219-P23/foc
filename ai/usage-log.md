@@ -42,6 +42,41 @@ Entry template:
 ```
 
 ---
+## 2026-10-25 — Ryan Ang (feat: Credit split settlement for request.dispute-resolved, issue #235)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** credit-service (`db/migration/V4__reservation_resolved.sql`
+  new; `ReservationStatus.java`: `RESOLVED`; `Reserved.java`:
+  `courierShare`; `CreditReservationSliceRepository.java`: slices latest
+  expiry first; `CreditOperations.java`, `CreditOperationsService.java`:
+  `resolve`, and a reserve / release on a RESOLVED record;
+  `RequestEventHandler.java`: the `RequestDisputeResolved` arm;
+  `RabbitMqTopology.java`: the fifth consumed event;
+  `RequestEventsListener.java`: comment only; `README.md`, `AGENTS.md`;
+  tests: `CreditOperationsServiceTest`, `RequestEventHandlerTest`,
+  `EntityMappingTest`, `RabbitMqTopologyTest`,
+  `RabbitMqTopologyIntegrationTest`). `docs/credit-service.md` (schema,
+  constraints, the event table with a RESOLVED column and a
+  `request.dispute-resolved` row, lots, operation answers, failure
+  table). `README.md` (AI Use Summary and header line).
+- **Prompt(s):** Implement issue #235 as written there (team decisions
+  DSP-4, DSP-8, DSP-13). Before coding, the tool listed what the
+  decisions left open, and the decisions were: on a RESOLVED record a
+  `request.cancelled` / `request.expired` or a `request.completed` is
+  dead-lettered and a redelivered `request.submitted` is a duplicate.
+  The team also gave the rule behind the whole event table (an event
+  matching what already happened is a duplicate, one contradicting it is
+  INVALID_STATE), transcribed into `docs/credit-service.md` in the
+  team's words. A courier share of 0 creates no lot (as it writes
+  no history row); a slice is refilled in part where the requester's 
+  share runs out inside it; "latest expiry first" puts the never-expiring 
+  sign-up credits first, from DSP-4's "the credits that last longest"; a 
+  missing courier or a null or negative share is INVALID_STATE before the 
+  record is looked up, as a transfer checks its courier; the shares are 
+  `Integer` so a missing one reaches that check.
+- **Author review:** 
+  credit-service 291 tests pass locally with Docker, none skipped.
+
 ## 2026-10-23 — Ryan Ang (feat: Order failed-order management, issue #240)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs

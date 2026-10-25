@@ -29,6 +29,13 @@
  * its reply can be sent again.
  * PR #212 review (Leong Wei Zhi), reviewer's suggestion: the REJECTED
  * case's comment names the V1__baseline.sql invariant it relies on.
+ * 2026-10-25, issue #235: resolve, the split settlement of a resolved
+ * dispute, written from DSP-4, DSP-8 and DSP-13 (team decisions): the
+ * checks, lock order, balances, lots and history rows are the team's.
+ * A release or reserve finding a RESOLVED record answers INVALID_STATE
+ * or DUPLICATE (team decision). Where the decisions are silent (no lot
+ * for a courier share of 0, a slice refilled in part) the tool took the
+ * plainest reading and listed it in ai/usage-log.md.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -153,6 +160,24 @@ public class CreditOperationsService implements CreditOperations {
         return result;
     }
 
+    @Override
+    public SettleResult resolve(String requestRef, String courierId, Integer courierAmount,
+            Integer requesterAmount) {
+        // Before the lookup, as for a transfer: with no record either, a
+        // resolution missing a field would be retried to no purpose.
+        if (isMissing(courierId) || isNotAShare(courierAmount) || isNotAShare(requesterAmount)) {
+            logResolve(requestRef, null, courierId, courierAmount, requesterAmount, SettleResult.INVALID_STATE);
+            return SettleResult.INVALID_STATE;
+        }
+        Optional<Reserved> found = reservations.findForUpdate(requestRef);
+        SettleResult result = found
+            .map(reservation -> applyResolve(reservation, courierId, courierAmount, requesterAmount))
+            .orElse(SettleResult.NO_RESERVATION);
+        logResolve(requestRef, found.map(Reserved::getRequesterId).orElse(null), courierId, courierAmount,
+            requesterAmount, result);
+        return result;
+    }
+
     private ReserveResult applyReserve(String requestRef, String requesterId, int amount) {
         Optional<Reserved> existing = reservations.findForUpdate(requestRef);
         if (existing.isPresent()) {
@@ -166,7 +191,7 @@ public class CreditOperationsService implements CreditOperations {
                 case REJECTED -> record.getAmount() < 1
                     ? ReserveResult.ALREADY_REJECTED_INVALID_AMOUNT
                     : ReserveResult.ALREADY_REJECTED_INSUFFICIENT_CREDITS;
-                case TRANSFERRED, RELEASED -> ReserveResult.DUPLICATE;
+                case TRANSFERRED, RELEASED, RESOLVED -> ReserveResult.DUPLICATE;
             };
         }
         Instant now = Instant.now();
@@ -229,7 +254,9 @@ public class CreditOperationsService implements CreditOperations {
     }
 
     private SettleResult applyRelease(Reserved reservation) {
-        if (reservation.getStatus() == ReservationStatus.TRANSFERRED) {
+        // the credits went to the courier, all or in part
+        if (reservation.getStatus() == ReservationStatus.TRANSFERRED
+                || reservation.getStatus() == ReservationStatus.RESOLVED) {
             return SettleResult.INVALID_STATE;
         }
         if (reservation.getStatus() != ReservationStatus.HELD) {
@@ -255,6 +282,74 @@ public class CreditOperationsService implements CreditOperations {
         reservation.setStatus(ReservationStatus.RELEASED);
         reservation.setSettledAt(now);
         return SettleResult.SETTLED;
+    }
+
+    private SettleResult applyResolve(Reserved reservation, String courierId, int courierAmount,
+            int requesterAmount) {
+        if (reservation.getStatus() == ReservationStatus.RESOLVED) {
+            // the split is stored as the courier's share; the requester's is the rest
+            boolean same = courierId.equals(reservation.getCourierId())
+                && courierAmount == reservation.getCourierShare()
+                && requesterAmount == reservation.getAmount() - reservation.getCourierShare();
+            return same ? SettleResult.DUPLICATE : SettleResult.INVALID_STATE;
+        }
+        if (reservation.getStatus() != ReservationStatus.HELD
+                || courierAmount + requesterAmount != reservation.getAmount()) {
+            return SettleResult.INVALID_STATE;
+        }
+
+        Instant now = Instant.now();
+        String requestRef = reservation.getRequestRef();
+        String requesterId = reservation.getRequesterId();
+        int amount = reservation.getAmount();
+        CreditAccount requester;
+        CreditAccount courier;
+        // Ascending user ID (D2), as for a transfer. The courier's account
+        // is locked even for a share of 0: the record references it.
+        if (requesterId.compareTo(courierId) <= 0) {
+            requester = lockAccount(requesterId, now);
+            courier = lockAccount(courierId, now);
+        } else {
+            courier = lockAccount(courierId, now);
+            requester = lockAccount(requesterId, now);
+        }
+
+        requester.setReserved(requester.getReserved() - amount);
+        if (courierAmount > 0) {
+            courier.setAvailable(courier.getAvailable() + courierAmount);
+            lots.save(new CreditLot(courierId, courierAmount, now, earnedCreditLifetime.expiryOfCreditsEarnedAt(now)));
+            record(requesterId, CreditHistoryType.TRANSFER_OUT, courierAmount, requestRef, now);
+            record(courierId, CreditHistoryType.TRANSFER_IN, courierAmount, requestRef, now);
+        }
+        if (requesterAmount > 0) {
+            refundLatestExpiryFirst(requestRef, requesterAmount);
+            requester.setAvailable(requester.getAvailable() + requesterAmount);
+            record(requesterId, CreditHistoryType.RELEASE, requesterAmount, requestRef, now);
+        }
+        reservation.setStatus(ReservationStatus.RESOLVED);
+        reservation.setCourierId(courierId);
+        reservation.setCourierShare(courierAmount);
+        reservation.setSettledAt(now);
+        return SettleResult.SETTLED;
+    }
+
+    // Back to the lots the slices came from, latest expiry first (DSP-4);
+    // a slice is refilled in part when the refund runs out inside it.
+    private void refundLatestExpiryFirst(String requestRef, int amount) {
+        int left = amount;
+        for (CreditReservationSlice slice : slices.findLatestExpiryFirst(requestRef)) {
+            if (left == 0) {
+                break;
+            }
+            int part = Math.min(left, slice.getAmount());
+            CreditLot lot = lots.findById(slice.getLotId()).orElseThrow();
+            lot.setRemaining(lot.getRemaining() + part);
+            left -= part;
+        }
+        if (left > 0) {
+            throw new IllegalStateException(
+                "slices of " + requestRef + " hold " + left + " fewer credits than the reservation");
+        }
     }
 
     // the cancel arrived first: an amount-0 record, so a late reserve is a duplicate
@@ -318,6 +413,18 @@ public class CreditOperationsService implements CreditOperations {
 
     private static boolean isMissing(String userId) {
         return userId == null || userId.isBlank();
+    }
+
+    // a share is 0 or more (DSP-8)
+    private static boolean isNotAShare(Integer amount) {
+        return amount == null || amount < 0;
+    }
+
+    private static void logResolve(String requestRef, String requesterId, String courierId, Integer courierAmount,
+            Integer requesterAmount, SettleResult result) {
+        afterCommit(() -> log.info(
+            "resolve request={} requester={} courier={} courierAmount={} requesterAmount={} outcome={}",
+            requestRef, requesterId, courierId, courierAmount, requesterAmount, result));
     }
 
     private static void logTransfer(String requestRef, String requesterId, String courierId, Integer amount,

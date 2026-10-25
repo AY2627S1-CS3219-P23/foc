@@ -24,6 +24,8 @@
  * 2026-10-22, PR #243 review follow-up: the reason text constants
  * renamed with a _TEXT suffix, so they no longer share a name with the
  * reasonCode constants passed beside them.
+ * 2026-10-25, issue #235: request.dispute-resolved settles through
+ * resolve, with the outcomes of a completion (team decision, DSP-13).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -42,6 +44,7 @@ import foc.contracts.events.credit.CreditReservationRejected;
 import foc.contracts.events.credit.CreditReserved;
 import foc.contracts.events.request.RequestCancelled;
 import foc.contracts.events.request.RequestCompleted;
+import foc.contracts.events.request.RequestDisputeResolved;
 import foc.contracts.events.request.RequestEvent;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestSubmitted;
@@ -90,8 +93,10 @@ public class RequestEventHandler {
             case RequestCompleted e -> settle(e.requestId(), operations.transfer(e.requestId(), e.courierId()));
             case RequestCancelled e -> settle(e.requestId(), operations.release(e.requestId(), e.requesterId()));
             case RequestExpired e -> settle(e.requestId(), operations.release(e.requestId(), e.requesterId()));
+            case RequestDisputeResolved e -> settle(e.requestId(), operations.resolve(
+                e.requestId(), e.courierId(), e.courierAmount(), e.requesterAmount()));
             // A request event the Credit Service has no part in. Only the
-            // four events above are bound to the queue, so this is one
+            // five events above are bound to the queue, so this is one
             // published to it by hand: acknowledged, since there is nothing
             // to inspect, but logged so it can be traced.
             default -> {
@@ -135,8 +140,8 @@ public class RequestEventHandler {
             // both acknowledged; they differ for logs and tests
             case SETTLED, DUPLICATE -> Outcome.HANDLED;
             case INVALID_STATE -> Outcome.INVALID_STATE;
-            // the completion overtook its reservation: retried like any
-            // failure, and dead-lettered once the attempts run out (D11)
+            // the completion or resolution overtook its reservation: retried
+            // like any failure, and dead-lettered once the attempts run out (D11)
             case NO_RESERVATION -> throw new ReservationNotFoundException(requestRef);
         };
     }

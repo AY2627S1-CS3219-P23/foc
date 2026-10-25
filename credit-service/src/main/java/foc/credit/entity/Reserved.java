@@ -4,6 +4,8 @@
  * Scope: JPA entity for the credit_reservation table, transcribed from
  * V1__baseline.sql; the class name is the design doc's
  * (docs/credit-service.md "Schema"). No logic.
+ * 2026-10-25, issue #235: courierShare, for V4's courier_share column
+ * (team decision, DSP-4).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.entity;
@@ -32,9 +34,13 @@ public class Reserved {
     @Column(name = "requester_id", nullable = false, updatable = false)
     private String requesterId;
 
-    // null until transfer
+    // null until transfer or resolution
     @Column(name = "courier_id")
     private String courierId;
+
+    // the courier's part of the amount; null unless RESOLVED (DSP-4)
+    @Column(name = "courier_share")
+    private Integer courierShare;
 
     @Column(nullable = false)
     private int amount;
@@ -76,6 +82,14 @@ public class Reserved {
 
     public void setCourierId(String courierId) {
         this.courierId = courierId;
+    }
+
+    public Integer getCourierShare() {
+        return courierShare;
+    }
+
+    public void setCourierShare(Integer courierShare) {
+        this.courierShare = courierShare;
     }
 
     public int getAmount() {

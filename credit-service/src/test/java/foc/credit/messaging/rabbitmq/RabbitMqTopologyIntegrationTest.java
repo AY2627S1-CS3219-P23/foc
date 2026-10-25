@@ -7,6 +7,8 @@
  * provisioning on, raw fixture JSON published under its routing key.
  * PR #168 review (Leong Wei Zhi): the unbound keys are published before
  * the bound ones, and the fixture is read as its literal bytes.
+ * 2026-10-25, issue #235: request.dispute-resolved is bound, and
+ * request.disputed, which the Credit Service does not act on, is not.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
@@ -39,7 +41,7 @@ import foc.credit.PostgresTestContainer;
 /**
  * The service starts against a real broker with provisioning on, so a
  * declaration the broker refuses fails this context, and the declared
- * queues then behave as docs/credit-service.md D11 says: the four bound
+ * queues then behave as docs/credit-service.md D11 says: the five bound
  * keys reach the work queue and no other, the retry queue returns an
  * event to it after the delay, and a rejected event lands in the DLQ.
  *
@@ -85,24 +87,25 @@ class RabbitMqTopologyIntegrationTest extends PostgresTestContainer {
 	}
 
 	@Test
-	void onlyTheFourConsumedKeysAreBound() throws IOException {
+	void onlyTheFiveConsumedKeysAreBound() throws IOException {
 		byte[] body = fixture("request-submitted");
 
 		// Routing is by key alone, so one body serves for every key. The
-		// three unbound keys go first, on one channel: the broker routes a
-		// channel's publishes in order, so once the four bound ones are in
+		// four unbound keys go first, on one channel: the broker routes a
+		// channel's publishes in order, so once the five bound ones are in
 		// the queue, a wrongly bound key has already added to the count.
 		rabbitTemplate.invoke(sameChannel -> {
 			for (String key : new String[] { "request.created", "request.accepted", "request.rejected",
-					"request.submitted", "request.completed", "request.cancelled", "request.expired" }) {
+					"request.disputed", "request.submitted", "request.completed", "request.cancelled",
+					"request.expired", "request.dispute-resolved" }) {
 				sameChannel.send(EventContracts.REQUEST_EVENTS_EXCHANGE, key, json(body));
 			}
 			return null;
 		});
 
 		await().atMost(TIMEOUT).untilAsserted(
-				() -> assertThat(readyCount(RabbitMqTopology.REQUEST_EVENTS_QUEUE)).isGreaterThanOrEqualTo(4));
-		assertThat(readyCount(RabbitMqTopology.REQUEST_EVENTS_QUEUE)).isEqualTo(4);
+				() -> assertThat(readyCount(RabbitMqTopology.REQUEST_EVENTS_QUEUE)).isGreaterThanOrEqualTo(5));
+		assertThat(readyCount(RabbitMqTopology.REQUEST_EVENTS_QUEUE)).isEqualTo(5);
 	}
 
 	@Test

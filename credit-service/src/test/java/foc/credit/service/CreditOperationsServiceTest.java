@@ -15,6 +15,10 @@
  * 2026-10-18, issue #165 (reviewer's suggestion): a redelivered
  * reservation on a HELD or REJECTED record answers what the record
  * holds, so the handler can send its reply again.
+ * 2026-10-25, issue #235: resolve, the split settlement of a resolved
+ * dispute (team decisions DSP-4, DSP-8, DSP-13): refund, payout, split,
+ * slice order, repeats, missing fields, a repeated delivery racing, and
+ * the other events on a RESOLVED record (team decision).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -459,6 +463,256 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
         assertBalance(courier, 8, 0);
     }
 
+    // ---- resolve (DSP-4, DSP-8, DSP-13) ----
+
+    @Test
+    void resolveWithTheWholeRewardToTheRequesterRefundsIt() {
+        operations.reserve(request, requester, 3);
+        // accepting an order never touches Credit, so the courier may have no account
+        assertThat(accounts.findById(courier)).isEmpty();
+
+        assertThat(operations.resolve(request, courier, 0, 3)).isEqualTo(SettleResult.SETTLED);
+
+        assertBalance(requester, 5, 0);
+        // the courier is on the record even with nothing, so their account is created
+        assertBalance(courier, 5, 0);
+        assertThat(historyOf(requester)).containsExactly("PROVISION 5", "RESERVE 3", "RELEASE 3");
+        assertThat(historyOf(courier)).containsExactly("PROVISION 5");
+        assertThat(lotsOf(courier)).containsExactly("5 never");
+        assertResolved(courier, 0);
+    }
+
+    @Test
+    void resolveWithTheWholeRewardToTheCourierPaysIt() {
+        operations.reserve(request, requester, 3);
+
+        assertThat(operations.resolve(request, courier, 3, 0)).isEqualTo(SettleResult.SETTLED);
+
+        assertBalance(requester, 2, 0);
+        assertBalance(courier, 8, 0);
+        assertThat(historyOf(requester)).containsExactly("PROVISION 5", "RESERVE 3", "TRANSFER_OUT 3");
+        assertThat(historyOf(courier)).containsExactly("PROVISION 5", "TRANSFER_IN 3");
+        assertThat(lotsOf(courier)).containsExactly("3 expiring", "5 never");
+        assertResolved(courier, 3);
+    }
+
+    @Test
+    void resolveWithASplitPaysOnePartAndRefundsTheOther() {
+        operations.reserve(request, requester, 3);
+
+        assertThat(operations.resolve(request, courier, 1, 2)).isEqualTo(SettleResult.SETTLED);
+
+        assertBalance(requester, 4, 0);
+        assertBalance(courier, 6, 0);
+        assertThat(historyOf(requester))
+            .containsExactly("PROVISION 5", "RESERVE 3", "TRANSFER_OUT 1", "RELEASE 2");
+        assertThat(historyOf(courier)).containsExactly("PROVISION 5", "TRANSFER_IN 1");
+        assertThat(lotsOf(requester)).containsExactly("4 never");
+        assertThat(lotsOf(courier)).containsExactly("1 expiring", "5 never");
+        assertResolved(courier, 1);
+    }
+
+    @Test
+    void resolveRefundsTheLatestExpiringSlicesFirst() {
+        // the courier holds 3 expiring credits and 5 that never expire, and
+        // reserves 4: 3 from the expiring lot, then 1 from the sign-up lot
+        operations.reserve(request, requester, 3);
+        operations.transfer(request, courier);
+        String disputed = request + "-disputed";
+        String other = "u-other-" + UUID.randomUUID();
+        operations.reserve(disputed, courier, 4);
+
+        // 2 back: the never-expiring 1 first, then 1 of the expiring 3
+        assertThat(operations.resolve(disputed, other, 2, 2)).isEqualTo(SettleResult.SETTLED);
+
+        assertBalance(courier, 6, 0);
+        assertThat(lotsOf(courier)).containsExactly("1 expiring", "5 never");
+        assertBalance(other, 7, 0);
+    }
+
+    @Test
+    void resolveRefundsIntoALotThatHasPassedItsExpiry() {
+        operations.reserve(request, requester, 3);
+        operations.transfer(request, courier);
+        String disputed = request + "-disputed";
+        String other = "u-other-" + UUID.randomUUID();
+        operations.reserve(disputed, courier, 3);
+        // the earned lot expires while its credits are held
+        jdbc.update("update credit_lot set expires_at = now() - interval '1 day'"
+            + " where owner_id = ? and expires_at is not null", courier);
+
+        assertThat(operations.resolve(disputed, other, 1, 2)).isEqualTo(SettleResult.SETTLED);
+
+        // back in the expired lot, for the next expiry run to move to the pool, as on a release
+        assertBalance(courier, 7, 0);
+        assertThat(lotsOf(courier)).containsExactly("2 expiring", "5 never");
+    }
+
+    @Test
+    void resolveToTheRequesterThemselvesKeepsTheBooksBalanced() {
+        // the Order Service never sends this; the one account is locked as for a transfer
+        operations.reserve(request, requester, 3);
+
+        assertThat(operations.resolve(request, requester, 1, 2)).isEqualTo(SettleResult.SETTLED);
+
+        assertBalance(requester, 5, 0);
+        assertThat(lotsOf(requester)).containsExactly("1 expiring", "4 never");
+    }
+
+    @Test
+    void resolveAgainIsADuplicateOnlyWithTheSameCourierAndSplit() {
+        operations.reserve(request, requester, 3);
+        operations.resolve(request, courier, 1, 2);
+        String another = "u-other-" + UUID.randomUUID();
+
+        assertThat(operations.resolve(request, courier, 1, 2)).as("same").isEqualTo(SettleResult.DUPLICATE);
+        assertThat(operations.resolve(request, another, 1, 2)).as("another courier")
+            .isEqualTo(SettleResult.INVALID_STATE);
+        assertThat(operations.resolve(request, courier, 2, 1)).as("another split")
+            .isEqualTo(SettleResult.INVALID_STATE);
+        assertThat(operations.resolve(request, courier, 1, 1)).as("not adding up")
+            .isEqualTo(SettleResult.INVALID_STATE);
+
+        assertBalance(requester, 4, 0);
+        assertBalance(courier, 6, 0);
+        assertThat(accounts.findById(another)).isEmpty();
+        assertResolved(courier, 1);
+    }
+
+    @Test
+    void resolveAgainWithAZeroShareIsADuplicate() {
+        operations.reserve(request, requester, 3);
+        operations.resolve(request, courier, 0, 3);
+
+        assertThat(operations.resolve(request, courier, 0, 3)).isEqualTo(SettleResult.DUPLICATE);
+
+        assertBalance(requester, 5, 0);
+        assertThat(historyOf(requester)).containsExactly("PROVISION 5", "RESERVE 3", "RELEASE 3");
+    }
+
+    @Test
+    void resolveWhoseSharesDoNotAddUpToTheRewardChangesNothing() {
+        operations.reserve(request, requester, 3);
+
+        assertThat(operations.resolve(request, courier, 1, 1)).as("short").isEqualTo(SettleResult.INVALID_STATE);
+        assertThat(operations.resolve(request, courier, 3, 1)).as("over").isEqualTo(SettleResult.INVALID_STATE);
+
+        assertThat(statusOf(request)).isEqualTo(ReservationStatus.HELD);
+        assertBalance(requester, 2, 3);
+        assertThat(accounts.findById(courier)).isEmpty();
+    }
+
+    @Test
+    void resolveMissingAFieldIsInvalidWhateverTheRecord() {
+        String held = request + "-held";
+        operations.reserve(held, requester, 3);
+
+        // with no record it is not NO_RESERVATION: a retry could never succeed
+        for (String requestRef : List.of(request, held)) {
+            assertThat(operations.resolve(requestRef, null, 1, 2)).as("null courier")
+                .isEqualTo(SettleResult.INVALID_STATE);
+            assertThat(operations.resolve(requestRef, " ", 1, 2)).as("blank courier")
+                .isEqualTo(SettleResult.INVALID_STATE);
+            assertThat(operations.resolve(requestRef, courier, null, 3)).as("null courier share")
+                .isEqualTo(SettleResult.INVALID_STATE);
+            assertThat(operations.resolve(requestRef, courier, 3, null)).as("null requester share")
+                .isEqualTo(SettleResult.INVALID_STATE);
+            // adds up to the reward, but a share is never negative (DSP-8)
+            assertThat(operations.resolve(requestRef, courier, -1, 4)).as("negative share")
+                .isEqualTo(SettleResult.INVALID_STATE);
+        }
+
+        assertThat(reservations.findById(request)).isEmpty();
+        assertThat(statusOf(held)).isEqualTo(ReservationStatus.HELD);
+        assertBalance(requester, 2, 3);
+        assertThat(accounts.findById(courier)).isEmpty();
+    }
+
+    @Test
+    void resolveWithNoRecordFindsNoReservation() {
+        assertThat(operations.resolve(request, courier, 1, 2)).isEqualTo(SettleResult.NO_RESERVATION);
+
+        assertThat(reservations.findById(request)).isEmpty();
+        assertThat(accounts.findById(courier)).isEmpty();
+    }
+
+    // The event table's request.dispute-resolved row and RESOLVED column,
+    // one cell each: an event matching what happened to the reservation is
+    // a duplicate, one contradicting it is INVALID_STATE.
+
+    @Test
+    void resolveOfARejectedRecordIsInvalid() {
+        operations.reserve(request, requester, 6);
+
+        assertThat(operations.resolve(request, courier, 0, 6)).isEqualTo(SettleResult.INVALID_STATE);
+
+        assertThat(statusOf(request)).isEqualTo(ReservationStatus.REJECTED);
+        assertBalance(requester, 5, 0);
+        assertThat(accounts.findById(courier)).isEmpty();
+    }
+
+    @Test
+    void resolveOfAReleasedRecordIsInvalid() {
+        operations.reserve(request, requester, 3);
+        operations.release(request, requester);
+
+        assertThat(operations.resolve(request, courier, 0, 3)).isEqualTo(SettleResult.INVALID_STATE);
+
+        assertThat(statusOf(request)).isEqualTo(ReservationStatus.RELEASED);
+        assertBalance(requester, 5, 0);
+        assertThat(accounts.findById(courier)).isEmpty();
+    }
+
+    @Test
+    void resolveOfATransferredRecordIsInvalid() {
+        operations.reserve(request, requester, 3);
+        operations.transfer(request, courier);
+
+        // the same courier and the whole reward still contradicts a transfer
+        assertThat(operations.resolve(request, courier, 3, 0)).isEqualTo(SettleResult.INVALID_STATE);
+
+        assertThat(statusOf(request)).isEqualTo(ReservationStatus.TRANSFERRED);
+        assertBalance(requester, 2, 0);
+        assertBalance(courier, 8, 0);
+    }
+
+    @Test
+    void reserveOfAResolvedRecordIsADuplicate() {
+        operations.reserve(request, requester, 3);
+        operations.resolve(request, courier, 1, 2);
+
+        assertThat(operations.reserve(request, requester, 3)).isEqualTo(ReserveResult.DUPLICATE);
+
+        assertBalance(requester, 4, 0);
+        assertResolved(courier, 1);
+    }
+
+    @Test
+    void transferOfAResolvedRecordIsInvalid() {
+        operations.reserve(request, requester, 3);
+        operations.resolve(request, courier, 1, 2);
+
+        // the same courier too: a completion contradicts a resolution
+        assertThat(operations.transfer(request, courier)).isEqualTo(SettleResult.INVALID_STATE);
+
+        assertBalance(requester, 4, 0);
+        assertBalance(courier, 6, 0);
+        assertResolved(courier, 1);
+    }
+
+    // request.cancelled and request.expired both release
+    @Test
+    void releaseOfAResolvedRecordIsInvalid() {
+        operations.reserve(request, requester, 3);
+        operations.resolve(request, courier, 1, 2);
+
+        assertThat(operations.release(request, requester)).isEqualTo(SettleResult.INVALID_STATE);
+
+        assertBalance(requester, 4, 0);
+        assertBalance(courier, 6, 0);
+        assertResolved(courier, 1);
+    }
+
     // ---- the record insert (D3) ----
 
     // The first draft saved the record, which merged over an existing one.
@@ -547,6 +801,19 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
     }
 
     @RepeatedTest(RACE_REPETITIONS)
+    void twoDeliveriesOfOneResolutionSettleOnce() throws Exception {
+        operations.reserve(request, requester, 3);
+
+        List<Object> results = race(
+            () -> operations.resolve(request, courier, 1, 2),
+            () -> operations.resolve(request, courier, 1, 2));
+
+        assertThat(results).containsExactlyInAnyOrder(SettleResult.SETTLED, SettleResult.DUPLICATE);
+        assertBalance(requester, 4, 0);
+        assertBalance(courier, 6, 0);
+    }
+
+    @RepeatedTest(RACE_REPETITIONS)
     void transfersInOppositeDirectionsDoNotDeadlock() throws Exception {
         String back = request + "-back";
         operations.reserve(request, requester, 3);
@@ -568,6 +835,14 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
         assertThat(List.of(account.getAvailable(), account.getReserved()))
             .as("available and reserved of " + userId)
             .containsExactly(available, reserved);
+    }
+
+    private void assertResolved(String courierId, int courierShare) {
+        Reserved resolved = reservations.findById(request).orElseThrow();
+        assertThat(resolved.getStatus()).isEqualTo(ReservationStatus.RESOLVED);
+        assertThat(resolved.getCourierId()).isEqualTo(courierId);
+        assertThat(resolved.getCourierShare()).isEqualTo(courierShare);
+        assertThat(resolved.getSettledAt()).isNotNull();
     }
 
     private ReservationStatus statusOf(String requestRef) {

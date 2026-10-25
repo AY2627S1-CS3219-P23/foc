@@ -17,6 +17,7 @@
  * timeout, which is now configurable. Also from the review: the outcome
  * switch made exhaustive, any failure to publish the copy settles the
  * delivery, and the event's own failure kept on the requeue path.
+ * 2026-10-25, issue #235: the class comment counts five consumed events.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
@@ -47,7 +48,7 @@ import foc.contracts.events.request.RequestEvent;
 import foc.credit.service.RequestEventHandler;
 
 /**
- * Consumes the four request events from this service's work queue and
+ * Consumes the five request events from this service's work queue and
  * settles each delivery on the handler's answer (D11):
  *
  * <ul>
@@ -60,7 +61,8 @@ import foc.credit.service.RequestEventHandler;
  * with the request's record could never succeed.</li>
  * <li>An exception (the transaction rolled back): republished to the
  * retry queue while attempts remain, then dead-lettered. This includes a
- * {@code request.completed} that overtook its reservation, which the
+ * {@code request.completed} or {@code request.dispute-resolved} that
+ * overtook its reservation, which the
  * handler throws for so that it is retried.</li>
  * </ul>
  *

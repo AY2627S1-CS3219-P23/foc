@@ -4,6 +4,8 @@
  * Scope: unit test of the declared topology (no broker): the three
  * queues and their failure legs, the four bound keys, and both
  * exchanges.
+ * 2026-10-25, issue #235: request.dispute-resolved is the fifth bound
+ * key.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
@@ -39,15 +41,15 @@ class RabbitMqTopologyTest {
 	}
 
 	@Test
-	void bindsOnlyTheFourEventsTheServiceActsOn() {
+	void bindsOnlyTheFiveEventsTheServiceActsOn() {
 		assertThat(topology.getDeclarablesByType(Binding.class))
 				.allSatisfy(binding -> {
 					assertThat(binding.getExchange()).isEqualTo("request-events");
 					assertThat(binding.getDestination()).isEqualTo("credit-service.request-events");
 				})
 				.extracting(Binding::getRoutingKey)
-				.containsExactlyInAnyOrder(
-						"request.submitted", "request.completed", "request.cancelled", "request.expired");
+				.containsExactlyInAnyOrder("request.submitted", "request.completed", "request.cancelled",
+						"request.expired", "request.dispute-resolved");
 	}
 
 	@Test

@@ -16,6 +16,8 @@
  * (team decision, DSP-12).
  * 2026-10-22, PR #243 review follow-up: the reason text constants
  * renamed (_TEXT).
+ * 2026-10-25, issue #235: a dispute resolution calls resolve with the
+ * event's split, and with no record throws (team decision, DSP-13).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -44,6 +46,7 @@ import foc.contracts.events.credit.CreditReservationRejected;
 import foc.contracts.events.credit.CreditReserved;
 import foc.contracts.events.request.RequestCancelled;
 import foc.contracts.events.request.RequestCompleted;
+import foc.contracts.events.request.RequestDisputeResolved;
 import foc.contracts.events.request.RequestEvent;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestSubmitted;
@@ -226,6 +229,29 @@ class RequestEventHandlerTest {
 
         assertThat(handler.handle(expired)).isEqualTo(expected);
         verifyNoInteractions(outbox);
+    }
+
+    @ParameterizedTest
+    @CsvSource({ "SETTLED, HANDLED", "DUPLICATE, HANDLED", "INVALID_STATE, INVALID_STATE" })
+    void resolutionSplitsTheReward(SettleResult result, Outcome expected) {
+        when(operations.resolve("r-1", "u-cou", 1, 2)).thenReturn(result);
+
+        assertThat(handler.handle(disputeResolved())).isEqualTo(expected);
+        verifyNoInteractions(outbox);
+    }
+
+    @Test
+    void resolutionWithNoRecordThrowsSoTheEventIsRetried() {
+        when(operations.resolve("r-1", "u-cou", 1, 2)).thenReturn(SettleResult.NO_RESERVATION);
+
+        assertThatThrownBy(() -> handler.handle(disputeResolved()))
+            .isInstanceOf(ReservationNotFoundException.class).hasMessageContaining("r-1");
+        verifyNoInteractions(outbox);
+    }
+
+    private static RequestDisputeResolved disputeResolved() {
+        return new RequestDisputeResolved("evt-5", SENT_AT, "order-service", "corr-1",
+            List.of("u-req", "u-cou"), "r-1", "u-req", "u-cou", "UTown", "PGP", null, 1, 2, "late delivery");
     }
 
     @Test
