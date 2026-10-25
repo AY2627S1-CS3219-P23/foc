@@ -13,6 +13,7 @@
  * a lot.
  * 2026-10-25, Claude Code (Opus 5.5), PR #247 review follow-up: a
  * courier share on a record that is not RESOLVED is rejected (V5).
+ * PR #248 review: the held-reservations index is partial (V5).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit;
@@ -131,6 +132,13 @@ class CreditServiceApplicationTests extends PostgresTestContainer {
 		assertThat(jdbc.queryForList(
 				"select indexname from pg_indexes where tablename = 'credit_reservation_slice'", String.class))
 				.contains("idx_credit_reservation_slice_request_ref");
+	}
+
+	@Test
+	void heldReservationsAreIndexed() {
+		assertThat(jdbc.queryForList(
+				"select indexdef from pg_indexes where indexname = 'idx_credit_reservation_held'", String.class))
+				.singleElement().asString().contains("(created_at, request_ref)", "status)::text = 'HELD'");
 	}
 
 	@Test

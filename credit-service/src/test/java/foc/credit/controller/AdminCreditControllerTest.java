@@ -8,7 +8,8 @@
  * newest month first with paging, and the paging 400s.
  * 2026-10-25, Claude Code (Opus 5.5), issue #236: the long-held
  * reservations route: HELD only, oldest first, the cap, the cutoff at
- * its boundary, PT0S, and the olderThan 400s.
+ * its boundary, PT0S, and the olderThan 400s. PR #248 review: truncated
+ * at exactly the cap and one past it.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.controller;
@@ -42,6 +43,7 @@ import foc.credit.entity.Reserved;
 import foc.credit.repository.CreditAccountRepository;
 import foc.credit.service.CreditOperations;
 import foc.credit.service.ReservationQueryService;
+import foc.credit.service.ReservationQueryService.HeldReservations;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 
@@ -203,7 +205,33 @@ class AdminCreditControllerTest extends PostgresTestContainer {
 
         mockMvc.perform(get("/credits/admin/reservations/held").header("Authorization", bearer("ADMIN")))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.items.length()").value(ReservationQueryService.MAX_HELD));
+            .andExpect(jsonPath("$.items.length()").value(ReservationQueryService.MAX_HELD))
+            .andExpect(jsonPath("$.truncated").value(true));
+    }
+
+    // a 1990 "now" leaves out every reservation but these
+    @Test
+    void exactlyAHundredHeldIsNotTruncated() {
+        for (int i = 0; i < ReservationQueryService.MAX_HELD; i++) {
+            reservation("1980-01-01T00:00:00Z", "HELD", 1);
+        }
+
+        HeldReservations held = reservations.heldLongerThan(Duration.ZERO, Instant.parse("1990-01-01T00:00:00Z"));
+
+        assertThat(held.reservations()).hasSize(ReservationQueryService.MAX_HELD);
+        assertThat(held.truncated()).isFalse();
+    }
+
+    @Test
+    void oneMoreThanAHundredHeldIsTruncated() {
+        for (int i = 0; i < ReservationQueryService.MAX_HELD + 1; i++) {
+            reservation("1980-01-01T00:00:00Z", "HELD", 1);
+        }
+
+        HeldReservations held = reservations.heldLongerThan(Duration.ZERO, Instant.parse("1990-01-01T00:00:00Z"));
+
+        assertThat(held.reservations()).hasSize(ReservationQueryService.MAX_HELD);
+        assertThat(held.truncated()).isTrue();
     }
 
     @Test
@@ -272,8 +300,8 @@ class AdminCreditControllerTest extends PostgresTestContainer {
         return ref;
     }
 
-    private static List<String> idsOf(List<Reserved> held) {
-        return held.stream().map(Reserved::getRequestRef).toList();
+    private static List<String> idsOf(HeldReservations held) {
+        return held.reservations().stream().map(Reserved::getRequestRef).toList();
     }
 
     private void run(String period, int distributed, int remainder, String ranAt) {

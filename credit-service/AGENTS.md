@@ -49,7 +49,8 @@
   invariant and five bindings in the package map.
   2026-10-25, Claude Code (Opus 5.5), issue #236: the held-reservations
   route, its DTO and ReservationQueryService in the package map; V5 in
-  the entity invariant (PR #247 review follow-up).
+  the entity invariant (PR #247 review follow-up). PR #248 review: V5's
+  index in the entity invariant.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -84,8 +85,8 @@ IDs (D1–D13) when touching related code.
   change is a design change, so update the doc with it.
 - **Entities mirror the migrations** (V1, V2 for
   `outbox_event.next_attempt_at`, and V4 for
-  `credit_reservation.courier_share`; V3 adds only an index, V5 only a
-  CHECK). With `ddl-auto: none` nothing validates the
+  `credit_reservation.courier_share`; V3 adds only an index, V5 a
+  CHECK and an index). With `ddl-auto: none` nothing validates the
   mappings at startup; `EntityMappingTest` saves and reads each one back.
   A new column needs a migration, the entity field and that test.
 - **A reply is enqueued inside the transaction that owes it.**

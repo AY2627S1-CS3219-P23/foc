@@ -1025,13 +1025,14 @@ into `docs/credit-service.md`. Recorded in `ai/usage-log.md`.
 Claude Code (Opus 5.5) implemented credit-service's admin list of
 long-held reservations (issue #236, team decisions DSP-5, DSP-11):
 `GET /credits/admin/reservations/held?olderThan=`, HELD only, oldest
-first, at most 100. The body shape and the handling of a negative or
-zero `olderThan` were decided by the team. With it came the PR #247
-review follow-ups: Flyway V5, the review's suggested CHECK that only a
-`RESOLVED` record carries a courier share (taken by the team), race
-tests pinning the resolution's lock order, and doc and usage-log
-corrections; and the PR #210 follow-up, a stale controller comment.
-Recorded in `ai/usage-log.md`.
+first, at most 100, with a `truncated` flag, served by a partial index
+in Flyway V5. The body shape, the handling of a negative or zero
+`olderThan`, the flag and the index were decided by the team. With it
+came the PR #247 review follow-ups: in the same V5, the review's
+suggested CHECK that only a `RESOLVED` record carries a courier share
+(taken by the team), race tests pinning the resolution's lock order,
+and doc and usage-log corrections; and the PR #210 follow-up, a stale
+controller comment. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

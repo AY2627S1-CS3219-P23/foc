@@ -123,6 +123,9 @@
   rows name the resolution, D9 points to DSP-4, the slice row says what
   a slice records after a resolution, and V5's CHECK keeps
   `courier_share` to RESOLVED records.
+  PR #248 review, the review's suggestions taken by the team: the
+  held-reservations list says whether it was cut off (`truncated`), and
+  V5's partial index on the HELD rows serves it.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -279,7 +282,7 @@ erDiagram
 | Table (entity) | Represents | Why  |
 | --- | --- | --- |
 | `credit_account` (`CreditAccount`) | **A user's credit balances.** One row per user. | The primary key on `user_id` makes get-or-create happen once per user (D6). `available` and `reserved` are columns so that the balance read is one row and the non-negative rule is a `CHECK` (F2.1.2). |
-| `credit_reservation` (`Reserved`) | **The reservation for one order.** One row per request. | The primary key on `request_ref` is the duplicate check (D3, NFR2.2.1). `status` records the outcome; `REJECTED` records a refusal so a redelivery gets the same answer. `courier_id` is filled in at transfer. `RESOLVED` records a dispute settled by dividing the reward (DSP-4): `courier_share` is the courier's part and the requester's is `amount - courier_share`; the courier is recorded even when their share is 0, and the stored split lets a repeated resolution be told from a conflicting one (DSP-13). `amount` is checked only while `HELD`: a `REJECTED` row holds the reward as it was requested, including zero or negative, and the amount-0 `RELEASED` row holds 0. `settled_at` is the moment the record became final, so it is set on a `REJECTED` row when it is written. |
+| `credit_reservation` (`Reserved`) | **The reservation for one order.** One row per request. | The primary key on `request_ref` is the duplicate check (D3, NFR2.2.1). `status` records the outcome; `REJECTED` records a refusal so a redelivery gets the same answer. `courier_id` is filled in at transfer. `RESOLVED` records a dispute settled by dividing the reward (DSP-4): `courier_share` is the courier's part and the requester's is `amount - courier_share`; the courier is recorded even when their share is 0, and the stored split lets a repeated resolution be told from a conflicting one (DSP-13). `amount` is checked only while `HELD`: a `REJECTED` row holds the reward as it was requested, including zero or negative, and the amount-0 `RELEASED` row holds 0. `settled_at` is the moment the record became final, so it is set on a `REJECTED` row when it is written. The `HELD` rows are indexed by `created_at` and `request_ref` for the admin list of long-held reservations; the index is partial, so it holds only what is held now while the table keeps a row for every order. |
 | `credit_reservation_slice` | Which lots a reservation's credits came from. | Lets a release return credits to the lot they came from, with its expiry and place in the spend order (D4). `lot_id` references that lot; `amount` is always positive. Indexed by `request_ref`, which is how a release and a resolution read them back. Slices are kept after the request is settled, as the record of how much was taken from each lot at reservation time: a resolution that refunds part of a slice leaves its `amount` as it was. |
 | `credit_lot` (`CreditLot`) | A user's available credits, split by expiry date. | Needed for 3-month expiry (F6.1). A null `expires_at` marks the sign-up credits, which never expire. A row is kept when spent to zero: its slices reference it and a release may refill it. The spend order and the expiry run only look at lots with something remaining, which is what both lot indexes cover. |
 | `credit_history` (`CreditHistoryEntry`) | **The record of every credit operation.** Append-only. | One row per affected account per operation (F4.1.1). `amount` is always positive and `type` says which way it moved. Indexed by user and time for the history view (F4.1.2, F4.1.3). |
@@ -560,7 +563,8 @@ reservation held so far. There is no status parameter and no paging.
 {
   "items": [
     { "requestId": "42", "requesterId": "7", "amount": 3, "heldSince": "2026-10-25T03:12:00Z" }
-  ]
+  ],
+  "truncated": false
 }
 ```
 
@@ -570,13 +574,14 @@ reservation held so far. There is no status parameter and no paging.
 | `requesterId` | Whose credits are held |
 | `amount` | How many are held |
 | `heldSince` | When the reservation was made |
+| `truncated` | `true` when more reservations matched than the 100 listed, so the dashboard can tell "exactly 100" from "100 of more" |
 
 - **The list is an object**, as on `/credits/me/expiries`, so fields
   can be added without breaking clients.
 - Reservations made at the same instant are ordered by `requestId`, so
   two reads of an unchanged table list the same 100.
 
-Nothing held is 200 with `"items": []`.
+Nothing held is 200 with `"items": []` and `"truncated": false`.
 
 ### Errors
 

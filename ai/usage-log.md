@@ -48,31 +48,35 @@ Entry template:
 - **Scope:** credit-service (`AdminCreditController.java`:
   `GET /credits/admin/reservations/held`; `ReservationQueryService.java`
   and `HeldReservationsResponse.java` new; `ReservedRepository.java`:
-  held at or before a cutoff, paged; `db/migration/V5__courier_share_only_when_resolved.sql`
-  new; `CreditController.java`: comment only; `AGENTS.md`; tests:
+  held at or before a cutoff, paged;
+  `db/migration/V5__reservation_share_check_and_held_index.sql` new;
+  `CreditController.java`: comment only; `AGENTS.md`; tests:
   `AdminCreditControllerTest`, `CreditOperationsServiceTest`,
   `CreditServiceApplicationTests`). `docs/credit-service.md` (the admin
-  route and its 400s, D9, the listener, handler and slice rows, the
-  diagram and the constraints list). `ai/usage-log.md` (the #235
-  entry's test count and trailing spaces). `README.md` (AI Use Summary
-  and header line).
+  route and its 400s, D9, the listener, handler, slice and
+  `credit_reservation` rows, the diagram and the constraints list).
+  `ai/usage-log.md` (the #235 entry's test count and trailing spaces).
+  `README.md` (AI Use Summary and header line).
 - **Prompt(s):** Summary: implement issue #236 as written there (team
   decisions DSP-5, DSP-11), and in the same PR the outstanding PR #247
   review follow-ups and the stale comment left from the PR #210 review.
   Before coding, the tool listed what the issue left open, and the
   decisions made were: the body is an object around the list, as on
-  `/credits/me/expiries`, so fields such as a truncation flag can be
-  added later; a negative `olderThan` is a 400 naming the problem, and
-  `PT0S` is allowed and lists every held reservation; a reservation
-  made exactly at the cutoff is included. The team also took both
-  optional PR #247 items: the D9 pointer to DSP-4, and the review's
-  suggested CHECK, added as V5 since V4 is applied. The tool chose a
-  request ID tiebreak so the capped list is stable, and a cutoff
-  clamped to the epoch so a very long duration cannot leave the range
-  of `Instant` or PostgreSQL (it changes no result, as no reservation
-  predates it).
+  `/credits/me/expiries`, so fields can be added later; a negative
+  `olderThan` is a 400 naming the problem, and `PT0S` is allowed and
+  lists every held reservation; a reservation made exactly at the
+  cutoff is included. The team also took both optional PR #247 items:
+  the D9 pointer to DSP-4, and the review's suggested CHECK, added in
+  V5 since V4 is applied. The tool chose a request ID tiebreak so the
+  capped list is stable, and a cutoff clamped to the epoch so a very
+  long duration cannot leave the range of `Instant` or PostgreSQL (it
+  changes no result, as no reservation predates it). Two PR #248 review
+  suggestions were done: the list says whether it was cut off (101 rows 
+  are read, 100 returned, and `truncated` is true when there were more), 
+  and a partial index on the HELD rows by `created_at` and `request_ref` 
+  serves it. 
 - **Author review:**
-  credit-service 318 tests pass locally with Docker, none skipped.
+  credit-service 321 tests pass locally with Docker, none skipped.
 
 ## 2026-10-25 — Ryan Ang (feat: Credit split settlement for request.dispute-resolved, issue #235)
 - **Tool:** Claude Code (Opus 5.5)
