@@ -1048,5 +1048,11 @@ outside. The mechanism, protection and timing were decided by the team;
 the failure handling, batch size and timeouts were the tool's choices for
 the team to review. Recorded in `ai/usage-log.md`.
 
+Claude Code (Sonnet 5.5) recorded the N8 supplier-bookmark decisions in
+`docs/supplier-service.md` (D12 and D14, the Bookmark API section, the
+bookmark table), its diagram, the architecture note, the gateway routing
+row and the web wireframe notes (transcription only; the decisions and
+their rationale are the team's). Recorded in `ai/usage-log.md`.
+
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

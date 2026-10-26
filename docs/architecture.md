@@ -42,6 +42,9 @@
   2026-10-19 (Claude Code, Sonnet 5.5), issue #226: N8 supplier
   bookmarks added to the scope paragraph and the open decisions, per
   Alastair Tan Choon Wei's decisions on #225. Transcription only.
+  2026-10-26 (Claude Code, Sonnet 5.5), issue #226: the open bookmark-
+  cleanup decision moved to resolved (D12 in docs/supplier-service.md).
+  Transcription only.
 -->
 
 # Favours on Campus (FoC) — High-Level Service Architecture
@@ -171,10 +174,13 @@ These shape sizing and implementation rather than adding components:
 
 - **Supplier caching mechanism** (Supplier NFR1.1.1) — in-process vs. a
   shared cache; drawn inside the Supplier Service until decided.
-- **Bookmark cleanup on account purge** (N8.5) — the Supplier Service
-  stores bookmarks by user id, so how it learns an account was purged is
-  open. N8's endpoints sit inside the Supplier Service, so the diagram
-  gains no edge unless the chosen mechanism adds one.
+
+Resolved 2026-10-26: the **bookmark cleanup on account purge** (N8.5) is
+a direct API call — the User Service's purge job calls the Supplier
+Service's internal `POST /purge/bookmarks` before it deletes the
+accounts (D12 in [`supplier-service.md`](supplier-service.md)). Decided
+by Alastair Tan Choon Wei. N8 is outside this runtime diagram, so the
+call is drawn only in `supplier-service.mmd`.
 
 Resolved 2026-09-29: the **email provider** for OTP delivery (User
 F1.1.3) is **Gmail SMTP**, with a Mailpit container in compose as the

@@ -6192,3 +6192,19 @@ Entry template:
   back the account and its bookmarks were removed while an in-window
   account's and another user's bookmarks were untouched. Test rows removed.
 - **Author review:** Alastair Tan Choon Wei to review before opening the PR.
+
+## 2026-10-26 — Alastair Tan Choon Wei (docs: supplier bookmarks N8, issues #225-#227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** docs, transcription
+- **Scope:** `docs/supplier-service.md` (D12 decided, D13 default-order note,
+  D14 added, Bookmark API section, component and entity rows),
+  `docs/supplier-service.mmd` (internal purge API and the User Service
+  call), `docs/architecture.md` (the open bookmark-cleanup decision moved to
+  resolved), `docs/gateway.md` (the supplier route's purge exception),
+  `web/AGENTS.md` (the suppliers and create-request wireframe rows),
+  `README.md` (AI Use Summary).
+- **Prompt(s):** "all is good, lets add to the docs now". Every decision
+  recorded was made by the author in this session or read from the code as
+  built; no rationale text was drafted, and the D13 default-order note
+  describes what was built for the author to confirm.
+- **Author review:** Alastair Tan Choon Wei to review before opening the PR.
