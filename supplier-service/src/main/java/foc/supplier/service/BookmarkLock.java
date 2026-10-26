@@ -10,6 +10,9 @@
  * different users collide. PostgreSQL-only (the tests substitute it, as
  * they run on H2). Nothing else in this database uses advisory locks, so
  * the bare user id is the key.
+ * Design: the tool proposed the advisory lock (over the serializable
+ * transaction the author first named); the author reviewed it on
+ * 2026-10-26 (PR #259 review) and confirmed it as their decision.
  * Reviewed by: [pending]
  */
 package foc.supplier.service;

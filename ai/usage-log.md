@@ -6148,7 +6148,10 @@ Entry template:
   PostgreSQL advisory lock tried per user, instead of the serializable
   transaction the author first named, because serializable can also abort
   two different users' requests that share index pages; the author is to
-  confirm this. The purge endpoint (D12) is not in this entry.
+  confirm this. **Update 2026-10-26 (PR #259 review):** the author has
+  reviewed this and confirms the advisory lock as their decision; the
+  tool proposed it and the author adopted it. The purge endpoint (D12) is
+  not in this entry.
   Checked on the compose Postgres: ordering, flag, the cap under 8
   simultaneous requests, the lock refusal, supplier-delete cascade.
 - **Author review:** Alastair Tan Choon Wei to review before opening the PR.
