@@ -1025,6 +1025,41 @@ events do on a `RESOLVED` record, and the duplicate-or-contradiction
 rule behind the event table, were decided by the team and transcribed
 into `docs/credit-service.md`. Recorded in `ai/usage-log.md`.
 
+Claude Code (Sonnet 5.5) added the supplier bookmark table for N8
+(issues #225/#227): the `SupplierBookmarks` entity with a composite key,
+cascade on supplier deletion and a per-user index, and its repository.
+Key, cascade and cap were decided by the team; table and column names
+were chosen by the tool for review. Recorded in `ai/usage-log.md`.
+
+Claude Code (Sonnet 5.5) added the N8 frontend (issues #225/#227): a
+bookmark flag on every supplier card, the detail panel's Create Request
+button, the `?supplierId=` prefill on the create-request form, the
+bookmark API calls and their tests. Behaviour (reload to page 1 in the
+default view, the client-side cap, the button's placement) was decided
+by the team. Recorded in `ai/usage-log.md`.
+
+Claude Code (Sonnet 5.5) added the N8 backend in supplier-service
+(issues #225/#227): the bookmark list, add and remove endpoints, the cap
+of 5 with a per-user PostgreSQL advisory lock against simultaneous adds,
+the `bookmarked` flag and bookmarks-first default order on the supplier
+list, and their tests. Endpoint shapes, the cap and the "too fast" refusal
+were decided by the team; the lock mechanism was the tool's choice for
+the team to confirm. Recorded in `ai/usage-log.md`.
+
+Claude Code (Sonnet 5.5) implemented the N8.5 account-purge cleanup
+(issues #225/#227, decision D12): supplier-service's internal
+`POST /purge/bookmarks` (SERVICE-role token only), user-service's purge
+job calling it before deleting the accounts and skipping the delete for a
+run if the call fails, and a gateway rule answering 404 for the path from
+outside. The mechanism, protection and timing were decided by the team;
+the failure handling, batch size and timeouts were the tool's choices for
+the team to review. Recorded in `ai/usage-log.md`.
+
+Claude Code (Sonnet 5.5) recorded the N8 supplier-bookmark decisions in
+`docs/supplier-service.md` (D12 and D14, the Bookmark API section, the
+bookmark table), its diagram, the architecture note, the gateway routing
+row and the web wireframe notes (transcription only; the decisions and
+their rationale are the team's). Recorded in `ai/usage-log.md`.
 Claude Code (Opus 5.5) implemented credit-service's admin list of
 long-held reservations (issue #236, team decisions DSP-5, DSP-11):
 `GET /credits/admin/reservations/held?olderThan=`, HELD only, oldest

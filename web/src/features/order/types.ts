@@ -12,6 +12,8 @@
 // backend has neither.
 // 2026-10-20: ListMineParams.state is a list (order-service takes several
 // states, comma-separated).
+// 2026-10-26, Claude Code (Sonnet 5.5), issue #227 (N8.4): SupplierOption
+// carries the caller's `bookmarked` flag.
 // Author review: [pending]
 
 // order-service's OrderStates, by name
@@ -85,4 +87,5 @@ export interface SupplierOption {
   id: string // supplier-service ids are strings here; sent as a number
   name: string
   location: string
+  bookmarked?: boolean // the caller's bookmark; bookmarked options list first
 }

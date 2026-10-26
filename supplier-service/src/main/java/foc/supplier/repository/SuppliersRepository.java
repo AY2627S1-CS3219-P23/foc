@@ -31,6 +31,11 @@
  * finds every supplier at Yusof Ishak House, the same simple substring
  * match already used for name (no abbreviation/synonym expansion, kept
  * deliberately simple per the author).
+ * 2026-10-26, Claude Code (Sonnet 5.5), issue #225 (N8, D13): added
+ * listBookmarksFirst, the default (unfiltered, name-ordered) list: the
+ * caller's bookmarked suppliers first, most recently bookmarked first,
+ * then the rest by name. The pageable must be unsorted — the ordering is
+ * in the query, and Spring Data would append a Sort after it.
  * Reviewed by: [pending]
  */
 package foc.supplier.repository;
@@ -58,6 +63,15 @@ public interface SuppliersRepository extends JpaRepository<Suppliers, Long> {
             """)
     Page<Suppliers> search(@Param("search") String search, @Param("category") String category,
             Pageable pageable);
+
+    @Query(value = """
+            SELECT s FROM Suppliers s
+            LEFT JOIN SupplierBookmarks b ON b.supplier = s AND b.userId = :userId
+            ORDER BY CASE WHEN b.bookmarkedAt IS NULL THEN 1 ELSE 0 END,
+                b.bookmarkedAt DESC, s.name ASC, s.id ASC
+            """,
+            countQuery = "SELECT COUNT(s) FROM Suppliers s")
+    Page<Suppliers> listBookmarksFirst(@Param("userId") Long userId, Pageable pageable);
 
     @Query(value = """
             SELECT s.* FROM suppliers s

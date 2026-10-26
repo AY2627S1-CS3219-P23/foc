@@ -9,7 +9,13 @@
 // 2026-09-29, Claude Code (Sonnet 5): `isAdmin` comment updated — it's
 // now the caller's real role from useAuth() (routes/suppliers.tsx),
 // not the hardcoded stand-in the old comment referred to.
+// 2026-10-26, Claude Code (Sonnet 5.5), issue #227 (N8): Create Request
+// button linking to the create-request form with this supplier
+// prefilled (?supplierId=); full width, so for admins it spans the
+// Edit and Delete buttons combined and sits above them.
 // Reviewed by: [pending]
+
+import { Link } from 'react-router'
 
 import type { Supplier } from '../types'
 
@@ -73,6 +79,13 @@ export function SupplierDetailPanel({
       )}
 
       <div className="mt-5 flex flex-col gap-2">
+        <Link
+          to={`/my-requests/new?supplierId=${encodeURIComponent(supplier.id)}`}
+          className="rounded-md bg-gray-900 px-4 py-2 text-center text-sm font-medium text-white hover:bg-gray-800"
+        >
+          Create Request
+        </Link>
+
         {onSelect && (
           <button
             type="button"

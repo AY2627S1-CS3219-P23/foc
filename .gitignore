@@ -10,6 +10,8 @@ out/
 .env
 .env.local
 .env.*.local
+# hand-made backups of .env (hold real local secrets)
+.env.bak*
 *.pem
 *.key
 

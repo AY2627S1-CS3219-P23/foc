@@ -6162,3 +6162,220 @@ Entry template:
   author for a separate wiki fix.
 - **Author review:** Leong Wei Zhi verified the newman run against the
   compose stack and reviews via pull request.
+
+## 2026-10-26 — Alastair Tan Choon Wei (feat: supplier bookmark table, issues #225/#227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** implementation
+- **Scope:** `supplier-service` `SupplierBookmarks` entity,
+  `SupplierBookmarkId`, `SupplierBookmarksRepository` (first step of N8:
+  the table only; endpoints, purge endpoint and web follow in later
+  entries), `README.md` (AI Use Summary).
+- **Prompt(s):** "lets do it step by step, starting with DB first".
+  Composite primary key (user_id, supplier_id), DB-level ON DELETE
+  CASCADE on supplier_id, `Long` ids and the 5-bookmark cap were decided
+  by the author; table and column names were left to the tool. Checked
+  against the compose DB: the first run produced a duplicate supplier
+  column (join column name), fixed; a `user_id` index was added because
+  the primary key leads with `supplier_id`.
+- **Author review:** Alastair Tan Choon Wei to review before opening the PR.
+
+## 2026-10-26 — Alastair Tan Choon Wei (feat: supplier bookmark flag and Create Request button, issues #225/#227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** implementation
+- **Scope:** `web/` — `SupplierCard` (bookmark flag), `SupplierDetailPanel`
+  (Create Request button), `routes/suppliers.tsx` (toggle, reload and cap
+  logic), `routes/create-request.tsx` (`?supplierId=` prefill),
+  `features/supplier/api.ts` and `types.ts` (bookmark calls and types),
+  `test/supplier-bookmarks.test.tsx` (new), `README.md` (AI Use
+  Summary). The backend endpoints these call are still to come.
+- **Prompt(s):** "lets move on to next step of adding flag icon and create
+  request button (frontend stuff)". Behaviour decided by the author:
+  yellow/hollow flag on every card; flag click only toggles the bookmark;
+  bookmarking in the default view jumps to page 1, un-bookmarking reloads
+  the same page, a search/filter flips the flag in place; client-side cap
+  plus the server's 409; Create Request for every user, full width, above
+  Edit/Delete for admins, linking to the create-request form with
+  `?supplierId=`. The form's route is `/my-requests/new`.
+- **Author review:** Alastair Tan Choon Wei to review before opening the PR.
+
+## 2026-10-26 — Alastair Tan Choon Wei (feat: supplier bookmark endpoints, issues #225/#227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** implementation
+- **Scope:** `supplier-service` — `BookmarkController`, `BookmarkService`,
+  `BookmarkLock`, the bookmark DTOs and exceptions, the bookmark repository
+  queries, the `bookmarked` flag and bookmarks-first default order in
+  `SupplierService`/`SuppliersRepository`/`SupplierController`/
+  `SupplierResponse`, the `SecurityConfig` rule for the user's own
+  bookmark add/remove, and their tests (`BookmarkServiceTest`,
+  `BookmarkControllerTest`, additions to `SupplierServiceTest`);
+  `README.md` (AI Use Summary).
+- **Prompt(s):** "lets move on to backend now". Decided by the author:
+  `GET /bookmarks`, `PUT`/`DELETE /suppliers/{id}/bookmark`, the cap of 5
+  answering 409 with the limit message, a simultaneous request from the
+  same user refused with "You are bookmarking too fast, please try again."
+  and nothing saved, bookmarks first (newest first) only in the default
+  view. The tool chose how to guard the race: a transaction-scoped
+  PostgreSQL advisory lock tried per user, instead of the serializable
+  transaction the author first named, because serializable can also abort
+  two different users' requests that share index pages; the author is to
+  confirm this. **Update 2026-10-26 (PR #259 review):** the approach was
+  suggested during implementation and reviewed and confirmed by the
+  author/team as the accepted design (D14, `docs/supplier-service.md`).
+  The purge endpoint (D12) is not in this entry.
+  Checked on the compose Postgres: ordering, flag, the cap under 8
+  simultaneous requests, the lock refusal, supplier-delete cascade.
+- **Author review:** Alastair Tan Choon Wei to review before opening the PR.
+
+## 2026-10-26 — Alastair Tan Choon Wei (feat: star bookmarked suppliers in the create-request dropdown, issue #227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** implementation
+- **Scope:** `web/` — `features/order/types.ts` and `api.ts` (the supplier
+  option keeps the `bookmarked` flag), `routes/create-request.tsx` (leading
+  ★ on bookmarked options), `test/supplier-bookmarks.test.tsx` (one test).
+- **Prompt(s):** "B. Text prefix is good, help me add star". The author
+  chose a text prefix over group headings, a suffix or a custom dropdown;
+  the bookmarks-first order itself comes from supplier-service's default
+  list order.
+- **Author review:** Alastair Tan Choon Wei to review before opening the PR.
+
+## 2026-10-26 — Alastair Tan Choon Wei (feat: purge a deleted account's bookmarks, issues #225/#227, N8.5/D12)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** implementation
+- **Scope:** `supplier-service` — `PurgeController` (`POST /purge/bookmarks`),
+  `PurgeBookmarksRequest`/`Response`, `BookmarkService.purgeUsers`, the
+  `/purge/**` SERVICE-role rule in `SecurityConfig`, and tests
+  (`PurgeControllerTest`); `user-service` — `JwtIssuer.issueServiceToken`,
+  `SupplierBookmarkCleanupClient`, `BookmarkCleanupException`, the call in
+  `AccountPurgeScheduler`, `user.supplier.base-url` in `application.yaml`,
+  and tests (`SupplierBookmarkCleanupClientTest`, additions to
+  `AccountPurgeSchedulerTest` and `JwtIssuerTest`); `gateway/nginx.conf`
+  (404 for `/api/supplier/purge`); `compose.yaml` (`SUPPLIER_SERVICE_URL`);
+  `README.md` (AI Use Summary).
+- **Prompt(s):** "ok implement the C+B purge". Decided by the author: a
+  direct API call from user-service's purge job (D12), `/purge/bookmarks`,
+  a SERVICE-role service token (option C) plus a gateway block (option B),
+  bookmarks removed when the account is purged (day 31), not when it is
+  soft-deleted, and the supplier call made before the accounts are
+  deleted. The tool chose: POST with a JSON body (the author was asked and
+  did not object), all-or-nothing skip of the account delete when the call
+  fails (retried on the next daily run), 500-id batches, a 1-minute token,
+  and the client timeouts. Checked on the compose stack: the gateway answers
+  404 for the purge path in every spelling tried; with supplier-service
+  stopped the condemned account was kept and the failure logged; once it was
+  back the account and its bookmarks were removed while an in-window
+  account's and another user's bookmarks were untouched. Test rows removed.
+- **Author review:** Alastair Tan Choon Wei to review before opening the PR.
+
+## 2026-10-26 — Alastair Tan Choon Wei (docs: supplier bookmarks N8, issues #225-#227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** docs, transcription
+- **Scope:** `docs/supplier-service.md` (D12 decided, D13 default-order note,
+  D14 added, Bookmark API section, component and entity rows),
+  `docs/supplier-service.mmd` (internal purge API and the User Service
+  call), `docs/architecture.md` (the open bookmark-cleanup decision moved to
+  resolved), `docs/gateway.md` (the supplier route's purge exception),
+  `web/AGENTS.md` (the suppliers and create-request wireframe rows),
+  `README.md` (AI Use Summary).
+- **Prompt(s):** "all is good, lets add to the docs now". Every decision
+  recorded was made by the author in this session or read from the code as
+  built; no rationale text was drafted, and the D13 default-order note
+  describes what was built for the author to confirm.
+- **Author review:** Alastair Tan Choon Wei to review before opening the PR.
+
+## 2026-10-26 — Alastair Tan Choon Wei (fix: PR review of the supplier bookmarks PR, issues #225/#227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** fix
+- **Scope:** `.env.bak-pre-pr217` removed from the index and `.env.bak*` added
+  to `.gitignore` (the file was swept into the first commit by a stage-all
+  and holds local secrets); `BookmarkService.add` (a supplier deleted
+  between lookup and insert is a 404, not a 500) and its test;
+  `AccountPurgeScheduler` and `UserRepository` (the supplier-service call
+  now runs before the locking transaction opens, not inside it).
+- **Prompt(s):** "need to fix?" then "FIX IT NOW", answering an automated
+  review's comments. The two code changes follow the reviewer's suggestions;
+  an earlier note that the held locks stopped an account being recovered in
+  the gap was wrong (recovery already refuses accounts past the window), so
+  the call no longer sits inside the transaction. Rotating the secrets in the
+  committed backup and rewriting the branch history were left to the author.
+- **Author review:** Alastair Tan Choon Wei to review before pushing.
+
+---
+
+## 2026-10-26 — Alastair Tan Choon Wei (fix: Copilot review on PR #259, issue #225)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** fix
+- **Scope:** `SupplierController` gains a `NumberFormatException` handler
+  returning 401 (copied from `BookmarkController`), so `GET /suppliers` with a
+  non-numeric JWT subject no longer 500s; test added in
+  `BookmarkControllerTest`.
+- **Prompt(s):** "fix with option 1" after asking whether to fix a Copilot
+  review comment. The handler duplicates `BookmarkController`'s rather than
+  sharing a helper; that choice was the author's.
+- **Author review:** Alastair Tan Choon Wei to review before pushing.
+
+---
+
+## 2026-10-26 — Alastair Tan Choon Wei (fix: Copilot review on PR #259, issue #225/#227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** fix
+- **Scope:** `web/` — `SupplierCard.tsx` (the bookmark flag keeps one constant
+  accessible label and conveys its state only through `aria-pressed`) and
+  `test/supplier-bookmarks.test.tsx` (finds the flag by the constant label and
+  asserts `aria-pressed` instead of the "Remove bookmark" label).
+- **Prompt(s):** "fix it", answering Copilot's accessibility review comment.
+  The change follows the reviewer's suggestion.
+- **Author review:** Alastair Tan Choon Wei to review before pushing.
+
+---
+
+## 2026-10-26 — Alastair Tan Choon Wei (docs: Copilot review on PR #259, issue #225)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** docs
+- **Scope:** `UserRepository.java` — dated entry added to the file header for
+  `findIdsDeletedBefore`; the method's comment moved so the
+  `deleteByDeletedBefore` comment sits above that method again (a comment
+  edit only, no code change).
+- **Prompt(s):** "need fix?" then the go-ahead, answering Copilot's review comment.
+- **Author review:** Alastair Tan Choon Wei to review before pushing.
+
+---
+
+## 2026-10-26 — Alastair Tan Choon Wei (docs: Copilot review on PR #259, issue #225)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** docs
+- **Scope:** `.env.example` — `SUPPLIER_SERVICE_URL` added to the User Service
+  section with its compose default and a file-header entry, as the file's
+  rule requires for every variable a service reads. The value matches
+  `application.yaml` and `compose.yaml`.
+- **Prompt(s):** "what is this? need fix?" then the go-ahead, answering
+  Copilot's review comment.
+- **Author review:** Alastair Tan Choon Wei to review before pushing.
+
+---
+
+## 2026-10-26 — Alastair Tan Choon Wei (fix: reviewer comment on PR #259, issues #225/#227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** fix
+- **Scope:** `web/` — `features/supplier/api.ts` and `types.ts` (`addBookmark`
+  returns PUT's `BookmarkResult`), `routes/suppliers.tsx` (the bookmark count
+  is taken from the server's `count` after an add and re-read after a remove,
+  instead of a local +1/-1), `test/supplier-bookmarks.test.tsx` (add mock
+  answers like PUT; two tests for the count).
+- **Prompt(s):** "need fix?" answering Sinnez1's review comment. The change
+  follows the reviewer's suggestion and leaves the DELETE endpoint as
+  documented (the reviewer's note on a DELETE body is for the team).
+- **Author review:** Alastair Tan Choon Wei to review before pushing.
+
+---
+
+## 2026-10-26 — Alastair Tan Choon Wei (fix: reviewer comment on PR #259, issue #225)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** fix
+- **Scope:** `AccountPurgeScheduler` (the bookmark-cleanup step treats any
+  `RuntimeException` as a failed cleanup and keeps the accounts, so an
+  unexpected exception no longer skips the expired-code sweeps) and
+  `AccountPurgeSchedulerTest` (a case where the client throws
+  `IllegalStateException`).
+- **Prompt(s):** "need fix?" answering Sinnez1's review comment. The change
+  follows the reviewer's suggestion.
+- **Author review:** Alastair Tan Choon Wei to review before pushing.
