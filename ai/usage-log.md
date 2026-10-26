@@ -6208,3 +6208,20 @@ Entry template:
   built; no rationale text was drafted, and the D13 default-order note
   describes what was built for the author to confirm.
 - **Author review:** Alastair Tan Choon Wei to review before opening the PR.
+
+## 2026-10-26 — Alastair Tan Choon Wei (fix: PR review of the supplier bookmarks PR, issues #225/#227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** fix
+- **Scope:** `.env.bak-pre-pr217` removed from the index and `.env.bak*` added
+  to `.gitignore` (the file was swept into the first commit by a stage-all
+  and holds local secrets); `BookmarkService.add` (a supplier deleted
+  between lookup and insert is a 404, not a 500) and its test;
+  `AccountPurgeScheduler` and `UserRepository` (the supplier-service call
+  now runs before the locking transaction opens, not inside it).
+- **Prompt(s):** "need to fix?" then "FIX IT NOW", answering an automated
+  review's comments. The two code changes follow the reviewer's suggestions;
+  an earlier note that the held locks stopped an account being recovered in
+  the gap was wrong (recovery already refuses accounts past the window), so
+  the call no longer sits inside the transaction. Rotating the secrets in the
+  committed backup and rewriting the branch history were left to the author.
+- **Author review:** Alastair Tan Choon Wei to review before pushing.

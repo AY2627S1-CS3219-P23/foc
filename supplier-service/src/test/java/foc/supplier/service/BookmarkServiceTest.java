@@ -5,6 +5,7 @@
  * the idempotent re-add, the cap of 5 (D10), a missing supplier, the
  * per-user lock refusing a simultaneous request without saving, remove,
  * and the list's count/limit.
+ * PR review: a supplier deleted between the lookup and the insert is a 404.
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -70,14 +72,27 @@ class BookmarkServiceTest {
         supplierExistsAndLockFree();
         when(bookmarksRepository.findById(new SupplierBookmarkId(USER_ID, SUPPLIER_ID))).thenReturn(Optional.empty());
         when(bookmarksRepository.countByUserId(USER_ID)).thenReturn(2L);
-        when(bookmarksRepository.save(any(SupplierBookmarks.class))).thenAnswer(i -> i.getArgument(0));
+        when(bookmarksRepository.saveAndFlush(any(SupplierBookmarks.class))).thenAnswer(i -> i.getArgument(0));
 
         var response = bookmarkService.add(USER_ID, SUPPLIER_ID);
 
         assertThat(response.bookmarked()).isTrue();
         assertThat(response.supplierId()).isEqualTo("12");
         assertThat(response.count()).isEqualTo(3);
-        verify(bookmarksRepository).save(any(SupplierBookmarks.class));
+        verify(bookmarksRepository).saveAndFlush(any(SupplierBookmarks.class));
+    }
+
+    @Test
+    @DisplayName("Should answer 404, not 500, when the supplier is deleted between the lookup and the insert")
+    void add_supplierDeletedMidRequestIsNotFound() {
+        supplierExistsAndLockFree();
+        when(bookmarksRepository.findById(new SupplierBookmarkId(USER_ID, SUPPLIER_ID))).thenReturn(Optional.empty());
+        when(bookmarksRepository.countByUserId(USER_ID)).thenReturn(1L);
+        when(bookmarksRepository.saveAndFlush(any(SupplierBookmarks.class)))
+                .thenThrow(new DataIntegrityViolationException("fk_supplier_bookmarks_supplier"));
+
+        assertThatThrownBy(() -> bookmarkService.add(USER_ID, SUPPLIER_ID))
+                .isInstanceOf(SupplierNotFoundException.class);
     }
 
     @Test
@@ -92,7 +107,7 @@ class BookmarkServiceTest {
         var response = bookmarkService.add(USER_ID, SUPPLIER_ID);
 
         assertThat(response.count()).isEqualTo(5);
-        verify(bookmarksRepository, never()).save(any());
+        verify(bookmarksRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -105,7 +120,7 @@ class BookmarkServiceTest {
         assertThatThrownBy(() -> bookmarkService.add(USER_ID, SUPPLIER_ID))
                 .isInstanceOf(BookmarkLimitException.class)
                 .hasMessage("You have reached the limit of 5 bookmarks.");
-        verify(bookmarksRepository, never()).save(any());
+        verify(bookmarksRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -117,7 +132,7 @@ class BookmarkServiceTest {
         assertThatThrownBy(() -> bookmarkService.add(USER_ID, SUPPLIER_ID))
                 .isInstanceOf(BookmarkTooFastException.class)
                 .hasMessage("You are bookmarking too fast, please try again.");
-        verify(bookmarksRepository, never()).save(any());
+        verify(bookmarksRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -128,7 +143,7 @@ class BookmarkServiceTest {
         assertThatThrownBy(() -> bookmarkService.add(USER_ID, SUPPLIER_ID))
                 .isInstanceOf(SupplierNotFoundException.class);
         verify(bookmarkLock, never()).tryLock(any());
-        verify(bookmarksRepository, never()).save(any());
+        verify(bookmarksRepository, never()).saveAndFlush(any());
     }
 
     @Test

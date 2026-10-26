@@ -7,6 +7,9 @@
  * saved, rather than retried. Adding an existing bookmark is a no-op that
  * does not count against the cap. Removing one that does not exist
  * succeeds. purgeUsers removes every bookmark of purged accounts (N8.5).
+ * PR review: the insert is flushed inside add, so a supplier deleted between
+ * the lookup and the insert (a foreign-key violation) answers 404 like any
+ * unknown supplier instead of surfacing as a 500 at commit.
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
@@ -23,6 +26,7 @@ import foc.supplier.repository.SupplierBookmarksRepository;
 import foc.supplier.repository.SuppliersRepository;
 import java.util.Collection;
 import java.util.List;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,7 +71,13 @@ public class BookmarkService {
         if (count >= BOOKMARK_LIMIT) {
             throw new BookmarkLimitException(BOOKMARK_LIMIT);
         }
-        SupplierBookmarks saved = bookmarksRepository.save(new SupplierBookmarks(userId, supplier));
+        SupplierBookmarks saved;
+        try {
+            saved = bookmarksRepository.saveAndFlush(new SupplierBookmarks(userId, supplier));
+        } catch (DataIntegrityViolationException e) {
+            // the supplier was deleted after the lookup above
+            throw new SupplierNotFoundException(supplierId);
+        }
         return new BookmarkResponse(String.valueOf(supplierId), true, saved.getBookmarkedAt(), (int) count + 1);
     }
 

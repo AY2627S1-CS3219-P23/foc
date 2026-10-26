@@ -34,8 +34,13 @@ deleting anything the run asks supplier-service to drop the condemned
 accounts' bookmarks (SupplierBookmarkCleanupClient). If that fails, the
 run skips the account delete and its child deletes — the accounts stay and
 are tried again on the next run — but still does the expired-code hygiene
-sweeps. Failure handling chosen by the author; the call is made while the
-condemned rows are locked, so a recover or reset cannot touch them meanwhile.
+sweeps. Failure handling chosen by the author.
+Same day, PR review: the call is made BEFORE the locking transaction opens,
+not inside it — it is idempotent, and holding row locks and a connection for
+up to a timeout per batch served nothing: an account past the retention
+window cannot be recovered (recoverOwnAccount refuses it), so nothing can
+change the condemned set between the call and the delete. The locks stay,
+taken first in the short transaction, for the flows' lock order.
 */
 
 package foc.user.service;
@@ -49,9 +54,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
-import foc.user.entity.User;
 import foc.user.exception.BookmarkCleanupException;
 import foc.user.repository.AccountUpdateOtpRepository;
 import foc.user.repository.PasswordResetOtpRepository;
@@ -87,6 +92,7 @@ class AccountPurgeScheduler {
     private final PendingEmailChangeRepository pendingEmailChanges;
     private final UserRepository users;
     private final SupplierBookmarkCleanupClient bookmarkCleanup;
+    private final TransactionTemplate transaction;
     private final int retentionDays;
 
     AccountPurgeScheduler(PasswordResetOtpRepository resetOtps,
@@ -94,6 +100,7 @@ class AccountPurgeScheduler {
             AccountUpdateOtpRepository accountUpdateOtps,
             PendingEmailChangeRepository pendingEmailChanges,
             UserRepository users, SupplierBookmarkCleanupClient bookmarkCleanup,
+            PlatformTransactionManager transactionManager,
             @Value("${user.retention.days}") int retentionDays) {
         this.resetOtps = resetOtps;
         this.pendingSignups = pendingSignups;
@@ -101,31 +108,39 @@ class AccountPurgeScheduler {
         this.pendingEmailChanges = pendingEmailChanges;
         this.users = users;
         this.bookmarkCleanup = bookmarkCleanup;
+        this.transaction = new TransactionTemplate(transactionManager);
         this.retentionDays = retentionDays;
     }
 
+    // Not transactional itself: the supplier-service call must not run while
+    // row locks and a connection are held. Past the retention window an
+    // account cannot be recovered, so the ids read here are still the
+    // accounts the transaction below deletes (the cutoff is fixed for the run).
     @Scheduled(cron = "${user.retention.purge-cron}")
-    @Transactional
     void purgeExpiredDeletedAccounts() {
         Instant now = Instant.now();
         Instant cutoff = now.minus(retentionDays, ChronoUnit.DAYS);
+        // supplier-service first (issue #225): once the users are gone
+        // nothing would tell it which bookmarks to drop. All or nothing — a
+        // failed run leaves every condemned account for the next one, and
+        // the call is safe to repeat
+        boolean cleaned = bookmarksCleaned(users.findIdsDeletedBefore(cutoff));
+        transaction.executeWithoutResult(status -> purge(now, cutoff, cleaned));
+    }
+
+    private void purge(Instant now, Instant cutoff, boolean cleaned) {
         // lock the condemned user rows FIRST (PR #179 Copilot review):
         // the flows lock user-then-child, and the child deletes below
         // acquire child-row locks — taken unlocked-first, this
         // transaction could hold a reset OTP row while a reset request
         // held its user and waited for that row, deadlocking both. The
         // locked set is discarded: only the lock order matters
-        List<User> condemned = users.findWithLockByDeletedBefore(cutoff);
-        // supplier-service first (issue #225): once the users are gone
-        // nothing would tell it which bookmarks to drop. All or nothing — a
-        // failed run leaves every condemned account for the next one, and
-        // the call is safe to repeat. It is made inside this transaction on
-        // purpose, so the rows stay locked until the delete (or the skip)
+        users.findWithLockByDeletedBefore(cutoff);
         int resetByUserCount = 0;
         int purgedGateCount = 0;
         int purgedChangeCount = 0;
         int userCount = 0;
-        if (bookmarksCleaned(condemned)) {
+        if (cleaned) {
             // every dependent of a purged account goes first, selected by that
             // account — not by expiry: a TTL longer than the retention window
             // would leave a live row to trip the user_id FK (PR #157 review)
@@ -149,17 +164,17 @@ class AccountPurgeScheduler {
     }
 
     // true when there is nothing to clean or supplier-service did it
-    private boolean bookmarksCleaned(List<User> condemned) {
-        if (condemned.isEmpty()) {
+    private boolean bookmarksCleaned(List<Long> condemnedIds) {
+        if (condemnedIds.isEmpty()) {
             return true;
         }
         try {
-            bookmarkCleanup.purgeBookmarks(condemned.stream().map(User::getId).toList());
+            bookmarkCleanup.purgeBookmarks(condemnedIds);
             return true;
         } catch (BookmarkCleanupException e) {
             log.error("skipping the purge of {} account(s): their supplier bookmarks could"
                     + " not be removed; the accounts are kept and tried again on the next run",
-                    condemned.size(), e);
+                    condemnedIds.size(), e);
             return false;
         }
     }

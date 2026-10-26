@@ -163,6 +163,12 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     // password_reset_otps rows first — their user_id FK blocks this
     // delete. (The otps table
     // this also used to name went with issue #88.)
+    // the ids the purge is about to delete, read without a lock: the purge
+    // sends them to supplier-service BEFORE it opens its locking transaction
+    // (issue #225, PR review)
+    @Query("select u.id from User u where u.deletedAt < :cutoff")
+    List<Long> findIdsDeletedBefore(@Param("cutoff") Instant cutoff);
+
     @Modifying(clearAutomatically = true)
     @Query("DELETE FROM User u WHERE u.deletedAt < :cutoff")
     int deleteByDeletedBefore(@Param("cutoff") Instant cutoff);
