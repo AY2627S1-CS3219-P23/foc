@@ -6,18 +6,28 @@
  * CreditControllerTest's harness: ADMIN and OWNER allowed, USER 403 and
  * no token 401, the summary's fields read from the database, the runs
  * newest month first with paging, and the paging 400s.
+ * 2026-10-25, Claude Code (Opus 5.5), issue #236: the long-held
+ * reservations route: HELD only, oldest first, the cap, the cutoff at
+ * its boundary, PT0S, and the olderThan 400s. PR #248 review: truncated
+ * at exactly the cap and one past it; a blank olderThan takes the
+ * default, and weeks, months and years are refused with the new message.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -31,8 +41,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import foc.credit.PostgresTestContainer;
+import foc.credit.entity.Reserved;
 import foc.credit.repository.CreditAccountRepository;
 import foc.credit.service.CreditOperations;
+import foc.credit.service.ReservationQueryService;
+import foc.credit.service.ReservationQueryService.HeldReservations;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 
@@ -40,7 +53,9 @@ import io.jsonwebtoken.security.Keys;
 // and would not add up (CreditOperationsServiceTest's checks read the
 // whole database), so nothing is committed. Runs use the years 9998 and
 // 9999, later than any a test writes as a real month, so they are the
-// newest whatever else the shared database holds.
+// newest whatever else the shared database holds. Reservations are
+// dated 1980 and 1990, before any a test makes now, so they are the
+// oldest; the cutoff cases pass a 1990 "now" for the same reason.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
@@ -59,14 +74,21 @@ class AdminCreditControllerTest extends PostgresTestContainer {
     private CreditAccountRepository accounts;
 
     @Autowired
+    private ReservationQueryService reservations;
+
+    @Autowired
     private JdbcTemplate jdbc;
+
+    private final String requester = "u-req-" + UUID.randomUUID();
 
     @ParameterizedTest
     @ValueSource(strings = { "ADMIN", "OWNER" })
-    void adminsAndOwnersMayReadBothRoutes(String role) throws Exception {
+    void adminsAndOwnersMayReadEveryRoute(String role) throws Exception {
         mockMvc.perform(get("/credits/admin/pool").header("Authorization", bearer(role)))
             .andExpect(status().isOk());
         mockMvc.perform(get("/credits/admin/redistributions").header("Authorization", bearer(role)))
+            .andExpect(status().isOk());
+        mockMvc.perform(get("/credits/admin/reservations/held").header("Authorization", bearer(role)))
             .andExpect(status().isOk());
     }
 
@@ -75,6 +97,8 @@ class AdminCreditControllerTest extends PostgresTestContainer {
         mockMvc.perform(get("/credits/admin/pool").header("Authorization", bearer("USER")))
             .andExpect(status().isForbidden());
         mockMvc.perform(get("/credits/admin/redistributions").header("Authorization", bearer("USER")))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(get("/credits/admin/reservations/held").header("Authorization", bearer("USER")))
             .andExpect(status().isForbidden());
     }
 
@@ -145,9 +169,160 @@ class AdminCreditControllerTest extends PostgresTestContainer {
             .andExpect(jsonPath("$.detail").value("size must be between 1 and 100"));
     }
 
+    @Test
+    void heldReservationsComeOldestFirstWithTheirFields() throws Exception {
+        String a = reservation("1990-01-01T00:00:00Z", "HELD", 1);
+        String b = reservation("1990-01-01T00:00:00Z", "HELD", 2);
+        String c = reservation("1990-01-02T00:00:00Z", "HELD", 3);
+        String released = reservation("1989-12-31T00:00:00Z", "RELEASED", 4);
+        // the same instant is settled by the request ID
+        String first = a.compareTo(b) < 0 ? a : b;
+        String second = a.compareTo(b) < 0 ? b : a;
+
+        mockMvc.perform(get("/credits/admin/reservations/held").header("Authorization", bearer("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].requestId").value(first))
+            .andExpect(jsonPath("$.items[1].requestId").value(second))
+            .andExpect(jsonPath("$.items[2].requestId").value(c))
+            .andExpect(jsonPath("$.items[2].requesterId").value(requester))
+            .andExpect(jsonPath("$.items[2].amount").value(3))
+            .andExpect(jsonPath("$.items[2].heldSince").value("1990-01-02T00:00:00Z"))
+            .andExpect(jsonPath("$.items[?(@.requestId == '" + released + "')]").isEmpty());
+    }
+
+    @Test
+    void aReservationHeldUnderAnHourIsLeftOutByDefault() throws Exception {
+        String recent = reservation(Instant.now().toString(), "HELD", 1);
+
+        mockMvc.perform(get("/credits/admin/reservations/held").header("Authorization", bearer("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[?(@.requestId == '" + recent + "')]").isEmpty());
+    }
+
+    @Test
+    void heldReservationsAreCappedAtAHundred() throws Exception {
+        for (int i = 0; i < ReservationQueryService.MAX_HELD + 1; i++) {
+            reservation("1980-01-01T00:00:00Z", "HELD", 1);
+        }
+
+        mockMvc.perform(get("/credits/admin/reservations/held").header("Authorization", bearer("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(ReservationQueryService.MAX_HELD))
+            .andExpect(jsonPath("$.truncated").value(true));
+    }
+
+    // a 1990 "now" leaves out every reservation but these
+    @Test
+    void exactlyAHundredHeldIsNotTruncated() {
+        for (int i = 0; i < ReservationQueryService.MAX_HELD; i++) {
+            reservation("1980-01-01T00:00:00Z", "HELD", 1);
+        }
+
+        HeldReservations held = reservations.heldLongerThan(Duration.ZERO, Instant.parse("1990-01-01T00:00:00Z"));
+
+        assertThat(held.reservations()).hasSize(ReservationQueryService.MAX_HELD);
+        assertThat(held.truncated()).isFalse();
+    }
+
+    @Test
+    void oneMoreThanAHundredHeldIsTruncated() {
+        for (int i = 0; i < ReservationQueryService.MAX_HELD + 1; i++) {
+            reservation("1980-01-01T00:00:00Z", "HELD", 1);
+        }
+
+        HeldReservations held = reservations.heldLongerThan(Duration.ZERO, Instant.parse("1990-01-01T00:00:00Z"));
+
+        assertThat(held.reservations()).hasSize(ReservationQueryService.MAX_HELD);
+        assertThat(held.truncated()).isTrue();
+    }
+
+    @Test
+    void theCutoffIncludesAReservationMadeExactlyThen() {
+        String atCutoff = reservation("1990-01-01T00:00:00Z", "HELD", 1);
+        String after = reservation("1990-01-01T00:00:01Z", "HELD", 1);
+        Instant now = Instant.parse("1990-01-01T01:00:00Z");
+
+        assertThat(idsOf(reservations.heldLongerThan(Duration.ofHours(1), now)))
+            .contains(atCutoff).doesNotContain(after);
+    }
+
+    @Test
+    void zeroListsEveryReservationHeldSoFar() {
+        String earlier = reservation("1990-01-01T00:59:59Z", "HELD", 1);
+        String atNow = reservation("1990-01-01T01:00:00Z", "HELD", 1);
+        String later = reservation("1990-01-01T01:00:01Z", "HELD", 1);
+        Instant now = Instant.parse("1990-01-01T01:00:00Z");
+
+        assertThat(idsOf(reservations.heldLongerThan(Duration.ZERO, now)))
+            .contains(earlier, atNow).doesNotContain(later);
+    }
+
+    @Test
+    void zeroIsAccepted() throws Exception {
+        mockMvc.perform(get("/credits/admin/reservations/held").param("olderThan", "PT0S")
+                .header("Authorization", bearer("ADMIN")))
+            .andExpect(status().isOk());
+    }
+
+    // a cutoff before the epoch could leave Instant's or PostgreSQL's range
+    @Test
+    void aDurationReachingPastTheEpochListsNothing() throws Exception {
+        reservation("1990-01-01T00:00:00Z", "HELD", 1);
+
+        mockMvc.perform(get("/credits/admin/reservations/held").param("olderThan", "P100000000D")
+                .header("Authorization", bearer("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items").isEmpty());
+    }
+
+    @Test
+    void aNegativeOlderThanIsRefused() throws Exception {
+        mockMvc.perform(get("/credits/admin/reservations/held").param("olderThan", "-PT1H")
+                .header("Authorization", bearer("ADMIN")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("olderThan must not be negative"));
+    }
+
+    // weeks, months and years are ISO-8601 too, but Duration.parse refuses them
+    @ParameterizedTest
+    @ValueSource(strings = { "1h", "PT", "60", "P1W", "P1M", "P1Y" })
+    void anOlderThanThatIsNotADurationIsRefused(String olderThan) throws Exception {
+        mockMvc.perform(get("/credits/admin/reservations/held").param("olderThan", olderThan)
+                .header("Authorization", bearer("ADMIN")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail")
+                .value("olderThan must be a day- or time-based ISO-8601 duration such as PT1H or P7D"));
+    }
+
+    // a dashboard that always sends the filter sends it blank when none is chosen
+    @ParameterizedTest
+    @ValueSource(strings = { "", " " })
+    void aBlankOlderThanTakesTheDefault(String olderThan) throws Exception {
+        String old = reservation("1990-01-01T00:00:00Z", "HELD", 1);
+
+        mockMvc.perform(get("/credits/admin/reservations/held").param("olderThan", olderThan)
+                .header("Authorization", bearer("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[*].requestId").value(hasItem(old)));
+    }
+
+    // a reservation of this test's requester, made at createdAt
+    private String reservation(String createdAt, String status, int amount) {
+        operations.getOrCreate(requester);
+        String ref = "r-" + UUID.randomUUID();
+        jdbc.update("insert into credit_reservation (request_ref, requester_id, amount, status, created_at)"
+                + " values (?, ?, ?, ?, ?)",
+            ref, requester, amount, status, Timestamp.from(Instant.parse(createdAt)));
+        return ref;
+    }
+
+    private static List<String> idsOf(HeldReservations held) {
+        return held.reservations().stream().map(Reserved::getRequestRef).toList();
+    }
+
     private void run(String period, int distributed, int remainder, String ranAt) {
         jdbc.update("insert into redistribution_run (period, distributed, remainder, ran_at) values (?, ?, ?, ?)",
-            period, distributed, remainder, java.sql.Timestamp.from(Instant.parse(ranAt)));
+            period, distributed, remainder, Timestamp.from(Instant.parse(ranAt)));
     }
 
     private static String bearer(String role) {

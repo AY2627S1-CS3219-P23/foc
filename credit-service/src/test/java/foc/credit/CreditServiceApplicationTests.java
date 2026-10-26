@@ -11,6 +11,9 @@
  * needs its lot, a drained lot is allowed and a negative one is not, the
  * lot indexes skip drained lots); the slice amount case gives its slice
  * a lot.
+ * 2026-10-25, Claude Code (Opus 5.5), PR #247 review follow-up: a
+ * courier share on a record that is not RESOLVED is rejected (V5).
+ * PR #248 review: the held-reservations index is partial (V5).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit;
@@ -106,6 +109,17 @@ class CreditServiceApplicationTests extends PostgresTestContainer {
 	}
 
 	@Test
+	@Transactional
+	void aCourierShareNeedsAResolvedRecord() {
+		jdbc.update("insert into credit_account (user_id, available, reserved, created_at) values ('u-share', 0, 0, now())");
+
+		assertThatThrownBy(() -> jdbc.update(
+				"insert into credit_reservation (request_ref, requester_id, courier_id, courier_share, amount, status,"
+						+ " created_at, settled_at) values ('r-share', 'u-share', 'u-share', 1, 3, 'TRANSFERRED', now(), now())"))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
 	void theLotIndexesSkipDrainedLots() {
 		assertThat(jdbc.queryForList(
 				"select indexdef from pg_indexes where indexname in"
@@ -118,6 +132,13 @@ class CreditServiceApplicationTests extends PostgresTestContainer {
 		assertThat(jdbc.queryForList(
 				"select indexname from pg_indexes where tablename = 'credit_reservation_slice'", String.class))
 				.contains("idx_credit_reservation_slice_request_ref");
+	}
+
+	@Test
+	void heldReservationsAreIndexed() {
+		assertThat(jdbc.queryForList(
+				"select indexdef from pg_indexes where indexname = 'idx_credit_reservation_held'", String.class))
+				.singleElement().asString().contains("(created_at, request_ref)", "status)::text = 'HELD'");
 	}
 
 	@Test
