@@ -1031,5 +1031,13 @@ bookmark API calls and their tests. Behaviour (reload to page 1 in the
 default view, the client-side cap, the button's placement) was decided
 by the team. Recorded in `ai/usage-log.md`.
 
+Claude Code (Sonnet 5.5) added the N8 backend in supplier-service
+(issues #225/#227): the bookmark list, add and remove endpoints, the cap
+of 5 with a per-user PostgreSQL advisory lock against simultaneous adds,
+the `bookmarked` flag and bookmarks-first default order on the supplier
+list, and their tests. Endpoint shapes, the cap and the "too fast" refusal
+were decided by the team; the lock mechanism was the tool's choice for
+the team to confirm. Recorded in `ai/usage-log.md`.
+
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

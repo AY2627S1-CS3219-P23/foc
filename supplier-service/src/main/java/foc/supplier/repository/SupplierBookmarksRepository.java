@@ -30,6 +30,12 @@ public interface SupplierBookmarksRepository extends JpaRepository<SupplierBookm
 
     long countByUserId(Long userId);
 
+    // which of these suppliers the user has bookmarked (the list's flag)
+    @Query("SELECT b.supplierId FROM SupplierBookmarks b "
+            + "WHERE b.userId = :userId AND b.supplierId IN :supplierIds")
+    List<Long> findBookmarkedSupplierIds(@Param("userId") Long userId,
+            @Param("supplierIds") Collection<Long> supplierIds);
+
     @Modifying
     @Query("DELETE FROM SupplierBookmarks b WHERE b.userId = :userId AND b.supplierId = :supplierId")
     int deleteByUserIdAndSupplierId(@Param("userId") Long userId, @Param("supplierId") Long supplierId);

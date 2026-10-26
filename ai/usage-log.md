@@ -6127,3 +6127,28 @@ Entry template:
   Edit/Delete for admins, linking to the create-request form with
   `?supplierId=`. The form's route is `/my-requests/new`.
 - **Author review:** Alastair Tan Choon Wei to review before opening the PR.
+
+## 2026-10-26 — Alastair Tan Choon Wei (feat: supplier bookmark endpoints, issues #225/#227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** implementation
+- **Scope:** `supplier-service` — `BookmarkController`, `BookmarkService`,
+  `BookmarkLock`, the bookmark DTOs and exceptions, the bookmark repository
+  queries, the `bookmarked` flag and bookmarks-first default order in
+  `SupplierService`/`SuppliersRepository`/`SupplierController`/
+  `SupplierResponse`, the `SecurityConfig` rule for the user's own
+  bookmark add/remove, and their tests (`BookmarkServiceTest`,
+  `BookmarkControllerTest`, additions to `SupplierServiceTest`);
+  `README.md` (AI Use Summary).
+- **Prompt(s):** "lets move on to backend now". Decided by the author:
+  `GET /bookmarks`, `PUT`/`DELETE /suppliers/{id}/bookmark`, the cap of 5
+  answering 409 with the limit message, a simultaneous request from the
+  same user refused with "You are bookmarking too fast, please try again."
+  and nothing saved, bookmarks first (newest first) only in the default
+  view. The tool chose how to guard the race: a transaction-scoped
+  PostgreSQL advisory lock tried per user, instead of the serializable
+  transaction the author first named, because serializable can also abort
+  two different users' requests that share index pages; the author is to
+  confirm this. The purge endpoint (D12) is not in this entry.
+  Checked on the compose Postgres: ordering, flag, the cap under 8
+  simultaneous requests, the lock refusal, supplier-delete cascade.
+- **Author review:** Alastair Tan Choon Wei to review before opening the PR.

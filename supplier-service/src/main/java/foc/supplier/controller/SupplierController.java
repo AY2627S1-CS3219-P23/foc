@@ -34,6 +34,9 @@
  * handler.
  * 2026-10-07 (PR #161 review, LeongWZ): added a 400 handler for
  * InvalidCategoryException (a category name containing "/").
+ * 2026-10-26, Claude Code (Sonnet 5.5), issue #225 (N8): the list passes
+ * the caller (JWT subject) to the service for the bookmarked flag and the
+ * bookmarks-first default order.
  * Reviewed by: [pending]
  */
 package foc.supplier.controller;
@@ -56,6 +59,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -79,12 +83,14 @@ public class SupplierController {
 
     @GetMapping("/suppliers")
     public PageResponse<SupplierResponse> listSuppliers(
+            Authentication authentication,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) Double lat,
             @RequestParam(required = false) Double lng,
             @PageableDefault(size = 20, sort = "name", direction = Sort.Direction.ASC) Pageable pageable) {
-        return supplierService.listSuppliers(search, category, lat, lng, pageable);
+        return supplierService.listSuppliers(
+                Long.valueOf(authentication.getName()), search, category, lat, lng, pageable);
     }
 
     @GetMapping("/suppliers/categories")

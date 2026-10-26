@@ -73,6 +73,11 @@
  * flat column's delimiter) before the supplier is saved, so the flat
  * column is set pre-save in applyRequest — no second UPDATE per create —
  * and is null, not "", when a supplier has no categories.
+ * 2026-10-26, Claude Code (Sonnet 5.5), issue #225 (N8, D13): listSuppliers
+ * takes the caller's id; in the default view (no search, category or
+ * location, name-ascending or unsorted) it lists the caller's bookmarks
+ * first, newest first, and every response carries the `bookmarked` flag.
+ * Any other sort or filter keeps its own order.
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
@@ -85,6 +90,7 @@ import foc.supplier.exception.InvalidSortException;
 import foc.supplier.exception.SupplierNotFoundException;
 import foc.supplier.model.SupplierCategories;
 import foc.supplier.model.Suppliers;
+import foc.supplier.repository.SupplierBookmarksRepository;
 import foc.supplier.repository.SupplierCategoriesRepository;
 import foc.supplier.repository.SuppliersRepository;
 import java.time.LocalTime;
@@ -108,11 +114,14 @@ public class SupplierService {
 
     private final SuppliersRepository suppliersRepository;
     private final SupplierCategoriesRepository supplierCategoriesRepository;
+    private final SupplierBookmarksRepository supplierBookmarksRepository;
 
     public SupplierService(SuppliersRepository suppliersRepository,
-            SupplierCategoriesRepository supplierCategoriesRepository) {
+            SupplierCategoriesRepository supplierCategoriesRepository,
+            SupplierBookmarksRepository supplierBookmarksRepository) {
         this.suppliersRepository = suppliersRepository;
         this.supplierCategoriesRepository = supplierCategoriesRepository;
+        this.supplierBookmarksRepository = supplierBookmarksRepository;
     }
 
     // The only Suppliers entity properties this endpoint allows sorting
@@ -121,15 +130,21 @@ public class SupplierService {
     // must never reach Spring Data as one.
     private static final Set<String> SORTABLE_PROPERTIES = Set.of("name", "id");
 
-    public PageResponse<SupplierResponse> listSuppliers(String search, String category, Double lat, Double lng,
-            Pageable pageable) {
+    public PageResponse<SupplierResponse> listSuppliers(Long userId, String search, String category, Double lat,
+            Double lng, Pageable pageable) {
         validateSort(pageable.getSort());
 
         String normalizedSearch = escapeLikePattern(blankToNull(search));
         String normalizedCategory = blankToNull(category);
 
         Page<Suppliers> page;
-        if (lat != null && lng != null) {
+        if (normalizedSearch == null && normalizedCategory == null && lat == null && lng == null
+                && isDefaultOrder(pageable.getSort())) {
+            // D13: the unfiltered, name-ordered view lists the caller's
+            // bookmarks first; the ordering is in the query, so no Sort
+            Pageable unsorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+            page = suppliersRepository.listBookmarksFirst(userId, unsorted);
+        } else if (lat != null && lng != null) {
             Pageable unsorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
             page = suppliersRepository.searchOrderedByDistance(normalizedSearch, normalizedCategory, lat, lng, unsorted);
         } else {
@@ -143,11 +158,30 @@ public class SupplierService {
                         sc -> sc.getSupplier().getId(),
                         Collectors.mapping(SupplierCategories::getCategory, Collectors.toList())));
 
+        Set<Long> bookmarkedIds = supplierIds.isEmpty()
+                ? Set.of()
+                : Set.copyOf(supplierBookmarksRepository.findBookmarkedSupplierIds(userId, supplierIds));
+
         List<SupplierResponse> content = page.getContent().stream()
-                .map(s -> toResponse(s, categoriesBySupplierId.getOrDefault(s.getId(), List.of())))
+                .map(s -> {
+                    SupplierResponse response = toResponse(s,
+                            categoriesBySupplierId.getOrDefault(s.getId(), List.of()));
+                    response.setBookmarked(bookmarkedIds.contains(s.getId()));
+                    return response;
+                })
                 .toList();
 
         return PageResponse.of(page, content);
+    }
+
+    // Name ascending (or no sort at all) is the default order; any other
+    // sort is the user's own choice and gets no bookmark precedence.
+    private static boolean isDefaultOrder(Sort sort) {
+        if (sort.isUnsorted()) {
+            return true;
+        }
+        List<Sort.Order> orders = sort.toList();
+        return orders.size() == 1 && "name".equals(orders.get(0).getProperty()) && orders.get(0).isAscending();
     }
 
     public List<String> listCategories() {

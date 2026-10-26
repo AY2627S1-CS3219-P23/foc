@@ -16,6 +16,9 @@
  * platform's admin-equivalent super admin (issue #97) and should have
  * every ADMIN capability, supplier CRUD included, mirroring
  * user-service's own hasAnyRole("ADMIN", "OWNER") pattern.
+ * 2026-10-26, Claude Code (Sonnet 5.5), issue #225 (N8): PUT/DELETE on
+ * /suppliers/{id}/bookmark open to any authenticated user, ahead of the
+ * admin rule that would otherwise cover them.
  * Reviewed by: [pending]
  */
 package foc.supplier.config;
@@ -74,6 +77,11 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health").permitAll()
                         // browse/search: open to any authenticated user (D2)
                         .requestMatchers(HttpMethod.GET, "/suppliers", "/suppliers/**").authenticated()
+                        // a user's own bookmark add/remove (issue #225) lives under
+                        // /suppliers/{id}/bookmark but is not admin CRUD; matched
+                        // before the admin rule below. The caller is the JWT subject.
+                        .requestMatchers(HttpMethod.PUT, "/suppliers/*/bookmark").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/suppliers/*/bookmark").authenticated()
                         // everything else under /suppliers, whatever the method, is an
                         // admin CRUD endpoint (D2, #6). Method-less so unlisted methods
                         // fail closed. OWNER included: PR #143 review (LeongWZ) —
