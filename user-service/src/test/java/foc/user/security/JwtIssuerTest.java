@@ -7,6 +7,8 @@ Scope: tests for JwtIssuer (issue #90): tokens verify the way
        secret fails at construction.
        PR #141 review: a TTL with no unit binds as seconds.
 Author review: Ryan to review via the PR.
+2026-10-26 (Claude Code, Sonnet 5.5), issue #225 (N8.5, D12): a case for
+the SERVICE token the purge job sends to supplier-service.
 */
 
 package foc.user.security;
@@ -99,6 +101,20 @@ class JwtIssuerTest {
         assertThat(ttl).isEqualTo(Duration.ofHours(1));
         assertThat(ApplicationConversionService.getSharedInstance()
             .convert("30m", TypeDescriptor.valueOf(String.class), ttlParam)).isEqualTo(Duration.ofMinutes(30));
+    }
+
+    @Test
+    @DisplayName("A service token is HS256, role SERVICE, sub user-service, and lives one minute")
+    void issueServiceToken_claims() {
+        Instant now = Instant.now().minusSeconds(5).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        JwtIssuer issuer = new JwtIssuer(SECRET, Duration.ofHours(1), Clock.fixed(now, ZoneOffset.UTC));
+
+        Claims claims = verify(issuer.issueServiceToken()).getPayload();
+
+        assertThat(claims.getSubject()).isEqualTo("user-service");
+        assertThat(claims.get("role", String.class)).isEqualTo("SERVICE");
+        assertThat(claims.getId()).isNotBlank();
+        assertThat(claims.getExpiration().toInstant()).isEqualTo(now.plus(Duration.ofMinutes(1)));
     }
 
     @Test

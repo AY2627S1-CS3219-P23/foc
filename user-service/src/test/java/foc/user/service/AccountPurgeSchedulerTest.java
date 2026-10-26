@@ -25,6 +25,12 @@ Reviewed by: Leong Wei Zhi (via pull request).
        follows PasswordResetOtp (V7 remakes the account_tokens scaffold
        for the reset flow), and a case covers the expired-reset-code
        hygiene sweep the same run now performs.
+2026-10-26 (Claude Code, Sonnet 5.5), issue #225 (N8.5, D12): the supplier
+       bookmark cleanup client is mocked; cases pin that the purge asks
+       supplier-service for exactly the condemned accounts, makes no call
+       when none are condemned, and — when the call fails — keeps every
+       condemned account (and its child rows) while still running the
+       expired-code hygiene sweep.
 */
 
 package foc.user.service;
@@ -33,12 +39,17 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import foc.user.PostgresTestContainer;
@@ -48,6 +59,7 @@ import foc.user.entity.PendingEmailChange;
 import foc.user.entity.PendingSignup;
 import foc.user.entity.Role;
 import foc.user.entity.User;
+import foc.user.exception.BookmarkCleanupException;
 import foc.user.repository.AccountUpdateOtpRepository;
 import foc.user.repository.PasswordResetOtpRepository;
 import foc.user.repository.PendingEmailChangeRepository;
@@ -70,6 +82,9 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
 
     @Autowired
     private UserRepository userRepository;
+
+    @MockitoBean
+    private SupplierBookmarkCleanupClient bookmarkCleanup;
 
     @Autowired
     private PasswordResetOtpRepository resetOtpRepository;
@@ -262,6 +277,54 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
 
         assertThat(resetOtpRepository.findAll()).extracting(PasswordResetOtp::getId)
             .containsExactly(live.getId());
+    }
+
+    @Test
+    @DisplayName("Should ask supplier-service to drop the bookmarks of exactly the purged accounts")
+    void purgeAsksSupplierServiceForTheCondemnedAccounts() {
+        saveUser("e1111111@u.nus.edu", "active_user", null);
+        saveUser("e2222222@u.nus.edu", "recently_deleted", Instant.now().minus(29, ChronoUnit.DAYS));
+        User expired = saveUser("e3333333@u.nus.edu", "expired_deleted",
+            Instant.now().minus(31, ChronoUnit.DAYS));
+        userRepository.flush();
+
+        scheduler.purgeExpiredDeletedAccounts();
+
+        verify(bookmarkCleanup).purgeBookmarks(java.util.List.of(expired.getId()));
+        assertThat(userRepository.findAll()).extracting(User::getUsername)
+            .containsExactlyInAnyOrder("active_user", "recently_deleted");
+    }
+
+    @Test
+    @DisplayName("Should not call supplier-service when no account is due for purge")
+    void purgeMakesNoCallWhenNothingIsCondemned() {
+        saveUser("e1111111@u.nus.edu", "active_user", null);
+        userRepository.flush();
+
+        scheduler.purgeExpiredDeletedAccounts();
+
+        verify(bookmarkCleanup, never()).purgeBookmarks(any());
+    }
+
+    @Test
+    @DisplayName("Should keep the condemned accounts and their rows when the bookmark cleanup fails")
+    void failedBookmarkCleanupKeepsTheAccountsForTheNextRun() {
+        User expired = saveUser("e3333333@u.nus.edu", "expired_deleted",
+            Instant.now().minus(31, ChronoUnit.DAYS));
+        resetOtpRepository.save(new PasswordResetOtp(expired, "code_hash",
+            Instant.now(), Instant.now().plus(1, ChronoUnit.DAYS)));
+        // unrelated hygiene: an already-expired pending sign-up
+        pendingSignupRepository.save(new PendingSignup("e4444444@u.nus.edu", "stale_signup",
+            "password_hash", "code_hash", Instant.now().minusSeconds(660), Instant.now().minusSeconds(60), false));
+        userRepository.flush();
+        doThrow(new BookmarkCleanupException("supplier-service is down", new RuntimeException()))
+            .when(bookmarkCleanup).purgeBookmarks(any());
+
+        scheduler.purgeExpiredDeletedAccounts();
+
+        assertThat(userRepository.findAll()).extracting(User::getId).containsExactly(expired.getId());
+        assertThat(resetOtpRepository.findAll()).hasSize(1);
+        assertThat(pendingSignupRepository.findAll()).isEmpty();
     }
 
     private User saveUser(String email, String username, Instant deletedAt) {

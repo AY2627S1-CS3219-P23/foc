@@ -6164,3 +6164,31 @@ Entry template:
   the bookmarks-first order itself comes from supplier-service's default
   list order.
 - **Author review:** Alastair Tan Choon Wei to review before opening the PR.
+
+## 2026-10-26 — Alastair Tan Choon Wei (feat: purge a deleted account's bookmarks, issues #225/#227, N8.5/D12)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** implementation
+- **Scope:** `supplier-service` — `PurgeController` (`POST /purge/bookmarks`),
+  `PurgeBookmarksRequest`/`Response`, `BookmarkService.purgeUsers`, the
+  `/purge/**` SERVICE-role rule in `SecurityConfig`, and tests
+  (`PurgeControllerTest`); `user-service` — `JwtIssuer.issueServiceToken`,
+  `SupplierBookmarkCleanupClient`, `BookmarkCleanupException`, the call in
+  `AccountPurgeScheduler`, `user.supplier.base-url` in `application.yaml`,
+  and tests (`SupplierBookmarkCleanupClientTest`, additions to
+  `AccountPurgeSchedulerTest` and `JwtIssuerTest`); `gateway/nginx.conf`
+  (404 for `/api/supplier/purge`); `compose.yaml` (`SUPPLIER_SERVICE_URL`);
+  `README.md` (AI Use Summary).
+- **Prompt(s):** "ok implement the C+B purge". Decided by the author: a
+  direct API call from user-service's purge job (D12), `/purge/bookmarks`,
+  a SERVICE-role service token (option C) plus a gateway block (option B),
+  bookmarks removed when the account is purged (day 31), not when it is
+  soft-deleted, and the supplier call made before the accounts are
+  deleted. The tool chose: POST with a JSON body (the author was asked and
+  did not object), all-or-nothing skip of the account delete when the call
+  fails (retried on the next daily run), 500-id batches, a 1-minute token,
+  and the client timeouts. Checked on the compose stack: the gateway answers
+  404 for the purge path in every spelling tried; with supplier-service
+  stopped the condemned account was kept and the failure logged; once it was
+  back the account and its bookmarks were removed while an in-window
+  account's and another user's bookmarks were untouched. Test rows removed.
+- **Author review:** Alastair Tan Choon Wei to review before opening the PR.

@@ -1039,5 +1039,14 @@ list, and their tests. Endpoint shapes, the cap and the "too fast" refusal
 were decided by the team; the lock mechanism was the tool's choice for
 the team to confirm. Recorded in `ai/usage-log.md`.
 
+Claude Code (Sonnet 5.5) implemented the N8.5 account-purge cleanup
+(issues #225/#227, decision D12): supplier-service's internal
+`POST /purge/bookmarks` (SERVICE-role token only), user-service's purge
+job calling it before deleting the accounts and skipping the delete for a
+run if the call fails, and a gateway rule answering 404 for the path from
+outside. The mechanism, protection and timing were decided by the team;
+the failure handling, batch size and timeouts were the tool's choices for
+the team to review. Recorded in `ai/usage-log.md`.
+
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

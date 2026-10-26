@@ -9,6 +9,10 @@ Scope: JWT minting for login (issue #90), per design doc §3: HS256 with the
        PR #141 review: a TTL with no unit is read as seconds, not
        milliseconds.
 Author review: Ryan to review via the PR.
+2026-10-26 (Claude Code, Sonnet 5.5), issue #225 (N8.5, D12):
+issueServiceToken — a 1-minute SERVICE-role token for the purge job's
+call to supplier-service. Option C (service token) chosen by the author
+over a shared-secret header.
 */
 
 package foc.user.security;
@@ -37,6 +41,9 @@ public class JwtIssuer {
 
     private static final int MIN_SECRET_BYTES = 32;
     private static final Duration DEFAULT_TTL = Duration.ofHours(1);
+    static final String SERVICE_ROLE = "SERVICE";
+    static final String SERVICE_SUBJECT = "user-service";
+    static final Duration SERVICE_TOKEN_TTL = Duration.ofMinutes(1);
 
     private final SecretKey key;
     private final Duration ttl;
@@ -74,6 +81,23 @@ public class JwtIssuer {
             .id(UUID.randomUUID().toString())
             .issuedAt(Date.from(now))
             .expiration(Date.from(now.plus(ttl)))
+            .signWith(key, Jwts.SIG.HS256)
+            .compact();
+    }
+
+    // a short-lived token for user-service's own calls to another service
+    // (issue #225, D12: the account-purge job asking supplier-service to
+    // drop a purged account's bookmarks). Role SERVICE is not a Role enum
+    // value and no login ever issues it: only a holder of JWT_SECRET can
+    // mint one. It lives in memory for one call.
+    public String issueServiceToken() {
+        Instant now = clock.instant();
+        return Jwts.builder()
+            .subject(SERVICE_SUBJECT)
+            .claim("role", SERVICE_ROLE)
+            .id(UUID.randomUUID().toString())
+            .issuedAt(Date.from(now))
+            .expiration(Date.from(now.plus(SERVICE_TOKEN_TTL)))
             .signWith(key, Jwts.SIG.HS256)
             .compact();
     }

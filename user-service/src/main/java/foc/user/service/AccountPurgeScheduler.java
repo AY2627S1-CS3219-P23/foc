@@ -29,12 +29,20 @@ will delete BEFORE touching any child table, so it takes locks in the
 flows' user-then-child order — unlocked, its child bulk deletes could
 hold an OTP row while a reset request held that user and waited for
 the same row, a deadlock.
+2026-10-26 (Claude Code, Sonnet 5.5), issue #225 (N8.5, D12): before
+deleting anything the run asks supplier-service to drop the condemned
+accounts' bookmarks (SupplierBookmarkCleanupClient). If that fails, the
+run skips the account delete and its child deletes — the accounts stay and
+are tried again on the next run — but still does the expired-code hygiene
+sweeps. Failure handling chosen by the author; the call is made while the
+condemned rows are locked, so a recover or reset cannot touch them meanwhile.
 */
 
 package foc.user.service;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +51,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import foc.user.entity.User;
+import foc.user.exception.BookmarkCleanupException;
 import foc.user.repository.AccountUpdateOtpRepository;
 import foc.user.repository.PasswordResetOtpRepository;
 import foc.user.repository.PendingEmailChangeRepository;
@@ -62,6 +72,9 @@ import foc.user.repository.UserRepository;
  * whoever owns them: pending sign-ups (issue #88), the two
  * account-update tables (issue #92) and reset codes (issue #94). That
  * sweep is hygiene only — the flows reject an expired row on sight.
+ * Each purged account's supplier bookmarks are removed first, through
+ * supplier-service (issue #225); if that fails the accounts are kept for
+ * the next run.
  */
 @Component
 class AccountPurgeScheduler {
@@ -73,18 +86,21 @@ class AccountPurgeScheduler {
     private final AccountUpdateOtpRepository accountUpdateOtps;
     private final PendingEmailChangeRepository pendingEmailChanges;
     private final UserRepository users;
+    private final SupplierBookmarkCleanupClient bookmarkCleanup;
     private final int retentionDays;
 
     AccountPurgeScheduler(PasswordResetOtpRepository resetOtps,
             PendingSignupRepository pendingSignups,
             AccountUpdateOtpRepository accountUpdateOtps,
             PendingEmailChangeRepository pendingEmailChanges,
-            UserRepository users, @Value("${user.retention.days}") int retentionDays) {
+            UserRepository users, SupplierBookmarkCleanupClient bookmarkCleanup,
+            @Value("${user.retention.days}") int retentionDays) {
         this.resetOtps = resetOtps;
         this.pendingSignups = pendingSignups;
         this.accountUpdateOtps = accountUpdateOtps;
         this.pendingEmailChanges = pendingEmailChanges;
         this.users = users;
+        this.bookmarkCleanup = bookmarkCleanup;
         this.retentionDays = retentionDays;
     }
 
@@ -99,14 +115,25 @@ class AccountPurgeScheduler {
         // transaction could hold a reset OTP row while a reset request
         // held its user and waited for that row, deadlocking both. The
         // locked set is discarded: only the lock order matters
-        users.findWithLockByDeletedBefore(cutoff);
-        // every dependent of a purged account goes first, selected by that
-        // account — not by expiry: a TTL longer than the retention window
-        // would leave a live row to trip the user_id FK (PR #157 review)
-        int resetByUserCount = resetOtps.deleteByUserDeletedBefore(cutoff);
-        int purgedGateCount = accountUpdateOtps.deleteByUserDeletedBefore(cutoff);
-        int purgedChangeCount = pendingEmailChanges.deleteByUserDeletedBefore(cutoff);
-        int userCount = users.deleteByDeletedBefore(cutoff);
+        List<User> condemned = users.findWithLockByDeletedBefore(cutoff);
+        // supplier-service first (issue #225): once the users are gone
+        // nothing would tell it which bookmarks to drop. All or nothing — a
+        // failed run leaves every condemned account for the next one, and
+        // the call is safe to repeat. It is made inside this transaction on
+        // purpose, so the rows stay locked until the delete (or the skip)
+        int resetByUserCount = 0;
+        int purgedGateCount = 0;
+        int purgedChangeCount = 0;
+        int userCount = 0;
+        if (bookmarksCleaned(condemned)) {
+            // every dependent of a purged account goes first, selected by that
+            // account — not by expiry: a TTL longer than the retention window
+            // would leave a live row to trip the user_id FK (PR #157 review)
+            resetByUserCount = resetOtps.deleteByUserDeletedBefore(cutoff);
+            purgedGateCount = accountUpdateOtps.deleteByUserDeletedBefore(cutoff);
+            purgedChangeCount = pendingEmailChanges.deleteByUserDeletedBefore(cutoff);
+            userCount = users.deleteByDeletedBefore(cutoff);
+        }
         // hygiene for the accounts that stay: anything already expired,
         // inclusive of the exact boundary the flows call expired
         int pendingCount = pendingSignups.deleteByExpiresAtBefore(now);
@@ -119,5 +146,21 @@ class AccountPurgeScheduler {
                 + " {} expired pending email change(s), {} expired reset code(s)",
                 userCount, cutoff, resetByUserCount, purgedGateCount, purgedChangeCount,
                 pendingCount, gateCount, emailChangeCount, expiredResetCount);
+    }
+
+    // true when there is nothing to clean or supplier-service did it
+    private boolean bookmarksCleaned(List<User> condemned) {
+        if (condemned.isEmpty()) {
+            return true;
+        }
+        try {
+            bookmarkCleanup.purgeBookmarks(condemned.stream().map(User::getId).toList());
+            return true;
+        } catch (BookmarkCleanupException e) {
+            log.error("skipping the purge of {} account(s): their supplier bookmarks could"
+                    + " not be removed; the accounts are kept and tried again on the next run",
+                    condemned.size(), e);
+            return false;
+        }
     }
 }

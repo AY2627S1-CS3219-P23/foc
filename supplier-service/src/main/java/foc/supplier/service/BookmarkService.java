@@ -6,7 +6,7 @@
  * second simultaneous add from the same user is refused with nothing
  * saved, rather than retried. Adding an existing bookmark is a no-op that
  * does not count against the cap. Removing one that does not exist
- * succeeds.
+ * succeeds. purgeUsers removes every bookmark of purged accounts (N8.5).
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
@@ -21,6 +21,7 @@ import foc.supplier.model.SupplierBookmarks;
 import foc.supplier.model.Suppliers;
 import foc.supplier.repository.SupplierBookmarksRepository;
 import foc.supplier.repository.SuppliersRepository;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,5 +74,14 @@ public class BookmarkService {
     @Transactional
     public void remove(Long userId, Long supplierId) {
         bookmarksRepository.deleteByUserIdAndSupplierId(userId, supplierId);
+    }
+
+    // N8.5 / D12: every bookmark of the given (purged) accounts. Idempotent.
+    @Transactional
+    public int purgeUsers(Collection<Long> userIds) {
+        if (userIds.isEmpty()) {
+            return 0;
+        }
+        return bookmarksRepository.deleteByUserIdIn(userIds);
     }
 }
