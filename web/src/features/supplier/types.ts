@@ -44,6 +44,15 @@ export type SupplierInput = Omit<Supplier, 'id'>
 // GET /bookmarks (issue #225): the caller's own bookmarks, newest first.
 // `count` and `limit` are per user — the cap comes from the server so the
 // frontend never hard-codes it.
+// PUT /suppliers/{id}/bookmark's answer: `count` is the caller's bookmark
+// total after the add, so the client takes it from here rather than counting.
+export interface BookmarkResult {
+  supplierId: string
+  bookmarked: boolean
+  bookmarkedAt: string
+  count: number
+}
+
 export interface BookmarkList {
   count: number
   limit: number

@@ -117,6 +117,10 @@
 // place. The cap (count/limit from GET /bookmarks) is checked here too, but
 // the server's 409 is the real enforcement. The detail panel stays on the
 // toggled supplier even if its card moves off the current page.
+// 2026-10-26, Claude Code (Sonnet 5.5), PR #259 review (Sinnez1): the
+// bookmark count comes from the server (PUT's count; a re-read after
+// DELETE) instead of a local +1/-1 that drifts when another tab or device
+// already changed the bookmark.
 
 import { Fragment, useCallback, useEffect, useState } from 'react'
 
@@ -426,12 +430,16 @@ export function Suppliers() {
     setBookmarkBusy(true)
     try {
       if (adding) {
-        await addBookmark(supplier.id)
+        // PUT answers with the server's count (an add that was already
+        // bookmarked elsewhere changes nothing there)
+        const result = await addBookmark(supplier.id)
+        setBookmarkCount(result.count)
       } else {
+        // DELETE has no body, so re-read the count
         await removeBookmark(supplier.id)
+        syncBookmarkCount()
       }
       setError(null)
-      setBookmarkCount((n) => Math.max(0, n + (adding ? 1 : -1)))
       if (supplier.id === selectedId) {
         setPinned({ ...supplier, bookmarked: adding })
       }

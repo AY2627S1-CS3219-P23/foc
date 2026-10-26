@@ -7,6 +7,8 @@
 // supplier API module is mocked wholesale; the harness follows
 // credits.test.tsx (memory router over the real route table, a stored
 // session to pass ProtectedRoute).
+// 2026-10-26, PR #259 review (Sinnez1): the add mock now answers like PUT
+// (a BookmarkResult), and two tests cover the count following the server.
 // Author review: [pending]
 
 import { render, screen, waitFor } from '@testing-library/react'
@@ -58,6 +60,15 @@ function supplier(id: number, name: string, bookmarked = false): Supplier {
   }
 }
 
+function addResult(count: number) {
+  return {
+    supplierId: '2',
+    bookmarked: true,
+    bookmarkedAt: '2026-10-26T00:00:00Z',
+    count,
+  }
+}
+
 function pageOf(content: Supplier[], page = 0) {
   return {
     content,
@@ -102,7 +113,7 @@ beforeEach(() => {
     limit: 5,
     bookmarks: [],
   })
-  vi.mocked(supplierApi.addBookmark).mockResolvedValue(undefined)
+  vi.mocked(supplierApi.addBookmark).mockResolvedValue(addResult(2))
   vi.mocked(supplierApi.removeBookmark).mockResolvedValue(undefined)
   vi.mocked(supplierApi.listSuppliers).mockResolvedValue(
     pageOf([supplier(1, 'A Hot Hideout', true), supplier(2, 'Cool Spot')]),
@@ -193,6 +204,37 @@ describe('bookmark flag', () => {
 
     expect(supplierApi.addBookmark).not.toHaveBeenCalled()
     expect(await screen.findByText(/limit of 5 bookmarks/)).toBeInTheDocument()
+  })
+
+  it("takes the bookmark count from the server's answer to an add", async () => {
+    // the page thinks 1 is bookmarked, but the server says the caller is
+    // already at the limit (e.g. bookmarked from another device)
+    vi.mocked(supplierApi.addBookmark).mockResolvedValue(addResult(5))
+    const user = userEvent.setup()
+    renderAt('/suppliers')
+    await user.click(
+      await screen.findByRole('button', { name: 'Bookmark: Cool Spot' }),
+    )
+    await waitFor(() => expect(supplierApi.addBookmark).toHaveBeenCalled())
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Bookmark: Cool Spot' }),
+    )
+    expect(await screen.findByText(/limit of 5 bookmarks/)).toBeInTheDocument()
+  })
+
+  it('re-reads the count after a remove', async () => {
+    const user = userEvent.setup()
+    renderAt('/suppliers')
+    await waitFor(() => expect(supplierApi.listBookmarks).toHaveBeenCalled())
+    const reads = vi.mocked(supplierApi.listBookmarks).mock.calls.length
+    await user.click(
+      await screen.findByRole('button', { name: 'Bookmark: A Hot Hideout' }),
+    )
+
+    await waitFor(() =>
+      expect(supplierApi.listBookmarks).toHaveBeenCalledTimes(reads + 1),
+    )
   })
 
   it("shows the server's refusal, e.g. bookmarking too fast", async () => {

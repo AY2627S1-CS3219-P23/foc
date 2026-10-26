@@ -22,11 +22,15 @@
 // orders by distance from that point instead of `sort`.
 // 2026-10-26, Claude Code (Sonnet 5.5), issue #225 (N8): added the bookmark
 // calls (list, add, remove).
+// 2026-10-26, Claude Code (Sonnet 5.5), PR #259 review (Sinnez1):
+// addBookmark returns PUT's BookmarkResult so the page can take the
+// server's count.
 // Reviewed by: [pending]
 
 import { apiFetch } from '@/lib/api/http'
 import type {
   BookmarkList,
+  BookmarkResult,
   PagedResponse,
   Supplier,
   SupplierInput,
@@ -98,7 +102,7 @@ export function listBookmarks() {
 }
 
 export function addBookmark(supplierId: string) {
-  return apiFetch<void>('supplier', `/suppliers/${supplierId}/bookmark`, {
+  return apiFetch<BookmarkResult>('supplier', `/suppliers/${supplierId}/bookmark`, {
     method: 'PUT',
   })
 }

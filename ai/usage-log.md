@@ -6280,3 +6280,18 @@ Entry template:
 - **Prompt(s):** "what is this? need fix?" then the go-ahead, answering
   Copilot's review comment.
 - **Author review:** Alastair Tan Choon Wei to review before pushing.
+
+---
+
+## 2026-10-26 — Alastair Tan Choon Wei (fix: reviewer comment on PR #259, issues #225/#227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** fix
+- **Scope:** `web/` — `features/supplier/api.ts` and `types.ts` (`addBookmark`
+  returns PUT's `BookmarkResult`), `routes/suppliers.tsx` (the bookmark count
+  is taken from the server's `count` after an add and re-read after a remove,
+  instead of a local +1/-1), `test/supplier-bookmarks.test.tsx` (add mock
+  answers like PUT; two tests for the count).
+- **Prompt(s):** "need fix?" answering Sinnez1's review comment. The change
+  follows the reviewer's suggestion and leaves the DELETE endpoint as
+  documented (the reviewer's note on a DELETE body is for the team).
+- **Author review:** Alastair Tan Choon Wei to review before pushing.
