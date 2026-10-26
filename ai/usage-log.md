@@ -6092,3 +6092,19 @@ Entry template:
   author for a separate wiki fix.
 - **Author review:** Leong Wei Zhi verified the newman run against the
   compose stack and reviews via pull request.
+
+## 2026-10-26 — Alastair Tan Choon Wei (feat: supplier bookmark table, issues #225/#227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** implementation
+- **Scope:** `supplier-service` `SupplierBookmarks` entity,
+  `SupplierBookmarkId`, `SupplierBookmarksRepository` (first step of N8:
+  the table only; endpoints, purge endpoint and web follow in later
+  entries), `README.md` (AI Use Summary).
+- **Prompt(s):** "lets do it step by step, starting with DB first".
+  Composite primary key (user_id, supplier_id), DB-level ON DELETE
+  CASCADE on supplier_id, `Long` ids and the 5-bookmark cap were decided
+  by the author; table and column names were left to the tool. Checked
+  against the compose DB: the first run produced a duplicate supplier
+  column (join column name), fixed; a `user_id` index was added because
+  the primary key leads with `supplier_id`.
+- **Author review:** Alastair Tan Choon Wei to review before opening the PR.

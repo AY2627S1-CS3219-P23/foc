@@ -1018,5 +1018,11 @@ events do on a `RESOLVED` record, and the duplicate-or-contradiction
 rule behind the event table, were decided by the team and transcribed
 into `docs/credit-service.md`. Recorded in `ai/usage-log.md`.
 
+Claude Code (Sonnet 5.5) added the supplier bookmark table for N8
+(issues #225/#227): the `SupplierBookmarks` entity with a composite key,
+cascade on supplier deletion and a per-user index, and its repository.
+Key, cascade and cap were decided by the team; table and column names
+were chosen by the tool for review. Recorded in `ai/usage-log.md`.
+
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
