@@ -41,6 +41,11 @@ up to a timeout per batch served nothing: an account past the retention
 window cannot be recovered (recoverOwnAccount refuses it), so nothing can
 change the condemned set between the call and the delete. The locks stay,
 taken first in the short transaction, for the flows' lock order.
+2026-10-26 (Claude Code, Sonnet 5.5), PR #259 review (Sinnez1): the cleanup
+step now treats any RuntimeException as a failed cleanup (not only
+BookmarkCleanupException) — anything else (e.g. from JwtIssuer or a bad URI)
+used to escape before the transaction and skip the hygiene sweeps too.
+Returning false only keeps the accounts for the next run, so it is safe.
 */
 
 package foc.user.service;
@@ -57,7 +62,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import foc.user.exception.BookmarkCleanupException;
 import foc.user.repository.AccountUpdateOtpRepository;
 import foc.user.repository.PasswordResetOtpRepository;
 import foc.user.repository.PendingEmailChangeRepository;
@@ -171,7 +175,7 @@ class AccountPurgeScheduler {
         try {
             bookmarkCleanup.purgeBookmarks(condemnedIds);
             return true;
-        } catch (BookmarkCleanupException e) {
+        } catch (RuntimeException e) {
             log.error("skipping the purge of {} account(s): their supplier bookmarks could"
                     + " not be removed; the accounts are kept and tried again on the next run",
                     condemnedIds.size(), e);

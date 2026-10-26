@@ -31,6 +31,9 @@ Reviewed by: Leong Wei Zhi (via pull request).
        when none are condemned, and — when the call fails — keeps every
        condemned account (and its child rows) while still running the
        expired-code hygiene sweep.
+2026-10-26 (Claude Code, Sonnet 5.5), PR #259 review (Sinnez1): a case where
+       the cleanup throws an unexpected RuntimeException (not a
+       BookmarkCleanupException) — the accounts stay and the sweeps still run.
 */
 
 package foc.user.service;
@@ -324,6 +327,23 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
 
         assertThat(userRepository.findAll()).extracting(User::getId).containsExactly(expired.getId());
         assertThat(resetOtpRepository.findAll()).hasSize(1);
+        assertThat(pendingSignupRepository.findAll()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Should keep the accounts and still sweep expired rows when the cleanup throws an unexpected exception")
+    void unexpectedCleanupFailureStillRunsTheHygieneSweeps() {
+        User expired = saveUser("e3333333@u.nus.edu", "expired_deleted",
+            Instant.now().minus(31, ChronoUnit.DAYS));
+        pendingSignupRepository.save(new PendingSignup("e4444444@u.nus.edu", "stale_signup",
+            "password_hash", "code_hash", Instant.now().minusSeconds(660), Instant.now().minusSeconds(60), false));
+        userRepository.flush();
+        doThrow(new IllegalStateException("cannot issue the service token"))
+            .when(bookmarkCleanup).purgeBookmarks(any());
+
+        scheduler.purgeExpiredDeletedAccounts();
+
+        assertThat(userRepository.findAll()).extracting(User::getId).containsExactly(expired.getId());
         assertThat(pendingSignupRepository.findAll()).isEmpty();
     }
 

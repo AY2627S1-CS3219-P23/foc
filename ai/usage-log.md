@@ -6295,3 +6295,17 @@ Entry template:
   follows the reviewer's suggestion and leaves the DELETE endpoint as
   documented (the reviewer's note on a DELETE body is for the team).
 - **Author review:** Alastair Tan Choon Wei to review before pushing.
+
+---
+
+## 2026-10-26 — Alastair Tan Choon Wei (fix: reviewer comment on PR #259, issue #225)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** fix
+- **Scope:** `AccountPurgeScheduler` (the bookmark-cleanup step treats any
+  `RuntimeException` as a failed cleanup and keeps the accounts, so an
+  unexpected exception no longer skips the expired-code sweeps) and
+  `AccountPurgeSchedulerTest` (a case where the client throws
+  `IllegalStateException`).
+- **Prompt(s):** "need fix?" answering Sinnez1's review comment. The change
+  follows the reviewer's suggestion.
+- **Author review:** Alastair Tan Choon Wei to review before pushing.
