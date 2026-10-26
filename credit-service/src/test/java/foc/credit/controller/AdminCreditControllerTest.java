@@ -9,13 +9,15 @@
  * 2026-10-25, Claude Code (Opus 5.5), issue #236: the long-held
  * reservations route: HELD only, oldest first, the cap, the cutoff at
  * its boundary, PT0S, and the olderThan 400s. PR #248 review: truncated
- * at exactly the cap and one past it.
+ * at exactly the cap and one past it; a blank olderThan takes the
+ * default, and weeks, months and years are refused with the new message.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -281,13 +283,27 @@ class AdminCreditControllerTest extends PostgresTestContainer {
             .andExpect(jsonPath("$.detail").value("olderThan must not be negative"));
     }
 
+    // weeks, months and years are ISO-8601 too, but Duration.parse refuses them
     @ParameterizedTest
-    @ValueSource(strings = { "1h", "PT", "60" })
+    @ValueSource(strings = { "1h", "PT", "60", "P1W", "P1M", "P1Y" })
     void anOlderThanThatIsNotADurationIsRefused(String olderThan) throws Exception {
         mockMvc.perform(get("/credits/admin/reservations/held").param("olderThan", olderThan)
                 .header("Authorization", bearer("ADMIN")))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.detail").value("olderThan must be an ISO-8601 duration such as PT1H"));
+            .andExpect(jsonPath("$.detail")
+                .value("olderThan must be a day- or time-based ISO-8601 duration such as PT1H or P7D"));
+    }
+
+    // a dashboard that always sends the filter sends it blank when none is chosen
+    @ParameterizedTest
+    @ValueSource(strings = { "", " " })
+    void aBlankOlderThanTakesTheDefault(String olderThan) throws Exception {
+        String old = reservation("1990-01-01T00:00:00Z", "HELD", 1);
+
+        mockMvc.perform(get("/credits/admin/reservations/held").param("olderThan", olderThan)
+                .header("Authorization", bearer("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[*].requestId").value(hasItem(old)));
     }
 
     // a reservation of this test's requester, made at createdAt

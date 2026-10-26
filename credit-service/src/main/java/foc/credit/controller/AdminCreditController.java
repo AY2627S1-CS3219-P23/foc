@@ -8,6 +8,8 @@
  * 2026-10-25, Claude Code (Opus 5.5), issue #236: the long-held
  * reservations route, with olderThan an ISO-8601 duration that is not
  * negative (team decision).
+ * PR #248 review: a blank olderThan takes the PT1H default, and the 400
+ * names the durations Duration.parse accepts (days and smaller).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.controller;
@@ -64,14 +66,21 @@ public class AdminCreditController {
     }
 
     // a string, parsed here, so a bad duration is the contract's 400
-    // rather than a conversion failure; PT0S lists every held reservation
+    // rather than a conversion failure; PT0S lists every held reservation.
+    // defaultValue covers only an absent parameter, so a blank one
+    // (?olderThan=) takes the default here
     @GetMapping("/reservations/held")
     public HeldReservationsResponse heldReservations(@RequestParam(defaultValue = "PT1H") String olderThan) {
+        if (olderThan.isBlank()) {
+            olderThan = "PT1H";
+        }
         Duration duration;
         try {
             duration = Duration.parse(olderThan);
         } catch (DateTimeParseException e) {
-            throw new InvalidQueryParameterException("olderThan must be an ISO-8601 duration such as PT1H");
+            // Duration.parse takes days and smaller, not weeks, months or years
+            throw new InvalidQueryParameterException(
+                "olderThan must be a day- or time-based ISO-8601 duration such as PT1H or P7D");
         }
         if (duration.isNegative()) {
             throw new InvalidQueryParameterException("olderThan must not be negative");

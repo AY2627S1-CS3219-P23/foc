@@ -125,7 +125,9 @@
   `courier_share` to RESOLVED records.
   PR #248 review, the review's suggestions taken by the team: the
   held-reservations list says whether it was cut off (`truncated`), and
-  V5's partial index on the HELD rows serves it.
+  V5's partial index on the HELD rows serves it. Later PR #248 review
+  suggestions taken: a blank olderThan takes the default, and the
+  accepted durations are named (days and smaller).
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -555,8 +557,10 @@ included.
 The reservations still `HELD` that were made at or before now minus
 `olderThan`, oldest first, at most 100 (DSP-5). The dashboard checks
 them against the Order Service in one batch call and flags the ones
-whose order has finished (DSP-11). `olderThan` is an ISO-8601 duration,
-default `PT1H`; it must not be negative, and `PT0S` lists every
+whose order has finished (DSP-11). `olderThan` is a day- or
+time-based ISO-8601 duration (days and smaller, such as `PT1H` or
+`P7D`; weeks, months and years are refused), default `PT1H`, also when
+it is sent blank; it must not be negative, and `PT0S` lists every
 reservation held so far. There is no status parameter and no paging.
 
 ```json
@@ -587,7 +591,7 @@ Nothing held is 200 with `"items": []` and `"truncated": false`.
 
 | Status | When |
 | --- | --- |
-| 400 problem+json | An amount that is not an integer or is below 1; `minAmount` above `maxAmount`; `from` or `to` not a full instant with an offset; `from` not before `to`; `page` below 0; `size` outside 1 to 100; `olderThan` not an ISO-8601 duration, or negative |
+| 400 problem+json | An amount that is not an integer or is below 1; `minAmount` above `maxAmount`; `from` or `to` not a full instant with an offset; `from` not before `to`; `page` below 0; `size` outside 1 to 100; `olderThan` not a day- or time-based ISO-8601 duration, or negative |
 | 401 problem+json | A missing or invalid token |
 | 403 problem+json | An admin route called with a role other than `ADMIN` or `OWNER` |
 
