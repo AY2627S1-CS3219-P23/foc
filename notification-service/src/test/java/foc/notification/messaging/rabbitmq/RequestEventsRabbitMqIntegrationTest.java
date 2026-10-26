@@ -24,6 +24,9 @@
  * row per party, acked rather than dead-lettered, redelivery deduped;
  * the fixture loader takes the event type. Author review: Ryan Ang,
  * pending pull request review.
+ * 2026-10-26, Claude Code (Opus 5.5), PR #260 review: the dispute fields
+ * are checked in each stored payload, and the accepted-event test uses
+ * rowsOfType. Author review: Ryan Ang, pending pull request review.
  */
 package foc.notification.messaging.rabbitmq;
 
@@ -64,6 +67,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.rabbitmq.RabbitMQContainer;
 import org.testcontainers.utility.DockerImageName;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * End-to-end through a real broker: raw fixture JSON (no broker type
@@ -136,6 +140,9 @@ class RequestEventsRabbitMqIntegrationTest {
 	@Autowired
 	private NotificationRepository notifications;
 
+	@Autowired
+	private ObjectMapper objectMapper;
+
 	@BeforeEach
 	void purgeDeadLetterQueue() {
 		rabbitTemplate.execute(channel ->
@@ -153,10 +160,7 @@ class RequestEventsRabbitMqIntegrationTest {
 		await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
 				assertThat(notifications.count()).isEqualTo(baseline + 2));
 
-		List<Notification> rows = notifications.findAll().stream()
-				.filter(row -> "request.accepted".equals(row.getEventType()))
-				.toList();
-		assertThat(rows).extracting(Notification::getRecipientId)
+		assertThat(rowsOfType("request.accepted")).extracting(Notification::getRecipientId)
 				.containsExactlyInAnyOrder("usr-req-1001", "usr-cou-2002");
 
 		// Duplicate delivery, then a sentinel event: the queue is FIFO, so
@@ -223,6 +227,15 @@ class RequestEventsRabbitMqIntegrationTest {
 					assertThat(rowsOfType(eventType)).extracting(Notification::getRecipientId)
 							.containsExactlyInAnyOrder("usr-req-1001", "usr-cou-2002"));
 		}
+		// the stored payload is all the web's templates can read, so every
+		// field a dispute event adds must land in it, on both rows
+		assertThat(rowsOfType("request.disputed")).allSatisfy(row -> assertThat(payloadOf(row))
+				.containsEntry("category", "WRONG_ITEM")
+				.containsEntry("disputeNote", "Got duck rice instead of chicken rice"));
+		assertThat(rowsOfType("request.dispute-resolved")).allSatisfy(row -> assertThat(payloadOf(row))
+				.containsEntry("courierAmount", 0)
+				.containsEntry("requesterAmount", 2)
+				.containsEntry("resolutionNote", "Wrong item delivered; full refund to the requester"));
 
 		// Redeliver both, then a sentinel: the queue is FIFO, so once the
 		// sentinel's row exists both duplicates were processed — and must
@@ -296,6 +309,11 @@ class RequestEventsRabbitMqIntegrationTest {
 		return notifications.findAll().stream()
 				.filter(row -> eventType.equals(row.getEventType()))
 				.toList();
+	}
+
+	@SuppressWarnings("unchecked")
+	private Map<String, Object> payloadOf(Notification row) {
+		return objectMapper.readValue(row.getPayload(), Map.class);
 	}
 
 	private void publishRawJson(byte[] body, String routingKey) {

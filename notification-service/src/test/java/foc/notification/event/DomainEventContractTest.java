@@ -30,6 +30,10 @@
  * 2026-10-26, Claude Code (Opus 5.5), issue #237: the two N3 dispute
  * fixtures bind their own fields and name both parties. Author review:
  * Ryan Ang, pending pull request review.
+ * 2026-10-26, Claude Code (Opus 5.5), PR #260 review: both registry tests
+ * read their fixture through readFixture (one path rule, one not-null
+ * check), and the resolution's amounts are distinct. Author review: Ryan
+ * Ang, pending pull request review.
  */
 package foc.notification.event;
 
@@ -87,12 +91,7 @@ class DomainEventContractTest {
 	@Test
 	void everyCatalogedEventHasABindingFixture() throws IOException {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
-			String path = "/contracts/" + entry.eventType().replace('.', '-') + ".example.json";
-			DomainEvent event;
-			try (InputStream fixture = getClass().getResourceAsStream(path)) {
-				assertThat(fixture).as("fixture %s on classpath via foc-contracts jar", path).isNotNull();
-				event = objectMapper.readValue(fixture, entry.eventClass());
-			}
+			DomainEvent event = readFixture(entry.eventType(), entry.eventClass());
 
 			assertThat(event.eventType()).isEqualTo(entry.eventType());
 			assertThat(event.eventId()).isNotBlank();
@@ -123,11 +122,7 @@ class DomainEventContractTest {
 			if (values == null) {
 				continue;
 			}
-			String path = "/contracts/" + entry.eventType().replace('.', '-') + ".example.json";
-			DomainEvent event;
-			try (InputStream fixture = getClass().getResourceAsStream(path)) {
-				event = objectMapper.readValue(fixture, entry.eventClass());
-			}
+			DomainEvent event = readFixture(entry.eventType(), entry.eventClass());
 
 			String name = VALUE_COMPONENTS.get(entry.eventClass());
 			assertThat(name).as("%s has a value set but no entry in VALUE_COMPONENTS",
@@ -138,7 +133,7 @@ class DomainEventContractTest {
 					value = component.getAccessor().invoke(event);
 				}
 			}
-			assertThat(value).as("%s: %s from %s", path, name, values).isIn(values);
+			assertThat(value).as("%s: %s from %s", entry.eventType(), name, values).isIn(values);
 		}
 	}
 
@@ -158,17 +153,19 @@ class DomainEventContractTest {
 
 		RequestDisputeResolved resolved =
 				readFixture("request.dispute-resolved", RequestDisputeResolved.class);
-		assertThat(resolved.courierAmount()).isEqualTo(1);
-		assertThat(resolved.requesterAmount()).isEqualTo(1);
-		assertThat(resolved.resolutionNote()).isEqualTo("Delivered, but the wrong item; reward split");
+		// distinct amounts, so a courier/requester swap fails here
+		assertThat(resolved.courierAmount()).isEqualTo(0);
+		assertThat(resolved.requesterAmount()).isEqualTo(2);
+		assertThat(resolved.resolutionNote()).isEqualTo("Wrong item delivered; full refund to the requester");
 		assertThat(resolved.parties()).containsExactlyInAnyOrder(
 				resolved.requesterId(), resolved.courierId());
 	}
 
+	// the one copy of the fixture-path rule in this class (EventTypeRegistry's javadoc)
 	private <T> T readFixture(String eventType, Class<T> type) throws IOException {
 		String path = "/contracts/" + eventType.replace('.', '-') + ".example.json";
 		try (InputStream fixture = getClass().getResourceAsStream(path)) {
-			assertThat(fixture).as("fixture %s", path).isNotNull();
+			assertThat(fixture).as("fixture %s on classpath via foc-contracts jar", path).isNotNull();
 			return objectMapper.readValue(fixture, type);
 		}
 	}

@@ -61,6 +61,17 @@ Entry template:
 - **Author review:** `./mvnw test` green with Docker, including the
   Testcontainers broker integration test. Ryan Ang to review via pull
   request.
+- **PR #260 review follow-ups:** the review's four
+  suggestions applied. The broker test checks each dispute field in
+  both stored payloads, and the accepted-event test uses `rowsOfType`.
+  `DomainEventContractTest`'s two registry tests read their fixture
+  through `readFixture`, so the path rule and its not-null check live
+  in one place. The `request-dispute-resolved` fixture in
+  `foc-contracts` now has distinct amounts, courier 0 and requester 2,
+  still adding up to the fixture request's reward of 2, with a
+  matching `resolutionNote`, so a swapped split fails the tests.
+  `foc-contracts` install (with its tests) and `./mvnw test` green
+  with Docker.
 
 ## 2026-10-25 — Ryan Ang (feat: Credit split settlement for request.dispute-resolved, issue #235)
 - **Tool:** Claude Code (Opus 5.5)
