@@ -46,6 +46,11 @@ getActiveUserWithLock gives the account-update flows); and
 findWithLockByDeletedBefore, taken by the purge before it touches any
 child table, so the purge acquires locks in the flows' user-then-child
 order instead of deadlocking against a concurrent reset request.
+2026-10-26 (Claude Code, Sonnet 5.5), issue #225 (N8.5, D12) and PR #259
+review: findIdsDeletedBefore added for purge-cleanup support — the purge
+reads the condemned ids without a lock and sends them to supplier-service
+before it opens its locking transaction.
+Author review: [pending]
 */
 
 package foc.user.repository;
@@ -157,18 +162,18 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     @Query(value = "SELECT pg_advisory_xact_lock(1000)", nativeQuery = true)
     void acquireSetupLock();
 
-    // bulk-deletes accounts whose 30-day recovery window has passed,
-    // releasing their email/username. The caller (AccountPurgeScheduler)
-    // provides the transaction and must remove dependent
-    // password_reset_otps rows first — their user_id FK blocks this
-    // delete. (The otps table
-    // this also used to name went with issue #88.)
     // the ids the purge is about to delete, read without a lock: the purge
     // sends them to supplier-service BEFORE it opens its locking transaction
     // (issue #225, PR review)
     @Query("select u.id from User u where u.deletedAt < :cutoff")
     List<Long> findIdsDeletedBefore(@Param("cutoff") Instant cutoff);
 
+    // bulk-deletes accounts whose 30-day recovery window has passed,
+    // releasing their email/username. The caller (AccountPurgeScheduler)
+    // provides the transaction and must remove dependent
+    // password_reset_otps rows first — their user_id FK blocks this
+    // delete. (The otps table
+    // this also used to name went with issue #88.)
     @Modifying(clearAutomatically = true)
     @Query("DELETE FROM User u WHERE u.deletedAt < :cutoff")
     int deleteByDeletedBefore(@Param("cutoff") Instant cutoff);

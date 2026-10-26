@@ -6255,3 +6255,15 @@ Entry template:
 - **Prompt(s):** "fix it", answering Copilot's accessibility review comment.
   The change follows the reviewer's suggestion.
 - **Author review:** Alastair Tan Choon Wei to review before pushing.
+
+---
+
+## 2026-10-26 — Alastair Tan Choon Wei (docs: Copilot review on PR #259, issue #225)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** docs
+- **Scope:** `UserRepository.java` — dated entry added to the file header for
+  `findIdsDeletedBefore`; the method's comment moved so the
+  `deleteByDeletedBefore` comment sits above that method again (a comment
+  edit only, no code change).
+- **Prompt(s):** "need fix?" then the go-ahead, answering Copilot's review comment.
+- **Author review:** Alastair Tan Choon Wei to review before pushing.
