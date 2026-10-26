@@ -75,6 +75,40 @@ Entry template:
   in rating-db; to be reviewed via pull request.
 
 ---
+## 2026-10-26 — Ryan Ang (feat: Notification accepts the N3 dispute events, issue #237)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** notification-service tests:
+  `RequestEventsRabbitMqIntegrationTest` (both dispute fixtures
+  published raw under their routing keys, one row per party, nothing
+  dead-lettered, redelivery deduped behind a sentinel; the fixture
+  loader now takes the event type), `DomainEventContractTest` (the
+  fields each dispute fixture adds, and both parties named). No main
+  code change: the consumer dispatches through `EventTypeRegistry`, so
+  rebuilding against the current `foc-contracts` is what makes it
+  accept the two types. `README.md` (AI Use Summary and header line).
+- **Prompt(s):** The tool wrote the two tests from issue #237's
+  implementation checklist (part of #46, DSP-15) and confirmed that the
+  consumer needs no main-code change, since it dispatches through the
+  registry.
+- **Author review:** `./mvnw test` green with Docker, including the
+  Testcontainers broker integration test. Ryan Ang to review via pull
+  request.
+- **PR #260 review follow-ups:** the review's four
+  suggestions applied. The broker test checks each dispute field in
+  both stored payloads, and the accepted-event test uses `rowsOfType`.
+  `DomainEventContractTest`'s two registry tests read their fixture
+  through `readFixture`, so the path rule and its not-null check live
+  in one place. The `request-dispute-resolved` fixture in
+  `foc-contracts` now has distinct amounts, courier 0 and requester 2,
+  still adding up to the fixture request's reward of 2, with a
+  matching `resolutionNote`, so a swapped split fails the tests.
+  `foc-contracts` install (with its tests) and `./mvnw test` green
+  with Docker.
+  Second round: the contract test checks the split adds up to the
+  `request-submitted` fixture's reward (DSP-8), and the README summary
+  names the fixture change.
+
 ## 2026-10-25 — Ryan Ang (feat: Credit admin list of long-held reservations, issue #236; PR #247 and PR #210 follow-ups)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs

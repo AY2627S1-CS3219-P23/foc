@@ -228,6 +228,9 @@
   of long-held reservations (issue #236) and the PR #247 and PR #210
   review follow-ups, by Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-26: AI Use Summary extended for notification-service's
+  dispute-event tests (issue #237), by Claude Code (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
   2026-10-26: AI Use Summary extended for the rating-service scaffold
   (issue #250), and the Repository Structure tree updated now that the
   N1 nice-to-have fills the <n2h-service> slot, by Claude Code
@@ -1039,6 +1042,13 @@ suggested CHECK that only a `RESOLVED` record carries a courier share
 and doc and usage-log corrections; and the PR #210 follow-up, a stale
 controller comment. Recorded in `ai/usage-log.md`.
 
+Claude Code (Opus 5.5) wrote notification-service's tests for the two
+N3 dispute events (issue #237): a broker integration test replaying
+the `request.disputed` and `request.dispute-resolved` fixtures (one
+notification per party, acked, redelivery deduped) and a contract test
+pinning the fields they add, and adjusted the `request.dispute-resolved`
+example fixture's amounts in `foc-contracts`. Recorded in
+`ai/usage-log.md`.
 Claude Code (Fable 5) scaffolded the rating-service walking skeleton
 (issue #250, the first N1 PR under #44): pom, security chain, JWT
 verifier and application/test classes copied from the order-service /

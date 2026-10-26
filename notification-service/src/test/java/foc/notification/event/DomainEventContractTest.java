@@ -27,6 +27,14 @@
  * from the component named for each record, not from whichever String
  * component holds one. Author review: Ryan Ang, pending pull request
  * review.
+ * 2026-10-26, Claude Code (Opus 5.5), issue #237: the two N3 dispute
+ * fixtures bind their own fields and name both parties. Author review:
+ * Ryan Ang, pending pull request review.
+ * 2026-10-26, Claude Code (Opus 5.5), PR #260 review: both registry tests
+ * read their fixture through readFixture (one path rule, one not-null
+ * check), and the resolution's amounts are distinct. Author review: Ryan
+ * Ang, pending pull request review. Same review, second round: the
+ * split is checked against the request-submitted fixture's reward (DSP-8).
  */
 package foc.notification.event;
 
@@ -37,8 +45,10 @@ import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.credit.CreditEvent;
 import foc.contracts.events.credit.CreditReservationRejected;
 import foc.contracts.events.request.RequestAccepted;
+import foc.contracts.events.request.RequestDisputeResolved;
 import foc.contracts.events.request.RequestDisputed;
 import foc.contracts.events.request.RequestEvent;
+import foc.contracts.events.request.RequestSubmitted;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
@@ -83,12 +93,7 @@ class DomainEventContractTest {
 	@Test
 	void everyCatalogedEventHasABindingFixture() throws IOException {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
-			String path = "/contracts/" + entry.eventType().replace('.', '-') + ".example.json";
-			DomainEvent event;
-			try (InputStream fixture = getClass().getResourceAsStream(path)) {
-				assertThat(fixture).as("fixture %s on classpath via foc-contracts jar", path).isNotNull();
-				event = objectMapper.readValue(fixture, entry.eventClass());
-			}
+			DomainEvent event = readFixture(entry.eventType(), entry.eventClass());
 
 			assertThat(event.eventType()).isEqualTo(entry.eventType());
 			assertThat(event.eventId()).isNotBlank();
@@ -119,11 +124,7 @@ class DomainEventContractTest {
 			if (values == null) {
 				continue;
 			}
-			String path = "/contracts/" + entry.eventType().replace('.', '-') + ".example.json";
-			DomainEvent event;
-			try (InputStream fixture = getClass().getResourceAsStream(path)) {
-				event = objectMapper.readValue(fixture, entry.eventClass());
-			}
+			DomainEvent event = readFixture(entry.eventType(), entry.eventClass());
 
 			String name = VALUE_COMPONENTS.get(entry.eventClass());
 			assertThat(name).as("%s has a value set but no entry in VALUE_COMPONENTS",
@@ -134,7 +135,45 @@ class DomainEventContractTest {
 					value = component.getAccessor().invoke(event);
 				}
 			}
-			assertThat(value).as("%s: %s from %s", path, name, values).isIn(values);
+			assertThat(value).as("%s: %s from %s", entry.eventType(), name, values).isIn(values);
+		}
+	}
+
+	/**
+	 * Issue #237: the generic test above proves the dispute fixtures bind;
+	 * this pins the fields they add, so a rename in either record fails
+	 * here, and both parties are named — the requester and the courier
+	 * each get a notification.
+	 */
+	@Test
+	void disputeFixturesBindTheirOwnFieldsAndNameBothParties() throws IOException {
+		RequestDisputed disputed = readFixture("request.disputed", RequestDisputed.class);
+		assertThat(disputed.category()).isEqualTo(RequestDisputed.WRONG_ITEM);
+		assertThat(disputed.disputeNote()).isEqualTo("Got duck rice instead of chicken rice");
+		assertThat(disputed.parties()).containsExactlyInAnyOrder(
+				disputed.requesterId(), disputed.courierId());
+
+		RequestDisputeResolved resolved =
+				readFixture("request.dispute-resolved", RequestDisputeResolved.class);
+		// distinct amounts, so a courier/requester swap fails here
+		assertThat(resolved.courierAmount()).isEqualTo(0);
+		assertThat(resolved.requesterAmount()).isEqualTo(2);
+		assertThat(resolved.resolutionNote()).isEqualTo("Wrong item delivered; full refund to the requester");
+		// the reward is in another fixture, so changing it alone fails here
+		int reward = readFixture("request.submitted", RequestSubmitted.class).reward();
+		assertThat(resolved.courierAmount() + resolved.requesterAmount())
+				.as("DSP-8: the split adds up to the reward")
+				.isEqualTo(reward);
+		assertThat(resolved.parties()).containsExactlyInAnyOrder(
+				resolved.requesterId(), resolved.courierId());
+	}
+
+	// the one copy of the fixture-path rule in this class (EventTypeRegistry's javadoc)
+	private <T> T readFixture(String eventType, Class<T> type) throws IOException {
+		String path = "/contracts/" + eventType.replace('.', '-') + ".example.json";
+		try (InputStream fixture = getClass().getResourceAsStream(path)) {
+			assertThat(fixture).as("fixture %s on classpath via foc-contracts jar", path).isNotNull();
+			return objectMapper.readValue(fixture, type);
 		}
 	}
 
