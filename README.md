@@ -1024,5 +1024,12 @@ cascade on supplier deletion and a per-user index, and its repository.
 Key, cascade and cap were decided by the team; table and column names
 were chosen by the tool for review. Recorded in `ai/usage-log.md`.
 
+Claude Code (Sonnet 5.5) added the N8 frontend (issues #225/#227): a
+bookmark flag on every supplier card, the detail panel's Create Request
+button, the `?supplierId=` prefill on the create-request form, the
+bookmark API calls and their tests. Behaviour (reload to page 1 in the
+default view, the client-side cap, the button's placement) was decided
+by the team. Recorded in `ai/usage-log.md`.
+
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

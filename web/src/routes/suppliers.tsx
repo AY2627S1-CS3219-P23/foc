@@ -109,14 +109,25 @@
 // errorMessage helper.
 // Reviewed by: Ryan Ang (the 2026-09-29 issue #147 changes above); the
 // original supplier code's review is still pending with its author.
+// 2026-10-26, Claude Code (Sonnet 5.5), issues #225/#227 (N8): bookmark
+// flag on every card. In the default view (no search/category, name sort)
+// the server orders bookmarked suppliers first (D13), so bookmarking jumps
+// to page 1 and reloads, and un-bookmarking reloads the same page; with a
+// search/filter active the order is unaffected, so the flag is flipped in
+// place. The cap (count/limit from GET /bookmarks) is checked here too, but
+// the server's 409 is the real enforcement. The detail panel stays on the
+// toggled supplier even if its card moves off the current page.
 
 import { Fragment, useCallback, useEffect, useState } from 'react'
 
 import {
+  addBookmark,
   createSupplier,
   deleteSupplier,
+  listBookmarks,
   listCategories,
   listSuppliers,
+  removeBookmark,
   updateSupplier,
 } from '@/features/supplier/api'
 import { DeleteSupplierModal } from '@/features/supplier/components/DeleteSupplierModal'
@@ -135,6 +146,8 @@ import { useAuth } from '@/features/user/useAuth'
 
 const PAGE_SIZE = 10
 const DISTANCE_SORT = 'distance'
+const DEFAULT_SORT = 'name,asc'
+const DEFAULT_BOOKMARK_LIMIT = 5
 
 interface Coordinates {
   lat: number
@@ -168,6 +181,12 @@ export function Suppliers() {
   const [formOpenFor, setFormOpenFor] = useState<Supplier | 'new' | null>(null)
   const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null)
   const [saving, setSaving] = useState(false)
+  const [bookmarkCount, setBookmarkCount] = useState(0)
+  const [bookmarkLimit, setBookmarkLimit] = useState(DEFAULT_BOOKMARK_LIMIT)
+  const [bookmarkBusy, setBookmarkBusy] = useState(false)
+  // The toggled supplier, kept so the detail panel survives its card
+  // leaving the loaded page after a bookmark reorders the list.
+  const [pinned, setPinned] = useState<Supplier | null>(null)
 
   // Filter changes should always jump back to the first page — a
   // stale page number from a previous, larger result set would
@@ -181,6 +200,7 @@ export function Suppliers() {
     sort !== prevFilters.sort
   ) {
     setPrevFilters({ query, category, sort })
+    setPinned(null)
     setPage(0)
   }
 
@@ -368,7 +388,73 @@ export function Suppliers() {
     return () => window.clearTimeout(timeout)
   }, [successMessage])
 
-  const selected = suppliers.find((s) => s.id === selectedId) ?? null
+  const selected =
+    suppliers.find((s) => s.id === selectedId) ??
+    (pinned && pinned.id === selectedId ? pinned : null)
+
+  // Bookmarked suppliers only sort first in the default, unfiltered view
+  // (D13); anywhere else a bookmark change leaves the order untouched.
+  const defaultView = !query && !category && sort === DEFAULT_SORT
+
+  // The server's count is the truth; this re-syncs after a failed toggle,
+  // when the local count may be stale (e.g. bookmarked from another device).
+  const syncBookmarkCount = useCallback(() => {
+    listBookmarks()
+      .then((result) => {
+        setBookmarkCount(result.count)
+        setBookmarkLimit(result.limit)
+      })
+      .catch(() => {
+        // Non-fatal: the server still enforces the cap on every add.
+      })
+  }, [])
+
+  useEffect(() => {
+    syncBookmarkCount()
+  }, [syncBookmarkCount])
+
+  async function handleToggleBookmark(supplier: Supplier) {
+    if (bookmarkBusy) return
+    const adding = !supplier.bookmarked
+    if (adding && bookmarkCount >= bookmarkLimit) {
+      setSuccessMessage(null)
+      setError(
+        `You have reached the limit of ${bookmarkLimit} bookmarks. Remove one to add another.`,
+      )
+      return
+    }
+    setBookmarkBusy(true)
+    try {
+      if (adding) {
+        await addBookmark(supplier.id)
+      } else {
+        await removeBookmark(supplier.id)
+      }
+      setError(null)
+      setBookmarkCount((n) => Math.max(0, n + (adding ? 1 : -1)))
+      if (supplier.id === selectedId) {
+        setPinned({ ...supplier, bookmarked: adding })
+      }
+      if (defaultView) {
+        // The server re-orders the whole list, so reload rather than
+        // reorder here; a new bookmark lands at the top of page 1.
+        if (adding) setPage(0)
+        setRefreshKey((k) => k + 1)
+      } else {
+        setSuppliers((list) =>
+          list.map((s) =>
+            s.id === supplier.id ? { ...s, bookmarked: adding } : s,
+          ),
+        )
+      }
+    } catch (err) {
+      setSuccessMessage(null)
+      setError(errorMessage(err, 'Could not update bookmark.'))
+      syncBookmarkCount()
+    } finally {
+      setBookmarkBusy(false)
+    }
+  }
 
   // Derived, not stored — while true, fetchCurrentPage resolves to
   // null (nothing to show yet), so the list below must not render
@@ -506,6 +592,9 @@ export function Suppliers() {
                         supplier.id === selectedId ? null : supplier.id,
                       )
                     }
+                    bookmarked={supplier.bookmarked}
+                    onToggleBookmark={() => handleToggleBookmark(supplier)}
+                    bookmarkBusy={bookmarkBusy}
                     distanceLabel={
                       sort === DISTANCE_SORT && userLocation
                         ? formatDistance(

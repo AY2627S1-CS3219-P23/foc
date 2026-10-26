@@ -6108,3 +6108,22 @@ Entry template:
   column (join column name), fixed; a `user_id` index was added because
   the primary key leads with `supplier_id`.
 - **Author review:** Alastair Tan Choon Wei to review before opening the PR.
+
+## 2026-10-26 — Alastair Tan Choon Wei (feat: supplier bookmark flag and Create Request button, issues #225/#227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** implementation
+- **Scope:** `web/` — `SupplierCard` (bookmark flag), `SupplierDetailPanel`
+  (Create Request button), `routes/suppliers.tsx` (toggle, reload and cap
+  logic), `routes/create-request.tsx` (`?supplierId=` prefill),
+  `features/supplier/api.ts` and `types.ts` (bookmark calls and types),
+  `test/supplier-bookmarks.test.tsx` (new), `README.md` (AI Use
+  Summary). The backend endpoints these call are still to come.
+- **Prompt(s):** "lets move on to next step of adding flag icon and create
+  request button (frontend stuff)". Behaviour decided by the author:
+  yellow/hollow flag on every card; flag click only toggles the bookmark;
+  bookmarking in the default view jumps to page 1, un-bookmarking reloads
+  the same page, a search/filter flips the flag in place; client-side cap
+  plus the server's 409; Create Request for every user, full width, above
+  Edit/Delete for admins, linking to the create-request form with
+  `?supplierId=`. The form's route is `/my-requests/new`.
+- **Author review:** Alastair Tan Choon Wei to review before opening the PR.

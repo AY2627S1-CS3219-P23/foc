@@ -9,10 +9,14 @@
 // real /create body — item, creditAmount, the supplier's id (as a number)
 // and name, dropoffLocation, deadline. The request starts PENDING while
 // credit-service reserves the reward, so the notice says so.
+// 2026-10-26, Claude Code (Sonnet 5.5), issue #227 (N8): ?supplierId= preselects
+// the pickup supplier (the Suppliers tab's Create Request button); an id
+// that is not in the loaded list is dropped, so the form never submits a
+// supplier it cannot name.
 // Author review: [pending]
 
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 
 import type { CreditBalance } from '@/features/credit/types'
 import { orderApi } from '@/features/order/api'
@@ -36,11 +40,14 @@ const fieldClass =
 
 export function CreateRequest() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
   const [balance, setBalance] = useState<CreditBalance | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  const [supplierId, setSupplierId] = useState('')
+  const [supplierId, setSupplierId] = useState(
+    () => searchParams.get('supplierId') ?? '',
+  )
   const [dropoff, setDropoff] = useState('')
   const [item, setItem] = useState('')
   const [reward, setReward] = useState(DEFAULT_REWARD)
@@ -56,7 +63,11 @@ export function CreateRequest() {
     orderApi
       .listSupplierOptions()
       .then((options) => {
-        if (!cancelled) setSuppliers(options)
+        if (cancelled) return
+        setSuppliers(options)
+        setSupplierId((current) =>
+          options.some((o) => o.id === current) ? current : '',
+        )
       })
       .catch((err) => {
         if (!cancelled)

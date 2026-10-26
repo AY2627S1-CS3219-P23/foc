@@ -11,6 +11,8 @@
 // with nothing to populate it was blocking the edit-supplier form
 // (an empty, required <select> can never validate). Removed from
 // SupplierFormModal/SupplierFilterBar/SupplierDetailPanel too.
+// 2026-10-26, Claude Code (Sonnet 5.5), issue #225 (N8): added the bookmark
+// calls (list, add, remove).
 // Reviewed by: [pending]
 
 export interface PagedResponse<T> {
@@ -32,7 +34,18 @@ export interface Supplier {
   closingTime: string // "HH:mm", 24h
   description: string
   imageUrl?: string
+  // Set by GET /suppliers for the calling user (issue #225, D13).
+  bookmarked?: boolean
 }
 
 // Payload shape for create/update — server assigns `id`.
 export type SupplierInput = Omit<Supplier, 'id'>
+
+// GET /bookmarks (issue #225): the caller's own bookmarks, newest first.
+// `count` and `limit` are per user — the cap comes from the server so the
+// frontend never hard-codes it.
+export interface BookmarkList {
+  count: number
+  limit: number
+  bookmarks: { supplierId: string; name: string; bookmarkedAt: string }[]
+}
