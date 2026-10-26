@@ -7,6 +7,8 @@
  * design; this transcribes them.
  * 2026-10-17, Claude Code (Opus 5.5), issue #196: GET /credits/me/expiries,
  * the route and its shape as the team decided.
+ * 2026-10-25, Claude Code (Opus 5.5), PR #210 review follow-up: the
+ * expiries comment states the every-poll read.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.controller;
@@ -87,7 +89,8 @@ public class CreditController {
     }
 
     // no parameters, so no 400s: fetched when the credits page opens and
-    // when the balance changes, not on the 30 s balance poll
+    // again on every 30 s balance poll, since reading it only on a
+    // balance change missed changes that cancel out between two polls
     @GetMapping("/expiries")
     public ExpiriesResponse expiries(Authentication caller) {
         return ExpiriesResponse.of(credits.upcomingExpiries(caller.getName()));

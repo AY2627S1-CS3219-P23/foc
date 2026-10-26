@@ -7,19 +7,24 @@
  * credit operations start with (D2, D3); then, on team review, the
  * insert that never overwrites, moved here from the service so a test
  * can call it twice.
+ * 2026-10-25, Claude Code (Opus 5.5), issue #236: the read behind the
+ * admin list of long-held reservations.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.repository;
 
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import foc.credit.entity.ReservationStatus;
 import foc.credit.entity.Reserved;
 
 public interface ReservedRepository extends JpaRepository<Reserved, String> {
@@ -28,6 +33,10 @@ public interface ReservedRepository extends JpaRepository<Reserved, String> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from Reserved r where r.requestRef = :requestRef")
     Optional<Reserved> findForUpdate(@Param("requestRef") String requestRef);
+
+    // a plain read for the admin list (issue #236); the page sets the
+    // order and the cap
+    List<Reserved> findByStatusAndCreatedAtLessThanEqual(ReservationStatus status, Instant cutoff, Pageable page);
 
     /**
      * Inserts a request's record, never updates one: a second insert for
