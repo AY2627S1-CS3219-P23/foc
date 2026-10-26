@@ -19,6 +19,11 @@
  * 2026-10-17, Claude Code (Fable 5), issue #66: fixtures updated for
  * the display-name fields added to the request event records (D29);
  * no behavior change in this test.
+ * 2026-10-26, Claude Code (Opus 5.5), issue #237: the two N3 dispute
+ * fixtures (request.disputed, request.dispute-resolved) end to end, one
+ * row per party, acked rather than dead-lettered, redelivery deduped;
+ * the fixture loader takes the event type. Author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.notification.messaging.rabbitmq;
 
@@ -140,7 +145,7 @@ class RequestEventsRabbitMqIntegrationTest {
 	@Test
 	void consumesDeduplicatesAndAcksThroughRealBroker() throws IOException {
 		long baseline = notifications.count();
-		byte[] fixture = canonicalFixtureBytes();
+		byte[] fixture = fixtureBytes("request.accepted");
 
 		// Canonical request-accepted fixture (two parties), as raw JSON
 		// under its canonical routing key.
@@ -201,6 +206,41 @@ class RequestEventsRabbitMqIntegrationTest {
 		awaitDrained();
 	}
 
+	/**
+	 * Issue #237 (DSP-15): before this consumer knew the two N3 dispute
+	 * types they dead-lettered as unknown. Both canonical fixtures now
+	 * store one row per party (requester and courier), are acked rather
+	 * than dead-lettered, and a redelivery of either adds nothing.
+	 */
+	@Test
+	void storesBothDisputeEventsForEachPartyAndDeduplicates() throws IOException {
+		List<String> disputeTypes = List.of("request.disputed", "request.dispute-resolved");
+		for (String eventType : disputeTypes) {
+			publishRawJson(fixtureBytes(eventType), eventType);
+		}
+		for (String eventType : disputeTypes) {
+			await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+					assertThat(rowsOfType(eventType)).extracting(Notification::getRecipientId)
+							.containsExactlyInAnyOrder("usr-req-1001", "usr-cou-2002"));
+		}
+
+		// Redeliver both, then a sentinel: the queue is FIFO, so once the
+		// sentinel's row exists both duplicates were processed — and must
+		// have produced nothing.
+		for (String eventType : disputeTypes) {
+			publishRawJson(fixtureBytes(eventType), eventType);
+		}
+		publishEvent(collected("e-int-dispute-sentinel"));
+		await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+				assertThat(countByEventId("e-int-dispute-sentinel")).isEqualTo(1));
+		for (String eventType : disputeTypes) {
+			assertThat(rowsOfType(eventType)).hasSize(2);
+		}
+
+		awaitDrained();
+		assertThat(readyMessageCount(RabbitMqTopology.REQUEST_EVENTS_DEAD_LETTER_QUEUE)).isZero();
+	}
+
 	@Test
 	void transientFailureRecoversThroughRetryQueue() {
 		publishEvent(collected("flaky-e-1"));
@@ -243,12 +283,19 @@ class RequestEventsRabbitMqIntegrationTest {
 		awaitDrained();
 	}
 
-	private static byte[] canonicalFixtureBytes() throws IOException {
-		try (InputStream fixture = RequestEventsRabbitMqIntegrationTest.class
-				.getResourceAsStream("/contracts/request-accepted.example.json")) {
-			assertThat(fixture).isNotNull();
+	/** The canonical fixture shipped in the foc-contracts jar for one event type. */
+	private static byte[] fixtureBytes(String eventType) throws IOException {
+		String path = "/contracts/" + eventType.replace('.', '-') + ".example.json";
+		try (InputStream fixture = RequestEventsRabbitMqIntegrationTest.class.getResourceAsStream(path)) {
+			assertThat(fixture).as("fixture %s", path).isNotNull();
 			return fixture.readAllBytes();
 		}
+	}
+
+	private List<Notification> rowsOfType(String eventType) {
+		return notifications.findAll().stream()
+				.filter(row -> eventType.equals(row.getEventType()))
+				.toList();
 	}
 
 	private void publishRawJson(byte[] body, String routingKey) {

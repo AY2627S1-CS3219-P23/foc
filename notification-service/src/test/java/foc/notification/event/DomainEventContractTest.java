@@ -27,6 +27,9 @@
  * from the component named for each record, not from whichever String
  * component holds one. Author review: Ryan Ang, pending pull request
  * review.
+ * 2026-10-26, Claude Code (Opus 5.5), issue #237: the two N3 dispute
+ * fixtures bind their own fields and name both parties. Author review:
+ * Ryan Ang, pending pull request review.
  */
 package foc.notification.event;
 
@@ -37,6 +40,7 @@ import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.credit.CreditEvent;
 import foc.contracts.events.credit.CreditReservationRejected;
 import foc.contracts.events.request.RequestAccepted;
+import foc.contracts.events.request.RequestDisputeResolved;
 import foc.contracts.events.request.RequestDisputed;
 import foc.contracts.events.request.RequestEvent;
 import java.io.IOException;
@@ -135,6 +139,37 @@ class DomainEventContractTest {
 				}
 			}
 			assertThat(value).as("%s: %s from %s", path, name, values).isIn(values);
+		}
+	}
+
+	/**
+	 * Issue #237: the generic test above proves the dispute fixtures bind;
+	 * this pins the fields they add, so a rename in either record fails
+	 * here, and both parties are named — the requester and the courier
+	 * each get a notification.
+	 */
+	@Test
+	void disputeFixturesBindTheirOwnFieldsAndNameBothParties() throws IOException {
+		RequestDisputed disputed = readFixture("request.disputed", RequestDisputed.class);
+		assertThat(disputed.category()).isEqualTo(RequestDisputed.WRONG_ITEM);
+		assertThat(disputed.disputeNote()).isEqualTo("Got duck rice instead of chicken rice");
+		assertThat(disputed.parties()).containsExactlyInAnyOrder(
+				disputed.requesterId(), disputed.courierId());
+
+		RequestDisputeResolved resolved =
+				readFixture("request.dispute-resolved", RequestDisputeResolved.class);
+		assertThat(resolved.courierAmount()).isEqualTo(1);
+		assertThat(resolved.requesterAmount()).isEqualTo(1);
+		assertThat(resolved.resolutionNote()).isEqualTo("Delivered, but the wrong item; reward split");
+		assertThat(resolved.parties()).containsExactlyInAnyOrder(
+				resolved.requesterId(), resolved.courierId());
+	}
+
+	private <T> T readFixture(String eventType, Class<T> type) throws IOException {
+		String path = "/contracts/" + eventType.replace('.', '-') + ".example.json";
+		try (InputStream fixture = getClass().getResourceAsStream(path)) {
+			assertThat(fixture).as("fixture %s", path).isNotNull();
+			return objectMapper.readValue(fixture, type);
 		}
 	}
 

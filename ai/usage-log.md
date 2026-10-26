@@ -42,6 +42,26 @@ Entry template:
 ```
 
 ---
+## 2026-10-26 — Ryan Ang (feat: Notification accepts the N3 dispute events, issue #237)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** notification-service tests:
+  `RequestEventsRabbitMqIntegrationTest` (both dispute fixtures
+  published raw under their routing keys, one row per party, nothing
+  dead-lettered, redelivery deduped behind a sentinel; the fixture
+  loader now takes the event type), `DomainEventContractTest` (the
+  fields each dispute fixture adds, and both parties named). No main
+  code change: the consumer dispatches through `EventTypeRegistry`, so
+  rebuilding against the current `foc-contracts` is what makes it
+  accept the two types. `README.md` (AI Use Summary and header line).
+- **Prompt(s):** The tool wrote the two tests from issue #237's
+  implementation checklist (part of #46, DSP-15) and confirmed that the
+  consumer needs no main-code change, since it dispatches through the
+  registry.
+- **Author review:** `./mvnw test` green with Docker, including the
+  Testcontainers broker integration test. Ryan Ang to review via pull
+  request.
+
 ## 2026-10-25 — Ryan Ang (feat: Credit split settlement for request.dispute-resolved, issue #235)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs

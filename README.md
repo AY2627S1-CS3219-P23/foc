@@ -224,6 +224,9 @@
   settlement of request.dispute-resolved (issue #235), by Claude Code
   (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-26: AI Use Summary extended for notification-service's
+  dispute-event tests (issue #237), by Claude Code (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1017,6 +1020,12 @@ stored split, and the event bound to the work queue. What the other
 events do on a `RESOLVED` record, and the duplicate-or-contradiction
 rule behind the event table, were decided by the team and transcribed
 into `docs/credit-service.md`. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) wrote notification-service's tests for the two
+N3 dispute events (issue #237): a broker integration test replaying
+the `request.disputed` and `request.dispute-resolved` fixtures (one
+notification per party, acked, redelivery deduped) and a contract test
+pinning the fields they add. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
