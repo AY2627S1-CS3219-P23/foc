@@ -16,6 +16,8 @@
 // gone: the backend has neither.
 // 2026-10-20: a list's state filter is sent as several states,
 // comma-separated.
+// 2026-10-26, Claude Code (Sonnet 5.5), issue #227 (N8.4): the supplier
+// options keep the `bookmarked` flag; the list arrives bookmarks-first.
 // Author review: [pending]
 
 import { creditApi } from '@/features/credit/api'
@@ -143,7 +145,12 @@ const httpOrderApi = {
     for (let page = 0; ; page++) {
       const result = await listSuppliers({ page, size: 100, sort: 'name,asc' })
       for (const s of result.content) {
-        options.push({ id: s.id, name: s.name, location: s.location })
+        options.push({
+          id: s.id,
+          name: s.name,
+          location: s.location,
+          bookmarked: s.bookmarked,
+        })
       }
       if (page + 1 >= result.totalPages) return options
     }

@@ -11,6 +11,10 @@
 // wireframe. The flag is a sibling of the select button, not a child —
 // a button inside a button is invalid HTML and would make a flag click
 // also select the card.
+// 2026-10-26: wrapper and select button are h-full, so a card still stretches to
+// its grid row (it was the grid item itself before the flag wrapper); the
+// button is a top-aligned flex column, since a button centres its content
+// vertically and a short card (no categories) would otherwise float down.
 // Reviewed by: [pending]
 
 import type { Supplier } from '../types'
@@ -35,12 +39,12 @@ export function SupplierCard({
   bookmarkBusy = false,
 }: SupplierCardProps) {
   return (
-    <div className="relative">
+    <div className="relative h-full">
       <button
         type="button"
         onClick={onSelect}
         aria-pressed={selected}
-        className={`w-full rounded-lg border p-4 text-left transition-colors ${
+        className={`flex h-full w-full flex-col justify-start rounded-lg border p-4 text-left transition-colors ${
           selected
             ? 'border-gray-900 bg-white shadow-sm'
             : 'border-gray-200 bg-white hover:border-gray-300'

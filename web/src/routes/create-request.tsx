@@ -13,6 +13,9 @@
 // the pickup supplier (the Suppliers tab's Create Request button); an id
 // that is not in the loaded list is dropped, so the form never submits a
 // supplier it cannot name.
+// 2026-10-26, issue #227 (N8.4): bookmarked suppliers are marked with a
+// leading ★ (a native <option> cannot hold the flag icon); the list
+// already arrives bookmarks-first from supplier-service.
 // Author review: [pending]
 
 import { useEffect, useState } from 'react'
@@ -187,7 +190,7 @@ export function CreateRequest() {
               <option value="">Select a supplier…</option>
               {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name}
+                  {s.bookmarked ? `★ ${s.name}` : s.name}
                 </option>
               ))}
             </select>

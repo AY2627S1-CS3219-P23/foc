@@ -269,6 +269,21 @@ describe('create-request prefill', () => {
     await waitFor(() => expect(select).toHaveValue('2'))
   })
 
+  it('marks bookmarked suppliers in the dropdown with a leading star', async () => {
+    vi.spyOn(orderApi, 'listSupplierOptions').mockResolvedValue([
+      { id: '2', name: 'Cool Spot', location: 'Utown', bookmarked: true },
+      { id: '1', name: 'A Hot Hideout', location: 'PGP', bookmarked: false },
+    ])
+    renderAt('/my-requests/new')
+
+    expect(
+      await screen.findByRole('option', { name: '★ Cool Spot' }),
+    ).toHaveValue('2')
+    expect(
+      screen.getByRole('option', { name: 'A Hot Hideout' }),
+    ).toBeInTheDocument()
+  })
+
   it('ignores an id that is not in the supplier list', async () => {
     renderAt('/my-requests/new?supplierId=999')
     const select = await screen.findByLabelText('Pickup supplier')

@@ -6152,3 +6152,15 @@ Entry template:
   Checked on the compose Postgres: ordering, flag, the cap under 8
   simultaneous requests, the lock refusal, supplier-delete cascade.
 - **Author review:** Alastair Tan Choon Wei to review before opening the PR.
+
+## 2026-10-26 — Alastair Tan Choon Wei (feat: star bookmarked suppliers in the create-request dropdown, issue #227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** implementation
+- **Scope:** `web/` — `features/order/types.ts` and `api.ts` (the supplier
+  option keeps the `bookmarked` flag), `routes/create-request.tsx` (leading
+  ★ on bookmarked options), `test/supplier-bookmarks.test.tsx` (one test).
+- **Prompt(s):** "B. Text prefix is good, help me add star". The author
+  chose a text prefix over group headings, a suffix or a custom dropdown;
+  the bookmarks-first order itself comes from supplier-service's default
+  list order.
+- **Author review:** Alastair Tan Choon Wei to review before opening the PR.
