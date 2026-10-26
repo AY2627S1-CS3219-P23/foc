@@ -117,9 +117,7 @@ describe('bookmark flag', () => {
   it('shows a flag on every card, pressed only for bookmarked ones', async () => {
     renderAt('/suppliers')
     expect(
-      await screen.findByRole('button', {
-        name: 'Remove bookmark: A Hot Hideout',
-      }),
+      await screen.findByRole('button', { name: 'Bookmark: A Hot Hideout' }),
     ).toHaveAttribute('aria-pressed', 'true')
     expect(
       screen.getByRole('button', { name: 'Bookmark: Cool Spot' }),
@@ -147,9 +145,7 @@ describe('bookmark flag', () => {
     const user = userEvent.setup()
     renderAt('/suppliers')
     await user.click(
-      await screen.findByRole('button', {
-        name: 'Remove bookmark: A Hot Hideout',
-      }),
+      await screen.findByRole('button', { name: 'Bookmark: A Hot Hideout' }),
     )
 
     expect(supplierApi.removeBookmark).toHaveBeenCalledWith('1')
@@ -174,9 +170,11 @@ describe('bookmark flag', () => {
       await screen.findByRole('button', { name: 'Bookmark: Cool Spot' }),
     )
 
-    expect(
-      await screen.findByRole('button', { name: 'Remove bookmark: Cool Spot' }),
-    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Bookmark: Cool Spot' }),
+      ).toHaveAttribute('aria-pressed', 'true'),
+    )
     expect(supplierApi.listSuppliers).toHaveBeenCalledTimes(calls)
   })
 

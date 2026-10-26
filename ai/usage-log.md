@@ -6242,3 +6242,16 @@ Entry template:
   review comment. The handler duplicates `BookmarkController`'s rather than
   sharing a helper; that choice was the author's.
 - **Author review:** Alastair Tan Choon Wei to review before pushing.
+
+---
+
+## 2026-10-26 — Alastair Tan Choon Wei (fix: Copilot review on PR #259, issue #225/#227)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** fix
+- **Scope:** `web/` — `SupplierCard.tsx` (the bookmark flag keeps one constant
+  accessible label and conveys its state only through `aria-pressed`) and
+  `test/supplier-bookmarks.test.tsx` (finds the flag by the constant label and
+  asserts `aria-pressed` instead of the "Remove bookmark" label).
+- **Prompt(s):** "fix it", answering Copilot's accessibility review comment.
+  The change follows the reviewer's suggestion.
+- **Author review:** Alastair Tan Choon Wei to review before pushing.

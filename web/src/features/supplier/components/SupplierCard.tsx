@@ -15,6 +15,9 @@
 // its grid row (it was the grid item itself before the flag wrapper); the
 // button is a top-aligned flex column, since a button centres its content
 // vertically and a short card (no categories) would otherwise float down.
+// 2026-10-26 (PR #259 review, Copilot): the flag keeps one constant
+// accessible label ("Bookmark: <name>") and conveys its state only through
+// aria-pressed, so a screen reader does not announce the state twice.
 // Reviewed by: [pending]
 
 import type { Supplier } from '../types'
@@ -81,11 +84,7 @@ export function SupplierCard({
           onClick={onToggleBookmark}
           disabled={bookmarkBusy}
           aria-pressed={bookmarked}
-          aria-label={
-            bookmarked
-              ? `Remove bookmark: ${supplier.name}`
-              : `Bookmark: ${supplier.name}`
-          }
+          aria-label={`Bookmark: ${supplier.name}`}
           className="absolute top-3 right-3 rounded p-0.5 text-gray-900 hover:bg-gray-100 disabled:opacity-50"
         >
           <svg
