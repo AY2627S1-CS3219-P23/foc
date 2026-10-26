@@ -224,6 +224,10 @@
   settlement of request.dispute-resolved (issue #235), by Claude Code
   (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-25: AI Use Summary extended for credit-service's admin list
+  of long-held reservations (issue #236) and the PR #247 and PR #210
+  review follow-ups, by Claude Code (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
   2026-10-26: AI Use Summary extended for notification-service's
   dispute-event tests (issue #237), by Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
@@ -1020,6 +1024,18 @@ stored split, and the event bound to the work queue. What the other
 events do on a `RESOLVED` record, and the duplicate-or-contradiction
 rule behind the event table, were decided by the team and transcribed
 into `docs/credit-service.md`. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) implemented credit-service's admin list of
+long-held reservations (issue #236, team decisions DSP-5, DSP-11):
+`GET /credits/admin/reservations/held?olderThan=`, HELD only, oldest
+first, at most 100, with a `truncated` flag, served by a partial index
+in Flyway V5. The body shape, the handling of a negative or zero
+`olderThan`, the flag and the index were decided by the team. With it
+came the PR #247 review follow-ups: in the same V5, the review's
+suggested CHECK that only a `RESOLVED` record carries a courier share
+(taken by the team), race tests pinning the resolution's lock order,
+and doc and usage-log corrections; and the PR #210 follow-up, a stale
+controller comment. Recorded in `ai/usage-log.md`.
 
 Claude Code (Opus 5.5) wrote notification-service's tests for the two
 N3 dispute events (issue #237): a broker integration test replaying
