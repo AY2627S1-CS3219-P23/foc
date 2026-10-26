@@ -102,9 +102,13 @@ export function listBookmarks() {
 }
 
 export function addBookmark(supplierId: string) {
-  return apiFetch<BookmarkResult>('supplier', `/suppliers/${supplierId}/bookmark`, {
-    method: 'PUT',
-  })
+  return apiFetch<BookmarkResult>(
+    'supplier',
+    `/suppliers/${supplierId}/bookmark`,
+    {
+      method: 'PUT',
+    },
+  )
 }
 
 export function removeBookmark(supplierId: string) {
