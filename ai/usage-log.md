@@ -42,6 +42,39 @@ Entry template:
 ```
 
 ---
+## 2026-10-26 — Leong Wei Zhi (feat: rating-service scaffold, issue #250)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate, docs
+- **Scope:** `rating-service/` (new: pom, Spring Initializr scaffolding
+  copied from order-service, `RatingServiceApplication`,
+  `config/SecurityConfig`, `security/JwtVerifier` /
+  `JwtAuthenticationFilter` / `RestAuthEntryPoint` /
+  `RestAccessDeniedHandler` — all copied from order-service with only
+  the package and property prefix changed —, main/test
+  `application.yaml`, empty Flyway `V1__baseline.sql`, contracts-aware
+  `Dockerfile`, README; tests: contextLoads, `SecurityConfigTest`
+  scaffolded from notification-service's, `JwtVerifierTest`);
+  `compose.yaml` (rating-service + rating-db on host port 5438, web
+  build arg, gateway depends_on); `gateway/nginx.conf` (`/api/rating/`
+  location copied from credit's); `.env.example` (Rating Service
+  section, `VITE_RATING_SERVICE_URL`); `web/Dockerfile` (the build
+  arg); `docs/gateway.md` (routing row, G3 count); `AGENTS.md` (folder
+  + port tables); `README.md` (structure tree, AI Use Summary);
+  `.github/workflows/ci.yml` (java + docker filters).
+- **Prompt(s):** "make a plan to resolve [issue #250]" then approval of
+  the plan; two scope decisions made by the author via neutral-options
+  Q&A: the Flyway baseline stays empty (the rating table lands as V2
+  with the first feature issue) and the pom stays lean (no AMQP /
+  foc-contracts dependency) while the Dockerfile keeps the contracts
+  stage so the later event wiring touches no infra.
+- **Author review:** `./mvnw test` green (18 tests, H2, no Docker);
+  full-stack smoke — `/api/rating/actuator/health` through the gateway
+  200 UP (anonymous passthrough per G5 + in-service permitAll, matching
+  credit's behavior), an invalid bearer 401 from the gateway, an
+  anonymous non-health route 401 from the service, Flyway V1 recorded
+  in rating-db; to be reviewed via pull request.
+
+---
 ## 2026-10-25 — Ryan Ang (feat: Credit split settlement for request.dispute-resolved, issue #235)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs

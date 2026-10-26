@@ -26,6 +26,10 @@
   port table while wiring the logout denylist and the API gateway
   cutover (team decisions by Leong Wei Zhi via options Q&A, recorded in
   docs/gateway.md).
+  2026-10-26, issue #250 (Fable 5): rating-service row added to the
+  folder table and rating-db to the port table (host port 5438, next
+  free) while scaffolding the N1 rating service (walking skeleton,
+  decisions recorded on #44/#250).
   All decisions documented here were made by the team.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
@@ -61,6 +65,7 @@ an independent Spring Boot application:
 | `order-service/` | Request creation, listing, acceptance, courier updates, completion, expiry |
 | `credit-service/` | Credit balances, reservation, atomic transfer, transaction history |
 | `notification-service/` | Order event updates, delivery retries, idempotent event processing |
+| `rating-service/` | Ratings for completed orders (nice-to-have N1, issue #44) — walking skeleton for now |
 
 Any nice-to-have feature that warrants its own service gets an additional
 top-level folder following the same skeleton. A service folder may contain
@@ -144,6 +149,7 @@ alone is only a gate inside the server.
 | `supplier-db` | `${SUPPLIER_DB_HOST_PORT:-5434}` (loopback only) | available |
 | `order-db` | `${ORDER_DB_HOST_PORT:-5437}` (loopback only) | available |
 | `credit-db` | `${CREDIT_DB_HOST_PORT:-5436}` (loopback only) | available |
+| `rating-db` | `${RATING_DB_HOST_PORT:-5438}` (loopback only) | available |
 | `web` | — | no database (frontend itself published on `${WEB_PORT:-5173}`) |
 | `mailpit` | — | mail catcher, not a DB: SMTP `${MAILPIT_SMTP_PORT:-1025}`, web inbox `${MAILPIT_UI_PORT:-8025}` (both loopback only) |
 | `redis` | `${REDIS_HOST_PORT:-6379}` (loopback only) | logout token denylist (issue #151), not a DB profile — inspect with `redis-cli` |

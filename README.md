@@ -224,6 +224,11 @@
   settlement of request.dispute-resolved (issue #235), by Claude Code
   (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-26: AI Use Summary extended for the rating-service scaffold
+  (issue #250), and the Repository Structure tree updated now that the
+  N1 nice-to-have fills the <n2h-service> slot, by Claude Code
+  (Fable 5).
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -254,8 +259,8 @@ withdrawn, or exchanged for money, and only circulate within the platform.
 
 This repository follows a **one-service-per-folder** structure: each
 microservice (`user-service/`, `supplier-service/`, `order-service/`,
-`credit-service/`, `notification-service/`) lives in its own top-level
-folder. The frontend lives in `web/`.
+`credit-service/`, `notification-service/`, `rating-service/`) lives in
+its own top-level folder. The frontend lives in `web/`.
 
 ```text
 .
@@ -265,8 +270,8 @@ folder. The frontend lives in `web/`.
 ├── order-service/
 ├── credit-service/
 ├── notification-service/
+├── rating-service/
 ├── foc-contracts/
-├── <n2h-service>/
 └── README.md
 ```
 
@@ -1017,6 +1022,15 @@ stored split, and the event bound to the work queue. What the other
 events do on a `RESOLVED` record, and the duplicate-or-contradiction
 rule behind the event table, were decided by the team and transcribed
 into `docs/credit-service.md`. Recorded in `ai/usage-log.md`.
+
+Claude Code (Fable 5) scaffolded the rating-service walking skeleton
+(issue #250, the first N1 PR under #44): pom, security chain, JWT
+verifier and application/test classes copied from the order-service /
+supplier-service pattern, an empty Flyway baseline (the schema lands
+with the feature issues), the contracts-aware Dockerfile, and the
+rating-db / gateway-route / compose / `.env.example` wiring, with the
+Flyway-baseline and lean-pom scope decided by the author via
+neutral-options Q&A. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
