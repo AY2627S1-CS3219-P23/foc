@@ -72,6 +72,9 @@ Entry template:
   matching `resolutionNote`, so a swapped split fails the tests.
   `foc-contracts` install (with its tests) and `./mvnw test` green
   with Docker.
+  Second round: the contract test checks the split adds up to the
+  `request-submitted` fixture's reward (DSP-8), and the README summary
+  names the fixture change.
 
 ## 2026-10-25 — Ryan Ang (feat: Credit admin list of long-held reservations, issue #236; PR #247 and PR #210 follow-ups)
 - **Tool:** Claude Code (Opus 5.5)

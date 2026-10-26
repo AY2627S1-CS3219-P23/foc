@@ -33,7 +33,8 @@
  * 2026-10-26, Claude Code (Opus 5.5), PR #260 review: both registry tests
  * read their fixture through readFixture (one path rule, one not-null
  * check), and the resolution's amounts are distinct. Author review: Ryan
- * Ang, pending pull request review.
+ * Ang, pending pull request review. Same review, second round: the
+ * split is checked against the request-submitted fixture's reward (DSP-8).
  */
 package foc.notification.event;
 
@@ -47,6 +48,7 @@ import foc.contracts.events.request.RequestAccepted;
 import foc.contracts.events.request.RequestDisputeResolved;
 import foc.contracts.events.request.RequestDisputed;
 import foc.contracts.events.request.RequestEvent;
+import foc.contracts.events.request.RequestSubmitted;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
@@ -157,6 +159,11 @@ class DomainEventContractTest {
 		assertThat(resolved.courierAmount()).isEqualTo(0);
 		assertThat(resolved.requesterAmount()).isEqualTo(2);
 		assertThat(resolved.resolutionNote()).isEqualTo("Wrong item delivered; full refund to the requester");
+		// the reward is in another fixture, so changing it alone fails here
+		int reward = readFixture("request.submitted", RequestSubmitted.class).reward();
+		assertThat(resolved.courierAmount() + resolved.requesterAmount())
+				.as("DSP-8: the split adds up to the reward")
+				.isEqualTo(reward);
 		assertThat(resolved.parties()).containsExactlyInAnyOrder(
 				resolved.requesterId(), resolved.courierId());
 	}

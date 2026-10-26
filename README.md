@@ -1041,7 +1041,9 @@ Claude Code (Opus 5.5) wrote notification-service's tests for the two
 N3 dispute events (issue #237): a broker integration test replaying
 the `request.disputed` and `request.dispute-resolved` fixtures (one
 notification per party, acked, redelivery deduped) and a contract test
-pinning the fields they add. Recorded in `ai/usage-log.md`.
+pinning the fields they add, and adjusted the `request.dispute-resolved`
+example fixture's amounts in `foc-contracts`. Recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
