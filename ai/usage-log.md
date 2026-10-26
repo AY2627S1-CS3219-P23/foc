@@ -6267,3 +6267,16 @@ Entry template:
   edit only, no code change).
 - **Prompt(s):** "need fix?" then the go-ahead, answering Copilot's review comment.
 - **Author review:** Alastair Tan Choon Wei to review before pushing.
+
+---
+
+## 2026-10-26 — Alastair Tan Choon Wei (docs: Copilot review on PR #259, issue #225)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** docs
+- **Scope:** `.env.example` — `SUPPLIER_SERVICE_URL` added to the User Service
+  section with its compose default and a file-header entry, as the file's
+  rule requires for every variable a service reads. The value matches
+  `application.yaml` and `compose.yaml`.
+- **Prompt(s):** "what is this? need fix?" then the go-ahead, answering
+  Copilot's review comment.
+- **Author review:** Alastair Tan Choon Wei to review before pushing.
