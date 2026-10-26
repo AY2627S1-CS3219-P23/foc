@@ -188,6 +188,20 @@ class BookmarkControllerTest {
     }
 
     @Test
+    void theListRejectsANonNumericSubjectWith401() throws Exception {
+        SecretKey key = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
+        String serviceToken = "Bearer " + Jwts.builder()
+                .subject("user-service")
+                .claim("role", "SERVICE")
+                .expiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(key)
+                .compact();
+
+        mockMvc.perform(get("/suppliers").header("Authorization", serviceToken))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void theListFlagsBookmarksAndPutsTheNewestFirstInTheDefaultView() throws Exception {
         bookmark(1, 4); // Echo, older
         bookmark(1, 2); // Charlie, newer

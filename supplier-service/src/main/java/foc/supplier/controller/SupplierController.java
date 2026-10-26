@@ -37,6 +37,9 @@
  * 2026-10-26, Claude Code (Sonnet 5.5), issue #225 (N8): the list passes
  * the caller (JWT subject) to the service for the bookmarked flag and the
  * bookmarks-first default order.
+ * 2026-10-26 (PR #259 review, Copilot): added a 401 handler for
+ * NumberFormatException — a non-numeric JWT subject (e.g. a SERVICE
+ * token) reaching the list is rejected, mirroring BookmarkController.
  * Reviewed by: [pending]
  */
 package foc.supplier.controller;
@@ -120,6 +123,12 @@ public class SupplierController {
     }
 
     // the web client reads RFC 9457 problem+json error bodies
+    // a non-numeric subject cannot be one of user-service's ids
+    @ExceptionHandler(NumberFormatException.class)
+    public ProblemDetail handleBadSubject() {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Invalid token subject");
+    }
+
     @ExceptionHandler(InvalidSortException.class)
     public ProblemDetail handleInvalidSort(InvalidSortException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());

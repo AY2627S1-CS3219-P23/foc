@@ -6225,3 +6225,17 @@ Entry template:
   the call no longer sits inside the transaction. Rotating the secrets in the
   committed backup and rewriting the branch history were left to the author.
 - **Author review:** Alastair Tan Choon Wei to review before pushing.
+
+---
+
+## 2026-10-26 — Alastair Tan Choon Wei (fix: Copilot review on PR #259, issue #225)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** fix
+- **Scope:** `SupplierController` gains a `NumberFormatException` handler
+  returning 401 (copied from `BookmarkController`), so `GET /suppliers` with a
+  non-numeric JWT subject no longer 500s; test added in
+  `BookmarkControllerTest`.
+- **Prompt(s):** "fix with option 1" after asking whether to fix a Copilot
+  review comment. The handler duplicates `BookmarkController`'s rather than
+  sharing a helper; that choice was the author's.
+- **Author review:** Alastair Tan Choon Wei to review before pushing.
