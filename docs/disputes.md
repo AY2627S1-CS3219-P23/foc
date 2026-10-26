@@ -13,6 +13,10 @@
   amended and a #240 revision entry added, transcribing the team's
   answers to the questions the implementation raised. Author review:
   Ryan Ang, pending pull request review.
+  2026-10-26, Claude Code (Opus 5.5), issue #239: a #239 revision entry
+  added, transcribing the team's answers to the questions the
+  implementation raised. Author review: Ryan Ang, pending pull request
+  review.
 -->
 
 # N3 — Dispute Resolution and Failed-Order Management
@@ -83,6 +87,17 @@ takes any back from a courier.
 
 ## Revisions (2026-10-21)
 
+- **#239 (2026-10-26):**
+  - `request_dispute.request_id` is a foreign key to `requests(id)`. Unlike the outbox, which is a log of messages, a dispute is part of its order (DSP-2).
+  - `raised_by` is null when the sweep escalated the dispute; `auto_escalated` says who raised it (DSP-2).
+  - Named CHECKs on `request_dispute`:
+    - `category` is one of the four values.
+    - `auto_escalated or raised_by is not null`.
+    - `resolved_by`, `resolved_at`, `courier_amount` and `requester_amount` are all set or all null.
+    - Both amounts are 0 or more.
+  - An ARRIVED order can be disputed only until `arrivedAt` + the auto-complete window. Past it the dispute is refused with 409 "The dispute window closed at …", even if the auto-complete sweep hasn't run yet. The window is the rule, not the sweep's timing (DSP-5, DSP-7).
+  - The resolution note is optional, at most 500 characters, like the dispute note (DSP-5).
+  - `RequestSummary` and `RequestDetail` carry a nullable `dispute`: `{category, disputeNote, raisedAt, autoEscalated, resolvedAt, resolvedBy, courierAmount, requesterAmount, resolutionNote}`. It is null if the order was never disputed. The disputes of a page are loaded in one query, never one per row (DSP-3, DSP-5).
 - **#240 (2026-10-23):**
   - `closeReason` is in both `RequestSummary` and `RequestDetail`, so the admin lists need no extra call per row (DSP-1).
   - `GET /requests/admin` takes the shared `RequestFilter` as well as `state` and `closeReason`; DSP-5 had listed the minimum, not a limit.

@@ -42,6 +42,65 @@ Entry template:
 ```
 
 ---
+## 2026-10-26 — Ryan Ang (feat: Order disputes, issue #239)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** order-service (`db/migration/V3__disputes.sql` new;
+  `DisputeCategory.java`, `model/RequestDispute.java`,
+  `repository/RequestDisputeRepository.java`, `dto/Dispute.java` new;
+  `OrderStates.java`, `OrderEvents.java`, `OrderStateMachine.java`: the
+  dispute states and transitions; `RequestsService.java`: `dispute`,
+  `escalate`, `resolve`; `RequestEvents.java`: `request.disputed`,
+  `request.dispute-resolved`; `DeadlineExpirySweeper.java`: escalation;
+  `RequestsQueryService.java`, `RequestSummary.java`,
+  `RequestDetail.java`: the dispute object; `RequestsController.java`,
+  `SecurityConfig.java`: `POST /dispute`, `POST /resolve` (ADMIN /
+  OWNER); `application.yaml` (main and test), `README.md`,
+  `endpoints.txt`; tests: `OrderStateMachineTests`,
+  `RequestsServiceTests`, `RequestsControllerTests`,
+  `RequestsReadEndpointsTests`, `DeadlineExpirySweeperTests`,
+  `AutoCompleteSweeperTests`, `DisputeListQueryCountTests` and
+  `DisputeWindowTests` new).
+  `compose.yaml`, `.env.example`: `ORDER_DISPUTE_ESCALATION_GRACE_MS`.
+  `docs/disputes.md` (#239 revision entry). `README.md` (AI Use Summary
+  and header line).
+- **Prompt(s):** Implement issue #239 as written there (team decisions
+  DSP-2, DSP-5 to DSP-8, DSP-14). Before coding, the tool listed four
+  points the issue left open, and the team decided them:
+  - `request_dispute` gets a foreign key to `requests`, because a
+    dispute is part of its order, unlike the outbox log.
+  - `raised_by` is null when the sweep escalated the dispute.
+  - CHECKs require a hand-raised dispute to name who raised it, keep the
+    resolution fields set together or not at all, and keep the shares
+    non-negative.
+  - An ARRIVED order past its auto-complete window is refused with 409
+    naming the time, even before the sweep runs.
+  - The resolution note is optional, at most 500 characters.
+  - A nullable `dispute` object goes on both `RequestSummary` and
+    `RequestDetail`, loaded once per page and not once per row, with a
+    test of the query count.
+
+  These were transcribed into `docs/disputes.md`.
+
+  The tool chose these implementation details after author confirmation:
+  - Fields are checked first (400), then the caller (404), then the
+    state (409). `/resolve` checks the state before the party and the
+    split.
+  - A blank note counts as none, and the category's case is forgiven.
+  - The window time in the 409 is truncated to whole seconds.
+  - `RequestDispute` holds the request as an id, not an association, and
+    implements `Persistable` so a save inserts.
+  - The escalation runs after expiry in the same scheduled sweep, as
+    `escalateOverdue`.
+  - The disputes query runs only for rows that are DISPUTED or RESOLVED.
+
+  The PR #246 note on a tiebreaker for retry settlement was checked and
+  left as is: a request can reach DISPUTED only from COLLECTED or
+  ARRIVED, so it never has an earlier settlement event.
+- **Author review:** order-service 165 tests pass locally with Docker,
+  none skipped. Ryan Ang to review via pull request.
+
+---
 ## 2026-10-26 — Ryan Ang (feat: Notification accepts the N3 dispute events, issue #237)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs

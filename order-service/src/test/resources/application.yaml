@@ -15,6 +15,9 @@
 # Testcontainers Postgres (PostgresTestContainer), built by Flyway and
 # validated, as in production. Author review: Ryan Ang, pending pull
 # request review.
+# 2026-10-26, Claude Code (Opus 5.5), issue #239: the dispute escalation
+# grace, repeated from the main yaml. Author review: Ryan Ang, pending
+# pull request review.
 
 spring:
   # The datasource comes from PostgresTestContainer's @ServiceConnection.
@@ -55,6 +58,7 @@ order:
       # the tests call DeadlineExpirySweeper.expireOverdue() themselves
       enabled: false
       interval-ms: 300000
+    dispute-escalation-grace-ms: 3600000
   auto-complete:
     after-ms: 3600000
     sweep:

@@ -22,6 +22,10 @@
  * PR #214 review (@Sinnez1): dropped() takes the courier explicitly
  * instead of reading the entity field the caller is about to clear.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: request.disputed and
+ * request.dispute-resolved, parties = the requester and the courier
+ * (DSP-9), with the stored dispute's category and notes (DSP-12; team
+ * decisions). Author review: Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -31,10 +35,13 @@ import foc.contracts.events.request.RequestCancelled;
 import foc.contracts.events.request.RequestCollected;
 import foc.contracts.events.request.RequestCompleted;
 import foc.contracts.events.request.RequestCreated;
+import foc.contracts.events.request.RequestDisputeResolved;
+import foc.contracts.events.request.RequestDisputed;
 import foc.contracts.events.request.RequestDropped;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestRejected;
 import foc.contracts.events.request.RequestSubmitted;
+import foc.order.model.RequestDispute;
 import foc.order.model.Requests;
 
 import java.time.Instant;
@@ -128,6 +135,25 @@ final class RequestEvents {
         }
         return new RequestExpired(newEventId(), Instant.now(), PRODUCER, correlationId(r), List.copyOf(parties),
                 id(r.getId()), id(r.getRequesterId()), r.getSupplierName(), r.getDropoffLocation(), r.getItem());
+    }
+
+    // request.disputed: the requester reported a problem, or the sweep
+    // escalated the request; the reward stays held until an admin
+    // resolves it. disputeNote is the stored dispute_note.
+    static RequestDisputed disputed(Requests r, RequestDispute d) {
+        return new RequestDisputed(newEventId(), Instant.now(), PRODUCER, correlationId(r), requesterAndCourier(r),
+                id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
+                r.getDropoffLocation(), r.getItem(), d.getCategory().name(), d.getDisputeNote());
+    }
+
+    // request.dispute-resolved: the Credit Service divides the held
+    // reward as the admin decided. resolutionNote is the stored
+    // resolution_note.
+    static RequestDisputeResolved disputeResolved(Requests r, RequestDispute d) {
+        return new RequestDisputeResolved(newEventId(), Instant.now(), PRODUCER, correlationId(r),
+                requesterAndCourier(r), id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()),
+                r.getSupplierName(), r.getDropoffLocation(), r.getItem(), d.getCourierAmount(),
+                d.getRequesterAmount(), d.getResolutionNote());
     }
 
     private static String correlationId(Requests r) {
