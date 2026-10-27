@@ -1080,5 +1080,16 @@ pinning the fields they add, and adjusted the `request.dispute-resolved`
 example fixture's amounts in `foc-contracts`. Recorded in
 `ai/usage-log.md`.
 
+Claude Code (Fable 5) made the order pages live-refresh when a pushed
+notification concerns a request they show (issue #233): a
+`useRequestRefetch` hook in `web/src/features/notifications/` consumes
+the existing STOMP stream, matches `payload.requestId` against the
+page's shown ids, and debounces matches into one re-run of the page's
+existing REST fetch — the push is only the trigger, REST stays the
+source of truth (D32's read-side pattern). The issue's open questions
+(all four order pages in scope, bursts debounced, the provider's stream
+reused over a second subscription) were decided by Leong Wei Zhi via
+options Q&A and recorded in `ai/usage-log.md`.
+
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

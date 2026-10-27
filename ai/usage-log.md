@@ -42,6 +42,31 @@ Entry template:
 ```
 
 ---
+## 2026-10-27 — Leong Wei Zhi (web: live-refresh request pages on matching notifications, issue #233)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `web/src/features/notifications/useRequestRefetch.ts` (new
+  hook: consumes the NotificationProvider's pushed queue, matches
+  `payload.requestId` against the page's shown ids with string
+  coercion, debounces matches into one refetch per 400 ms window; a
+  no-op outside the provider), wired into the four order pages —
+  `active-delivery.tsx` (re-runs `reload()`), `my-requests.tsx` (bumps
+  `refreshKey`; `useDetail` gains a version param so an expanded card's
+  courier/arrival detail refreshes with the list), `open-requests.tsx`
+  (feed + deliveries strip ids), `request-history.tsx` (new
+  `refreshKey`) — and `web/src/test/request-refetch.test.tsx` (seven
+  tests driving a stub NotificationsContext).
+- **Prompt(s):** "make a plan to resolve issue #233" then plan
+  execution. The issue's open questions were decided by the author via
+  options Q&A: all four pages in scope, bursts debounced into one
+  refetch, and the existing provider stream reused rather than a second
+  STOMP subscription. The push stays a trigger only — REST remains the
+  source of truth (D32's read-side pattern).
+- **Author review:** Leong Wei Zhi to review via pull request. Full web
+  suite 313/313 (orders.test.tsx unchanged — its provider-less renders
+  are the regression test for the hook's no-op path), lint and build
+  clean.
+
 ## 2026-10-26 — Ryan Ang (feat: Notification accepts the N3 dispute events, issue #237)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs

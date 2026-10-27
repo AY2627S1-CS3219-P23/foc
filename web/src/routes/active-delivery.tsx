@@ -13,10 +13,16 @@
 // read it, so the page goes back to the feed. The requester's name comes
 // from user-service. States renamed (COLLECTED, ARRIVED); DISPUTED gone.
 // Author review: [pending]
+// 2026-10-27, Claude Code (Fable 5), issue #233: a pushed request event
+// for this id re-runs reload() (useRequestRefetch). A push-triggered
+// reload that 404s (access lost, e.g. the requester cancelled) lands on
+// the existing "request does not exist" state — deliberate, better than
+// a stale action button.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 
+import { useRequestRefetch } from '@/features/notifications/useRequestRefetch'
 import { orderApi } from '@/features/order/api'
 import { Banner } from '@/features/order/components/Banner'
 import { StatusChip } from '@/features/order/components/StatusChip'
@@ -85,6 +91,8 @@ function ActiveDeliveryView({ requestId }: { requestId: number }) {
       if (mounted.current) setLoading(false)
     })
   }, [requestId, reload])
+
+  useRequestRefetch(Number.isInteger(requestId) ? [requestId] : [], reload)
 
   // Runs a step, then reloads the request: the step answers only a
   // message, and after a failure the request may have changed under us

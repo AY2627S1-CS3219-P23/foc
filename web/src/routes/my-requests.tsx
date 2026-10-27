@@ -18,10 +18,15 @@
 // 2026-10-20: while a request is PENDING the list is refetched every 2
 // seconds (the author's request), until credit reservation settles it.
 // Author review: [pending]
+// 2026-10-27, Claude Code (Fable 5), issue #233: a pushed request event
+// for a listed id bumps refreshKey (useRequestRefetch), and refreshKey
+// now also reaches each expanded card's detail fetch so the courier and
+// arrival time it shows refresh with the list.
 
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 
+import { useRequestRefetch } from '@/features/notifications/useRequestRefetch'
 import { orderApi } from '@/features/order/api'
 import { Banner } from '@/features/order/components/Banner'
 import { OrderProgress } from '@/features/order/components/OrderProgress'
@@ -123,6 +128,11 @@ export function MyRequests() {
     return () => clearTimeout(timer)
   }, [requests])
 
+  useRequestRefetch(
+    requests.map((r) => r.id),
+    () => setRefreshKey((k) => k + 1),
+  )
+
   function selectFilter(next: FilterOption) {
     if (next.key === filter.key) return
     setLoading(true)
@@ -209,6 +219,7 @@ export function MyRequests() {
             <RequestCard
               key={request.id}
               request={request}
+              detailVersion={refreshKey}
               busy={busyId === request.id}
               onCancel={() => setPendingCancel(request)}
               onConfirm={() =>
@@ -264,6 +275,8 @@ export function MyRequests() {
 
 interface RequestCardProps {
   request: RequestSummary
+  // bumped when the list refetches, so the expanded detail follows it
+  detailVersion: number
   busy: boolean
   onCancel: () => void
   onConfirm: () => void
@@ -271,14 +284,24 @@ interface RequestCardProps {
 
 const IN_PROGRESS: RequestStatus[] = ['ACCEPTED', 'COLLECTED', 'ARRIVED']
 
-function RequestCard({ request, busy, onCancel, onConfirm }: RequestCardProps) {
+function RequestCard({
+  request,
+  detailVersion,
+  busy,
+  onCancel,
+  onConfirm,
+}: RequestCardProps) {
   const dimmed =
     request.status === 'CANCELLED' ||
     request.status === 'EXPIRED' ||
     request.status === 'REJECTED'
   const outlineButton =
     'rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50'
-  const detail = useDetail(request.id, IN_PROGRESS.includes(request.status))
+  const detail = useDetail(
+    request.id,
+    IN_PROGRESS.includes(request.status),
+    detailVersion,
+  )
   const courier = useUsername(detail?.courierId ?? null)
   const autoAt = detail ? autoCompleteAt(detail) : null
 
@@ -375,8 +398,13 @@ function RequestCard({ request, busy, onCancel, onConfirm }: RequestCardProps) {
 }
 
 // The list items carry no courier or arrival time, so an in-progress card
-// reads its request's detail once.
-function useDetail(requestId: number, enabled: boolean): RequestDetail | null {
+// reads its request's detail — again whenever the list refetches, so the
+// two can't drift apart.
+function useDetail(
+  requestId: number,
+  enabled: boolean,
+  version: number,
+): RequestDetail | null {
   const [detail, setDetail] = useState<RequestDetail | null>(null)
   useEffect(() => {
     if (!enabled) return
@@ -390,7 +418,7 @@ function useDetail(requestId: number, enabled: boolean): RequestDetail | null {
     return () => {
       cancelled = true
     }
-  }, [requestId, enabled])
+  }, [requestId, enabled, version])
   return enabled ? detail : null
 }
 
