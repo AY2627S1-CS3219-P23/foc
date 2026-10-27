@@ -34,6 +34,9 @@
 // labels swap to "select to open the request" on request rows, and the
 // mark-read-in-place regression tests switch to request-less fixtures
 // so their clicks stay on the page under test.
+// 2026-10-27, same tool, PR #263 review round 2 (@claude): a case that
+// a request id carrying `/`, `?` or `#` lands as one encoded path
+// segment (regression cover for the round-1 encode fix).
 
 import {
   act,
@@ -508,6 +511,41 @@ describe('notification center page', () => {
         ([, init]) => (init as RequestInit)?.method === 'PATCH',
       ),
     ).toBe(false)
+  })
+
+  test('a request id with path characters is encoded in the navigated path', async () => {
+    const user = userEvent.setup()
+    // ids are arbitrary payload strings (the contract fixtures use
+    // req-… forms): raw interpolation would let a `/`, `?` or `#`
+    // route somewhere unintended (PR #263 review)
+    pages = [
+      pageOf(
+        [notification(7, 'request.created', { requestId: 'req/9?x#y' }, true)],
+        0,
+        1,
+        1,
+      ),
+    ]
+    localStorage.setItem('user', JSON.stringify(session))
+    const router = createMemoryRouter(routes, {
+      initialEntries: ['/notifications'],
+    })
+    render(<RouterProvider router={router} />)
+    await act(async () => {})
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Request req/9?x#y created — select to open the request',
+      }),
+    )
+
+    // the whole id stays one path segment — not a deeper route, and no
+    // part of it read as a query or fragment
+    expect(router.state.location.pathname).toBe('/deliveries/req%2F9%3Fx%23y')
+    expect(router.state.location.search).toBe('')
+    expect(router.state.location.hash).toBe('')
+    // a non-numeric id renders the delivery page's error view
+    await screen.findByRole('link', { name: '← Back to requests' })
   })
 
   test('clicking an unread row without a request marks it read in place', async () => {

@@ -67,6 +67,11 @@ Entry template:
   URL-encoded before interpolation into the navigate path (a non-numeric
   id containing `/`, `?` or `#` could otherwise route somewhere
   unintended); tests re-run green.
+  Round 2 (both notes optional, reviewer found nothing blocking): a
+  regression test pins the encoding (an id with `/`, `?`, `#` lands as
+  one path segment with empty search/hash), and the deliberate
+  skip-the-per-row-PATCH-during-mark-all behavior is documented in a
+  comment at the guard.
 
 ## 2026-10-26 — Ryan Ang (feat: Notification accepts the N3 dispute events, issue #237)
 - **Tool:** Claude Code (Opus 5.5)

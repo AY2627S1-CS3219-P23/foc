@@ -232,6 +232,9 @@ export function NotificationCenter() {
         // Fire-and-forget: navigation unmounts this page, so no list
         // surgery — a failure just leaves the row unread server-side.
         // The provider outlives the route, so the badge refresh lands.
+        // During mark-all (`marking`) the bulk call covers this row, so
+        // the per-row PATCH is skipped but the click still navigates
+        // (PR #263 review).
         setNotificationRead(notification.id, true)
           .then(() => refreshUnreadCount())
           .catch(() => {})
