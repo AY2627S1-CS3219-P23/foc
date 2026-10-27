@@ -3,6 +3,10 @@
   Tool: Claude Code (Fable 5), 2026-10-26, issue #250.
   Scope: service README written while scaffolding the Spring Boot
   skeleton (issue #250, the N1 walking skeleton under #44).
+  2026-10-27, Claude Code (Fable 5), PR #261 review (@Sinnez1): the
+  health-curl comment and the Endpoints auth wording corrected — the
+  gateway passes anonymous requests through (G5), so health is open
+  and the 401 on other routes comes from the service itself.
   Reviewed by: [pending]
 -->
 
@@ -26,7 +30,7 @@ The service has no published host port; it is reachable only through
 the API gateway (docs/gateway.md):
 
 ```sh
-curl http://localhost:8090/api/rating/actuator/health   # 401 without a token
+curl http://localhost:8090/api/rating/actuator/health   # {"status":"UP"} — health is open
 ```
 
 Directly, against a local PostgreSQL (see `.env.example`, Rating
@@ -52,7 +56,8 @@ Flyway disabled (the migrations are PostgreSQL-flavored).
 
 | Method | Path | Auth | Notes |
 | --- | --- | --- | --- |
-| GET | `/actuator/health` | none in-service (the gateway still requires a token on `/api/rating/**`) | compose healthcheck / probes |
+| GET | `/actuator/health` | none — open through the gateway too (G5: anonymous requests pass through; a token is only verified if present) | compose healthcheck / probes |
 
-Everything else is 401 without a valid bearer token and 404 with one —
-no rating routes exist yet.
+Everything else is answered 401 by the service itself without a valid
+bearer token (the gateway does not require one, per G5) and 404 with
+one — no rating routes exist yet.
