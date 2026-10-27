@@ -8,6 +8,9 @@
  * directly: `location` combines `building`/`locationDescription`,
  * `openingTime`/`closingTime` are formatted "HH:mm" strings, `id` is
  * stringified to match the frontend's `id: string`.
+ * 2026-10-26, Claude Code (Sonnet 5.5), issue #225 (N8, D13): added the
+ * `bookmarked` flag (the caller's, set by the list endpoint only; false
+ * everywhere else, e.g. after create/update).
  * Reviewed by: [pending]
  */
 package foc.supplier.dto;
@@ -30,6 +33,7 @@ public class SupplierResponse {
     private final String closingTime;
     private final String description;
     private final String imageUrl;
+    private boolean bookmarked;
 
     public SupplierResponse(Long id, String name, String building, String locationDescription,
             Double latitude, Double longitude, List<String> categories,
@@ -94,5 +98,13 @@ public class SupplierResponse {
 
     public String getImageUrl() {
         return imageUrl;
+    }
+
+    public boolean isBookmarked() {
+        return bookmarked;
+    }
+
+    public void setBookmarked(boolean bookmarked) {
+        this.bookmarked = bookmarked;
     }
 }

@@ -22,6 +22,10 @@
  * 2026-10-07 (PR #161 review, LeongWZ): added tests for the flat
  * Suppliers.category column (set pre-save, null when empty) and for
  * rejecting a category name containing "/".
+ * 2026-10-26, Claude Code (Sonnet 5.5), issue #225 (N8): listSuppliers
+ * takes the caller's id; added tests for the bookmarks-first default view
+ * and the bookmarked flag. The image-URL and allow-list tests now use a
+ * non-default sort so they keep exercising the search query.
  * Reviewed by: [pending]
  */
 package foc.supplier.service;
@@ -31,6 +35,7 @@ import foc.supplier.exception.InvalidCategoryException;
 import foc.supplier.exception.InvalidSortException;
 import foc.supplier.exception.SupplierNotFoundException;
 import foc.supplier.model.Suppliers;
+import foc.supplier.repository.SupplierBookmarksRepository;
 import foc.supplier.repository.SupplierCategoriesRepository;
 import foc.supplier.repository.SuppliersRepository;
 import java.time.LocalTime;
@@ -70,15 +75,74 @@ class SupplierServiceTest {
     @Mock
     private SupplierCategoriesRepository supplierCategoriesRepository;
 
+    @Mock
+    private SupplierBookmarksRepository supplierBookmarksRepository;
+
     @InjectMocks
     private SupplierService supplierService;
+
+    private static final Long USER_ID = 7L;
+
+    @Test
+    @DisplayName("Should list the caller's bookmarks first in the default view and flag them")
+    void listSuppliers_defaultViewUsesBookmarksFirstAndFlagsBookmarked() {
+        Suppliers bookmarked = supplierWithId(1L);
+        Suppliers other = supplierWithId(2L);
+        Pageable pageable = PageRequest.of(0, 10, Sort.by("name").ascending());
+        when(suppliersRepository.listBookmarksFirst(eq(USER_ID), eq(PageRequest.of(0, 10))))
+                .thenReturn(new PageImpl<>(List.of(bookmarked, other)));
+        when(supplierCategoriesRepository.findBySupplier_IdIn(any())).thenReturn(List.of());
+        when(supplierBookmarksRepository.findBookmarkedSupplierIds(eq(USER_ID), any()))
+                .thenReturn(List.of(1L));
+
+        var response = supplierService.listSuppliers(USER_ID, null, null, null, null, pageable);
+
+        assertThat(response.getContent()).extracting("bookmarked").containsExactly(true, false);
+        verify(suppliersRepository, never()).search(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Should give bookmarks no precedence when a search is applied, but still flag them")
+    void listSuppliers_searchKeepsItsOwnOrderButFlagsBookmarked() {
+        Pageable pageable = PageRequest.of(0, 10, Sort.by("name").ascending());
+        when(suppliersRepository.search(eq("cafe"), any(), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(supplierWithId(1L))));
+        when(supplierCategoriesRepository.findBySupplier_IdIn(any())).thenReturn(List.of());
+        when(supplierBookmarksRepository.findBookmarkedSupplierIds(eq(USER_ID), any()))
+                .thenReturn(List.of(1L));
+
+        var response = supplierService.listSuppliers(USER_ID, "cafe", null, null, null, pageable);
+
+        assertThat(response.getContent()).extracting("bookmarked").containsExactly(true);
+        verify(suppliersRepository, never()).listBookmarksFirst(any(), any());
+    }
+
+    @Test
+    @DisplayName("Should give bookmarks no precedence under a descending name sort")
+    void listSuppliers_descendingSortIsNotTheDefaultView() {
+        Pageable pageable = PageRequest.of(0, 10, Sort.by("name").descending());
+        when(suppliersRepository.search(any(), any(), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of()));
+        when(supplierCategoriesRepository.findBySupplier_IdIn(any())).thenReturn(List.of());
+
+        supplierService.listSuppliers(USER_ID, null, null, null, null, pageable);
+
+        verify(suppliersRepository, never()).listBookmarksFirst(any(), any());
+    }
+
+    private static Suppliers supplierWithId(Long id) {
+        Suppliers supplier = new Suppliers();
+        org.springframework.test.util.ReflectionTestUtils.setField(supplier, "id", id);
+        supplier.setName("Supplier " + id);
+        return supplier;
+    }
 
     @Test
     @DisplayName("Should reject a sort property that isn't on the allow-list, before querying the repository")
     void listSuppliers_rejectsUnrecognizedSortProperty() {
         Pageable pageable = PageRequest.of(0, 20, Sort.by("location").ascending());
 
-        assertThatThrownBy(() -> supplierService.listSuppliers(null, null, null, null, pageable))
+        assertThatThrownBy(() -> supplierService.listSuppliers(USER_ID, null, null, null, null, pageable))
                 .isInstanceOf(InvalidSortException.class);
 
         verify(suppliersRepository, never()).search(any(), any(), any());
@@ -89,19 +153,19 @@ class SupplierServiceTest {
     void listSuppliers_rejectsDistanceAsASortProperty() {
         Pageable pageable = PageRequest.of(0, 20, Sort.by("distance").ascending());
 
-        assertThatThrownBy(() -> supplierService.listSuppliers(null, null, null, null, pageable))
+        assertThatThrownBy(() -> supplierService.listSuppliers(USER_ID, null, null, null, null, pageable))
                 .isInstanceOf(InvalidSortException.class);
     }
 
     @Test
     @DisplayName("Should accept an allow-listed sort property")
     void listSuppliers_acceptsAllowedSortProperty() {
-        Pageable pageable = PageRequest.of(0, 20, Sort.by("name").ascending());
+        Pageable pageable = PageRequest.of(0, 20, Sort.by("id").ascending());
         lenient().when(suppliersRepository.search(any(), any(), eq(pageable)))
                 .thenReturn(new PageImpl<Suppliers>(List.of()));
         lenient().when(supplierCategoriesRepository.findBySupplier_IdIn(any())).thenReturn(List.of());
 
-        assertThatCode(() -> supplierService.listSuppliers(null, null, null, null, pageable))
+        assertThatCode(() -> supplierService.listSuppliers(USER_ID, null, null, null, null, pageable))
                 .doesNotThrowAnyException();
     }
 
@@ -110,12 +174,12 @@ class SupplierServiceTest {
     void listSuppliers_normalizesGithubBlobImageUrl() {
         Suppliers supplier = supplierWithImageUrl(
                 "https://github.com/CS3219-AY2627S1/FoC-Template/blob/main/data/images/ANNA.jpeg");
-        Pageable pageable = PageRequest.of(0, 20, Sort.by("name").ascending());
+        Pageable pageable = PageRequest.of(0, 20, Sort.by("name").descending());
         when(suppliersRepository.search(any(), any(), eq(pageable)))
                 .thenReturn(new PageImpl<>(List.of(supplier)));
         when(supplierCategoriesRepository.findBySupplier_IdIn(any())).thenReturn(List.of());
 
-        var response = supplierService.listSuppliers(null, null, null, null, pageable);
+        var response = supplierService.listSuppliers(USER_ID, null, null, null, null, pageable);
 
         assertThat(response.getContent().get(0).getImageUrl())
                 .isEqualTo("https://raw.githubusercontent.com/CS3219-AY2627S1/FoC-Template/main/data/images/ANNA.jpeg");
@@ -125,12 +189,12 @@ class SupplierServiceTest {
     @DisplayName("Should leave a non-GitHub-blob image URL unchanged")
     void listSuppliers_leavesOtherImageUrlsUnchanged() {
         Suppliers supplier = supplierWithImageUrl("https://example.com/anna.jpeg");
-        Pageable pageable = PageRequest.of(0, 20, Sort.by("name").ascending());
+        Pageable pageable = PageRequest.of(0, 20, Sort.by("name").descending());
         when(suppliersRepository.search(any(), any(), eq(pageable)))
                 .thenReturn(new PageImpl<>(List.of(supplier)));
         when(supplierCategoriesRepository.findBySupplier_IdIn(any())).thenReturn(List.of());
 
-        var response = supplierService.listSuppliers(null, null, null, null, pageable);
+        var response = supplierService.listSuppliers(USER_ID, null, null, null, null, pageable);
 
         assertThat(response.getContent().get(0).getImageUrl()).isEqualTo("https://example.com/anna.jpeg");
     }
@@ -139,12 +203,12 @@ class SupplierServiceTest {
     @DisplayName("Should leave a missing image URL as-is (null/blank)")
     void listSuppliers_leavesMissingImageUrlAsIs() {
         Suppliers supplier = supplierWithImageUrl(null);
-        Pageable pageable = PageRequest.of(0, 20, Sort.by("name").ascending());
+        Pageable pageable = PageRequest.of(0, 20, Sort.by("name").descending());
         when(suppliersRepository.search(any(), any(), eq(pageable)))
                 .thenReturn(new PageImpl<>(List.of(supplier)));
         when(supplierCategoriesRepository.findBySupplier_IdIn(any())).thenReturn(List.of());
 
-        var response = supplierService.listSuppliers(null, null, null, null, pageable);
+        var response = supplierService.listSuppliers(USER_ID, null, null, null, null, pageable);
 
         assertThat(response.getContent().get(0).getImageUrl()).isNull();
     }

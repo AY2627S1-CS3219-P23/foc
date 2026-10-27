@@ -17,6 +17,8 @@
 # 2026-09-29, Claude Code (Opus 5.5), issues #87/#89/#90: user.jwt (login
 # token signing, design doc §3) and user.web-allowed-origin (CORS, reusing
 # supplier-service's WEB_ALLOWED_ORIGIN variable).
+# 2026-10-26, Claude Code (Sonnet 5.5), issue #225 (N8.5, D12): user.supplier.
+# base-url, where the purge job reaches supplier-service.
 # 2026-09-29, Claude Code (Fable 5), issue #88: spring.mail + user.mail/
 # user.otp for OTP email sending. Defaults target the compose Mailpit
 # container; Gmail SMTP (the chosen provider) is switched on via the
@@ -139,6 +141,11 @@ user:
     access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:1h}
   # Browser origin allowed by CORS (the web SPA).
   web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
+  # supplier-service's own address on the compose network, NOT the
+  # gateway: the account-purge job (issue #225, D12) calls its internal
+  # /purge/bookmarks directly, with a SERVICE token.
+  supplier:
+    base-url: ${SUPPLIER_SERVICE_URL:http://supplier-service:8080}
   mail:
     # From-address on OTP emails. With Gmail SMTP this must equal
     # MAIL_USERNAME (Gmail rewrites anything else).

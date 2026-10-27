@@ -29,19 +29,38 @@ will delete BEFORE touching any child table, so it takes locks in the
 flows' user-then-child order — unlocked, its child bulk deletes could
 hold an OTP row while a reset request held that user and waited for
 the same row, a deadlock.
+2026-10-26 (Claude Code, Sonnet 5.5), issue #225 (N8.5, D12): before
+deleting anything the run asks supplier-service to drop the condemned
+accounts' bookmarks (SupplierBookmarkCleanupClient). If that fails, the
+run skips the account delete and its child deletes — the accounts stay and
+are tried again on the next run — but still does the expired-code hygiene
+sweeps. Failure handling chosen by the author.
+Same day, PR review: the call is made BEFORE the locking transaction opens,
+not inside it — it is idempotent, and holding row locks and a connection for
+up to a timeout per batch served nothing: an account past the retention
+window cannot be recovered (recoverOwnAccount refuses it), so nothing can
+change the condemned set between the call and the delete. The locks stay,
+taken first in the short transaction, for the flows' lock order.
+2026-10-26 (Claude Code, Sonnet 5.5), PR #259 review (Sinnez1): the cleanup
+step now treats any RuntimeException as a failed cleanup (not only
+BookmarkCleanupException) — anything else (e.g. from JwtIssuer or a bad URI)
+used to escape before the transaction and skip the hygiene sweeps too.
+Returning false only keeps the accounts for the next run, so it is safe.
 */
 
 package foc.user.service;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import foc.user.repository.AccountUpdateOtpRepository;
 import foc.user.repository.PasswordResetOtpRepository;
@@ -62,6 +81,9 @@ import foc.user.repository.UserRepository;
  * whoever owns them: pending sign-ups (issue #88), the two
  * account-update tables (issue #92) and reset codes (issue #94). That
  * sweep is hygiene only — the flows reject an expired row on sight.
+ * Each purged account's supplier bookmarks are removed first, through
+ * supplier-service (issue #225); if that fails the accounts are kept for
+ * the next run.
  */
 @Component
 class AccountPurgeScheduler {
@@ -73,26 +95,44 @@ class AccountPurgeScheduler {
     private final AccountUpdateOtpRepository accountUpdateOtps;
     private final PendingEmailChangeRepository pendingEmailChanges;
     private final UserRepository users;
+    private final SupplierBookmarkCleanupClient bookmarkCleanup;
+    private final TransactionTemplate transaction;
     private final int retentionDays;
 
     AccountPurgeScheduler(PasswordResetOtpRepository resetOtps,
             PendingSignupRepository pendingSignups,
             AccountUpdateOtpRepository accountUpdateOtps,
             PendingEmailChangeRepository pendingEmailChanges,
-            UserRepository users, @Value("${user.retention.days}") int retentionDays) {
+            UserRepository users, SupplierBookmarkCleanupClient bookmarkCleanup,
+            PlatformTransactionManager transactionManager,
+            @Value("${user.retention.days}") int retentionDays) {
         this.resetOtps = resetOtps;
         this.pendingSignups = pendingSignups;
         this.accountUpdateOtps = accountUpdateOtps;
         this.pendingEmailChanges = pendingEmailChanges;
         this.users = users;
+        this.bookmarkCleanup = bookmarkCleanup;
+        this.transaction = new TransactionTemplate(transactionManager);
         this.retentionDays = retentionDays;
     }
 
+    // Not transactional itself: the supplier-service call must not run while
+    // row locks and a connection are held. Past the retention window an
+    // account cannot be recovered, so the ids read here are still the
+    // accounts the transaction below deletes (the cutoff is fixed for the run).
     @Scheduled(cron = "${user.retention.purge-cron}")
-    @Transactional
     void purgeExpiredDeletedAccounts() {
         Instant now = Instant.now();
         Instant cutoff = now.minus(retentionDays, ChronoUnit.DAYS);
+        // supplier-service first (issue #225): once the users are gone
+        // nothing would tell it which bookmarks to drop. All or nothing — a
+        // failed run leaves every condemned account for the next one, and
+        // the call is safe to repeat
+        boolean cleaned = bookmarksCleaned(users.findIdsDeletedBefore(cutoff));
+        transaction.executeWithoutResult(status -> purge(now, cutoff, cleaned));
+    }
+
+    private void purge(Instant now, Instant cutoff, boolean cleaned) {
         // lock the condemned user rows FIRST (PR #179 Copilot review):
         // the flows lock user-then-child, and the child deletes below
         // acquire child-row locks — taken unlocked-first, this
@@ -100,13 +140,19 @@ class AccountPurgeScheduler {
         // held its user and waited for that row, deadlocking both. The
         // locked set is discarded: only the lock order matters
         users.findWithLockByDeletedBefore(cutoff);
-        // every dependent of a purged account goes first, selected by that
-        // account — not by expiry: a TTL longer than the retention window
-        // would leave a live row to trip the user_id FK (PR #157 review)
-        int resetByUserCount = resetOtps.deleteByUserDeletedBefore(cutoff);
-        int purgedGateCount = accountUpdateOtps.deleteByUserDeletedBefore(cutoff);
-        int purgedChangeCount = pendingEmailChanges.deleteByUserDeletedBefore(cutoff);
-        int userCount = users.deleteByDeletedBefore(cutoff);
+        int resetByUserCount = 0;
+        int purgedGateCount = 0;
+        int purgedChangeCount = 0;
+        int userCount = 0;
+        if (cleaned) {
+            // every dependent of a purged account goes first, selected by that
+            // account — not by expiry: a TTL longer than the retention window
+            // would leave a live row to trip the user_id FK (PR #157 review)
+            resetByUserCount = resetOtps.deleteByUserDeletedBefore(cutoff);
+            purgedGateCount = accountUpdateOtps.deleteByUserDeletedBefore(cutoff);
+            purgedChangeCount = pendingEmailChanges.deleteByUserDeletedBefore(cutoff);
+            userCount = users.deleteByDeletedBefore(cutoff);
+        }
         // hygiene for the accounts that stay: anything already expired,
         // inclusive of the exact boundary the flows call expired
         int pendingCount = pendingSignups.deleteByExpiresAtBefore(now);
@@ -119,5 +165,21 @@ class AccountPurgeScheduler {
                 + " {} expired pending email change(s), {} expired reset code(s)",
                 userCount, cutoff, resetByUserCount, purgedGateCount, purgedChangeCount,
                 pendingCount, gateCount, emailChangeCount, expiredResetCount);
+    }
+
+    // true when there is nothing to clean or supplier-service did it
+    private boolean bookmarksCleaned(List<Long> condemnedIds) {
+        if (condemnedIds.isEmpty()) {
+            return true;
+        }
+        try {
+            bookmarkCleanup.purgeBookmarks(condemnedIds);
+            return true;
+        } catch (RuntimeException e) {
+            log.error("skipping the purge of {} account(s): their supplier bookmarks could"
+                    + " not be removed; the accounts are kept and tried again on the next run",
+                    condemnedIds.size(), e);
+            return false;
+        }
     }
 }

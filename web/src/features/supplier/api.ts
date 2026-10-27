@@ -20,10 +20,21 @@
 // optional lat/lng — team decision to support "sort by distance from
 // the user's current location." When lat/lng are present, the backend
 // orders by distance from that point instead of `sort`.
+// 2026-10-26, Claude Code (Sonnet 5.5), issue #225 (N8): added the bookmark
+// calls (list, add, remove).
+// 2026-10-26, Claude Code (Sonnet 5.5), PR #259 review (Sinnez1):
+// addBookmark returns PUT's BookmarkResult so the page can take the
+// server's count.
 // Reviewed by: [pending]
 
 import { apiFetch } from '@/lib/api/http'
-import type { PagedResponse, Supplier, SupplierInput } from './types'
+import type {
+  BookmarkList,
+  BookmarkResult,
+  PagedResponse,
+  Supplier,
+  SupplierInput,
+} from './types'
 
 export interface SupplierSearchParams {
   search?: string
@@ -79,6 +90,29 @@ export function updateSupplier(id: string, input: SupplierInput) {
 
 export function deleteSupplier(id: string) {
   return apiFetch<void>('supplier', `/suppliers/${id}`, {
+    method: 'DELETE',
+  })
+}
+
+// Bookmarks (issue #225, N8). The caller is taken from the JWT server-side,
+// so no user id is ever sent. PUT is idempotent; a sixth bookmark is a 409
+// and two simultaneous requests may be refused with a "too fast" message.
+export function listBookmarks() {
+  return apiFetch<BookmarkList>('supplier', '/bookmarks')
+}
+
+export function addBookmark(supplierId: string) {
+  return apiFetch<BookmarkResult>(
+    'supplier',
+    `/suppliers/${supplierId}/bookmark`,
+    {
+      method: 'PUT',
+    },
+  )
+}
+
+export function removeBookmark(supplierId: string) {
+  return apiFetch<void>('supplier', `/suppliers/${supplierId}/bookmark`, {
     method: 'DELETE',
   })
 }

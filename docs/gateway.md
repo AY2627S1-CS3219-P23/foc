@@ -38,6 +38,10 @@
   self-deletion writes no stamp, so the paragraph's scope (the
   admin-initiated paths) is explicit. Accepted as-is (option C) by
   Leong Wei Zhi via options Q&A. No gateway code changed.
+  2026-10-26, Claude Code (Sonnet 5.5), issue #225: the supplier routing
+  row notes that `/api/supplier/purge` is answered 404 by its own
+  location block (Alastair Tan Choon Wei's decision, D12 in
+  docs/supplier-service.md). No new gateway decision number.
   2026-10-26, Claude Code (Fable 5), issue #250: /api/rating/** row
   added to the routing table and G3's count amended — rating-service
   joins the cutover with no published host port, as G3's pattern
@@ -143,7 +147,7 @@ fresh ones its logins keep minting for 30 days — stay valid.
 | Prefix | Upstream | Notes |
 | --- | --- | --- |
 | `/api/user/**` | `user-service:8080` | prefix stripped; `/auth/**` (except logout) and `/actuator/health` route through auth-free locations (G5) |
-| `/api/supplier/**` | `supplier-service:8080` | prefix stripped |
+| `/api/supplier/**` | `supplier-service:8080` | prefix stripped; except `/api/supplier/purge…`, which a dedicated location block answers 404 — supplier-service's internal account-purge cleanup is reached over the compose network, never through the gateway (issue #225, D12) |
 | `/api/credit/**` | `credit-service:8080` | prefix stripped |
 | `/api/notification/**` | `notification-service:8080` | prefix stripped; WebSocket upgrade + SockJS streaming enabled for `/ws/**` |
 | `/api/order/**` | `order-service:8080` | prefix stripped (replaced the reserved 503 stub once order-service existed, as G3 anticipated) |
