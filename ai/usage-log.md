@@ -63,6 +63,10 @@ Entry template:
   open.
 - **Author review:** `npm test` (308/308), lint, format and build
   green. Leong Wei Zhi to review via the PR.
+- **PR #263 review follow-up:** the payload's request id is
+  URL-encoded before interpolation into the navigate path (a non-numeric
+  id containing `/`, `?` or `#` could otherwise route somewhere
+  unintended); tests re-run green.
 
 ## 2026-10-26 — Ryan Ang (feat: Notification accepts the N3 dispute events, issue #237)
 - **Tool:** Claude Code (Opus 5.5)

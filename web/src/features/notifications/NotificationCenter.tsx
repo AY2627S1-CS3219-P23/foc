@@ -47,6 +47,8 @@
 // row is also marked read, fire-and-forget, before navigating; read
 // rows with a request become clickable; rows without a request keep the
 // mark-read-only behavior).
+// 2026-10-27, same tool, PR #263 review (@claude): the payload's id is
+// URL-encoded before it is interpolated into the navigate path.
 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
@@ -234,7 +236,9 @@ export function NotificationCenter() {
           .then(() => refreshUnreadCount())
           .catch(() => {})
       }
-      navigate(`/deliveries/${requestId}`)
+      // the id is an arbitrary payload string — encoded so a `/`, `?`
+      // or `#` in it cannot route somewhere unintended (PR #263 review)
+      navigate(`/deliveries/${encodeURIComponent(requestId)}`)
       return
     }
     if (notification.read || marking) return
