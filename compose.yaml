@@ -114,6 +114,10 @@
 # time through the gateway, so no service-to-service call remains.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
+# 2026-10-26, Claude Code (Opus 5.5), issue #239:
+# ORDER_DISPUTE_ESCALATION_GRACE_MS passed to the order service for the
+# expiry sweep's dispute escalation (team decision DSP-6). Author review:
+# Ryan Ang, pending pull request review.
 
 name: foc
 
@@ -496,6 +500,9 @@ services:
       ORDER_EXPIRY_SWEEP_INTERVAL_MS: ${ORDER_EXPIRY_SWEEP_INTERVAL_MS:-300000}
       ORDER_AUTO_COMPLETE_AFTER_MS: ${ORDER_AUTO_COMPLETE_AFTER_MS:-3600000}
       ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS: ${ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS:-300000}
+      # how long after its deadline a still-COLLECTED request is disputed
+      # by the expiry sweep (DSP-6)
+      ORDER_DISPUTE_ESCALATION_GRACE_MS: ${ORDER_DISPUTE_ESCALATION_GRACE_MS:-3600000}
       # verifies the caller's bearer token for the ownership checks
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       # the SPA's origin, for CORS

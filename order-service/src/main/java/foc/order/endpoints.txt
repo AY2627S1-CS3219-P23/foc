@@ -8,6 +8,8 @@ Answers: 200 success, 400 invalid /create fields, 401 no or invalid token, 404 u
 /drop request id (assigned courier only) -> returns success or error message (no event: the credits stay held)
 /cancel request id (requester only) -> returns success or error message + publish event for credit service to release funds to the requester
 /complete request id (requester only) -> returns success or error message + publish event for credit service to pay the courier
+/dispute request id, category (NOT_DELIVERED|WRONG_ITEM|DAMAGED|OTHER), note (<= 500, required for OTHER) (requester only) -> ARRIVED within the 1 h auto-complete window, or COLLECTED past the deadline, becomes DISPUTED + publish request.disputed to both parties; 409 otherwise
+/resolve request id, courierAmount, requesterAmount, note (optional, <= 500) (ADMIN/OWNER, not a party) -> DISPUTED becomes RESOLVED + publish request.dispute-resolved for credit service to divide the reward; amounts >= 0 adding up to the reward, else 400
 /retry-settlement request id (ADMIN/OWNER) -> the request's newest settlement event (completed / cancelled / expired / dispute-resolved) sent again with the same event id; 409 if the request is active or has no such event
 
 Reads (GET, newest first, paged: page from 0, size 1-100, default 20):
@@ -18,8 +20,10 @@ Reads (GET, newest first, paged: page from 0, size 1-100, default 20):
 /requests/admin?state=&closeReason= (ADMIN/OWNER; else 403) -> every user's requests; closeReason comma-separated like state
 POST /requests/admin/statuses {"ids": [...]} (ADMIN/OWNER; else 403) -> {id: state}, null for an unknown id; at most 100 ids
 Every list item and the full request carry closeReason: null unless the request ended without completing
+Every list item and the full request carry dispute: null unless the request was disputed (category, notes, who resolved it and the split)
 Filters on every list (optional, combined): supplierId, minCredit, maxCredit, deadlineAfter, deadlineBefore, createdFrom, createdTo; sort=createdAt (newest first, default) or deadline (nearest first)
 
 Not endpoints (timers inside the service):
 expire: a CREATED or ACCEPTED request past its deadline, checked every 5 min -> publish event for credit service to release funds to the requester
 auto-complete: a request ARRIVED for 1 h without the requester's confirmation, checked every 5 min -> same event as /complete
+escalate: a request still COLLECTED 1 h after its deadline, checked with expire -> DISPUTED as NOT_DELIVERED, same event as /dispute

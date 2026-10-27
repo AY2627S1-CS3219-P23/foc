@@ -8,6 +8,9 @@
  * 2026-10-22, Claude Code (Opus 5.5), issue #238: runs against
  * Testcontainers Postgres built by Flyway (extends PostgresTestContainer)
  * instead of H2. Author review: Ryan Ang, pending pull request review.
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: a disputed request is
+ * never auto-completed (DSP-14). Author review: Ryan Ang, pending pull
+ * request review.
  */
 package foc.order;
 
@@ -45,6 +48,20 @@ class AutoCompleteSweeperTests extends PostgresTestContainer {
 		assertEquals(OrderStates.COMPLETED, status(overdue));
 		assertEquals(OrderStates.ARRIVED, status(recent));
 		assertEquals(OrderStates.COLLECTED, status(collected));
+	}
+
+	// DSP-14: no code change; the sweep only picks ARRIVED requests
+	@Test
+	void neverCompletesADisputedRequest() {
+		Long id = arrivedSecondsAgo(60);
+		requestsService.dispute(id, 1L, "WRONG_ITEM", null);
+		Requests stored = requestsRepository.findById(id).orElseThrow();
+		stored.setArrivedAt(Instant.now().minusSeconds(7_200));
+		requestsRepository.save(stored);
+
+		new AutoCompleteSweeper(requestsRepository, requestsService, DELAY_MS).completeOverdue();
+
+		assertEquals(OrderStates.DISPUTED, status(id));
 	}
 
 	private Long collectedRequest() {

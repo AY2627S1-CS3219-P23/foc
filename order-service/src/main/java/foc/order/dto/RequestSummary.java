@@ -9,20 +9,27 @@
  * unless the request ended without completing (team decision: the admin
  * lists need it on each row). Author review: Ryan Ang, pending pull
  * request review.
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: dispute, null unless
+ * the request was disputed (team decision: the admin dispute queue needs
+ * it on each row). Author review: Ryan Ang, pending pull request review.
  */
 package foc.order.dto;
 
 import foc.order.CloseReason;
 import foc.order.OrderStates;
+import foc.order.model.RequestDispute;
 import foc.order.model.Requests;
 
 import java.time.Instant;
 
 public record RequestSummary(Long id, OrderStates status, CloseReason closeReason, String supplierName,
-        String dropoffLocation, String item, Integer creditAmount, Instant deadline, Instant createdAt) {
+        String dropoffLocation, String item, Integer creditAmount, Instant deadline, Instant createdAt,
+        Dispute dispute) {
 
-    public static RequestSummary of(Requests r) {
+    // dispute: the request's stored dispute, null if it has none
+    public static RequestSummary of(Requests r, RequestDispute dispute) {
         return new RequestSummary(r.getId(), r.getStatus(), r.getCloseReason(), r.getSupplierName(),
-                r.getDropoffLocation(), r.getItem(), r.getCreditAmount(), r.getDeadline(), r.getCreatedAt());
+                r.getDropoffLocation(), r.getItem(), r.getCreditAmount(), r.getDeadline(), r.getCreatedAt(),
+                Dispute.of(dispute));
     }
 }
