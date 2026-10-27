@@ -41,11 +41,23 @@
 // array passed to useUsernames is memoized over the held rows — a fresh
 // array every render (clock ticks, pushes, filter toggles) defeated the
 // hook's own memo and re-ran its dedupe/sort/join each time.
+// 2026-10-27, Claude Code (Fable 5), issue #232: clicking a row that
+// references a request navigates to /deliveries/{requestId} (author
+// decisions via options Q&A: always the delivery-detail page; an unread
+// row is also marked read, fire-and-forget, before navigating; read
+// rows with a request become clickable; rows without a request keep the
+// mark-read-only behavior).
 
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router'
 
 import { listNotifications, markAllRead, setNotificationRead } from './api'
-import { courierIdOf, notificationMessage, relativeTime } from './eventMessage'
+import {
+  courierIdOf,
+  notificationMessage,
+  relativeTime,
+  requestIdOf,
+} from './eventMessage'
 import { useNotifications } from './useNotifications'
 import type { NotificationDto } from './types'
 import { useUsernames } from '@/features/user/usernames'
@@ -84,6 +96,8 @@ export function NotificationCenter() {
     soundEnabled,
     setSoundEnabled,
   } = useNotifications()
+
+  const navigate = useNavigate()
 
   const [items, setItems] = useState<NotificationDto[]>([])
   const [filter, setFilter] = useState<Filter>('all')
@@ -210,6 +224,19 @@ export function NotificationCenter() {
   }
 
   async function handleRowClick(notification: NotificationDto) {
+    const requestId = requestIdOf(notification.payload)
+    if (requestId !== null) {
+      if (!notification.read && !marking) {
+        // Fire-and-forget: navigation unmounts this page, so no list
+        // surgery — a failure just leaves the row unread server-side.
+        // The provider outlives the route, so the badge refresh lands.
+        setNotificationRead(notification.id, true)
+          .then(() => refreshUnreadCount())
+          .catch(() => {})
+      }
+      navigate(`/deliveries/${requestId}`)
+      return
+    }
     if (notification.read || marking) return
     try {
       await setNotificationRead(notification.id, true)
@@ -445,18 +472,27 @@ function NotificationRow({
 }) {
   const { icon, title } = notificationMessage(notification, names)
   const time = relativeTime(notification.occurredAt, now)
+  const requestId = requestIdOf(notification.payload)
 
-  // An unread row is a button (clicking marks it read); a read row is
-  // inert — there is deliberately no mark-unread control (options Q&A).
+  // A row that references a request navigates to it, read or not (an
+  // unread one is also marked read on the way). A row without a request
+  // keeps the original behavior: unread marks read, read is inert —
+  // there is deliberately no mark-unread control (options Q&A).
+  const label =
+    requestId !== null
+      ? notification.read
+        ? `${title} — select to open the request`
+        : `${title} — unread, select to open the request`
+      : notification.read
+        ? title
+        : `${title} — unread, select to mark read`
   return (
     <li>
       <button
         type="button"
         onClick={onClick}
-        disabled={notification.read}
-        aria-label={
-          notification.read ? title : `${title} — unread, select to mark read`
-        }
+        disabled={notification.read && requestId === null}
+        aria-label={label}
         className="flex w-full items-center gap-3 px-4 py-3 text-left enabled:cursor-pointer enabled:hover:bg-gray-50"
       >
         <span

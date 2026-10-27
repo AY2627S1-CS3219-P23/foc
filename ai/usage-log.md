@@ -42,6 +42,28 @@ Entry template:
 ```
 
 ---
+## 2026-10-27 — Leong Wei Zhi (feat: clicking a notification opens the request it is about, issue #232)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate, docs
+- **Scope:** `web/src/features/notifications/eventMessage.ts`
+  (`requestIdOf` exported, `requestLabel` refactored onto it),
+  `web/src/features/notifications/NotificationCenter.tsx` (a row whose
+  payload carries `requestId` navigates to `/deliveries/{requestId}`;
+  an unread one is also marked read, fire-and-forget, before
+  navigating; read request rows become clickable; request-less rows
+  keep the mark-read-only click), `web/src/test/notification-center.test.tsx`
+  (three new click-path cases, labels swapped to "select to open the
+  request", the mark-read-in-place regression tests moved to
+  request-less fixtures, and the mocked order base made real so the
+  landing page's fetch reaches the stub), `web/AGENTS.md`
+  (notification-center.png row), `README.md` (AI Use Summary).
+- **Prompt(s):** Plan and resolve issue #232. The landing target
+  (always the delivery-detail page) and the click-marks-read behavior
+  were the author's decisions via options Q&A; the issue had left both
+  open.
+- **Author review:** `npm test` (308/308), lint, format and build
+  green. Leong Wei Zhi to review via the PR.
+
 ## 2026-10-26 — Ryan Ang (feat: Notification accepts the N3 dispute events, issue #237)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs
