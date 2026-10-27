@@ -35,6 +35,10 @@
   object in the reads (team decisions DSP-2, DSP-5 to DSP-8, and the
   #239 answers in docs/disputes.md). Author review: Ryan Ang, pending
   pull request review.
+  2026-10-27, Claude Code (Opus 5.5), issue #242: Flyway V4 (closed_at),
+  closedAt in the reads, the closedFrom / closedTo filter and the admin
+  list's userId (team decisions). Author review: Ryan Ang, pending pull
+  request review.
 -->
 
 # Order Service
@@ -82,6 +86,12 @@ file; an applied migration is never edited.
   Named CHECKs cover the category, that a hand-raised dispute names who
   raised it, that the resolution fields are set together, and that the
   shares are non-negative.
+- **Flyway V4** (`V4__closed_at.sql`, issue #242): nullable `closed_at`
+  on `requests`, with a partial index on the non-null rows. Every
+  transition into a final state (COMPLETED, CANCELLED, EXPIRED, REJECTED,
+  RESOLVED) sets it, in `RequestsService.transition()` only. Rows that
+  closed before V4 stay null: their closing time was never recorded. No
+  CHECK ties it to `status`.
 
 `close_reason` is set when a request ends abnormally: `/cancel` →
 `REQUESTER_CANCELLED`, the pending timeout → `RESERVATION_TIMEOUT`, the
@@ -228,8 +238,9 @@ supplier listing: `page` (from 0, default 0) and `size` (1-100, default
 20), answered as `{"content": [...], "page", "size", "totalElements",
 "totalPages"}`, each item trimmed to `id`, `status`, `closeReason`
 (null unless the request ended without completing), `supplierName`,
-`dropoffLocation`, `item`, `creditAmount`, `deadline`, `createdAt`, and
-`dispute`. A bad `state`, `role`, `page` or `size` is a 400 with a
+`dropoffLocation`, `item`, `creditAmount`, `deadline`, `createdAt`,
+`closedAt` (null while active, and for requests that closed before it
+was recorded), and `dispute`. A bad `state`, `role`, `page` or `size` is a 400 with a
 `message`.
 
 `dispute` (on the lists and the full request) is null unless the request
@@ -246,6 +257,7 @@ Every list also takes these optional filters, combined with AND:
 | `minCredit` / `maxCredit` | reward at least / at most (both inclusive, each at least 1) |
 | `deadlineAfter` / `deadlineBefore` | deadline at or after / before (ISO-8601 instant with an offset, e.g. `Z`; write `+08:00` as `%2B08:00`) |
 | `createdFrom` / `createdTo` | created at or after / before (same format) |
+| `closedFrom` / `closedTo` | closed at or after / before (same format); a request with no `closedAt` never matches |
 | `sort` | `createdAt` (newest first, the default) or `deadline` (nearest first) |
 
 A range whose lower bound is not below its upper (`minCredit` above
@@ -255,11 +267,11 @@ A range whose lower bound is not below its upper (`minCredit` above
 | Path | Returns | Who may call it |
 | --- | --- | --- |
 | `GET /requests?state=CREATED&page=&size=` | open errands for couriers (F2.1): CREATED requests whose deadline is still ahead; `state` may only be `CREATED` (the default) | any logged-in user |
-| `GET /requests/{id}` | the request in full (every column, incl. `requesterId`, `courierId`, `closeReason` and the step timestamps) | its requester, its assigned courier, or ADMIN / OWNER; anyone else 404 |
+| `GET /requests/{id}` | the request in full (every column, incl. `requesterId`, `courierId`, `closeReason`, `closedAt` and the step timestamps) | its requester, its assigned courier, or ADMIN / OWNER; anyone else 404 |
 | `GET /requests/mine?role=requester&state=` | the caller's requests as requester, optionally in one state | the caller |
 | `GET /requests/mine?role=courier&state=` | the caller's assigned deliveries | the caller |
 | `GET /users/{id}/requests?state=` | that user's requests as requester or courier (admin view) | ADMIN / OWNER; anyone else 403 |
-| `GET /requests/admin?state=&closeReason=` | every user's requests; `closeReason` takes one or more `CloseReason` names, comma-separated like `state` (the dispute queue is `state=DISPUTED`) | ADMIN / OWNER; anyone else 403 |
+| `GET /requests/admin?state=&closeReason=&userId=` | every user's requests; `closeReason` takes one or more `CloseReason` names, comma-separated like `state` (the dispute queue is `state=DISPUTED`); `userId` keeps those the user is the requester or the courier of, combinable with every other filter (only here: the open list shares the other filters) | ADMIN / OWNER; anyone else 403 |
 | `POST /requests/admin/statuses` `{"ids": [42, 99]}` | each id's current state, `{"42": "COMPLETED", "99": null}`: an unknown id is `null`, a repeated one answered once, `[]` gives `{}`; more than 100 ids or a non-numeric id is a 400 | ADMIN / OWNER; anyone else 403 |
 
 ## Run

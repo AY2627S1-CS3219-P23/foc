@@ -10,6 +10,9 @@
  * 2026-10-26, Claude Code (Opus 5.5), issue #239: dispute, null unless
  * the request was disputed (team decision). Author review: Ryan Ang,
  * pending pull request review.
+ * 2026-10-27, Claude Code (Opus 5.5), issue #242: closedAt, null while
+ * active and for requests closed before it was recorded (team decision).
+ * Author review: Ryan Ang, pending pull request review.
  */
 package foc.order.dto;
 
@@ -23,13 +26,13 @@ import java.time.Instant;
 public record RequestDetail(Long id, OrderStates status, CloseReason closeReason, Long requesterId,
         Long courierId, Long supplierId, String supplierName, String dropoffLocation, String item,
         Integer creditAmount, Instant deadline, Instant createdAt, Instant acceptedAt, Instant collectedAt,
-        Instant arrivedAt, Dispute dispute) {
+        Instant arrivedAt, Instant closedAt, Dispute dispute) {
 
     // dispute: the request's stored dispute, null if it has none
     public static RequestDetail of(Requests r, RequestDispute dispute) {
         return new RequestDetail(r.getId(), r.getStatus(), r.getCloseReason(), r.getRequesterId(),
                 r.getCourierId(), r.getSupplierId(), r.getSupplierName(), r.getDropoffLocation(), r.getItem(),
                 r.getCreditAmount(), r.getDeadline(), r.getCreatedAt(), r.getAcceptedAt(), r.getCollectedAt(),
-                r.getArrivedAt(), Dispute.of(dispute));
+                r.getArrivedAt(), r.getClosedAt(), Dispute.of(dispute));
     }
 }

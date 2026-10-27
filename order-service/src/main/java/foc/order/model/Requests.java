@@ -19,6 +19,8 @@
  * 2026-10-23, Claude Code (Opus 5.5), issue #240: closeReason (DSP-1),
  * mapped like status. Author review: Ryan Ang, pending pull request
  * review.
+ * 2026-10-27, Claude Code (Opus 5.5), issue #242: closedAt (team
+ * decision). Author review: Ryan Ang, pending pull request review.
  */
 package foc.order.model;
 
@@ -91,6 +93,10 @@ public class Requests {
     // passes the not-null check (as in user-service's User)
     @Column(nullable = false)
     private Instant createdAt = Instant.now();
+
+    // When the request reached a final state (set by RequestsService's
+    // transition); null while active and for rows from before Flyway's V4
+    private Instant closedAt;
 
     // Optimistic lock
     @Version
@@ -217,6 +223,14 @@ public class Requests {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Instant getClosedAt() {
+        return closedAt;
+    }
+
+    public void setClosedAt(Instant closedAt) {
+        this.closedAt = closedAt;
     }
 
     public Long getVersion() {

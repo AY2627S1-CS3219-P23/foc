@@ -50,6 +50,10 @@
   button, the dropdown's star and the supplier prefill (author decisions via
   options Q&A).
   Author review: Alastair Tan Choon Wei to review via the PR.
+  2026-10-27, Claude Code (Opus 5.5), issue #242: the admin-dashboard.png
+  row records the Stuck Orders and Failed Orders sections, which the
+  wireframe doesn't draw (team decisions).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # web/ — Frontend Agent Guide
@@ -94,7 +98,7 @@ first**; they cost nothing to read, unlike Figma MCP calls:
 | `docs/wireframes/my-requests.png` | My requests — requester's view of own requests (built at `/my-requests`; lists only **active** requests — finished ones are in History — with a **state filter** (All active by default) and the state the wireframe doesn't draw, **Reserving credits** (PENDING); there is **no Dispute or Re-release** button — order-service has neither; the courier's name comes from user-service's public profile) |
 | `docs/wireframes/open-requests.png` | Open requests — courier's browse/accept view (built at `/requests`, nearest deadline first; the API's list items carry no requester, so there is **no "Requested by" line and no own-request state** on the card — order-service refuses a self-accept with a 409, shown as a banner; the "Too far" state is not built) |
 | `docs/wireframes/active-delivery.png` | Active delivery — courier's in-progress order view |
-| `docs/wireframes/admin-dashboard.png` | Admin dashboard — user/vendor management |
+| `docs/wireframes/admin-dashboard.png` | Admin dashboard — user/vendor management (not drawn, added for issue #242 between the Common Pool box and the Users section: **Stuck Orders**, finished orders whose credits credit-service still holds, with a "Held longer than" preset and a **Retry settlement** button per order; and **Failed Orders**, every user's rejected, cancelled and expired requests with their close reason and close time, filtered by user, reason and a created or closed date range; both table on desktop, cards on mobile) |
 | `docs/wireframes/forgot-password.png` | Forgot/reset password — email step + reset form |
 | `docs/wireframes/account-recovery.png` | Account recovery — restore a deleted account within 30 days |
 | `docs/wireframes/notification-center.png` | Notification center — bell with unread badge, read/unread list, empty state (built in the web half of issue #66: rows, blue unread dot, grayed read rows, "Mark all as read", empty-state copy as drawn; three additions the wireframe doesn't show, each an author decision via options Q&A — an **All/Unread filter toggle**, a **"Load more"** button (the wireframe draws no paging control; the REST list is paged), and **clicking an unread row marks it read** (no per-row control is drawn; mark-unread exists in the API but has no UI affordance); a fourth addition from the notification-sound follow-up — a **header sound toggle** muting the arrival chime, mirrored by the profile page's Preferences switch (author decision via options Q&A); and one rendering note from issue #221 — **courier names hydrate client-side** (D32 read-time lookup through the gateway), so a freshly loaded or pushed row can show the actor-less copy briefly before the name resolves in place) |

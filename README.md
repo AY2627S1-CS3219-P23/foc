@@ -234,6 +234,9 @@
   2026-10-26: AI Use Summary extended for order-service disputes
   (issue #239), by Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-27: AI Use Summary extended for the admin failed and stuck
+  orders (issue #242), by Claude Code (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1093,6 +1096,20 @@ to the outbox in the same transaction. A `dispute` object was added to
 the request lists and detail, loaded once per page. The table's
 constraints, the dispute window, the resolution note and the read
 shape were decided by the team and transcribed into
+`docs/disputes.md`. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) built the admin dashboard's Failed Orders and
+Stuck Orders sections (issue #242, DSP-10, DSP-11). Failed Orders lists
+every user's rejected, cancelled and expired requests with why and when
+each closed, filtered by close reason, by one user and by a created or
+closed date range, all together. Stuck Orders checks credit-service's
+long-held reservations against order-service in one batch call, flags
+those whose order is finished (never a disputed one), and offers
+"Retry settlement". For these, order-service gained Flyway V4's
+`closed_at`, set on every move into a final state, `closedAt` and the
+`closedFrom` / `closedTo` filter on its lists, and `userId` on the admin
+list. The filters, the close time and its fallback, and the threshold
+presets were decided by the team and transcribed into
 `docs/disputes.md`. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through

@@ -25,6 +25,10 @@
  * of requests in one query, for the dispute object on the list and
  * detail responses (team decision: no query per row). Author review:
  * Ryan Ang, pending pull request review.
+ * 2026-10-27, Claude Code (Opus 5.5), issue #242: the admin list's userId
+ * (requester or courier, combinable with every other filter) and the
+ * closedFrom / closedTo filter on every list (team decisions). Author
+ * review: Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -120,12 +124,14 @@ public class RequestsQueryService {
         return find(allOf(RequestSpecifications.involving(userId), statusIn(parseStates(state))), filter, page, size);
     }
 
-    // Every user's requests, optionally in some states and with some
-    // close reasons (the admin list; ADMIN / OWNER in SecurityConfig).
-    // The dispute queue is state=DISPUTED (#239).
-    public Page<Requests> admin(String state, String closeReason, RequestFilter filter, int page, int size) {
-        return find(allOf(statusIn(parseStates(state)), closeReasonIn(parseCloseReasons(closeReason))),
-                filter, page, size);
+    // Every user's requests, optionally in some states, with some close
+    // reasons and involving one user as requester or courier (the admin
+    // list; ADMIN / OWNER in SecurityConfig). The dispute queue is
+    // state=DISPUTED (#239).
+    public Page<Requests> admin(String state, String closeReason, Long userId, RequestFilter filter, int page,
+            int size) {
+        return find(allOf(statusIn(parseStates(state)), closeReasonIn(parseCloseReasons(closeReason)),
+                userId == null ? null : RequestSpecifications.involving(userId)), filter, page, size);
     }
 
     // The disputes of a page of requests, by request id, in one query
@@ -186,7 +192,9 @@ public class RequestsQueryService {
                 notBefore("deadline", instant(filter.deadlineAfter())),
                 before("deadline", instant(filter.deadlineBefore())),
                 notBefore("createdAt", instant(filter.createdFrom())),
-                before("createdAt", instant(filter.createdTo())));
+                before("createdAt", instant(filter.createdTo())),
+                notBefore("closedAt", instant(filter.closedFrom())),
+                before("closedAt", instant(filter.closedTo())));
         checkFilter(filter);
         return requestsRepository.findAll(spec, pageOf(page, size, sortOf(filter.sort())));
     }
@@ -205,6 +213,7 @@ public class RequestsQueryService {
         }
         checkRange("deadlineAfter", f.deadlineAfter(), "deadlineBefore", f.deadlineBefore());
         checkRange("createdFrom", f.createdFrom(), "createdTo", f.createdTo());
+        checkRange("closedFrom", f.closedFrom(), "closedTo", f.closedTo());
     }
 
     // the upper bound is exclusive, so an equal pair would match nothing

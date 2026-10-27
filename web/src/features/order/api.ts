@@ -19,6 +19,9 @@
 // 2026-10-26, Claude Code (Sonnet 5.5), issue #227 (N8.4): the supplier
 // options keep the `bookmarked` flag; the list arrives bookmarks-first.
 // Author review: [pending]
+// 2026-10-27, Claude Code (Opus 5.5), issue #242: orderFetch and query
+// exported for the admin calls in adminApi.ts.
+// Author review: Ryan Ang, pending pull request review.
 
 import { creditApi } from '@/features/credit/api'
 import { listSuppliers } from '@/features/supplier/api'
@@ -36,7 +39,10 @@ import type {
 
 // apiFetch for order-service: its 400/404/409 bodies are {"message"}, which
 // apiFetch (expecting problem+json) would turn into "Request failed (409)".
-async function orderFetch<T>(path: string, init?: ApiFetchInit): Promise<T> {
+export async function orderFetch<T>(
+  path: string,
+  init?: ApiFetchInit,
+): Promise<T> {
   try {
     return await apiFetch<T>('order', path, init)
   } catch (err) {
@@ -55,7 +61,7 @@ async function orderFetch<T>(path: string, init?: ApiFetchInit): Promise<T> {
 
 // Optional parameters are left out when undefined: URLSearchParams would
 // send them as the literal string "undefined".
-function query(params: Record<string, string | number | undefined>) {
+export function query(params: Record<string, string | number | undefined>) {
   const q = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined) q.set(key, String(value))
