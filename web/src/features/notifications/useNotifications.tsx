@@ -17,6 +17,11 @@
 // latestNotification became a queue — two frames delivered in one
 // WebSocket message batch into a single render, and only the last would
 // have survived a replaceable field.
+// 2026-10-28, Claude Code (Opus 5), PR #264 review (@Sinnez1), issue
+// #233: pushReconnects exposed — frames delivered while the socket was
+// down reach nobody, so a page that only reacts to pushes would stay
+// stale after the reconnect. useRequestRefetch treats a bump as a
+// refetch trigger.
 // 2026-10-18, Claude Code (Fable 5), notification sound (follow-up to
 // issue #66, no issue yet): soundEnabled/setSoundEnabled added so the
 // provider's chime and both toggle surfaces (Center header, Profile
@@ -43,6 +48,12 @@ export interface NotificationsData {
   // delivered inside one render must not lose all but its last frame
   // (PR #199 review). The reference only changes when a frame arrives.
   pushedNotifications: NotificationDto[]
+  // how many times this session's push channel has *re*connected: a
+  // session's first connect is not counted (a page's own mount fetch
+  // already covers it), so a bump always means frames may have been
+  // missed while the socket was down. Pages use it to refetch what
+  // they show (issue #233, PR #264 review).
+  pushReconnects: number
   // re-fetch the unread count from the REST API — the Center calls it
   // after a successful mark-read/read-all, keeping the server
   // authoritative over the badge

@@ -516,7 +516,13 @@ open indefinitely), the resend cooldown now travels in the 202 body with
 part of issue #109) without which registration through the site
 dead-ended at a failed login — with the fix-versus-restructure choice,
 the dialog's shape and the cooldown's route all decided by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`.
+neutral-options Q&A and recorded in `ai/usage-log.md`. Claude Code (Opus 5)
+then applied @Sinnez1's PR #264 review: a background reload no longer
+tears a page down on a transient failure, the expanded cards' detail
+fetches are keyed per request rather than off every list refetch, the
+pushed frame's fields are read defensively, and a push-channel
+reconnect — exposed as `pushReconnects` — is a refetch trigger too, so
+frames missed while the socket was down no longer leave a page stale.
 `ai/usage-log.md`; and an
 opt-in demo-account seeder for user-service (`USER_SEED_DEMO`: 1
 owner, 3 admins, 100 users), with the mechanism, the off-by-default

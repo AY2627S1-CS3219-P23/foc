@@ -19,9 +19,16 @@
 // seconds (the author's request), until credit reservation settles it.
 // Author review: [pending]
 // 2026-10-27, Claude Code (Fable 5), issue #233: a pushed request event
-// for a listed id bumps refreshKey (useRequestRefetch), and refreshKey
-// now also reaches each expanded card's detail fetch so the courier and
-// arrival time it shows refresh with the list.
+// for a listed id bumps refreshKey (useRequestRefetch), and an expanded
+// card's detail fetch re-runs with it so the courier and arrival time
+// it shows refresh with the list.
+// 2026-10-28, Claude Code (Opus 5), PR #264 review (@Sinnez1): the
+// detail fetches are keyed per request instead of off refreshKey, so
+// the 2 s PENDING poll (and an action on another card) no longer sends
+// a GET /requests/{id} for every expanded card every two seconds —
+// only the rows a push actually touched, plus the one acted on, re-read
+// their detail. The list fetch also clears its error on success, so a
+// background refetch that failed once stops showing a stale banner.
 
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
@@ -85,6 +92,19 @@ export function MyRequests() {
     null,
   )
   const [refreshKey, setRefreshKey] = useState(0)
+  // Per-request detail versions: bumping one re-reads just that card's
+  // GET /requests/{id}. Keyed by id rather than shared with refreshKey,
+  // which every list refetch bumps — including the 2 s PENDING poll
+  // (PR #264 review).
+  const [detailVersions, setDetailVersions] = useState<Record<number, number>>(
+    {},
+  )
+  const bumpDetails = (ids: number[]) =>
+    setDetailVersions((prev) => {
+      const next = { ...prev }
+      for (const id of ids) next[id] = (next[id] ?? 0) + 1
+      return next
+    })
   const [page, setPage] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
 
@@ -99,6 +119,10 @@ export function MyRequests() {
       })
       .then((result) => {
         if (cancelled) return
+        // cleared here, not only on a user action: a background refetch
+        // (push or PENDING poll) that failed once must not leave the
+        // banner up once the next one succeeds (PR #264 review)
+        setError(null)
         setRequests(result.content)
         setTotalPages(result.totalPages)
         // an action can empty the last page (e.g. a cancel under a state
@@ -130,7 +154,12 @@ export function MyRequests() {
 
   useRequestRefetch(
     requests.map((r) => r.id),
-    () => setRefreshKey((k) => k + 1),
+    (matchedIds) => {
+      setRefreshKey((k) => k + 1)
+      // the rows the pushed events named: their courier/arrival lines
+      // may have moved, the untouched ones cannot have
+      bumpDetails(matchedIds)
+    },
   )
 
   function selectFilter(next: FilterOption) {
@@ -158,6 +187,8 @@ export function MyRequests() {
     } finally {
       setBusyId(null)
       setRefreshKey((k) => k + 1)
+      // only the acted-on card's detail can have changed
+      bumpDetails([request.id])
     }
   }
 
@@ -219,7 +250,7 @@ export function MyRequests() {
             <RequestCard
               key={request.id}
               request={request}
-              detailVersion={refreshKey}
+              detailVersion={detailVersions[request.id] ?? 0}
               busy={busyId === request.id}
               onCancel={() => setPendingCancel(request)}
               onConfirm={() =>
@@ -275,7 +306,8 @@ export function MyRequests() {
 
 interface RequestCardProps {
   request: RequestSummary
-  // bumped when the list refetches, so the expanded detail follows it
+  // bumped when something that could have changed *this* request
+  // happened, so the expanded detail re-reads it
   detailVersion: number
   busy: boolean
   onCancel: () => void
@@ -398,8 +430,8 @@ function RequestCard({
 }
 
 // The list items carry no courier or arrival time, so an in-progress card
-// reads its request's detail — again whenever the list refetches, so the
-// two can't drift apart.
+// reads its request's detail — again whenever this request is touched
+// (a push naming it, an action on it), so the two can't drift apart.
 function useDetail(
   requestId: number,
   enabled: boolean,

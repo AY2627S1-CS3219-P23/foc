@@ -18,6 +18,11 @@
 // reload that 404s (access lost, e.g. the requester cancelled) lands on
 // the existing "request does not exist" state — deliberate, better than
 // a stale action button.
+// 2026-10-28, Claude Code (Opus 5), PR #264 review (@Sinnez1): that
+// only holds for a definitive answer. A background reload is given its
+// own failure branch, so a gateway 502 or a network blip arriving with
+// a push no longer replaces a perfectly good delivery with "Could not
+// load this request" — the view stays, and the next reload corrects it.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -34,7 +39,7 @@ import {
 import type { RequestDetail } from '@/features/order/types'
 import { useCurrentUserId } from '@/features/order/useCurrentUserId'
 import { useUsername } from '@/features/order/useUsername'
-import { errorMessage } from '@/lib/api/http'
+import { ApiError, errorMessage } from '@/lib/api/http'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
 
 // React Router keeps this component mounted when only :id changes (back/
@@ -44,6 +49,16 @@ import { ConfirmModal } from '@/shared/components/ConfirmModal'
 export function ActiveDelivery() {
   const { id } = useParams()
   return <ActiveDeliveryView key={id} requestId={Number(id)} />
+}
+
+// A reload failure the server actually decided: the request is gone, or
+// this user may no longer read it (order-service answers 404 to anyone
+// who is not requester, courier or admin). Everything else — 5xx, a
+// network drop, a missing base URL — says nothing about the request, so
+// a background reload keeps what is on screen. A 401 never reaches here
+// as a page state: apiFetch's handler ends the session.
+function isDefinitive(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 403 || err.status === 404)
 }
 
 function ActiveDeliveryView({ requestId }: { requestId: number }) {
@@ -70,20 +85,29 @@ function ActiveDeliveryView({ requestId }: { requestId: number }) {
     }
   }, [])
 
-  const reload = useCallback(() => {
-    const seq = ++loadSeq.current
-    return orderApi.getRequest(requestId).then(
-      (fresh) => {
-        if (mounted.current && seq === loadSeq.current) setRequest(fresh)
-      },
-      (err) => {
-        if (mounted.current && seq === loadSeq.current) {
+  // `background` marks a reload the user did not ask for (a push). Its
+  // failures are held to a higher bar: only a definitive answer — the
+  // request is gone, or no longer ours to read — may take the view
+  // down, because the alternative is a 502 or a dropped connection
+  // wiping a delivery that is perfectly fine (PR #264 review). A
+  // foreground reload has nothing to preserve, so it reports anything.
+  const reload = useCallback(
+    (background = false) => {
+      const seq = ++loadSeq.current
+      return orderApi.getRequest(requestId).then(
+        (fresh) => {
+          if (mounted.current && seq === loadSeq.current) setRequest(fresh)
+        },
+        (err) => {
+          if (!mounted.current || seq !== loadSeq.current) return
+          if (background && !isDefinitive(err)) return
           setRequest(null)
           setError(errorMessage(err, 'Could not load this request. Try again.'))
-        }
-      },
-    )
-  }, [requestId])
+        },
+      )
+    },
+    [requestId],
+  )
 
   useEffect(() => {
     if (!Number.isInteger(requestId)) return
@@ -92,7 +116,9 @@ function ActiveDeliveryView({ requestId }: { requestId: number }) {
     })
   }, [requestId, reload])
 
-  useRequestRefetch(Number.isInteger(requestId) ? [requestId] : [], reload)
+  useRequestRefetch(Number.isInteger(requestId) ? [requestId] : [], () => {
+    void reload(true)
+  })
 
   // Runs a step, then reloads the request: the step answers only a
   // message, and after a failure the request may have changed under us
