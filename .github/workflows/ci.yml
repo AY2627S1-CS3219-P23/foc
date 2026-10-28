@@ -10,6 +10,10 @@
 # 2026-10-23, Claude Code (Opus 5.5), PR #244 review: the skipped-tests
 # guard runs on every Java leg (order-service now skips without Docker
 # too). Author review: Ryan Ang, pending pull request review.
+# 2026-10-26, Claude Code (Fable 5), issue #250: rating-service added to
+# the java and docker filters (with foc-contracts/** in the docker one —
+# its image build installs the library even though the pom doesn't use
+# it yet). Author review: Leong Wei Zhi, pending pull request review.
 
 # One always-running workflow with dorny/paths-filter inside, instead of
 # per-workflow `on.paths`: a required check from a paths-filtered workflow
@@ -70,6 +74,9 @@ jobs:
               - 'notification-service/**'
               - 'foc-contracts/**'
               - '.github/workflows/**'
+            rating-service:
+              - 'rating-service/**'
+              - '.github/workflows/**'
 
       # Same paths again, as a separate step so its `changes` output maps
       # 1:1 onto Docker images (adds web + gateway, drops foc-contracts,
@@ -94,6 +101,10 @@ jobs:
               - '.github/workflows/**'
             notification-service:
               - 'notification-service/**'
+              - 'foc-contracts/**'
+              - '.github/workflows/**'
+            rating-service:
+              - 'rating-service/**'
               - 'foc-contracts/**'
               - '.github/workflows/**'
             web:
