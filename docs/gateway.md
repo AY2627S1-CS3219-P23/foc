@@ -42,6 +42,10 @@
   row notes that `/api/supplier/purge` is answered 404 by its own
   location block (Alastair Tan Choon Wei's decision, D12 in
   docs/supplier-service.md). No new gateway decision number.
+  2026-10-26, Claude Code (Fable 5), issue #250: /api/rating/** row
+  added to the routing table and G3's count amended — rating-service
+  joins the cutover with no published host port, as G3's pattern
+  anticipated for new services.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -74,7 +78,7 @@ decisions; comparisons presented were factual only).
 | --- | --- | --- |
 | G1 | Gateway technology | OpenResty (nginx + Lua): `lua-resty-jwt` verifies HS256 signature + exp, `lua-resty-redis` checks the denylist in-process — no extra HTTP hop per request |
 | G2 | Denylist store | Redis only: `denylist:<jti>` keys with `EX` = seconds until the token's own `exp`; Redis expiry replaces any purge job. The never-used `token_denylist` table is dropped (user-service `V6`) |
-| G3 | Routing scope | Full cutover: the SPA's five service URLs all point at the gateway (`/api/user`, `/api/supplier`, `/api/credit`, `/api/notification`; `/api/order` reserved); backend containers have **no published host ports** |
+| G3 | Routing scope | Full cutover: the SPA's service URLs all point at the gateway (`/api/user`, `/api/supplier`, `/api/credit`, `/api/notification`; `/api/order` reserved — five at the cutover; `/api/rating` joined 2026-10-26, issue #250); backend containers have **no published host ports** |
 | G4 | Enforcement depth | Gateway only. No backend service reads the denylist; user-service gains Redis solely to **write** it at logout. *2026-10-12 exception (D23, issue #67):* notification-service reads it at STOMP CONNECT (both the per-token key and the G11 per-user cutoff) — the frame-level token never reaches the gateway's access phase |
 | G5 | Anonymous requests | Pass through untouched (incl. OPTIONS preflights and non-Bearer schemes); each service's Spring Security still decides what needs auth. A Bearer token present is verified + denylist-checked — except on user-service's public `/auth/**` routes (logout excluded) and `/actuator/health`, which get their own auth-free location blocks mirroring `JwtAuthenticationFilter`'s skip, so a stale token stored by the SPA can never block login/sign-up. Location blocks, not a path match in Lua: nginx routes on the normalized URI, so a dot-segment path cannot be skipped one way and routed another (PR #176 reviews) |
 | G6 | Redis outage | Fail open: a connect/lookup error forwards the request if signature + exp are valid (availability over revocation, bounded by the ≤1 h token lifetime) |
@@ -147,6 +151,7 @@ fresh ones its logins keep minting for 30 days — stay valid.
 | `/api/credit/**` | `credit-service:8080` | prefix stripped |
 | `/api/notification/**` | `notification-service:8080` | prefix stripped; WebSocket upgrade + SockJS streaming enabled for `/ws/**` |
 | `/api/order/**` | `order-service:8080` | prefix stripped (replaced the reserved 503 stub once order-service existed, as G3 anticipated) |
+| `/api/rating/**` | `rating-service:8080` | prefix stripped |
 | anything else | — | 404 problem+json |
 
 Every gateway-origin response — the Lua 401s, the 404,

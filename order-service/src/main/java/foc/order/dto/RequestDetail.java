@@ -7,11 +7,15 @@
  * 2026-10-23, Claude Code (Opus 5.5), issue #240: closeReason, null
  * unless the request ended without completing (team decision). Author
  * review: Ryan Ang, pending pull request review.
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: dispute, null unless
+ * the request was disputed (team decision). Author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.order.dto;
 
 import foc.order.CloseReason;
 import foc.order.OrderStates;
+import foc.order.model.RequestDispute;
 import foc.order.model.Requests;
 
 import java.time.Instant;
@@ -19,12 +23,13 @@ import java.time.Instant;
 public record RequestDetail(Long id, OrderStates status, CloseReason closeReason, Long requesterId,
         Long courierId, Long supplierId, String supplierName, String dropoffLocation, String item,
         Integer creditAmount, Instant deadline, Instant createdAt, Instant acceptedAt, Instant collectedAt,
-        Instant arrivedAt) {
+        Instant arrivedAt, Dispute dispute) {
 
-    public static RequestDetail of(Requests r) {
+    // dispute: the request's stored dispute, null if it has none
+    public static RequestDetail of(Requests r, RequestDispute dispute) {
         return new RequestDetail(r.getId(), r.getStatus(), r.getCloseReason(), r.getRequesterId(),
                 r.getCourierId(), r.getSupplierId(), r.getSupplierName(), r.getDropoffLocation(), r.getItem(),
                 r.getCreditAmount(), r.getDeadline(), r.getCreatedAt(), r.getAcceptedAt(), r.getCollectedAt(),
-                r.getArrivedAt());
+                r.getArrivedAt(), Dispute.of(dispute));
     }
 }

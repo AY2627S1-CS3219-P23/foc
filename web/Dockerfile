@@ -2,6 +2,9 @@
 # Tool: Claude Code (Fable 5), 2026-09-21, issue #108.
 # Scope: multi-stage build — Vite static build served by nginx.
 # Reviewed by: Leong Wei Zhi (via pull request).
+# 2026-10-26, Claude Code (Fable 5), issue #250: VITE_RATING_SERVICE_URL
+# build arg added for the new rating-service (not consumed by the SPA
+# yet — the web half lands with the feature issues under #44).
 
 # 22.22 is the minimum required by react-router v8 (engines field);
 # keep in sync with package.json engines and .nvmrc.
@@ -19,11 +22,13 @@ ARG VITE_SUPPLIER_SERVICE_URL
 ARG VITE_ORDER_SERVICE_URL
 ARG VITE_CREDIT_SERVICE_URL
 ARG VITE_NOTIFICATION_SERVICE_URL
+ARG VITE_RATING_SERVICE_URL
 ENV VITE_USER_SERVICE_URL=$VITE_USER_SERVICE_URL \
     VITE_SUPPLIER_SERVICE_URL=$VITE_SUPPLIER_SERVICE_URL \
     VITE_ORDER_SERVICE_URL=$VITE_ORDER_SERVICE_URL \
     VITE_CREDIT_SERVICE_URL=$VITE_CREDIT_SERVICE_URL \
-    VITE_NOTIFICATION_SERVICE_URL=$VITE_NOTIFICATION_SERVICE_URL
+    VITE_NOTIFICATION_SERVICE_URL=$VITE_NOTIFICATION_SERVICE_URL \
+    VITE_RATING_SERVICE_URL=$VITE_RATING_SERVICE_URL
 RUN npm run build
 
 FROM nginx:alpine

@@ -43,12 +43,21 @@
  * ending and its CHECK, request_id on every outbox row, and retry
  * settlement (same event id; 409 cases; unknown request). Author review:
  * Ryan Ang, pending pull request review.
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: dispute (the window,
+ * the deadline, the requester only, category and note checks, once),
+ * escalate, resolve (split, party, state and note checks), retry of a
+ * resolution, request_dispute's CHECKs and foreign key, and the two races
+ * of the acceptance criteria in both orders. Author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.order;
 
+import foc.contracts.events.request.RequestDisputed;
 import foc.order.model.OutboxEvent;
+import foc.order.model.RequestDispute;
 import foc.order.model.Requests;
 import foc.order.repository.OutboxEventRepository;
+import foc.order.repository.RequestDisputeRepository;
 import foc.order.repository.RequestsRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,9 +73,11 @@ import tools.jackson.databind.json.JsonMapper;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -76,6 +87,8 @@ class RequestsServiceTests extends PostgresTestContainer {
 	private static final Long REQUESTER_ID = 1L;
 	private static final Long COURIER_ID = 7L;
 	private static final Long STRANGER_ID = 9L;
+	// resolves disputes: an admin who is neither party
+	private static final Long ADMIN_ID = 50L;
 
 	@Autowired
 	private RequestsService requestsService;
@@ -85,6 +98,9 @@ class RequestsServiceTests extends PostgresTestContainer {
 
 	@Autowired
 	private OutboxEventRepository outboxEvents;
+
+	@Autowired
+	private RequestDisputeRepository disputes;
 
 	@Autowired
 	private JsonMapper jsonMapper;
@@ -752,6 +768,360 @@ class RequestsServiceTests extends PostgresTestContainer {
 		assertThrows(NoSuchElementException.class, () -> requestsService.retrySettlement(999_999_999L));
 	}
 
+	// --- disputes (#239)
+
+	@Test
+	void requesterDisputesAnArrivedRequestWithinTheWindow() {
+		Long id = newArrivedRequest();
+
+		requestsService.dispute(id, REQUESTER_ID, "WRONG_ITEM", "Got fish soup");
+
+		assertEquals(OrderStates.DISPUTED, stored(id).getStatus());
+		assertNull(stored(id).getCloseReason(), "not closed until resolved");
+		RequestDispute dispute = disputes.findById(id).orElseThrow();
+		assertEquals(DisputeCategory.WRONG_ITEM, dispute.getCategory());
+		assertEquals("Got fish soup", dispute.getDisputeNote());
+		assertEquals(REQUESTER_ID, dispute.getRaisedBy());
+		assertNotNull(dispute.getRaisedAt());
+		assertFalse(dispute.isAutoEscalated());
+		assertNull(dispute.getResolvedAt());
+		assertNull(dispute.getCourierAmount());
+	}
+
+	@Test
+	void disputeWritesRequestDisputedForBothParties() {
+		Long id = newArrivedRequest();
+
+		requestsService.dispute(id, REQUESTER_ID, "OTHER", "Courier was rude");
+
+		JsonNode disputed = event(id, "request.disputed");
+		assertEquals(id.toString(), disputed.get("requestId").stringValue());
+		assertEquals(id.toString(), disputed.get("correlationId").stringValue());
+		assertEquals(List.of(REQUESTER_ID.toString(), COURIER_ID.toString()), parties(disputed));
+		assertEquals(REQUESTER_ID.toString(), disputed.get("requesterId").stringValue());
+		assertEquals(COURIER_ID.toString(), disputed.get("courierId").stringValue());
+		assertEquals("The Deck", disputed.get("pickupLocation").stringValue());
+		assertEquals("COM3 Level 2", disputed.get("dropoffLocation").stringValue());
+		// note is the request's item, as on every request event
+		assertEquals("Chicken rice", disputed.get("note").stringValue());
+		assertEquals("OTHER", disputed.get("category").stringValue());
+		assertEquals("Courier was rude", disputed.get("disputeNote").stringValue());
+		assertEquals(id, outboxRow(id, "request.disputed").getRequestId());
+	}
+
+	@Test
+	void anArrivedRequestPastTheAutoCompleteWindowCannotBeDisputed() {
+		Long id = newArrivedRequest();
+		Instant arrivedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS).minus(1, ChronoUnit.HOURS).minusSeconds(60);
+		setArrivedAt(id, arrivedAt);
+
+		// the auto-complete sweep has not run yet: the window decides
+		IllegalStateException e = assertThrows(IllegalStateException.class,
+				() -> requestsService.dispute(id, REQUESTER_ID, "WRONG_ITEM", null));
+
+		assertEquals("The dispute window closed at " + arrivedAt.plus(1, ChronoUnit.HOURS), e.getMessage());
+		assertEquals(OrderStates.ARRIVED, stored(id).getStatus());
+		assertFalse(disputes.existsById(id));
+		assertFalse(eventTypes(id).contains("request.disputed"));
+	}
+
+	@Test
+	void aCollectedRequestCanBeDisputedOnlyOnceItsDeadlinePassed() {
+		Long early = newCollectedRequest();
+		Long late = newCollectedRequest();
+		setDeadline(late, Instant.now().minusSeconds(60));
+
+		IllegalStateException e = assertThrows(IllegalStateException.class,
+				() -> requestsService.dispute(early, REQUESTER_ID, "NOT_DELIVERED", null));
+		requestsService.dispute(late, REQUESTER_ID, "NOT_DELIVERED", null);
+
+		assertEquals("The request's deadline has not passed yet", e.getMessage());
+		assertEquals(OrderStates.COLLECTED, stored(early).getStatus());
+		assertFalse(disputes.existsById(early));
+		assertEquals(OrderStates.DISPUTED, stored(late).getStatus());
+		assertNull(disputes.findById(late).orElseThrow().getDisputeNote());
+	}
+
+	@Test
+	void otherStatesCannotBeDisputedAndADisputeIsRaisedOnce() {
+		Long accepted = newCreatedRequest();
+		requestsService.accept(accepted, COURIER_ID);
+		Long completed = newCompletedRequest();
+		Long disputed = newArrivedRequest();
+		requestsService.dispute(disputed, REQUESTER_ID, "DAMAGED", null);
+
+		assertThrows(IllegalStateException.class,
+				() -> requestsService.dispute(accepted, REQUESTER_ID, "DAMAGED", null));
+		assertThrows(IllegalStateException.class,
+				() -> requestsService.dispute(completed, REQUESTER_ID, "DAMAGED", null));
+		IllegalStateException again = assertThrows(IllegalStateException.class,
+				() -> requestsService.dispute(disputed, REQUESTER_ID, "WRONG_ITEM", null));
+
+		assertEquals("Cannot DISPUTE a request that is DISPUTED", again.getMessage());
+		assertEquals(DisputeCategory.DAMAGED, disputes.findById(disputed).orElseThrow().getCategory());
+		assertEquals(1, eventTypes(disputed).stream().filter("request.disputed"::equals).count());
+	}
+
+	@Test
+	void onlyTheRequesterCanDispute() {
+		Long id = newArrivedRequest();
+
+		assertThrows(NoSuchElementException.class,
+				() -> requestsService.dispute(id, COURIER_ID, "DAMAGED", null));
+		assertThrows(NoSuchElementException.class,
+				() -> requestsService.dispute(id, STRANGER_ID, "DAMAGED", null));
+		assertThrows(NoSuchElementException.class,
+				() -> requestsService.dispute(-1L, REQUESTER_ID, "DAMAGED", null));
+
+		assertEquals(OrderStates.ARRIVED, stored(id).getStatus());
+	}
+
+	@Test
+	void disputeChecksItsCategoryAndNote() {
+		Long id = newArrivedRequest();
+
+		assertInvalid("category is required", () -> requestsService.dispute(id, REQUESTER_ID, null, null));
+		assertInvalid("category is required", () -> requestsService.dispute(id, REQUESTER_ID, " ", null));
+		assertInvalid("category must be one of NOT_DELIVERED, WRONG_ITEM, DAMAGED, OTHER",
+				() -> requestsService.dispute(id, REQUESTER_ID, "LATE", null));
+		assertInvalid("note is required when the category is OTHER",
+				() -> requestsService.dispute(id, REQUESTER_ID, "OTHER", null));
+		assertInvalid("note is required when the category is OTHER",
+				() -> requestsService.dispute(id, REQUESTER_ID, "OTHER", "   "));
+		assertInvalid("note must be at most 500 characters",
+				() -> requestsService.dispute(id, REQUESTER_ID, "DAMAGED", "x".repeat(501)));
+		assertEquals(OrderStates.ARRIVED, stored(id).getStatus());
+
+		// the case is forgiven, a blank note is no note, and 500 characters fit
+		requestsService.dispute(id, REQUESTER_ID, "damaged", "x".repeat(500));
+		assertEquals(DisputeCategory.DAMAGED, disputes.findById(id).orElseThrow().getCategory());
+	}
+
+	@Test
+	void everyDisputeCategoryIsAContractCategory() {
+		assertEquals(RequestDisputed.CATEGORIES,
+				Arrays.stream(DisputeCategory.values()).map(Enum::name).collect(Collectors.toSet()));
+	}
+
+	@Test
+	void escalateDisputesACollectedRequestAsNotDeliveredWithNoOneRaisingIt() {
+		Long id = newCollectedRequest();
+
+		requestsService.escalate(id);
+
+		assertEquals(OrderStates.DISPUTED, stored(id).getStatus());
+		RequestDispute dispute = disputes.findById(id).orElseThrow();
+		assertEquals(DisputeCategory.NOT_DELIVERED, dispute.getCategory());
+		assertEquals("auto-escalated: not delivered by deadline", dispute.getDisputeNote());
+		assertNull(dispute.getRaisedBy());
+		assertTrue(dispute.isAutoEscalated());
+		JsonNode disputed = event(id, "request.disputed");
+		assertEquals("NOT_DELIVERED", disputed.get("category").stringValue());
+		assertEquals("auto-escalated: not delivered by deadline", disputed.get("disputeNote").stringValue());
+		assertEquals(List.of(REQUESTER_ID.toString(), COURIER_ID.toString()), parties(disputed));
+	}
+
+	@Test
+	void escalateOnlyFromCollected() {
+		Long arrived = newArrivedRequest();
+
+		assertThrows(IllegalStateException.class, () -> requestsService.escalate(arrived));
+
+		assertEquals(OrderStates.ARRIVED, stored(arrived).getStatus());
+		assertFalse(disputes.existsById(arrived));
+	}
+
+	@Test
+	void resolveStoresTheSplitAndWritesRequestDisputeResolved() {
+		Long id = newDisputedRequest();
+
+		requestsService.resolve(id, ADMIN_ID, 1, 2, "Half the food was missing");
+
+		Requests stored = stored(id);
+		assertEquals(OrderStates.RESOLVED, stored.getStatus());
+		assertEquals(CloseReason.DISPUTE_RESOLVED, stored.getCloseReason());
+		RequestDispute dispute = disputes.findById(id).orElseThrow();
+		assertEquals(ADMIN_ID, dispute.getResolvedBy());
+		assertNotNull(dispute.getResolvedAt());
+		assertEquals(1, dispute.getCourierAmount());
+		assertEquals(2, dispute.getRequesterAmount());
+		assertEquals("Half the food was missing", dispute.getResolutionNote());
+		// the dispute itself is kept as raised
+		assertEquals(DisputeCategory.WRONG_ITEM, dispute.getCategory());
+		JsonNode resolved = event(id, "request.dispute-resolved");
+		assertEquals(List.of(REQUESTER_ID.toString(), COURIER_ID.toString()), parties(resolved));
+		assertEquals(COURIER_ID.toString(), resolved.get("courierId").stringValue());
+		assertEquals("Chicken rice", resolved.get("note").stringValue());
+		assertEquals(1, resolved.get("courierAmount").intValue());
+		assertEquals(2, resolved.get("requesterAmount").intValue());
+		assertEquals("Half the food was missing", resolved.get("resolutionNote").stringValue());
+	}
+
+	@Test
+	void fullRefundAndFullPayoutWithoutANote() {
+		Long refunded = newDisputedRequest();
+		Long paid = newDisputedRequest();
+
+		requestsService.resolve(refunded, ADMIN_ID, 0, 3, null);
+		requestsService.resolve(paid, ADMIN_ID, 3, 0, "  ");
+
+		assertEquals(3, disputes.findById(refunded).orElseThrow().getRequesterAmount());
+		assertNull(disputes.findById(refunded).orElseThrow().getResolutionNote());
+		assertEquals(3, disputes.findById(paid).orElseThrow().getCourierAmount());
+		assertTrue(event(paid, "request.dispute-resolved").get("resolutionNote").isNull());
+	}
+
+	@Test
+	void resolveChecksTheAmountsAndTheNote() {
+		Long id = newDisputedRequest();
+
+		assertInvalid("courierAmount must be 0 or more; requesterAmount must be 0 or more",
+				() -> requestsService.resolve(id, ADMIN_ID, null, -1, null));
+		assertInvalid("courierAmount must be 0 or more",
+				() -> requestsService.resolve(id, ADMIN_ID, -1, 4, null));
+		assertInvalid("courierAmount and requesterAmount must add up to the reward (3)",
+				() -> requestsService.resolve(id, ADMIN_ID, 1, 1, null));
+		assertInvalid("courierAmount and requesterAmount must add up to the reward (3)",
+				() -> requestsService.resolve(id, ADMIN_ID, 3, 3, null));
+		assertInvalid("note must be at most 500 characters",
+				() -> requestsService.resolve(id, ADMIN_ID, 1, 2, "x".repeat(501)));
+
+		assertEquals(OrderStates.DISPUTED, stored(id).getStatus());
+		assertNull(disputes.findById(id).orElseThrow().getResolvedAt());
+		assertFalse(eventTypes(id).contains("request.dispute-resolved"));
+	}
+
+	@Test
+	void anAdminWhoIsAPartyCannotResolve() {
+		Long id = newDisputedRequest();
+
+		IllegalStateException asRequester = assertThrows(IllegalStateException.class,
+				() -> requestsService.resolve(id, REQUESTER_ID, 1, 2, null));
+		assertThrows(IllegalStateException.class, () -> requestsService.resolve(id, COURIER_ID, 1, 2, null));
+
+		assertEquals("An admin cannot resolve a dispute on their own request", asRequester.getMessage());
+		assertEquals(OrderStates.DISPUTED, stored(id).getStatus());
+		assertNull(stored(id).getCloseReason());
+	}
+
+	@Test
+	void onlyADisputedRequestCanBeResolvedAndOnlyOnce() {
+		Long arrived = newArrivedRequest();
+		Long resolved = newDisputedRequest();
+		requestsService.resolve(resolved, ADMIN_ID, 1, 2, null);
+
+		assertThrows(IllegalStateException.class, () -> requestsService.resolve(arrived, ADMIN_ID, 1, 2, null));
+		IllegalStateException again = assertThrows(IllegalStateException.class,
+				() -> requestsService.resolve(resolved, ADMIN_ID, 3, 0, null));
+		assertThrows(NoSuchElementException.class, () -> requestsService.resolve(-1L, ADMIN_ID, 1, 2, null));
+
+		assertEquals("Cannot RESOLVE a request that is RESOLVED", again.getMessage());
+		assertEquals(1, disputes.findById(resolved).orElseThrow().getCourierAmount());
+		assertEquals(1, eventTypes(resolved).stream().filter("request.dispute-resolved"::equals).count());
+	}
+
+	@Test
+	void retrySettlementResendsADisputeResolution() {
+		Long disputed = newDisputedRequest();
+		Long resolved = newDisputedRequest();
+		requestsService.resolve(resolved, ADMIN_ID, 1, 2, null);
+
+		// a disputed request still holds its reward legitimately
+		assertThrows(IllegalStateException.class, () -> requestsService.retrySettlement(disputed));
+		assertEquals("request.dispute-resolved", requestsService.retrySettlement(resolved).getEventType());
+	}
+
+	// --- request_dispute's constraints (Flyway's V3)
+
+	@Test
+	void databaseAcceptsEveryDisputeCategory() {
+		for (DisputeCategory category : DisputeCategory.values()) {
+			Long id = newRequest();
+			jdbcTemplate.update("insert into request_dispute (request_id, category, raised_by, raised_at, "
+					+ "auto_escalated) values (?, ?, 1, now(), false)", id, category.name());
+			assertEquals(category, disputes.findById(id).orElseThrow().getCategory());
+		}
+	}
+
+	@Test
+	void databaseRejectsAnInconsistentDispute() {
+		String insert = "insert into request_dispute (request_id, category, raised_by, raised_at, auto_escalated, "
+				+ "resolved_by, resolved_at, courier_amount, requester_amount) values (?, ?, ?, now(), ?, ?, ?, ?, ?)";
+		Instant now = Instant.now();
+		java.sql.Timestamp at = java.sql.Timestamp.from(now);
+
+		// not a category
+		assertRejected(insert, newRequest(), "LATE", 1L, false, null, null, null, null);
+		// raised by hand but nobody named
+		assertRejected(insert, newRequest(), "DAMAGED", null, false, null, null, null, null);
+		// half a resolution
+		assertRejected(insert, newRequest(), "DAMAGED", 1L, false, 50L, null, null, null);
+		assertRejected(insert, newRequest(), "DAMAGED", 1L, false, 50L, at, 1, null);
+		// a negative share
+		assertRejected(insert, newRequest(), "DAMAGED", 1L, false, 50L, at, -1, 4);
+		// no such request (foreign key)
+		assertRejected(insert, 999_999_999L, "DAMAGED", 1L, false, null, null, null, null);
+
+		// a sweep's dispute names nobody; a full resolution is accepted
+		Long escalated = newRequest();
+		jdbcTemplate.update(insert, escalated, "NOT_DELIVERED", null, true, 50L, at, 0, 3);
+		assertTrue(disputes.findById(escalated).orElseThrow().isAutoEscalated());
+	}
+
+	// --- races (#239 acceptance criteria)
+
+	@Test
+	void disputeLosingARaceWithAutoCompleteLeavesTheRequestCompleted() {
+		Long id = newArrivedRequest();
+
+		assertThrows(OptimisticLockingFailureException.class, () -> whileUncommitted(id,
+				() -> requestsService.dispute(id, REQUESTER_ID, "WRONG_ITEM", null),
+				() -> requestsService.completeAutomatically(id)));
+
+		assertEquals(OrderStates.COMPLETED, stored(id).getStatus());
+		assertFalse(disputes.existsById(id));
+		assertFalse(eventTypes(id).contains("request.disputed"));
+	}
+
+	@Test
+	void autoCompleteLosingARaceWithADisputeLeavesTheRequestDisputed() {
+		Long id = newArrivedRequest();
+
+		assertThrows(OptimisticLockingFailureException.class, () -> whileUncommitted(id,
+				() -> requestsService.completeAutomatically(id),
+				() -> requestsService.dispute(id, REQUESTER_ID, "WRONG_ITEM", null)));
+
+		assertEquals(OrderStates.DISPUTED, stored(id).getStatus());
+		assertTrue(disputes.existsById(id));
+		assertFalse(eventTypes(id).contains("request.completed"));
+	}
+
+	@Test
+	void escalationLosingARaceWithArriveLeavesTheRequestArrived() {
+		Long id = newCollectedRequest();
+
+		assertThrows(OptimisticLockingFailureException.class, () -> whileUncommitted(id,
+				() -> requestsService.escalate(id),
+				() -> requestsService.arrive(id, COURIER_ID)));
+
+		assertEquals(OrderStates.ARRIVED, stored(id).getStatus());
+		assertFalse(disputes.existsById(id));
+		assertFalse(eventTypes(id).contains("request.disputed"));
+	}
+
+	@Test
+	void arriveLosingARaceWithEscalationLeavesTheRequestDisputed() {
+		Long id = newCollectedRequest();
+
+		assertThrows(OptimisticLockingFailureException.class, () -> whileUncommitted(id,
+				() -> requestsService.arrive(id, COURIER_ID),
+				() -> requestsService.escalate(id)));
+
+		assertEquals(OrderStates.DISPUTED, stored(id).getStatus());
+		assertTrue(disputes.findById(id).orElseThrow().isAutoEscalated());
+		assertFalse(eventTypes(id).contains("request.courier-arrived"));
+	}
+
 	// Two callers overlapping: first's transaction reads the request, then
 	// other runs and commits in its own transaction on another thread,
 	// then first carries on with the copy it read — so first writes last,
@@ -796,6 +1166,49 @@ class RequestsServiceTests extends PostgresTestContainer {
 		requestsService.arrive(id, COURIER_ID);
 		requestsService.complete(id, REQUESTER_ID);
 		return id;
+	}
+
+	// A request the courier has collected (deadline still ahead).
+	private Long newCollectedRequest() {
+		Long id = newCreatedRequest();
+		requestsService.accept(id, COURIER_ID);
+		requestsService.collect(id, COURIER_ID);
+		return id;
+	}
+
+	// A request the courier has just marked arrived.
+	private Long newArrivedRequest() {
+		Long id = newCollectedRequest();
+		requestsService.arrive(id, COURIER_ID);
+		return id;
+	}
+
+	// An arrived request the requester disputed as the wrong item.
+	private Long newDisputedRequest() {
+		Long id = newArrivedRequest();
+		requestsService.dispute(id, REQUESTER_ID, "WRONG_ITEM", null);
+		return id;
+	}
+
+	private void setArrivedAt(Long id, Instant arrivedAt) {
+		Requests stored = stored(id);
+		stored.setArrivedAt(arrivedAt);
+		requestsRepository.save(stored);
+	}
+
+	// create refuses a past deadline, so the row is changed afterwards
+	private void setDeadline(Long id, Instant deadline) {
+		Requests stored = stored(id);
+		stored.setDeadline(deadline);
+		requestsRepository.save(stored);
+	}
+
+	private static void assertInvalid(String message, org.junit.jupiter.api.function.Executable call) {
+		assertEquals(message, assertThrows(InvalidRequestException.class, call).getMessage());
+	}
+
+	private void assertRejected(String sql, Object... args) {
+		assertThrows(DataIntegrityViolationException.class, () -> jdbcTemplate.update(sql, args));
 	}
 
 	private Requests stored(Long id) {

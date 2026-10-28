@@ -21,10 +21,16 @@
  * the shared filters) and the batch status lookup (an unknown id answers
  * null; at most 100 ids). Both shapes are team decisions (DSP-5). Author
  * review: Ryan Ang, pending pull request review.
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: the disputes of a page
+ * of requests in one query, for the dispute object on the list and
+ * detail responses (team decision: no query per row). Author review:
+ * Ryan Ang, pending pull request review.
  */
 package foc.order;
 
+import foc.order.model.RequestDispute;
 import foc.order.model.Requests;
+import foc.order.repository.RequestDisputeRepository;
 import foc.order.repository.RequestSpecifications;
 import foc.order.repository.RequestsRepository;
 import org.springframework.data.jpa.domain.Specification;
@@ -39,10 +45,12 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
@@ -66,10 +74,15 @@ public class RequestsQueryService {
     private static final Sort NEWEST_FIRST = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
     private static final Sort NEAREST_DEADLINE_FIRST = Sort.by(Sort.Order.asc("deadline"), Sort.Order.asc("id"));
 
-    private final RequestsRepository requestsRepository;
+    // the only states a request with a dispute can be in
+    private static final Set<OrderStates> DISPUTE_STATES = EnumSet.of(OrderStates.DISPUTED, OrderStates.RESOLVED);
 
-    public RequestsQueryService(RequestsRepository requestsRepository) {
+    private final RequestsRepository requestsRepository;
+    private final RequestDisputeRepository disputes;
+
+    public RequestsQueryService(RequestsRepository requestsRepository, RequestDisputeRepository disputes) {
         this.requestsRepository = requestsRepository;
+        this.disputes = disputes;
     }
 
     // Open errands for couriers (F2.1): CREATED only, so PENDING requests
@@ -113,6 +126,26 @@ public class RequestsQueryService {
     public Page<Requests> admin(String state, String closeReason, RequestFilter filter, int page, int size) {
         return find(allOf(statusIn(parseStates(state)), closeReasonIn(parseCloseReasons(closeReason))),
                 filter, page, size);
+    }
+
+    // The disputes of a page of requests, by request id, in one query
+    // (none when no request on the page is disputed or resolved). A
+    // request without a dispute has no entry.
+    public Map<Long, RequestDispute> disputesOf(List<Requests> requests) {
+        List<Long> ids = requests.stream()
+                .filter(r -> DISPUTE_STATES.contains(r.getStatus()))
+                .map(Requests::getId)
+                .toList();
+        Map<Long, RequestDispute> byRequest = new HashMap<>();
+        if (!ids.isEmpty()) {
+            disputes.findAllById(ids).forEach(d -> byRequest.put(d.getRequestId(), d));
+        }
+        return byRequest;
+    }
+
+    // One request's dispute, null if it has none.
+    public RequestDispute disputeOf(Requests request) {
+        return disputesOf(List.of(request)).get(request.getId());
     }
 
     // The current state of each id, in the order asked; an id no request

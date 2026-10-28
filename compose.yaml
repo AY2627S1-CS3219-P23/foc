@@ -112,8 +112,18 @@
 # 2026-10-19, Claude Code (Fable 5), issue #221: both variables removed —
 # D32 (options Q&A) supersedes D30/D31: the web hydrates names at read
 # time through the gateway, so no service-to-service call remains.
+# 2026-10-26, Claude Code (Fable 5), issue #250: rating-service +
+# rating-db wiring added, following the order-service pattern (repo-root
+# build context for the contracts-aware Dockerfile; no RabbitMQ env or
+# depends_on yet — the skeleton has no listener). Host port 5438 for the
+# DB (next free after order's 5437), the postgres:17 image, and the
+# walking-skeleton scope per the decisions recorded on #44/#250.
 # Other services add their own entries in their own PRs.
 # Reviewed by: Leong Wei Zhi (via pull request).
+# 2026-10-26, Claude Code (Opus 5.5), issue #239:
+# ORDER_DISPUTE_ESCALATION_GRACE_MS passed to the order service for the
+# expiry sweep's dispute escalation (team decision DSP-6). Author review:
+# Ryan Ang, pending pull request review.
 
 name: foc
 
@@ -141,6 +151,7 @@ services:
         VITE_ORDER_SERVICE_URL: ${VITE_ORDER_SERVICE_URL:-http://localhost:${GATEWAY_PORT:-8090}/api/order}
         VITE_CREDIT_SERVICE_URL: ${VITE_CREDIT_SERVICE_URL:-http://localhost:${GATEWAY_PORT:-8090}/api/credit}
         VITE_NOTIFICATION_SERVICE_URL: ${VITE_NOTIFICATION_SERVICE_URL:-http://localhost:${GATEWAY_PORT:-8090}/api/notification}
+        VITE_RATING_SERVICE_URL: ${VITE_RATING_SERVICE_URL:-http://localhost:${GATEWAY_PORT:-8090}/api/rating}
     ports:
       - "${WEB_PORT:-5173}:80"
     restart: unless-stopped
@@ -174,6 +185,8 @@ services:
       credit-service:
         condition: service_started
       notification-service:
+        condition: service_started
+      rating-service:
         condition: service_started
     restart: unless-stopped
 
@@ -496,6 +509,9 @@ services:
       ORDER_EXPIRY_SWEEP_INTERVAL_MS: ${ORDER_EXPIRY_SWEEP_INTERVAL_MS:-300000}
       ORDER_AUTO_COMPLETE_AFTER_MS: ${ORDER_AUTO_COMPLETE_AFTER_MS:-3600000}
       ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS: ${ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS:-300000}
+      # how long after its deadline a still-COLLECTED request is disputed
+      # by the expiry sweep (DSP-6)
+      ORDER_DISPUTE_ESCALATION_GRACE_MS: ${ORDER_DISPUTE_ESCALATION_GRACE_MS:-3600000}
       # verifies the caller's bearer token for the ownership checks
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       # the SPA's origin, for CORS
@@ -530,6 +546,51 @@ services:
       retries: 10
     restart: unless-stopped
 
+  rating-service:
+    # Context is the repo root so the build can include the shared
+    # foc-contracts library (D15). The pom does not use it yet; see the
+    # Dockerfile note.
+    build:
+      context: .
+      dockerfile: rating-service/Dockerfile
+    environment:
+      RATING_DB_HOST: rating-db
+      RATING_DB_PORT: "5432"
+      RATING_DB_NAME: ${RATING_DB_NAME:-rating}
+      RATING_DB_USER: ${RATING_DB_USER:-rating}
+      RATING_DB_PASSWORD: ${RATING_DB_PASSWORD:?set in .env}
+      # verifies the caller's bearer token
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
+      # the SPA's origin, for CORS
+      WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
+    depends_on:
+      rating-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Rating DB: PostgreSQL owned exclusively by the rating service
+  # (database-per-service).
+  rating-db:
+    image: postgres:17
+    # Published on the host so local tooling (psql, DB GUIs, the postgres
+    # MCP server) can reach the service-owned DB; the service itself talks
+    # to it over the compose network on 5432. Bound to loopback so the
+    # database is reachable from this machine only.
+    ports:
+      - "127.0.0.1:${RATING_DB_HOST_PORT:-5438}:5432"
+    environment:
+      POSTGRES_DB: ${RATING_DB_NAME:-rating}
+      POSTGRES_USER: ${RATING_DB_USER:-rating}
+      POSTGRES_PASSWORD: ${RATING_DB_PASSWORD:?set in .env}
+    volumes:
+      - rating-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${RATING_DB_USER:-rating} -d ${RATING_DB_NAME:-rating}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   # Local mail catcher (issue #88): the default SMTP target for the user
   # service's OTP emails, so dev and demo need no real mail account.
   # Caught mail is browsable at http://localhost:8025; the store is
@@ -551,6 +612,7 @@ volumes:
   notification-db-data:
   order-db-data:
   rabbitmq-data:
+  rating-db-data:
   redis-data:
   supplier-db-data:
   user-db-data:

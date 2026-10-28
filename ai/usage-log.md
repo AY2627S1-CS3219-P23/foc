@@ -72,7 +72,116 @@ Entry template:
   one path segment with empty search/hash), and the deliberate
   skip-the-per-row-PATCH-during-mark-all behavior is documented in a
   comment at the guard.
+  Round 3 (@Sinnez1, approved with four inline notes, none blocking):
+  the `web/AGENTS.md` clause order is fixed (the #232 "fifth" clause
+  now follows the "fourth" one). The two timing nits the reviewer
+  himself called fine to leave (a row pushed mid-mark-all staying
+  unread; a fast Back showing the row unread until the PATCH commits)
+  are already documented at the guard and left as is. The ex-courier
+  note was checked against the code rather than taken at face value:
+  `request.cancelled` carries the requester only and a request can be
+  cancelled only before any courier accepted, so the reviewer's
+  example cannot occur; the real case is a courier who drops, since
+  `drop()` nulls `courierId` — which also removes the request from
+  their own history, so no landing page can show it. Left as is and
+  filed as a follow-up issue (the author's decision via options Q&A).
+  Main merged in: the only conflict was this file, both sides having
+  appended entries under the same `---`; both kept, the #232 entry
+  first.
 
+---
+## 2026-10-26 — Leong Wei Zhi (feat: rating-service scaffold, issue #250)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate, docs
+- **Scope:** `rating-service/` (new: pom, Spring Initializr scaffolding
+  copied from order-service, `RatingServiceApplication`,
+  `config/SecurityConfig`, `security/JwtVerifier` /
+  `JwtAuthenticationFilter` / `RestAuthEntryPoint` /
+  `RestAccessDeniedHandler` — all copied from order-service with only
+  the package and property prefix changed —, main/test
+  `application.yaml`, empty Flyway `V1__baseline.sql`, contracts-aware
+  `Dockerfile`, README; tests: contextLoads, `SecurityConfigTest`
+  scaffolded from notification-service's, `JwtVerifierTest`);
+  `compose.yaml` (rating-service + rating-db on host port 5438, web
+  build arg, gateway depends_on); `gateway/nginx.conf` (`/api/rating/`
+  location copied from credit's); `.env.example` (Rating Service
+  section, `VITE_RATING_SERVICE_URL`); `web/Dockerfile` (the build
+  arg); `docs/gateway.md` (routing row, G3 count); `AGENTS.md` (folder
+  + port tables); `README.md` (structure tree, AI Use Summary);
+  `.github/workflows/ci.yml` (java + docker filters).
+- **Prompt(s):** "make a plan to resolve [issue #250]" then approval of
+  the plan; two scope decisions made by the author via neutral-options
+  Q&A: the Flyway baseline stays empty (the rating table lands as V2
+  with the first feature issue) and the pom stays lean (no AMQP /
+  foc-contracts dependency) while the Dockerfile keeps the contracts
+  stage so the later event wiring touches no infra.
+- **Author review:** `./mvnw test` green (18 tests, H2, no Docker);
+  full-stack smoke — `/api/rating/actuator/health` through the gateway
+  200 UP (anonymous passthrough per G5 + in-service permitAll, matching
+  credit's behavior), an invalid bearer 401 from the gateway, an
+  anonymous non-health route 401 from the service, Flyway V1 recorded
+  in rating-db; to be reviewed via pull request.
+
+---
+## 2026-10-26 — Ryan Ang (feat: Order disputes, issue #239)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** order-service (`db/migration/V3__disputes.sql` new;
+  `DisputeCategory.java`, `model/RequestDispute.java`,
+  `repository/RequestDisputeRepository.java`, `dto/Dispute.java` new;
+  `OrderStates.java`, `OrderEvents.java`, `OrderStateMachine.java`: the
+  dispute states and transitions; `RequestsService.java`: `dispute`,
+  `escalate`, `resolve`; `RequestEvents.java`: `request.disputed`,
+  `request.dispute-resolved`; `DeadlineExpirySweeper.java`: escalation;
+  `RequestsQueryService.java`, `RequestSummary.java`,
+  `RequestDetail.java`: the dispute object; `RequestsController.java`,
+  `SecurityConfig.java`: `POST /dispute`, `POST /resolve` (ADMIN /
+  OWNER); `application.yaml` (main and test), `README.md`,
+  `endpoints.txt`; tests: `OrderStateMachineTests`,
+  `RequestsServiceTests`, `RequestsControllerTests`,
+  `RequestsReadEndpointsTests`, `DeadlineExpirySweeperTests`,
+  `AutoCompleteSweeperTests`, `DisputeListQueryCountTests` and
+  `DisputeWindowTests` new).
+  `compose.yaml`, `.env.example`: `ORDER_DISPUTE_ESCALATION_GRACE_MS`.
+  `docs/disputes.md` (#239 revision entry). `README.md` (AI Use Summary
+  and header line).
+- **Prompt(s):** Implement issue #239 as written there (team decisions
+  DSP-2, DSP-5 to DSP-8, DSP-14). Before coding, the tool listed four
+  points the issue left open, and the team decided them:
+  - `request_dispute` gets a foreign key to `requests`, because a
+    dispute is part of its order, unlike the outbox log.
+  - `raised_by` is null when the sweep escalated the dispute.
+  - CHECKs require a hand-raised dispute to name who raised it, keep the
+    resolution fields set together or not at all, and keep the shares
+    non-negative.
+  - An ARRIVED order past its auto-complete window is refused with 409
+    naming the time, even before the sweep runs.
+  - The resolution note is optional, at most 500 characters.
+  - A nullable `dispute` object goes on both `RequestSummary` and
+    `RequestDetail`, loaded once per page and not once per row, with a
+    test of the query count.
+
+  These were transcribed into `docs/disputes.md`.
+
+  The tool chose these implementation details after author confirmation:
+  - Fields are checked first (400), then the caller (404), then the
+    state (409). `/resolve` checks the state before the party and the
+    split.
+  - A blank note counts as none, and the category's case is forgiven.
+  - The window time in the 409 is truncated to whole seconds.
+  - `RequestDispute` holds the request as an id, not an association, and
+    implements `Persistable` so a save inserts.
+  - The escalation runs after expiry in the same scheduled sweep, as
+    `escalateOverdue`.
+  - The disputes query runs only for rows that are DISPUTED or RESOLVED.
+
+  The PR #246 note on a tiebreaker for retry settlement was checked and
+  left as is: a request can reach DISPUTED only from COLLECTED or
+  ARRIVED, so it never has an earlier settlement event.
+- **Author review:** order-service 165 tests pass locally with Docker,
+  none skipped. Ryan Ang to review via pull request.
+
+---
 ## 2026-10-26 — Ryan Ang (feat: Notification accepts the N3 dispute events, issue #237)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs

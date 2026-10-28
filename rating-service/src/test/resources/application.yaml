@@ -1,0 +1,30 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5), 2026-10-26, issue #250.
+# Scope: test configuration scaffolded following the supplier-service /
+# order-service pattern (in-memory H2 so `./mvnw test` needs no running
+# PostgreSQL, fixed 32+ byte test JWT secret). Flyway is off in tests:
+# the migrations are PostgreSQL-flavored, so H2 schemas come from the
+# JPA entities instead.
+# Reviewed by: [pending]
+
+# This file replaces the main application.yaml on the test classpath
+# (same name), so every rating.* setting the beans read is repeated here
+# with the main file's defaults.
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:rating;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+  flyway:
+    # PostgreSQL-flavored migrations don't run on H2
+    enabled: false
+
+rating:
+  web-allowed-origin: http://localhost:5173
+  jwt:
+    secret: test-secret-0123456789abcdef0123456789abcdef

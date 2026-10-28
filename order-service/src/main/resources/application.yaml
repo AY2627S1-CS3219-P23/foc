@@ -19,6 +19,9 @@
 # 2026-10-22, Claude Code (Opus 5.5), issue #238: Flyway owns the schema
 # (db/migration); Hibernate only validates it. Author review: Ryan Ang,
 # pending pull request review.
+# 2026-10-26, Claude Code (Opus 5.5), issue #239:
+# order.expiry.dispute-escalation-grace-ms (team decision DSP-6, 1 h
+# default). Author review: Ryan Ang, pending pull request review.
 
 spring:
   application:
@@ -79,6 +82,9 @@ order:
       # Delay between deadline-expiry sweeps (CREATED / ACCEPTED requests
       # past their deadline become EXPIRED).
       interval-ms: ${ORDER_EXPIRY_SWEEP_INTERVAL_MS:300000}
+    # How long after its deadline a request still COLLECTED is disputed
+    # as not delivered by the same sweep (DSP-6).
+    dispute-escalation-grace-ms: ${ORDER_DISPUTE_ESCALATION_GRACE_MS:3600000}
   auto-complete:
     # How long a request may stay ARRIVED without the requester's
     # confirmation before it is completed for them (F7.2).
