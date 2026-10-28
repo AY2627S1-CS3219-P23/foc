@@ -46,6 +46,9 @@
  * decision DSP-5; every list and the detail carry the request's dispute,
  * loaded once per page (team decision). Author review: Ryan Ang, pending
  * pull request review.
+ * 2026-10-27, Claude Code (Opus 5.5), issue #242: GET /requests/admin
+ * takes userId (team decision). Author review: Ryan Ang, pending pull
+ * request review.
  */
 package foc.order.controller;
 
@@ -159,16 +162,20 @@ public class RequestsController {
     }
 
     // Every user's requests by state and close reason (both may list
-    // several, comma-separated) and the shared filters: ADMIN / OWNER
+    // several, comma-separated), optionally only those a user is the
+    // requester or courier of, and the shared filters: ADMIN / OWNER
     // only (SecurityConfig). Matched before /requests/{id}, being literal.
+    // userId stays off RequestFilter, which the open list shares: there
+    // it would tell anyone whose requests those are.
     @GetMapping("/requests/admin")
     public PageResponse<RequestSummary> adminRequests(
             @RequestParam(required = false) String state,
             @RequestParam(required = false) String closeReason,
+            @RequestParam(required = false) Long userId,
             RequestFilter filter,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return summaries(queries.admin(state, closeReason, filter, page, size));
+        return summaries(queries.admin(state, closeReason, userId, filter, page, size));
     }
 
     // The current state of up to 100 requests, {"42": "COMPLETED", "99":

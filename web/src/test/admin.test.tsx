@@ -25,14 +25,30 @@
 // gateway, and the page case expects it beside the Users section.
 // Same day: its past-distributions call faked too.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-27, Claude Code (Opus 5.5), issue #242: the Stuck Orders and
+// Failed Orders sections against faked credit and order admin calls —
+// stuck flagging (finished orders only, DISPUTED never), retry settlement
+// and its 409, the threshold presets and truncation notice; the failed
+// states and reasons, the closed time and its fallback, and the user,
+// reason and date filters together.
+// Author review: Ryan Ang, pending pull request review.
+// 2026-10-28, Claude Code (Opus 5.5), PR #265 review: held credits for an
+// unknown order are named and not counted as in progress; the user lookup
+// lists its matches to pick from, with a notice when there are more.
+// Author review: Ryan Ang, pending pull request review.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router'
 
 import { creditApi } from '@/features/credit/api'
+import { localDayStart } from '@/features/credit/history'
+import { orderAdminApi } from '@/features/order/adminApi'
+import { orderApi } from '@/features/order/api'
+import type { RequestSummary } from '@/features/order/types'
 import { adminUserApi } from '@/features/user/adminApi'
 import { USERS_PAGE_SIZE } from '@/features/user/components/UsersSection'
+import { ApiError } from '@/lib/api/http'
 import type {
   AdminUser,
   AdminUserPage,
@@ -209,6 +225,20 @@ beforeEach(() => {
   vi.spyOn(adminUserApi, 'getCurrentUser').mockResolvedValue({
     ...seedUsers[2],
   })
+  // the order domain's Stuck Orders and Failed Orders sections: nothing
+  // held, no failed orders, unless a case says otherwise
+  vi.spyOn(creditApi, 'getHeldReservations').mockResolvedValue({
+    items: [],
+    truncated: false,
+  })
+  vi.spyOn(orderAdminApi, 'getStatuses').mockResolvedValue({})
+  vi.spyOn(orderAdminApi, 'retrySettlement').mockResolvedValue({
+    message: 'queued',
+  })
+  vi.spyOn(orderAdminApi, 'listRequests').mockResolvedValue(pageOf([]))
+  vi.spyOn(orderApi, 'getUsername').mockImplementation(
+    async (id) => `user_${id}`,
+  )
 })
 
 describe('Users section', () => {
@@ -796,7 +826,7 @@ describe('Users section', () => {
 })
 
 describe('Admin Dashboard page', () => {
-  test('shows the Common Pool and Users sections', async () => {
+  test('shows the Common Pool, order and Users sections', async () => {
     renderAdmin()
     await findSectionTable('Users')
 
@@ -804,7 +834,12 @@ describe('Admin Dashboard page', () => {
       screen
         .getAllByRole('region')
         .map((r) => r.getAttribute('aria-labelledby')),
-    ).toEqual(['pool-heading', 'users-heading'])
+    ).toEqual([
+      'pool-heading',
+      'stuck-orders-heading',
+      'failed-orders-heading',
+      'users-heading',
+    ])
     expect(
       screen.queryByRole('region', { name: 'Suppliers' }),
     ).not.toBeInTheDocument()
@@ -883,5 +918,447 @@ describe('Admin Dashboard nav link', () => {
     expect(
       screen.queryByRole('link', { name: 'Admin' }),
     ).not.toBeInTheDocument()
+  })
+})
+
+// --- order domain: Stuck Orders and Failed Orders (issue #242)
+
+function pageOf(content: RequestSummary[]) {
+  return {
+    content,
+    page: 0,
+    size: 20,
+    totalElements: content.length,
+    totalPages: content.length === 0 ? 0 : 1,
+  }
+}
+
+function held(requestId: string, requesterId = '2', amount = 3) {
+  return { requestId, requesterId, amount, heldSince: '2026-10-27T01:00:00Z' }
+}
+
+function failed(
+  id: number,
+  change: Partial<RequestSummary> = {},
+): RequestSummary {
+  return {
+    id,
+    status: 'CANCELLED',
+    closeReason: 'REQUESTER_CANCELLED',
+    closedAt: '2026-10-20T04:30:00Z',
+    supplierName: 'The Deck',
+    dropoffLocation: 'COM3 Level 2',
+    item: `Item ${id}`,
+    creditAmount: 3,
+    deadline: '2026-10-20T06:00:00Z',
+    createdAt: '2026-10-20T02:00:00Z',
+    ...change,
+  }
+}
+
+async function findRegion(name: 'Stuck Orders' | 'Failed Orders') {
+  return within(await screen.findByRole('region', { name }))
+}
+
+function lastAdminListParams() {
+  return vi.mocked(orderAdminApi.listRequests).mock.lastCall?.[0]
+}
+
+describe('Stuck Orders section', () => {
+  test('flags only held reservations whose order is finished', async () => {
+    vi.mocked(creditApi.getHeldReservations).mockResolvedValue({
+      items: [
+        held('41', '2'),
+        held('42'),
+        held('43'),
+        held('44', '4', 5),
+        held('45'),
+      ],
+      truncated: false,
+    })
+    vi.mocked(orderAdminApi.getStatuses).mockResolvedValue({
+      '41': 'COMPLETED',
+      '42': 'DISPUTED', // holds its credits on purpose
+      '43': 'ACCEPTED', // still in progress
+      '44': 'RESOLVED',
+      '45': null, // no such order
+    })
+    renderAdmin()
+
+    const table = within(
+      await (await findRegion('Stuck Orders')).findByRole('table'),
+    )
+    expect(creditApi.getHeldReservations).toHaveBeenCalledWith('PT1H')
+    // one batch call for every held reservation
+    expect(orderAdminApi.getStatuses).toHaveBeenCalledTimes(1)
+    expect(orderAdminApi.getStatuses).toHaveBeenCalledWith([
+      '41',
+      '42',
+      '43',
+      '44',
+      '45',
+    ])
+    expect(table.getByText('#41')).toBeInTheDocument()
+    expect(table.getByText('#44')).toBeInTheDocument()
+    for (const id of ['#42', '#43', '#45']) {
+      expect(table.queryByText(id)).not.toBeInTheDocument()
+    }
+    expect(await table.findByText('user_2')).toBeInTheDocument()
+    expect(table.getByText('5 Credits')).toBeInTheDocument()
+    // not stuck in the retry sense, but not hidden either
+    expect(
+      (await findRegion('Stuck Orders')).getByText(
+        '1 held reservation is for an order order-service has no record of: #45.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  test('an unknown order is not counted as in progress', async () => {
+    vi.mocked(creditApi.getHeldReservations).mockResolvedValue({
+      items: [held('42'), held('45'), held('46')],
+      truncated: false,
+    })
+    vi.mocked(orderAdminApi.getStatuses).mockResolvedValue({
+      '42': 'ACCEPTED',
+      '45': null,
+    })
+    renderAdmin()
+
+    const region = await findRegion('Stuck Orders')
+    expect(await region.findByText('No stuck orders.')).toBeInTheDocument()
+    expect(
+      region.getByText(
+        '2 held reservations are for orders order-service has no record of: #45, #46.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      region.getByText(
+        '1 of 3 held longer than 1 hour are for orders still in progress.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  test('says so when nothing is stuck', async () => {
+    vi.mocked(creditApi.getHeldReservations).mockResolvedValue({
+      items: [held('42')],
+      truncated: false,
+    })
+    vi.mocked(orderAdminApi.getStatuses).mockResolvedValue({ '42': 'DISPUTED' })
+    renderAdmin()
+
+    const region = await findRegion('Stuck Orders')
+    expect(await region.findByText('No stuck orders.')).toBeInTheDocument()
+    expect(
+      region.getByText(
+        '1 held longer than 1 hour, all for orders still in progress.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  test('nothing held skips the status call', async () => {
+    renderAdmin()
+
+    const region = await findRegion('Stuck Orders')
+    expect(
+      await region.findByText('No credits have been held longer than 1 hour.'),
+    ).toBeInTheDocument()
+    expect(orderAdminApi.getStatuses).not.toHaveBeenCalled()
+  })
+
+  test('retries a settlement and refreshes on request', async () => {
+    const user = userEvent.setup()
+    vi.mocked(creditApi.getHeldReservations).mockResolvedValue({
+      items: [held('41')],
+      truncated: false,
+    })
+    vi.mocked(orderAdminApi.getStatuses).mockResolvedValue({
+      '41': 'COMPLETED',
+    })
+    renderAdmin()
+
+    const region = await findRegion('Stuck Orders')
+    const table = within(await region.findByRole('table'))
+    await user.click(
+      table.getByRole('button', { name: 'Retry settlement for request #41' }),
+    )
+
+    expect(orderAdminApi.retrySettlement).toHaveBeenCalledWith(41)
+    expect(await region.findByRole('status')).toHaveTextContent(
+      'Settlement for request #41 sent again.',
+    )
+    expect(table.getByText('Retry sent')).toBeInTheDocument()
+
+    // credit-service has settled it by now
+    vi.mocked(creditApi.getHeldReservations).mockResolvedValue({
+      items: [],
+      truncated: false,
+    })
+    await user.click(region.getByRole('button', { name: 'Refresh' }))
+    expect(await region.findByText('No stuck orders.')).toBeInTheDocument()
+    expect(creditApi.getHeldReservations).toHaveBeenCalledTimes(2)
+  })
+
+  test("shows order-service's 409 when a retry is refused", async () => {
+    const user = userEvent.setup()
+    vi.mocked(creditApi.getHeldReservations).mockResolvedValue({
+      items: [held('41')],
+      truncated: false,
+    })
+    vi.mocked(orderAdminApi.getStatuses).mockResolvedValue({
+      '41': 'CANCELLED',
+    })
+    vi.mocked(orderAdminApi.retrySettlement).mockRejectedValue(
+      new ApiError(409, {
+        status: 409,
+        detail: 'Request 41 has no settlement event to retry',
+      }),
+    )
+    renderAdmin()
+
+    const region = await findRegion('Stuck Orders')
+    await user.click(
+      within(await region.findByRole('table')).getByRole('button', {
+        name: 'Retry settlement for request #41',
+      }),
+    )
+
+    expect(await region.findByRole('alert')).toHaveTextContent(
+      'Request #41: Request 41 has no settlement event to retry',
+    )
+    // still offered: nothing was queued
+    expect(
+      within(region.getByRole('table')).getByRole('button', {
+        name: 'Retry settlement for request #41',
+      }),
+    ).toBeEnabled()
+  })
+
+  test('the threshold is chosen from presets and remembered', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+
+    const region = await findRegion('Stuck Orders')
+    await user.selectOptions(
+      region.getByLabelText('Held longer than'),
+      '24 hours',
+    )
+
+    await waitFor(() =>
+      expect(creditApi.getHeldReservations).toHaveBeenLastCalledWith('P1D'),
+    )
+    expect(localStorage.getItem('foc.admin.stuckThreshold')).toBe('P1D')
+  })
+
+  test('a remembered threshold is used on the next visit', async () => {
+    localStorage.setItem('foc.admin.stuckThreshold', 'P7D')
+    renderAdmin()
+
+    const region = await findRegion('Stuck Orders')
+    expect(region.getByLabelText('Held longer than')).toHaveValue('P7D')
+    expect(creditApi.getHeldReservations).toHaveBeenCalledWith('P7D')
+    expect(creditApi.getHeldReservations).not.toHaveBeenCalledWith('PT1H')
+  })
+
+  test('says when the list was cut short', async () => {
+    vi.mocked(creditApi.getHeldReservations).mockResolvedValue({
+      items: [held('41')],
+      truncated: true,
+    })
+    vi.mocked(orderAdminApi.getStatuses).mockResolvedValue({ '41': 'EXPIRED' })
+    renderAdmin()
+
+    const region = await findRegion('Stuck Orders')
+    expect(
+      await region.findByText('Showing the oldest 100; more are held.'),
+    ).toBeInTheDocument()
+  })
+})
+
+describe('Failed Orders section', () => {
+  test('lists failed orders with their reason and when they closed', async () => {
+    vi.mocked(orderAdminApi.listRequests).mockResolvedValue(
+      pageOf([
+        failed(7),
+        failed(8, { status: 'EXPIRED', closeReason: 'DEADLINE_PASSED' }),
+        // closed before closedAt was recorded
+        failed(9, { status: 'REJECTED', closeReason: null, closedAt: null }),
+      ]),
+    )
+    renderAdmin()
+
+    const region = await findRegion('Failed Orders')
+    const table = within(await region.findByRole('table'))
+    expect(lastAdminListParams()).toEqual({
+      page: 0,
+      size: 20,
+      state: ['REJECTED', 'CANCELLED', 'EXPIRED'],
+      closeReason: undefined,
+      userId: undefined,
+      createdFrom: undefined,
+      createdTo: undefined,
+      closedFrom: undefined,
+      closedTo: undefined,
+    })
+    const row = (id: string) => {
+      const tr = table.getByText(id).closest('tr')
+      if (!tr) throw new Error(`No row for ${id}`)
+      return within(tr)
+    }
+    expect(row('#7').getByText('Cancelled by requester')).toBeInTheDocument()
+    expect(row('#8').getByText('Deadline passed')).toBeInTheDocument()
+    expect(row('#9').getByText('Not recorded')).toBeInTheDocument()
+    expect(
+      row('#9').getByText('(created; close time unknown)'),
+    ).toBeInTheDocument()
+    expect(
+      row('#7').queryByText('(created; close time unknown)'),
+    ).not.toBeInTheDocument()
+  })
+
+  test('does not offer resolved disputes as a reason', async () => {
+    renderAdmin()
+
+    const region = await findRegion('Failed Orders')
+    const reasons = within(region.getByLabelText('Close reason'))
+      .getAllByRole('option')
+      .map((o) => o.textContent)
+    expect(reasons).toEqual([
+      'All reasons',
+      'Cancelled by requester',
+      'Credit reservation timed out',
+      'Not enough credits',
+      'Invalid reward',
+      'Deadline passed',
+    ])
+    expect(await region.findByText('No failed orders.')).toBeInTheDocument()
+  })
+
+  test('user, reason and dates filter together', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    const region = await findRegion('Failed Orders')
+
+    await user.selectOptions(
+      region.getByLabelText('Close reason'),
+      'Credit reservation timed out',
+    )
+    await user.type(
+      region.getByLabelText('User (requester or courier)'),
+      'STUDENT_ALEX',
+    )
+    await user.click(region.getByRole('button', { name: 'Find' }))
+    // looked up through user-service, removed accounts included
+    expect(adminUserApi.listUsers).toHaveBeenLastCalledWith({
+      search: 'STUDENT_ALEX',
+      includeDeleted: true,
+      page: 0,
+      size: 20,
+    })
+    await user.click(
+      await region.findByRole('button', { name: 'Filter by student_alex' }),
+    )
+    expect(
+      await region.findByRole('button', { name: 'Clear user student_alex' }),
+    ).toBeInTheDocument()
+    await user.type(region.getByLabelText('From'), '2026-10-01')
+    await user.type(region.getByLabelText('To'), '2026-10-31')
+
+    await waitFor(() =>
+      expect(lastAdminListParams()).toMatchObject({
+        closeReason: ['RESERVATION_TIMEOUT'],
+        userId: 2,
+        closedFrom: localDayStart('2026-10-01'),
+        closedTo: localDayStart('2026-10-31', 1),
+        createdFrom: undefined,
+      }),
+    )
+
+    // the same days, by creation instead
+    await user.selectOptions(
+      region.getByLabelText('Date filter applies to'),
+      'When it was created',
+    )
+    await waitFor(() =>
+      expect(lastAdminListParams()).toMatchObject({
+        userId: 2,
+        createdFrom: localDayStart('2026-10-01'),
+        createdTo: localDayStart('2026-10-31', 1),
+        closedFrom: undefined,
+        closedTo: undefined,
+      }),
+    )
+
+    await user.click(
+      region.getByRole('button', { name: 'Clear user student_alex' }),
+    )
+    await waitFor(() => expect(lastAdminListParams()?.userId).toBeUndefined())
+  })
+
+  test('a broad lookup lists its matches to pick from', async () => {
+    const user = userEvent.setup()
+    users = [...seedUsers, ...manyUsers(25)]
+    renderAdmin()
+    const region = await findRegion('Failed Orders')
+
+    await user.type(
+      region.getByLabelText('User (requester or courier)'),
+      'user_',
+    )
+    await user.click(region.getByRole('button', { name: 'Find' }))
+
+    const matches = within(
+      await region.findByRole('list', { name: 'Users matching "user_"' }),
+    )
+    // nothing picked on the admin's behalf
+    expect(lastAdminListParams()?.userId).toBeUndefined()
+    expect(matches.getAllByRole('button')).toHaveLength(20)
+    expect(
+      region.getByText(
+        'Showing 20 of 25 matches; type more to narrow them down.',
+      ),
+    ).toBeInTheDocument()
+
+    await user.click(
+      matches.getByRole('button', { name: `Filter by ${nth(3)}` }),
+    )
+    await waitFor(() => expect(lastAdminListParams()?.userId).toBe(1002))
+    expect(
+      region.queryByRole('list', { name: 'Users matching "user_"' }),
+    ).not.toBeInTheDocument()
+  })
+
+  test('an unknown user is reported and not queried', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    const region = await findRegion('Failed Orders')
+    await waitFor(() => expect(orderAdminApi.listRequests).toHaveBeenCalled())
+    const calls = vi.mocked(orderAdminApi.listRequests).mock.calls.length
+
+    await user.type(
+      region.getByLabelText('User (requester or courier)'),
+      'nobody_here',
+    )
+    await user.click(region.getByRole('button', { name: 'Find' }))
+
+    expect(await region.findByRole('alert')).toHaveTextContent(
+      'No user matches "nobody_here".',
+    )
+    expect(orderAdminApi.listRequests).toHaveBeenCalledTimes(calls)
+  })
+
+  test('a start date after the end date is refused before querying', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    const region = await findRegion('Failed Orders')
+    await waitFor(() => expect(orderAdminApi.listRequests).toHaveBeenCalled())
+
+    await user.type(region.getByLabelText('To'), '2026-10-01')
+    const calls = vi.mocked(orderAdminApi.listRequests).mock.calls.length
+    await user.type(region.getByLabelText('From'), '2026-10-31')
+
+    expect(await region.findByRole('alert')).toHaveTextContent(
+      'The start date cannot be after the end date.',
+    )
+    expect(orderAdminApi.listRequests).toHaveBeenCalledTimes(calls)
   })
 })

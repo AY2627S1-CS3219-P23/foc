@@ -16,8 +16,13 @@
 // Common Pool box above the Users section (team decision). Same day,
 // author's request: the subtitle under the heading removed.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-27, Claude Code (Opus 5.5), issue #242: the order domain's
+// Stuck Orders and Failed Orders sections, between the pool and the users.
+// Author review: Ryan Ang, pending pull request review.
 
 import { CommonPoolCard } from '@/features/credit/components/CommonPoolCard'
+import { FailedOrdersSection } from '@/features/order/components/FailedOrdersSection'
+import { StuckOrdersSection } from '@/features/order/components/StuckOrdersSection'
 import { UsersSection } from '@/features/user/components/UsersSection'
 
 export function Admin() {
@@ -30,6 +35,10 @@ export function Admin() {
       </div>
 
       <CommonPoolCard />
+
+      <StuckOrdersSection />
+
+      <FailedOrdersSection />
 
       <UsersSection />
     </div>

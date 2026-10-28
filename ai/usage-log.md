@@ -42,6 +42,75 @@ Entry template:
 ```
 
 ---
+## 2026-10-28 — Ryan Ang (fix: PR #265 review, issue #242)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** web (`features/order/components/StuckOrdersSection.tsx`,
+  `FailedOrdersSection.tsx`; `test/admin.test.tsx`).
+- **Prompt(s):** Address two PR #265 review findings as the team decided:
+  - Stuck Orders: held reservations whose order order-service has no
+    record of were dropped and the empty state still said "all for
+    orders still in progress". Team decision: the minimum fix. They are
+    now counted and their request ids named in a notice, and the empty
+    state counts only the in-progress ones; they get no row or Retry
+    button.
+  - Failed Orders: the user lookup kept only an exact username, email or
+    id match within the first 20 results, so a broad search could miss
+    the intended account. Team decision: let the admin pick. The lookup
+    now lists its matches (username, id, email, removed accounts marked)
+    and says when there are more than it shows; nothing is picked until
+    the admin clicks one.
+- **Author review:** web `vitest run` green (321 tests; 2 new and 2
+  updated in `admin.test.tsx`), `tsc -b`, `eslint` and `prettier` clean.
+
+---
+## 2026-10-27 — Ryan Ang (feat: admin failed and stuck orders, issue #242)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** order-service (`db/migration/V4__closed_at.sql` new;
+  `model/Requests.java`: `closedAt`; `RequestsService.java`:
+  `transition()` sets it on a final state; `RequestFilter.java`:
+  `closedFrom` / `closedTo`; `RequestsQueryService.java`: those and the
+  admin list's `userId`; `RequestsController.java`: `userId` on
+  `GET /requests/admin`; `RequestSummary.java`, `RequestDetail.java`:
+  `closedAt`; `README.md`; tests: `RequestsServiceTests`,
+  `RequestsReadEndpointsTests`, `FlywayMigrationTests`).
+  web (`features/order/adminApi.ts`,
+  `features/order/components/FailedOrdersSection.tsx` and
+  `StuckOrdersSection.tsx` new; `features/order/types.ts`, `status.ts`,
+  `api.ts`; `features/credit/api.ts`, `types.ts`, `history.ts`;
+  `routes/admin.tsx`; `test/admin.test.tsx`; `AGENTS.md`).
+  `docs/disputes.md` (#242 revision entry). `README.md` (AI Use Summary
+  and header line).
+- **Prompt(s):** Implement issue #242 as written there (DSP-10, DSP-11).
+  Before coding, the tool listed four points the issue and the existing
+  endpoints left open, with the following decisions:
+  - The user filter is an optional `userId` on `GET /requests/admin`
+    (requester or courier), so it combines with the close-reason filter;
+    tests cover the requester side, the courier side and the combination.
+    The web looks the user up by username through user-service and sends
+    the id.
+  - A new `closed_at` column (Flyway V4), set only in `transition()` on a
+    final state, null for existing rows, with no CHECK against `status`;
+    `closedAt` on both read DTOs; `closedFrom` / `closedTo` on the shared
+    filter with a partial index; the table falls back to the creation
+    time, marked, when it is null, and the date filter switches between
+    created and closed.
+  - The stuck threshold is picked from presets (15 min, 1 h, 24 h,
+    7 days; 1 h by default), remembered in the browser, with a notice
+    when the list is truncated.
+  - RESOLVED orders stay out of the failed-orders table, and
+    `DISPUTE_RESOLVED` is not offered as a reason.
+  The tool kept `userId` off the shared `RequestFilter`, since the open
+  list shares it and there it would reveal whose requests those are.
+- **Author review:** order-service `./mvnw test` green (172 tests, the
+  new ones included: closed_at on every final transition and none on the
+  others, a final step losing a race, V4 leaving existing rows null,
+  `userId` on either side and with `closeReason`, the closed range and
+  its 400s). web `vitest run` green (319 tests; 13 new in
+  `admin.test.tsx`), `tsc -b` and `eslint` clean.
+
+---
 ## 2026-10-28 — Leong Wei Zhi (PR #264 review fixes, issue #233)
 - **Tool:** Claude Code (Opus 5)
 - **Mode:** debug + refactor

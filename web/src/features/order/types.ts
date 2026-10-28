@@ -15,6 +15,10 @@
 // 2026-10-26, Claude Code (Sonnet 5.5), issue #227 (N8.4): SupplierOption
 // carries the caller's `bookmarked` flag.
 // Author review: [pending]
+// 2026-10-27, Claude Code (Opus 5.5), issue #242: the two dispute states,
+// CloseReason, closeReason / closedAt on a list item (closedAt is a team
+// decision) and the admin list's parameters.
+// Author review: Ryan Ang, pending pull request review.
 
 // order-service's OrderStates, by name
 export type RequestStatus =
@@ -27,6 +31,17 @@ export type RequestStatus =
   | 'CANCELLED'
   | 'EXPIRED'
   | 'REJECTED' // the reward could not be reserved
+  | 'DISPUTED' // the requester (or the expiry sweep) raised a problem
+  | 'RESOLVED' // an admin divided the held reward
+
+// Why a request ended without completing (order-service's CloseReason)
+export type CloseReason =
+  | 'REQUESTER_CANCELLED'
+  | 'RESERVATION_TIMEOUT'
+  | 'INSUFFICIENT_CREDITS'
+  | 'INVALID_REWARD'
+  | 'DEADLINE_PASSED'
+  | 'DISPUTE_RESOLVED'
 
 // One request in a list (GET /requests, /requests/mine)
 export interface RequestSummary {
@@ -38,6 +53,11 @@ export interface RequestSummary {
   creditAmount: number
   deadline: string // ISO-8601 instant
   createdAt: string
+  // order-service always sends these two; the dev mock leaves them out.
+  // null while active, and closedAt also for requests closed before it
+  // was recorded
+  closeReason?: CloseReason | null
+  closedAt?: string | null
 }
 
 // One request in full (GET /requests/{id}): its requester, its courier, or
@@ -88,4 +108,19 @@ export interface SupplierOption {
   name: string
   location: string
   bookmarked?: boolean // the caller's bookmark; bookmarked options list first
+}
+
+// GET /requests/admin (ADMIN / OWNER): every user's requests
+export interface ListAdminParams {
+  page: number // 0-based
+  size: number
+  // any of these, sent comma-separated; omitted: every one
+  state?: RequestStatus[]
+  closeReason?: CloseReason[]
+  userId?: number // as requester or courier
+  // ISO-8601 instants; the lower bound inclusive, the upper exclusive
+  createdFrom?: string
+  createdTo?: string
+  closedFrom?: string // never matches a request without a closedAt
+  closedTo?: string
 }

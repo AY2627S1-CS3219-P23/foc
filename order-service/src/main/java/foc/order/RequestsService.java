@@ -56,6 +56,10 @@
  * auto-complete window, the resolution note is optional), each storing
  * the request_dispute row and writing its event in the same transaction.
  * Author review: Ryan Ang, pending pull request review.
+ * 2026-10-27, Claude Code (Opus 5.5), issue #242: every transition into a
+ * final state stamps closedAt, in transition() only (team decision: one
+ * place, so a final state added later is covered too). Author review:
+ * Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -399,9 +403,14 @@ public class RequestsService {
     // Moves a loaded request to the state the event leads to; throws
     // IllegalStateException if the event is not allowed from its current
     // state. The change is written when the transaction commits, guarded
-    // by the entity's @Version column.
+    // by the entity's @Version column. Reaching a final state stamps
+    // closedAt; this is the only place that sets it.
     private static Requests transition(Requests request, OrderEvents event) {
-        request.setStatus(OrderStateMachine.next(request.getStatus(), event));
+        OrderStates next = OrderStateMachine.next(request.getStatus(), event);
+        request.setStatus(next);
+        if (OrderStateMachine.isTerminal(next)) {
+            request.setClosedAt(Instant.now());
+        }
         return request;
     }
 

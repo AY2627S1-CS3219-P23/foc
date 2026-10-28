@@ -239,6 +239,12 @@
   N1 nice-to-have fills the <n2h-service> slot, by Claude Code
   (Fable 5).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-27: AI Use Summary extended for the admin failed and stuck
+  orders (issue #242), by Claude Code (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
+  2026-10-28: AI Use Summary extended for the PR #265 review fixes, by
+  Claude Code (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
   2026-10-27: AI Use Summary extended for the order pages' push-driven
   live refresh (issue #233), by Claude Code (Fable 5); extended again
   2026-10-28 for the PR #264 review round, by Claude Code (Opus 5).
@@ -1123,6 +1129,23 @@ the request lists and detail, loaded once per page. The table's
 constraints, the dispute window, the resolution note and the read
 shape were decided by the team and transcribed into
 `docs/disputes.md`. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) built the admin dashboard's Failed Orders and
+Stuck Orders sections (issue #242, DSP-10, DSP-11). Failed Orders lists
+every user's rejected, cancelled and expired requests with why and when
+each closed, filtered by close reason, by one user and by a created or
+closed date range, all together. Stuck Orders checks credit-service's
+long-held reservations against order-service in one batch call, flags
+those whose order is finished (never a disputed one), and offers
+"Retry settlement". For these, order-service gained Flyway V4's
+`closed_at`, set on every move into a final state, `closedAt` and the
+`closedFrom` / `closedTo` filter on its lists, and `userId` on the admin
+list. The filters, the close time and its fallback, and the threshold
+presets were decided by the team and transcribed into
+`docs/disputes.md`. After review, Stuck Orders also names held credits
+for orders order-service has no record of, and the user lookup lists its
+matches for the admin to pick from (team decisions). Recorded in
+`ai/usage-log.md`.
 
 Claude Code (Fable 5) made the order pages live-refresh when a pushed
 notification concerns a request they show (issue #233): a

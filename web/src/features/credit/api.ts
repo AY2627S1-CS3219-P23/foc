@@ -4,6 +4,9 @@
 // wrapper, as an object so tests can spy on them (profileApi's shape).
 // 2026-10-17: the two admin routes, for the admin dashboard's pool box.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-27, Claude Code (Opus 5.5), issue #242: the held-reservations
+// route, for the admin dashboard's stuck orders.
+// Author review: Ryan Ang, pending pull request review.
 
 import { apiFetch } from '@/lib/api/http'
 import type {
@@ -12,13 +15,15 @@ import type {
   CreditHistoryEntry,
   CreditHistoryQuery,
   CreditPage,
+  HeldReservations,
   PoolSummary,
   RedistributionRun,
 } from './types'
 
 // URLSearchParams encodes a "+" offset as %2B, which the contract asks
 // for; the page only sends toISOString()'s "Z" form anyway
-function toQuery(query: CreditHistoryQuery): string {
+// any of the routes' query objects; undefined values are left out
+function toQuery(query: object): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined) params.set(key, String(value))
@@ -49,6 +54,13 @@ export const creditApi = {
     return apiFetch<CreditPage<RedistributionRun>>(
       'credit',
       `/credits/admin/redistributions${toQuery(query)}`,
+    )
+  },
+  // reservations HELD longer than olderThan, an ISO-8601 duration (PT1H)
+  getHeldReservations(olderThan: string) {
+    return apiFetch<HeldReservations>(
+      'credit',
+      `/credits/admin/reservations/held${toQuery({ olderThan })}`,
     )
   },
 }

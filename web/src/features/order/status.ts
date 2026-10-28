@@ -8,8 +8,16 @@
 // the fields the backend has (no updatedAt).
 // 2026-10-20: activeStatuses / finishedStatuses, the two pages' groups.
 // Author review: [pending]
+// 2026-10-27, Claude Code (Opus 5.5), issue #242: labels for the two
+// dispute states and for each close reason (admin failed orders).
+// Author review: Ryan Ang, pending pull request review.
 
-import type { RequestDetail, RequestStatus, RequestSummary } from './types'
+import type {
+  CloseReason,
+  RequestDetail,
+  RequestStatus,
+  RequestSummary,
+} from './types'
 
 export const AUTO_COMPLETE_MS = 60 * 60 * 1000 // 1 hour after courier arrival
 
@@ -23,6 +31,8 @@ export const statusLabels: Record<RequestStatus, string> = {
   CANCELLED: 'Cancelled',
   EXPIRED: 'Expired',
   REJECTED: 'Rejected',
+  DISPUTED: 'Disputed',
+  RESOLVED: 'Resolved',
 }
 
 export const statusChipClasses: Record<RequestStatus, string> = {
@@ -35,9 +45,20 @@ export const statusChipClasses: Record<RequestStatus, string> = {
   CANCELLED: 'bg-gray-100 text-gray-500',
   EXPIRED: 'bg-gray-100 text-gray-500',
   REJECTED: 'bg-red-50 text-red-700',
+  DISPUTED: 'bg-orange-50 text-orange-700',
+  RESOLVED: 'bg-gray-100 text-gray-500',
 }
 
 // A requester follows these on My Requests; the rest live in History.
+export const closeReasonLabels: Record<CloseReason, string> = {
+  REQUESTER_CANCELLED: 'Cancelled by requester',
+  RESERVATION_TIMEOUT: 'Credit reservation timed out',
+  INSUFFICIENT_CREDITS: 'Not enough credits',
+  INVALID_REWARD: 'Invalid reward',
+  DEADLINE_PASSED: 'Deadline passed',
+  DISPUTE_RESOLVED: 'Dispute resolved',
+}
+
 export const activeStatuses: RequestStatus[] = [
   'PENDING',
   'CREATED',

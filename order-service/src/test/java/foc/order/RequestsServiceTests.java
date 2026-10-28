@@ -49,6 +49,10 @@
  * resolution, request_dispute's CHECKs and foreign key, and the two races
  * of the acceptance criteria in both orders. Author review: Ryan Ang,
  * pending pull request review.
+ * 2026-10-27, Claude Code (Opus 5.5), issue #242: closed_at — stamped by
+ * every transition into a final state, left null by the steps that keep a
+ * request active, and untouched by a final step that loses a race.
+ * Author review: Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -1120,6 +1124,70 @@ class RequestsServiceTests extends PostgresTestContainer {
 		assertEquals(OrderStates.DISPUTED, stored(id).getStatus());
 		assertTrue(disputes.findById(id).orElseThrow().isAutoEscalated());
 		assertFalse(eventTypes(id).contains("request.courier-arrived"));
+	}
+
+	// --- closed_at (#242)
+
+	@Test
+	void everyTransitionIntoAFinalStateStampsClosedAt() {
+		// the column keeps microseconds, so the bounds allow for rounding
+		Instant from = Instant.now().minusMillis(1);
+		Long cancelled = newCreatedRequest();
+		requestsService.cancel(cancelled, REQUESTER_ID);
+		Long timedOut = newRequest();
+		requestsService.timeout(timedOut);
+		Long rejected = newRequest();
+		requestsService.reject(rejected, "not enough credits", CloseReason.INSUFFICIENT_CREDITS);
+		Long expired = newCreatedRequest();
+		requestsService.expire(expired);
+		Long completed = newCompletedRequest();
+		Long autoCompleted = newArrivedRequest();
+		requestsService.completeAutomatically(autoCompleted);
+		Long resolved = newDisputedRequest();
+		requestsService.resolve(resolved, ADMIN_ID, 2, 1, null);
+		Instant to = Instant.now().plusMillis(1);
+
+		for (Long id : List.of(cancelled, timedOut, rejected, expired, completed, autoCompleted, resolved)) {
+			Requests stored = stored(id);
+			assertTrue(OrderStateMachine.isTerminal(stored.getStatus()), stored.getStatus() + " is final");
+			assertNotNull(stored.getClosedAt(), stored.getStatus() + " has a closedAt");
+			assertFalse(stored.getClosedAt().isBefore(from), stored.getStatus() + " closed during the test");
+			assertFalse(stored.getClosedAt().isAfter(to), stored.getStatus() + " closed during the test");
+		}
+	}
+
+	@Test
+	void stepsThatKeepARequestActiveLeaveClosedAtNull() {
+		Long pending = newRequest();
+		Long created = newCreatedRequest();
+		Long accepted = newCreatedRequest();
+		requestsService.accept(accepted, COURIER_ID);
+		Long collected = newCollectedRequest();
+		Long arrived = newArrivedRequest();
+		Long dropped = newCreatedRequest();
+		requestsService.accept(dropped, COURIER_ID);
+		requestsService.drop(dropped, COURIER_ID);
+		Long disputed = newDisputedRequest();
+		Long escalated = newCollectedRequest();
+		requestsService.escalate(escalated);
+
+		for (Long id : List.of(pending, created, accepted, collected, arrived, dropped, disputed, escalated)) {
+			Requests stored = stored(id);
+			assertNull(stored.getClosedAt(), stored.getStatus() + " is still active");
+		}
+	}
+
+	@Test
+	void aFinalStepLosingARaceLeavesClosedAtUnset() {
+		Long id = newCreatedRequest();
+
+		assertThrows(OptimisticLockingFailureException.class, () -> whileUncommitted(id,
+				() -> requestsService.cancel(id, REQUESTER_ID),
+				() -> requestsService.accept(id, COURIER_ID)));
+
+		Requests stored = stored(id);
+		assertEquals(OrderStates.ACCEPTED, stored.getStatus());
+		assertNull(stored.getClosedAt());
 	}
 
 	// Two callers overlapping: first's transaction reads the request, then

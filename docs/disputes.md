@@ -17,6 +17,10 @@
   added, transcribing the team's answers to the questions the
   implementation raised. Author review: Ryan Ang, pending pull request
   review.
+  2026-10-27, Claude Code (Opus 5.5), issue #242: a #242 revision entry
+  added, transcribing the team's answers to the questions the
+  implementation raised. Author review: Ryan Ang, pending pull request
+  review.
 -->
 
 # N3 — Dispute Resolution and Failed-Order Management
@@ -87,6 +91,13 @@ takes any back from a courier.
 
 ## Revisions (2026-10-21)
 
+- **#242 (2026-10-27):**
+  - `GET /requests/admin` takes an optional `userId`, matching requests the user is the requester or the courier of, so it combines with `closeReason` and every other filter (DSP-5). The web resolves a username through user-service's `GET /users?search=` and sends the id.
+  - Flyway V4 adds a nullable `closed_at` to `requests`. `RequestsService.transition()` sets it on every transition into a final state, and nothing else does. Existing rows stay null (no guessed timestamps). There is no CHECK tying it to `status`. A partial index covers the non-null rows.
+  - `RequestSummary` and `RequestDetail` carry a nullable `closedAt`. `RequestFilter` gains `closedFrom` / `closedTo`, which never match a null `closedAt`.
+  - The failed-orders table shows when each order closed, or its creation time marked as such when `closedAt` is null, and its deadline. Its date filter switches between created and closed.
+  - Failed orders are REJECTED, CANCELLED and EXPIRED only. A RESOLVED order was settled as an admin decided and belongs to #241's dispute queue, so `DISPUTE_RESOLVED` is not a reason the table offers.
+  - The stuck-orders threshold is picked from presets (15 min, 1 h, 24 h, 7 days; 1 h by default) and remembered in the browser. A truncated list says "Showing the oldest 100; more are held" (DSP-11).
 - **#239 (2026-10-26):**
   - `request_dispute.request_id` is a foreign key to `requests(id)`. Unlike the outbox, which is a log of messages, a dispute is part of its order (DSP-2).
   - `raised_by` is null when the sweep escalated the dispute; `auto_escalated` says who raised it (DSP-2).

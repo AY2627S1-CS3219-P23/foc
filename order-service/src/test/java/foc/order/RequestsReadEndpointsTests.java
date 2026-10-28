@@ -24,6 +24,11 @@
  * the lists and the detail (null if never disputed, resolution fields
  * once resolved) and the admin dispute queue (state=DISPUTED). Author
  * review: Ryan Ang, pending pull request review.
+ * 2026-10-27, Claude Code (Opus 5.5), issue #242: the admin list's userId
+ * (requester side, courier side, with closeReason; its 400), closedAt on
+ * the lists and the detail, and the closedFrom / closedTo filter (rows
+ * with no closedAt never match; its 400). Author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.order;
 
@@ -431,6 +436,77 @@ class RequestsReadEndpointsTests extends PostgresTestContainer {
 		send(get("/requests/admin?minCredit=0"), stranger, "ADMIN")
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message").value("minCredit must be at least 1"));
+		send(get("/requests/admin?userId=bee_lim"), stranger, "ADMIN")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("Invalid value for userId"));
+	}
+
+	@Test
+	void adminListFindsAUsersRequestsOnEitherSideWithTheOtherFilters() throws Exception {
+		long supplier = NEXT_USER.incrementAndGet(); // scopes the all-users list to this test
+		Long ownCancelled = createdRequestWith(requester, supplier);
+		requestsService.cancel(ownCancelled, requester);
+		Long carriedThenExpired = createdRequestWith(stranger, supplier);
+		requestsService.accept(carriedThenExpired, requester);
+		requestsService.expire(carriedThenExpired);
+		Long someoneElses = createdRequestWith(stranger, supplier);
+		String all = "/requests/admin?supplierId=" + supplier;
+
+		// as requester and as courier
+		assertEquals(List.of(carriedThenExpired, ownCancelled),
+				ids(getJson(all + "&userId=" + requester, courier, "ADMIN")));
+		assertEquals(List.of(someoneElses, carriedThenExpired),
+				ids(getJson(all + "&userId=" + stranger, courier, "ADMIN")));
+		// combined with closeReason and state
+		assertEquals(List.of(carriedThenExpired),
+				ids(getJson(all + "&userId=" + requester + "&closeReason=DEADLINE_PASSED", courier, "ADMIN")));
+		assertEquals(List.of(ownCancelled), ids(getJson(
+				all + "&userId=" + requester + "&state=REJECTED,CANCELLED,EXPIRED&closeReason=REQUESTER_CANCELLED",
+				courier, "OWNER")));
+		assertEquals(List.of(), ids(getJson(all + "&userId=" + courier, courier, "ADMIN")));
+	}
+
+	// --- closed_at (issue #242)
+
+	@Test
+	void listsAndTheDetailShowWhenARequestClosed() throws Exception {
+		Long cancelled = createdRequest();
+		requestsService.cancel(cancelled, requester);
+		Long open = createdRequest();
+		Instant closedAt = requestsRepository.findById(cancelled).orElseThrow().getClosedAt();
+
+		JsonNode page = getJson("/requests/mine?role=requester", requester);
+		assertEquals(closedAt, Instant.parse(item(page, cancelled).get("closedAt").stringValue()));
+		assertTrue(item(page, open).get("closedAt").isNull(), "present, null while active");
+		assertEquals(closedAt,
+				Instant.parse(getJson("/requests/" + cancelled, requester).get("closedAt").stringValue()));
+		assertTrue(getJson("/requests/" + open, requester).get("closedAt").isNull());
+	}
+
+	@Test
+	void closedRangeFiltersByWhenARequestEndedAndSkipsUnrecordedOnes() throws Exception {
+		long supplier = NEXT_USER.incrementAndGet();
+		Long january = cancelledWith(supplier, Instant.parse("2026-01-10T00:00:00Z"));
+		Long march = cancelledWith(supplier, Instant.parse("2026-03-10T00:00:00Z"));
+		// closed before V4, so when is unknown
+		Long unrecorded = cancelledWith(supplier, null);
+		Long open = createdRequestWith(requester, supplier);
+		String all = "/requests/admin?supplierId=" + supplier;
+
+		assertEquals(List.of(open, unrecorded, march, january), ids(getJson(all, stranger, "ADMIN")));
+		assertEquals(List.of(march),
+				ids(getJson(all + "&closedFrom=2026-02-01T00:00:00Z", stranger, "ADMIN")));
+		assertEquals(List.of(january),
+				ids(getJson(all + "&closedTo=2026-02-01T00:00:00Z", stranger, "ADMIN")));
+		// lower bound inclusive, upper exclusive, as the other ranges
+		assertEquals(List.of(january), ids(getJson(
+				all + "&closedFrom=2026-01-10T00:00:00Z&closedTo=2026-03-10T00:00:00Z", stranger, "ADMIN")));
+		// a shared filter, so the user's own lists take it too
+		assertEquals(List.of(march, january), ids(getJson("/requests/mine?role=requester&supplierId=" + supplier
+				+ "&closedFrom=2026-01-01T00:00:00Z", requester)));
+		expectBadRequest("/requests/mine?role=requester&closedFrom=2026-03-01T00:00:00Z&closedTo=2026-02-01T00:00:00Z",
+				"closedFrom must be before closedTo");
+		expectBadRequest("/requests/mine?role=requester&closedTo=yesterday", "Invalid value for closedTo");
 	}
 
 	@Test
@@ -528,6 +604,17 @@ class RequestsReadEndpointsTests extends PostgresTestContainer {
 		var stored = requestsRepository.findById(id).orElseThrow();
 		stored.setCreatedAt(createdAt);
 		requestsRepository.save(stored);
+	}
+
+	// A request the requester cancelled, its closedAt then set as given
+	// (null: as for a request closed before closedAt was recorded).
+	private Long cancelledWith(long supplierId, Instant closedAt) throws Exception {
+		Long id = createdRequestWith(requester, supplierId);
+		requestsService.cancel(id, requester);
+		var stored = requestsRepository.findById(id).orElseThrow();
+		stored.setClosedAt(closedAt);
+		requestsRepository.save(stored);
+		return id;
 	}
 
 	// Creates a request as the requester over HTTP; it stays PENDING.
