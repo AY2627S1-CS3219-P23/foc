@@ -130,7 +130,13 @@ Entry template:
   `OwnerSignupServiceTest` asserts the event; `DemoAccountsSeederTest`
   stubs `saveAndFlush` and pins one event per seeded account and none
   on a rerun; `AuthServiceTest` builds a real `UserCreation` over its
-  mocks. Pending pull request review.
+  mocks.
+- **Same day, CI fix:** notification-service's `DomainEventContractTest`
+  iterates the whole event registry and knew only request and credit
+  events, so the two user events failed it. The test now expects
+  `user-service` as their producer and checks their `userId` where the
+  others' `requestId` is checked; notification-service `./mvnw test`
+  green (91). Pending pull request review.
 
 ---
 ## 2026-10-27 — Leong Wei Zhi (feat: clicking a notification opens the request it is about, issue #232)
