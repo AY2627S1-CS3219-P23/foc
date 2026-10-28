@@ -48,6 +48,13 @@
 // sound preference opts into useLocalStorage's now-opt-in cross-tab
 // sync ({ sync: true }); the session key keeps its old per-tab
 // behaviour.
+// 2026-10-28, Claude Code (Opus 5), PR #264 review (@Sinnez1), issue
+// #233: reconnects of this session's socket are counted and exposed as
+// pushReconnects. The badge already re-seeded on every (re)connect, but
+// the order pages had no signal, so frames sent while the socket was
+// down left them stale until something else refreshed them. The first
+// connect of a session is not counted — a page's own mount fetch
+// already covers it.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet } from 'react-router'
@@ -134,6 +141,14 @@ export const NotificationProvider = () => {
   // move it, and it never resets — logout changes nothing, so nothing
   // fires.
   const [arrivalSeq, setArrivalSeq] = useState(0)
+
+  // Reconnects of this session's socket, never its first connect
+  // (`connected` below is per client, so a new session starts over).
+  // A bump means the channel was down for a while and any frame sent
+  // meanwhile reached nobody: the pages refetch what they show
+  // (issue #233, PR #264 review). Monotonic — consumers only compare
+  // it with what they last saw.
+  const [pushReconnects, setPushReconnects] = useState(0)
 
   // A chime per committed render that delivered new frames: a burst
   // batched into one render moves the counter once per frame but
@@ -230,6 +245,9 @@ export const NotificationProvider = () => {
     let errorRetries = 0
     let retryTimer: ReturnType<typeof setTimeout> | undefined
     let disposed = false
+    // this client has been CONNECTED before, so the next onConnect is a
+    // reconnect and may have missed frames
+    let connected = false
 
     const client = new Client({
       brokerURL: brokerUrl(base),
@@ -249,7 +267,10 @@ export const NotificationProvider = () => {
         // next ERROR is a new failure, not a continuation of this one
         errorRetries = 0
         // a reconnect may have missed frames; the REST count catches
-        // the badge up (issue #66)
+        // the badge up (issue #66), and the pages re-read what they
+        // show off pushReconnects (issue #233, PR #264 review)
+        if (connected) setPushReconnects((n) => n + 1)
+        connected = true
         refreshUnreadCount()
         client.subscribe('/user/queue/notifications', (message) => {
           // before the parse: like the count below, the chime must not
@@ -321,6 +342,7 @@ export const NotificationProvider = () => {
       unreadCount,
       pushStopped,
       pushedNotifications,
+      pushReconnects,
       refreshUnreadCount,
       soundEnabled,
       setSoundEnabled: setStoredSound,
@@ -329,6 +351,7 @@ export const NotificationProvider = () => {
       unreadCount,
       pushStopped,
       pushedNotifications,
+      pushReconnects,
       refreshUnreadCount,
       soundEnabled,
       setStoredSound,
