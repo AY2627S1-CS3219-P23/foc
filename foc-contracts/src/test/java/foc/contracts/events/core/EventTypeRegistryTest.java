@@ -14,6 +14,9 @@
  * 2026-10-21, Claude Code (Opus 5.5), issue #234: count bumped for
  * request.disputed and request.dispute-resolved; author review: Ryan
  * Ang, pending pull request review.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: count and domain
+ * prefix for the user domain; author review: Ryan Ang, pending pull
+ * request review.
  */
 package foc.contracts.events.core;
 
@@ -23,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import foc.contracts.events.credit.CreditEvent;
 import foc.contracts.events.request.RequestEvent;
+import foc.contracts.events.user.UserEvent;
 import java.util.HashSet;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -30,8 +34,8 @@ import org.junit.jupiter.api.Test;
 class EventTypeRegistryTest {
 
 	@Test
-	void catalogsExactlyFourteenEvents() {
-		assertEquals(14, EventTypeRegistry.entries().size());
+	void catalogsExactlySixteenEvents() {
+		assertEquals(16, EventTypeRegistry.entries().size());
 	}
 
 	@Test
@@ -78,6 +82,9 @@ class EventTypeRegistryTest {
 		}
 		if (CreditEvent.class.isAssignableFrom(eventClass)) {
 			return "credit.";
+		}
+		if (UserEvent.class.isAssignableFrom(eventClass)) {
+			return "user.";
 		}
 		throw new AssertionError(eventClass + " implements no domain marker interface");
 	}

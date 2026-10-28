@@ -22,6 +22,9 @@
  * 2026-10-21, Claude Code (Opus 5.5), issue #234: request.disputed and
  * request.dispute-resolved entries for N3 (team decision, DSP-12);
  * author review: Ryan Ang, pending pull request review.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: user.created and
+ * user.purged entries (team decision, USR-1); author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.contracts.events.core;
 
@@ -39,6 +42,8 @@ import foc.contracts.events.request.RequestDropped;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestRejected;
 import foc.contracts.events.request.RequestSubmitted;
+import foc.contracts.events.user.UserCreated;
+import foc.contracts.events.user.UserPurged;
 
 import java.util.HashMap;
 import java.util.List;
@@ -85,7 +90,9 @@ public final class EventTypeRegistry {
 			new Entry(RequestDisputed.class, "request.disputed"),
 			new Entry(RequestDisputeResolved.class, "request.dispute-resolved"),
 			new Entry(CreditReserved.class, "credit.reserved"),
-			new Entry(CreditReservationRejected.class, "credit.reservation-rejected"));
+			new Entry(CreditReservationRejected.class, "credit.reservation-rejected"),
+			new Entry(UserCreated.class, "user.created"),
+			new Entry(UserPurged.class, "user.purged"));
 
 	private static final Map<String, Entry> BY_EVENT_TYPE = new HashMap<>();
 	private static final Map<Class<?>, Entry> BY_CLASS = new HashMap<>();

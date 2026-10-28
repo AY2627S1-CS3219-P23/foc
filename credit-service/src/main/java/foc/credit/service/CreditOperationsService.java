@@ -36,7 +36,10 @@
  * or DUPLICATE (team decision). Where the decisions are silent (no lot
  * for a courier share of 0, a slice refilled in part) the tool took the
  * plainest reading and listed it in ai/usage-log.md.
- * Author review: Ryan Ang, pending pull request review.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: open and close
+ * (team decisions USR-3, USR-4, USR-6), and credits that reach a closed
+ * account go on to the pool with a CLOSURE row. Author review: Ryan
+ * Ang, pending pull request review.
  */
 package foc.credit.service;
 
@@ -53,6 +56,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import foc.credit.entity.CommonPool;
 import foc.credit.entity.CreditAccount;
 import foc.credit.entity.CreditHistoryEntry;
 import foc.credit.entity.CreditHistoryType;
@@ -60,6 +64,7 @@ import foc.credit.entity.CreditLot;
 import foc.credit.entity.CreditReservationSlice;
 import foc.credit.entity.ReservationStatus;
 import foc.credit.entity.Reserved;
+import foc.credit.repository.CommonPoolRepository;
 import foc.credit.repository.CreditAccountRepository;
 import foc.credit.repository.CreditHistoryEntryRepository;
 import foc.credit.repository.CreditLotRepository;
@@ -71,8 +76,12 @@ import foc.credit.repository.ReservedRepository;
  * transaction, the caller's if there is one (the request event handler's,
  * so the reply commits with it), and takes its row locks in the fixed
  * order of D2: the request's reservation, then accounts by ascending
- * user ID. A user's lots are only read or changed under that user's
- * account lock.
+ * user ID, then the common pool. A user's lots are only read or changed
+ * under that user's account lock.
+ *
+ * <p>A closed account (USR-4) keeps no available credits: whatever an
+ * operation brings it is moved to the pool before the transaction
+ * commits, with a {@code CLOSURE} row after the row that brought it.
  *
  * <p>Each operation that changes credits logs one line with the request,
  * the users it touched and its outcome, and creating an account logs
@@ -90,12 +99,13 @@ public class CreditOperationsService implements CreditOperations {
     private final CreditReservationSliceRepository slices;
     private final CreditLotRepository lots;
     private final CreditHistoryEntryRepository history;
+    private final CommonPoolRepository pool;
     private final int signUpCredits;
     private final EarnedCreditLifetime earnedCreditLifetime;
 
     public CreditOperationsService(CreditAccountRepository accounts, ReservedRepository reservations,
             CreditReservationSliceRepository slices, CreditLotRepository lots,
-            CreditHistoryEntryRepository history,
+            CreditHistoryEntryRepository history, CommonPoolRepository pool,
             @Value("${credit.sign-up-credits}") int signUpCredits,
             EarnedCreditLifetime earnedCreditLifetime) {
         // a history row's amount is at least 1
@@ -107,6 +117,7 @@ public class CreditOperationsService implements CreditOperations {
         this.slices = slices;
         this.lots = lots;
         this.history = history;
+        this.pool = pool;
         this.signUpCredits = signUpCredits;
         this.earnedCreditLifetime = earnedCreditLifetime;
     }
@@ -121,6 +132,46 @@ public class CreditOperationsService implements CreditOperations {
         }
         createIfAbsent(userId, Instant.now());
         return accounts.findById(userId).orElseThrow();
+    }
+
+    @Override
+    public AccountResult open(String userId) {
+        AccountResult result;
+        if (createIfAbsent(userId, Instant.now())) {
+            result = AccountResult.CREATED;
+        } else {
+            // there already, or created by a concurrent call that committed
+            // first; either way, as it is now
+            result = accounts.findById(userId).orElseThrow().isClosed()
+                ? AccountResult.IGNORED_CLOSED
+                : AccountResult.DUPLICATE;
+        }
+        afterCommit(() -> log.info("open user={} outcome={}", userId, result));
+        return result;
+    }
+
+    @Override
+    public AccountResult close(String userId) {
+        Instant now = Instant.now();
+        AccountResult result;
+        int moved = 0;
+        // the row is taken first, so a concurrent create waits for this
+        // commit and then finds it closed
+        if (accounts.insertClosedIfAbsent(userId, now) == 1) {
+            result = AccountResult.CLOSED_PLACEHOLDER;
+        } else {
+            CreditAccount account = accounts.findForUpdate(userId).orElseThrow();
+            if (account.isClosed()) {
+                result = AccountResult.DUPLICATE;
+            } else {
+                moved = moveToPool(account, null, now);
+                account.setClosedAt(now);
+                result = AccountResult.CLOSED;
+            }
+        }
+        int loggedMoved = moved;
+        afterCommit(() -> log.info("close user={} moved={} outcome={}", userId, loggedMoved, result));
+        return result;
     }
 
     @Override
@@ -247,6 +298,7 @@ public class CreditOperationsService implements CreditOperations {
         lots.save(new CreditLot(courierId, amount, now, earnedCreditLifetime.expiryOfCreditsEarnedAt(now)));
         record(requesterId, CreditHistoryType.TRANSFER_OUT, amount, requestRef, now);
         record(courierId, CreditHistoryType.TRANSFER_IN, amount, requestRef, now);
+        moveToPoolIfClosed(courier, requestRef, now);
         reservation.setStatus(ReservationStatus.TRANSFERRED);
         reservation.setCourierId(courierId);
         reservation.setSettledAt(now);
@@ -279,6 +331,7 @@ public class CreditOperationsService implements CreditOperations {
         account.setReserved(account.getReserved() - amount);
         account.setAvailable(account.getAvailable() + amount);
         record(ownerId, CreditHistoryType.RELEASE, amount, requestRef, now);
+        moveToPoolIfClosed(account, requestRef, now);
         reservation.setStatus(ReservationStatus.RELEASED);
         reservation.setSettledAt(now);
         return SettleResult.SETTLED;
@@ -326,6 +379,10 @@ public class CreditOperationsService implements CreditOperations {
             requester.setAvailable(requester.getAvailable() + requesterAmount);
             record(requesterId, CreditHistoryType.RELEASE, requesterAmount, requestRef, now);
         }
+        // after both shares; a courier who is the requester is one account,
+        // emptied by the first call
+        moveToPoolIfClosed(courier, requestRef, now);
+        moveToPoolIfClosed(requester, requestRef, now);
         reservation.setStatus(ReservationStatus.RESOLVED);
         reservation.setCourierId(courierId);
         reservation.setCourierShare(courierAmount);
@@ -366,13 +423,51 @@ public class CreditOperationsService implements CreditOperations {
         return SettleResult.SETTLED;
     }
 
-    // the sign-up lot and PROVISION row are written only by the call that created the account
-    private void createIfAbsent(String userId, Instant now) {
+    // The sign-up lot and PROVISION row are written only by the call that
+    // created the account; true for that call. A closed account is a row
+    // like any other, so it is never created again (USR-3).
+    private boolean createIfAbsent(String userId, Instant now) {
         if (accounts.insertIfAbsent(userId, signUpCredits, now) == 1) {
             lots.save(new CreditLot(userId, signUpCredits, now, null));
             record(userId, CreditHistoryType.PROVISION, signUpCredits, null, now);
             afterCommit(() -> log.info("provision user={} amount={} outcome=CREATED", userId, signUpCredits));
+            return true;
         }
+        return false;
+    }
+
+    // Credits that reached a closed account go on to the pool at once
+    // (USR-4). Called with the account locked, after the row that
+    // brought them.
+    private void moveToPoolIfClosed(CreditAccount account, String requestRef, Instant now) {
+        if (account.isClosed()) {
+            int moved = moveToPool(account, requestRef, now);
+            if (moved > 0) {
+                String userId = account.getUserId();
+                afterCommit(() -> log.info("closure request={} user={} moved={}", requestRef, userId, moved));
+            }
+        }
+    }
+
+    // Empties the account's lots into the common pool, with one CLOSURE
+    // row for the total, and returns it. Held credits are in no lot's
+    // remaining, so they stay held. Called with the account locked; the
+    // pool is the last lock (D2).
+    private int moveToPool(CreditAccount account, String requestRef, Instant now) {
+        int total = 0;
+        for (CreditLot lot : lots.findInSpendOrder(account.getUserId())) {
+            total += lot.getRemaining();
+            // kept at zero: slices reference it
+            lot.setRemaining(0);
+        }
+        if (total == 0) {
+            return 0;
+        }
+        account.setAvailable(account.getAvailable() - total);
+        CommonPool common = pool.lockPool();
+        common.setBalance(common.getBalance() + total);
+        record(account.getUserId(), CreditHistoryType.CLOSURE, total, requestRef, now);
+        return total;
     }
 
     private CreditAccount lockAccount(String userId, Instant now) {

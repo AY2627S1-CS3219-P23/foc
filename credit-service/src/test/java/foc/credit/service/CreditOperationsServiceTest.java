@@ -21,6 +21,12 @@
  * the other events on a RESOLVED record (team decision).
  * PR #247 review follow-up: a resolution racing another resolution, and
  * a transfer, in the opposite direction, which pins its lock order (D2).
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: open and close by the
+ * team's state table (USR-6), closure moving the balance to the pool
+ * while held credits stay held, credits reaching a closed account by
+ * release, transfer or dispute share going on to the pool (USR-4), and
+ * get-or-create never reopening (USR-3). The books' checks replay
+ * CLOSURE and hold a closed account to no available credits.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -112,13 +118,17 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
             group by a.user_id, a.available, a.reserved
             having a.available <> coalesce(sum(case
                     when h.type in ('PROVISION', 'RELEASE', 'TRANSFER_IN', 'REDISTRIBUTION') then h.amount
-                    when h.type in ('RESERVE', 'EXPIRY') then -h.amount
+                    when h.type in ('RESERVE', 'EXPIRY', 'CLOSURE') then -h.amount
                     else 0 end), 0)
                 or a.reserved <> coalesce(sum(case
                     when h.type = 'RESERVE' then h.amount
                     when h.type in ('RELEASE', 'TRANSFER_OUT') then -h.amount
                     else 0 end), 0)
             """)).as("accounts whose balances differ from their history").isEmpty();
+        // a closed account's credits are all in the pool (USR-4)
+        assertThat(jdbc.queryForList(
+            "select user_id from credit_account where closed_at is not null and available <> 0"))
+            .as("closed accounts holding available credits").isEmpty();
         // the closed economy: credits are only ever created by a provision
         assertThat(jdbc.queryForObject("""
             select (select coalesce(sum(available + reserved), 0) from credit_account)
@@ -861,7 +871,159 @@ class CreditOperationsServiceTest extends PostgresTestContainer {
         assertBalance(courier, 4, 0);
     }
 
+    // ---- open and close (issue #267) ----
+
+    @Test
+    void openCreatesTheAccountWithTheSignUpCreditsOnce() {
+        assertThat(operations.open(requester)).isEqualTo(AccountResult.CREATED);
+        assertThat(operations.open(requester)).isEqualTo(AccountResult.DUPLICATE);
+        // get-or-create finds it as the event left it
+        operations.getOrCreate(requester);
+
+        assertBalance(requester, 5, 0);
+        assertThat(historyOf(requester)).containsExactly("PROVISION 5");
+    }
+
+    @Test
+    void openAfterGetOrCreateIsADuplicate() {
+        operations.getOrCreate(requester);
+
+        assertThat(operations.open(requester)).isEqualTo(AccountResult.DUPLICATE);
+        assertThat(historyOf(requester)).containsExactly("PROVISION 5");
+    }
+
+    @Test
+    void closeMovesTheAvailableCreditsToThePoolAndKeepsTheHeldOnes() {
+        operations.reserve(request, requester, 2);
+        int poolBefore = poolBalance();
+
+        assertThat(operations.close(requester)).isEqualTo(AccountResult.CLOSED);
+
+        // the sign-up credits included; the held 2 stay held
+        assertBalance(requester, 0, 2);
+        assertThat(poolBalance()).isEqualTo(poolBefore + 3);
+        assertThat(historyOf(requester)).containsExactly("PROVISION 5", "RESERVE 2", "CLOSURE 3");
+        assertThat(accounts.findById(requester).orElseThrow().isClosed()).isTrue();
+        assertThat(statusOf(request)).isEqualTo(ReservationStatus.HELD);
+    }
+
+    @Test
+    void closeAgainIsADuplicate() {
+        operations.getOrCreate(requester);
+        operations.close(requester);
+        int poolBefore = poolBalance();
+
+        assertThat(operations.close(requester)).isEqualTo(AccountResult.DUPLICATE);
+
+        assertThat(poolBalance()).isEqualTo(poolBefore);
+        assertThat(historyOf(requester)).containsExactly("PROVISION 5", "CLOSURE 5");
+    }
+
+    @Test
+    void closeBeforeTheAccountExistsLeavesAClosedPlaceholderNothingCanFund() {
+        assertThat(operations.close(requester)).isEqualTo(AccountResult.CLOSED_PLACEHOLDER);
+
+        // a late user.created, a get-or-create and a reserve grant nothing
+        assertThat(operations.open(requester)).isEqualTo(AccountResult.IGNORED_CLOSED);
+        CreditAccount account = operations.getOrCreate(requester);
+        assertThat(account.isClosed()).isTrue();
+        assertThat(operations.reserve(request, requester, 1)).isEqualTo(ReserveResult.REJECTED_INSUFFICIENT_CREDITS);
+
+        assertBalance(requester, 0, 0);
+        assertThat(historyOf(requester)).isEmpty();
+        assertThat(lotsOf(requester)).isEmpty();
+    }
+
+    @Test
+    void openAfterCloseIsIgnoredAndNeverReopens() {
+        operations.open(requester);
+        operations.close(requester);
+
+        assertThat(operations.open(requester)).isEqualTo(AccountResult.IGNORED_CLOSED);
+
+        assertThat(accounts.findById(requester).orElseThrow().isClosed()).isTrue();
+        assertBalance(requester, 0, 0);
+        assertThat(historyOf(requester)).containsExactly("PROVISION 5", "CLOSURE 5");
+    }
+
+    @Test
+    void aReleaseToAClosedAccountGoesOnToThePool() {
+        operations.reserve(request, requester, 2);
+        operations.close(requester);
+        int poolBefore = poolBalance();
+
+        assertThat(operations.release(request, requester)).isEqualTo(SettleResult.SETTLED);
+
+        assertBalance(requester, 0, 0);
+        assertThat(poolBalance()).isEqualTo(poolBefore + 2);
+        assertThat(historyOf(requester))
+            .containsExactly("PROVISION 5", "RESERVE 2", "CLOSURE 3", "RELEASE 2", "CLOSURE 2");
+        assertThat(lotsOf(requester)).containsExactly("0 never");
+    }
+
+    @Test
+    void aTransferToAClosedCourierGoesOnToThePool() {
+        operations.getOrCreate(courier);
+        operations.close(courier);
+        operations.reserve(request, requester, 3);
+        int poolBefore = poolBalance();
+
+        assertThat(operations.transfer(request, courier)).isEqualTo(SettleResult.SETTLED);
+
+        assertBalance(requester, 2, 0);
+        assertBalance(courier, 0, 0);
+        assertThat(poolBalance()).isEqualTo(poolBefore + 3);
+        assertThat(historyOf(courier)).containsExactly("PROVISION 5", "CLOSURE 5", "TRANSFER_IN 3", "CLOSURE 3");
+    }
+
+    @Test
+    void aClosedRequestersHeldCreditsStillReachAnOpenCourier() {
+        operations.reserve(request, requester, 3);
+        operations.close(requester);
+
+        assertThat(operations.transfer(request, courier)).isEqualTo(SettleResult.SETTLED);
+
+        assertBalance(requester, 0, 0);
+        assertBalance(courier, 8, 0);
+        assertThat(historyOf(requester)).containsExactly("PROVISION 5", "RESERVE 3", "CLOSURE 2", "TRANSFER_OUT 3");
+    }
+
+    @Test
+    void bothSharesOfAResolutionToClosedAccountsGoOnToThePool() {
+        operations.getOrCreate(courier);
+        operations.reserve(request, requester, 4);
+        operations.close(requester);
+        operations.close(courier);
+        int poolBefore = poolBalance();
+
+        assertThat(operations.resolve(request, courier, 3, 1)).isEqualTo(SettleResult.SETTLED);
+
+        assertBalance(requester, 0, 0);
+        assertBalance(courier, 0, 0);
+        assertThat(poolBalance()).isEqualTo(poolBefore + 4);
+        assertThat(historyOf(requester))
+            .containsExactly("PROVISION 5", "RESERVE 4", "CLOSURE 1", "TRANSFER_OUT 3", "RELEASE 1", "CLOSURE 1");
+        assertThat(historyOf(courier)).containsExactly("PROVISION 5", "CLOSURE 5", "TRANSFER_IN 3", "CLOSURE 3");
+    }
+
+    @RepeatedTest(RACE_REPETITIONS)
+    void closeRacingAFirstGetOrCreateNeverLeavesCreditsOnAClosedAccount() throws Exception {
+        List<Object> results = race(
+            () -> operations.close(requester),
+            () -> operations.getOrCreate(requester));
+
+        assertThat(results).noneMatch(Exception.class::isInstance);
+        // whichever ran first, the account ends closed and empty
+        CreditAccount account = accounts.findById(requester).orElseThrow();
+        assertThat(account.isClosed()).isTrue();
+        assertBalance(requester, 0, 0);
+    }
+
     // ---- helpers ----
+
+    private int poolBalance() {
+        return jdbc.queryForObject("select balance from common_pool", Integer.class);
+    }
 
     private void assertBalance(String userId, int available, int reserved) {
         CreditAccount account = accounts.findById(userId).orElseThrow();

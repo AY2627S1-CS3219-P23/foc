@@ -128,6 +128,13 @@
   V5's partial index on the HELD rows serves it. Later PR #248 review
   suggestions taken: a blank olderThan takes the default, and the
   accepted durations are named (days and smaller).
+  2026-10-28, issue #267: the team's user-event decisions (USR-1 to
+  USR-9) written in as D14, with closed_at and CLOSURE in the schema,
+  the closed-account invariant, the user-event table, and the account
+  closure open item marked done. The decisions are the team's; the
+  tool transcribed them. Same day, PR review (team decisions): D14's
+  correlationId, the blank-userId dead-letter, the User Service's
+  independence from the broker and its outbox retention.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -147,7 +154,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D3 | Duplicate detection | **One held-credits record per request**, with a unique request reference. Its status records what has already been decided and done, so a redelivered event changes nothing and never produces a second, different reply. | NFR2.2, NFR2.2.1 |
 | D4 | Expiry model | Earned credits live in lots that expire 3 months after they are earned into a common pool. Lots are spent in soonest expiry order first. A release returns credits to the lot they were taken from, so they keep their expiry and place in that order. Redistributed credits expiry are started the date they are received. The lifetime is configuration (`CREDIT_EARNED_CREDIT_LIFETIME_MONTHS`, default 3): `expires_at` is the instant the credits were earned plus that many calendar months, in UTC. A lot's credits expire at the first expiry run after `expires_at`; until then they are spent like any other. | F6.1–F6.1.2 |
 | D5 | Credit history | **Append-only**: each row has type, amount, timestamp and request reference. Filters will use JPA. | F4.1.1, F4.1.2, F4.1.3 |
-| D6 | Account provisioning | **Get or create method inside Credit Service**. Call is made idempotent by a unique user ID. Account with 5 available credits is created the first time a trusted ID is seen; the amount is configuration (`CREDIT_SIGN_UP_CREDITS`, default 5) and applies to accounts created after it is set. Every path that writes a row referencing a user get-or-creates that user's account first: a balance or history read (the JWT's user), reserve (the requester), release, including the amount-0 `RELEASED` record (the requester), and transfer (the courier; the requester's already exists, since the `HELD` record references it). | F1.1, F1.1.1, F1.1.2 |
+| D6 | Account provisioning | **Get or create method inside Credit Service**. Call is made idempotent by a unique user ID. Account with 5 available credits is created the first time a trusted ID is seen; the amount is configuration (`CREDIT_SIGN_UP_CREDITS`, default 5) and applies to accounts created after it is set. Every path that writes a row referencing a user get-or-creates that user's account first: a balance or history read (the JWT's user), reserve (the requester), release, including the amount-0 `RELEASED` record (the requester), and transfer (the courier; the requester's already exists, since the `HELD` record references it). Since D14, `user.created` also opens the account; get-or-create stays the permanent fallback and never reopens a closed account. | F1.1, F1.1.1, F1.1.2 |
 | D7 | Cross-service consistency | **Saga between the Order and Credit Services, by choreography.** Each service reacts to the other's events, and the request's status in the Order Service is the saga's state. No synchronous call exists between the two services. | F2, F3, NFR2 |
 | D8 | Reservation | Saga step 1. The Credit Service consumes `request.submitted`, reserves or refuses, and replies with `credit.reserved` or `credit.reservation-rejected`. | F2.1, F2.1.2, F2.1.3 |
 | D9 | Transfer and release | Saga endings. `request.completed` transfers the held credits. `request.cancelled` and `request.expired` release them, with release being the compensation for a reservation. A disputed request has a third ending, `request.dispute-resolved`, which divides them (DSP-4, `docs/disputes.md`). | F2.1.1, F3.1, NFR1.1 |
@@ -155,6 +162,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D11 | Event failure handling | Transient failures go to a retry queue and are redelivered after a short delay, up to a fixed number of attempts, then to a dead-letter queue. Events that conflict with the recorded state go straight to the dead-letter queue. A `request.completed` with no record is not such a conflict: its reservation may not have been applied yet, so it is retried like a transient failure. The queue layout is the Notification Service's (a work, a retry and a dead-letter queue), with two differences: the five consumed routing keys are bound one by one instead of `request.#`, and the retry delay is 2 s with up to 5 attempts (`CREDIT_RETRY_TTL_MS`, `CREDIT_RETRY_MAX_ATTEMPTS`). The service declares both the `request-events` and `credit-events` exchanges, so it starts without the Order Service. | F5.1.1, NFR2.1 |
 | D12 | Scheduler | Done by a **cron job** through use of `@Scheduled`. One routine runs daily at 00:00 Asia/Singapore time and once at startup: the expiry sweep, then, if the current Singapore month has no `redistribution_run` row, that month's redistribution. The order inside the routine puts what expired into the pool before it is shared out, so the redistribution happens at 00:00 on the 1st, straight after that night's sweep. A month that is missed (the service down) or whose run fails is completed by the next run, at startup or the next day. The expiry is one transaction per account. A month is recorded in `redistribution_run` even when the pool is empty. | F6.1.1, F6.1.2 |
 | D13 | Outbox retention | A **scheduled purge** deletes the replies sent more than 30 days ago (`CREDIT_OUTBOX_RETENTION_DAYS`, default 30, at least 1 or the service does not start), daily at 03:00 Asia/Singapore time (`CREDIT_OUTBOX_PURGE_CRON`), away from the 00:00 routine of D12. Only sent rows (`sent_at` not null) are deleted: an unsent row is a reply the Order Service is still waiting for, and deleting it would leave that request stuck in pending. The window counts from `sent_at`, since a row's job ends at delivery. A partial index on `sent_at` covers the sent rows, so the purge's condition matches it exactly. Nothing but `outbox_event` is purged: `credit_reservation`, `credit_history`, `credit_lot` and `credit_reservation_slice` are the ledger and are kept. This differs from the Notification Service, which purges its `processed_events`: there that table is only a duplicate check, while here the duplicate check is `credit_reservation`, which is also the record of every request's credits. | NFR2.1 |
+| D14 | Account lifecycle | **User events** (issue #267, team decisions USR-1 to USR-9). The User Service publishes `user.created` when a user row is inserted after OTP verification (not at the pending sign-up; owner setup and the seeder rely on get-or-create) and `user.purged` for each account the day-31 purge deletes, through its own transactional outbox written in the same transaction, to one `user-events` topic exchange. Each carries the envelope and `userId` only, with no `parties`. `user.created` opens the account with the sign-up credits; `user.purged` closes it: the row is kept with `closed_at` set, every available credit (the sign-up ones included) moves to the common pool with a `CLOSURE` history row, held reservations settle normally, and any credits that reach a closed account afterwards (a release, a transfer, a dispute share) go on to the pool in the same transaction with a `CLOSURE` row. Duplicates and reordering are decided by the account's state, with no processed-events table (see "User events" below). Redistribution and the pool preview count open accounts only, through one query. No soft-delete or restore event: shares received during the 30-day window return to the pool at closure. Deploy order: `foc-contracts`, then the Credit Service, then the User Service. A user event's `correlationId` is the user's ID, so every event about one user can be traced together. An event with a blank `userId` is dead-lettered at once, before any query. The User Service starts and serves login and sign-up without the broker: compose does not make it wait for RabbitMQ, its RabbitMQ health check is off, and the exchange is declared when the publisher first connects, so an event published before the Credit Service has bound its queue is returned and retried from the outbox. Sent user events are deleted 30 days after they were sent, never an unsent one, as the Credit Service's replies are (D13). | F1.1, F6.1.1, F1 (closed economy) |
 
 ## The saga
  
@@ -227,6 +235,7 @@ erDiagram
         integer available "CHECK >= 0"
         integer reserved "CHECK >= 0"
         timestamptz created_at
+        timestamptz closed_at "null = open; set when the user is purged (D14)"
     }
     credit_reservation {
         varchar request_ref PK "the order's ID"
@@ -283,7 +292,7 @@ erDiagram
  
 | Table (entity) | Represents | Why  |
 | --- | --- | --- |
-| `credit_account` (`CreditAccount`) | **A user's credit balances.** One row per user. | The primary key on `user_id` makes get-or-create happen once per user (D6). `available` and `reserved` are columns so that the balance read is one row and the non-negative rule is a `CHECK` (F2.1.2). |
+| `credit_account` (`CreditAccount`) | **A user's credit balances.** One row per user. | The primary key on `user_id` makes get-or-create happen once per user (D6). `available` and `reserved` are columns so that the balance read is one row and the non-negative rule is a `CHECK` (F2.1.2). `closed_at` marks an account whose user was purged (D14): the row is kept because its reservations, lots and history reference it, and a closed account is never reopened. |
 | `credit_reservation` (`Reserved`) | **The reservation for one order.** One row per request. | The primary key on `request_ref` is the duplicate check (D3, NFR2.2.1). `status` records the outcome; `REJECTED` records a refusal so a redelivery gets the same answer. `courier_id` is filled in at transfer. `RESOLVED` records a dispute settled by dividing the reward (DSP-4): `courier_share` is the courier's part and the requester's is `amount - courier_share`; the courier is recorded even when their share is 0, and the stored split lets a repeated resolution be told from a conflicting one (DSP-13). `amount` is checked only while `HELD`: a `REJECTED` row holds the reward as it was requested, including zero or negative, and the amount-0 `RELEASED` row holds 0. `settled_at` is the moment the record became final, so it is set on a `REJECTED` row when it is written. The `HELD` rows are indexed by `created_at` and `request_ref` for the admin list of long-held reservations; the index is partial, so it holds only what is held now while the table keeps a row for every order. |
 | `credit_reservation_slice` | Which lots a reservation's credits came from. | Lets a release return credits to the lot they came from, with its expiry and place in the spend order (D4). `lot_id` references that lot; `amount` is always positive. Indexed by `request_ref`, which is how a release and a resolution read them back. Slices are kept after the request is settled, as the record of how much was taken from each lot at reservation time: a resolution that refunds part of a slice leaves its `amount` as it was. |
 | `credit_lot` (`CreditLot`) | A user's available credits, split by expiry date. | Needed for 3-month expiry (F6.1). A null `expires_at` marks the sign-up credits, which never expire. A row is kept when spent to zero: its slices reference it and a release may refill it. The spend order and the expiry run only look at lots with something remaining, which is what both lot indexes cover. |
@@ -303,6 +312,7 @@ History `type` values and what each does to the account's balances:
 | `TRANSFER_IN` (courier) | + amount | |
 | `EXPIRY` | − amount | |
 | `REDISTRIBUTION` | + amount | |
+| `CLOSURE` (closed account, D14) | − amount | |
  
 ### How available, reserved and total are stored
  
@@ -337,6 +347,9 @@ reservations instead.
      slices;
    - an account whose `reserved` differs from the sum of the amounts
      of its `HELD` reservations.
+
+   And, since D14, a third: a closed account with `available` other
+   than 0.
 5. **The history is an independent second record.** Replaying a user's
    history rows with the table above reproduces their `available` and
    `reserved`, so the two can be reconciled against each other. Across
@@ -638,7 +651,25 @@ amount-0 `RELEASED` record (D6). A resolution gets or creates both
 accounts, the courier's even for a share of 0, since the record
 references it. Each writes its history rows in the
 same transaction, including the sign-up lot and `PROVISION` row of an
-account it creates.
+account it creates. When an account the operation credits is closed
+(D14), its lots are emptied into the common pool before the commit,
+with a `CLOSURE` row after the row that credited it.
+
+### User events
+
+`user.created` and `user.purged` (D14) arrive on the service's own
+`credit-service.user-events` queue, with the same retry and
+dead-letter queues and values as the request events (D11). Each is
+applied in one transaction and acknowledged after the commit; every
+cell below is acknowledged, a reordered pair included. An event with a
+blank `userId` names no account and is dead-lettered at once, without a
+retry. An exception is retried and then dead-lettered, as for a request
+event.
+
+| Event | No account | Open account | Closed account |
+| --- | --- | --- | --- |
+| `user.created` | Create it with the sign-up credits (`PROVISION`) | Nothing (duplicate) | Nothing: the events arrived out of order, and the account is never reopened |
+| `user.purged` | Create a closed placeholder holding nothing, with no sign-up credits, so a late `user.created` or get-or-create cannot grant them | Close it: move every available credit to the common pool (`CLOSURE`), set `closed_at`; held credits stay held | Nothing (duplicate) |
 
 ### How lots are spent, returned and expired
 
@@ -852,7 +883,7 @@ tests.
 
 `Sum over all users (available + reserved) + common pool = number of credits ever created`
 
-Credits are created only by the one-time account provision (F1.1, D6). The credit operation moves credits and destroys none: reserve (available → held), release (held → available), transfer (held → courier), expiry (lot → common pool), redistribution (pool → users).
+Credits are created only by the one-time account provision (F1.1, D6). The credit operation moves credits and destroys none: reserve (available → held), release (held → available), transfer (held → courier), expiry (lot → common pool), redistribution (pool → users), closure (a closed account's available → common pool, D14).
 
 ## What this design needs from other services
  
@@ -864,10 +895,10 @@ Credits are created only by the one-time account provision (F1.1, D6). The credi
 | Order Service | Consume `credit.reserved` and `credit.reservation-rejected` on its own queue, ignoring replies for requests that are no longer `pending` | Saga steps 3a and 3b |
 | Order Service | Cancel a request that stays `pending` past a waiting time, publishing `request.cancelled` | Without it, a lost or dead-lettered reply strands the request |
 | Order Service | Publish `request.cancelled` only when a request is finally cancelled, never when a courier withdraws and the request returns to created (Order F5.2) — a withdrawal publishes `request.dropped` instead, which this service does not consume | A withdrawal must leave the credits held |
-| `foc-contracts` | Records and registry entries for the four new events, and a `credit-events` exchange name | Shared contracts |
+| `foc-contracts` | Records and registry entries for the four new events, and a `credit-events` exchange name; since D14, `user.created` and `user.purged` and a `user-events` exchange name | Shared contracts |
 | Notification Service | Nothing to build: `request.submitted` and `request.rejected` arrive through its existing `request.#` binding and notify the requester, who is in `parties` on both | The requester sees the submission, and `request.rejected` is the only way they learn of a refusal |
 | Web App | Show `pending` and `rejected` requests to the requester, and warn before submitting when the reward exceeds the displayed balance | The server's answer is no longer immediate |
-| User Service | Nothing | D6 removes the sign-up dependency |
+| User Service | Publish `user.created` when a verified sign-up inserts the user row and `user.purged` for each account the day-31 purge deletes, through a transactional outbox (D14) | A purged user must stop receiving redistribution shares and their credits must return to the pool; D6's get-or-create stays the fallback, so a lost `user.created` costs nothing |
  
 ## Requirements to revise
  
@@ -888,9 +919,10 @@ rewording by the team:
 
 ## Open items
 
-- **Account closure**: when a user account is deleted (User F3.1.3) or
-  removed by an admin (User F6.1.3), the user's balance must move to the
-  common pool, otherwise credits vanish. 
+- **Account closure**: done for the day-31 purge by D14 (issue #267).
+  A soft-deleted account (User F3.1.3, F6.1.3) keeps its balance during
+  the 30-day window and may receive redistribution shares there; the
+  team accepted that (USR-5), since closure returns them to the pool.
 - **Shared messaging code**: the converter that turns broker messages
   into typed events lives in `notification-service`. The Credit and
   Order Services need the same code, and both need an outbox publisher;

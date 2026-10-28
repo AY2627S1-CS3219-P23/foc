@@ -29,6 +29,10 @@ Scope: issue #147. Runs the Flyway migrations against their own schemas in
        per-operation naming), each decided by the owner via options
        Q&A.
 Author review: Ryan to review via the PR.
+2026-10-28, Claude Code (Opus 5.5), issue #267: V9 (outbox_event) moves the
+       counts to 8 and 9; the fresh-database case proves the table and its
+       primary key. Same day, PR review: V10 (the sent index) moves them
+       to 9 and 10. Author review: Ryan Ang, pending pull request review.
 */
 
 package foc.user;
@@ -56,7 +60,7 @@ import org.springframework.core.io.ClassPathResource;
 class FlywayMigrationTest extends PostgresTestContainer {
 
     // scripts in db/migration; a new V<n> bumps this
-    private static final int MIGRATION_SCRIPTS = 8;
+    private static final int MIGRATION_SCRIPTS = 10;
 
     // the application's Flyway, built from application.yaml's spring.flyway
     @Autowired
@@ -174,6 +178,15 @@ class FlywayMigrationTest extends PostgresTestContainer {
                     + " where username = 'Bob'"))
                 .isInstanceOf(SQLException.class)
                 .hasMessageContaining("idx_password_reset_otps_user");
+
+            // V9: the user-event outbox, one row per event id
+            statement.execute("insert into outbox_event (event_id, event_type, payload, created_at)"
+                + " values ('5d1c2a7e-3b4f-4e6a-9c8d-1f2e3a4b5c6d', 'user.created', '{}', now())");
+            assertThatThrownBy(() -> statement.execute(
+                    "insert into outbox_event (event_id, event_type, payload, created_at)"
+                    + " values ('5d1c2a7e-3b4f-4e6a-9c8d-1f2e3a4b5c6d', 'user.created', '{}', now())"))
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("outbox_event_pkey");
         }
     }
 }

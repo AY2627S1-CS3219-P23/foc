@@ -46,6 +46,11 @@ step now treats any RuntimeException as a failed cleanup (not only
 BookmarkCleanupException) — anything else (e.g. from JwtIssuer or a bad URI)
 used to escape before the transaction and skip the hygiene sweeps too.
 Returning false only keeps the accounts for the next run, so it is safe.
+2026-10-28 (Claude Code, Opus 5.5), issue #267: the purge transaction writes
+one user.purged per purged account to the outbox (team decision USR-2), so
+an account is gone if and only if credit-service will hear of it. The ids
+come from the locked set the transaction already reads. Author review: Ryan
+Ang, pending pull request review.
 */
 
 package foc.user.service;
@@ -62,6 +67,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import foc.user.entity.User;
 import foc.user.repository.AccountUpdateOtpRepository;
 import foc.user.repository.PasswordResetOtpRepository;
 import foc.user.repository.PendingEmailChangeRepository;
@@ -83,7 +89,8 @@ import foc.user.repository.UserRepository;
  * sweep is hygiene only — the flows reject an expired row on sight.
  * Each purged account's supplier bookmarks are removed first, through
  * supplier-service (issue #225); if that fails the accounts are kept for
- * the next run.
+ * the next run. Each purged account gets a {@code user.purged} event in
+ * the same transaction (issue #267).
  */
 @Component
 class AccountPurgeScheduler {
@@ -96,6 +103,7 @@ class AccountPurgeScheduler {
     private final PendingEmailChangeRepository pendingEmailChanges;
     private final UserRepository users;
     private final SupplierBookmarkCleanupClient bookmarkCleanup;
+    private final EventOutbox eventOutbox;
     private final TransactionTemplate transaction;
     private final int retentionDays;
 
@@ -104,6 +112,7 @@ class AccountPurgeScheduler {
             AccountUpdateOtpRepository accountUpdateOtps,
             PendingEmailChangeRepository pendingEmailChanges,
             UserRepository users, SupplierBookmarkCleanupClient bookmarkCleanup,
+            EventOutbox eventOutbox,
             PlatformTransactionManager transactionManager,
             @Value("${user.retention.days}") int retentionDays) {
         this.resetOtps = resetOtps;
@@ -112,6 +121,7 @@ class AccountPurgeScheduler {
         this.pendingEmailChanges = pendingEmailChanges;
         this.users = users;
         this.bookmarkCleanup = bookmarkCleanup;
+        this.eventOutbox = eventOutbox;
         this.transaction = new TransactionTemplate(transactionManager);
         this.retentionDays = retentionDays;
     }
@@ -138,8 +148,8 @@ class AccountPurgeScheduler {
         // acquire child-row locks — taken unlocked-first, this
         // transaction could hold a reset OTP row while a reset request
         // held its user and waited for that row, deadlocking both. The
-        // locked set is discarded: only the lock order matters
-        users.findWithLockByDeletedBefore(cutoff);
+        // locked set is also who the user.purged events are for
+        List<User> condemned = users.findWithLockByDeletedBefore(cutoff);
         int resetByUserCount = 0;
         int purgedGateCount = 0;
         int purgedChangeCount = 0;
@@ -152,6 +162,11 @@ class AccountPurgeScheduler {
             purgedGateCount = accountUpdateOtps.deleteByUserDeletedBefore(cutoff);
             purgedChangeCount = pendingEmailChanges.deleteByUserDeletedBefore(cutoff);
             userCount = users.deleteByDeletedBefore(cutoff);
+            // in this transaction: the event goes out if and only if the
+            // account is gone (USR-2), and credit-service closes its account
+            for (User user : condemned) {
+                eventOutbox.userPurged(user.getId());
+            }
         }
         // hygiene for the accounts that stay: anything already expired,
         // inclusive of the exact boundary the flows call expired

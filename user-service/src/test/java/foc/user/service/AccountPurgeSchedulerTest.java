@@ -34,6 +34,10 @@ Reviewed by: Leong Wei Zhi (via pull request).
 2026-10-26 (Claude Code, Sonnet 5.5), PR #259 review (Sinnez1): a case where
        the cleanup throws an unexpected RuntimeException (not a
        BookmarkCleanupException) — the accounts stay and the sweeps still run.
+2026-10-28 (Claude Code, Opus 5.5), issue #267: cases that the purge writes
+       one user.purged per purged account (and none for the accounts kept),
+       and none when the bookmark cleanup fails.
+       Author review: Ryan Ang, pending pull request review.
 */
 
 package foc.user.service;
@@ -63,7 +67,9 @@ import foc.user.entity.PendingSignup;
 import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.exception.BookmarkCleanupException;
+import foc.user.entity.OutboxEvent;
 import foc.user.repository.AccountUpdateOtpRepository;
+import foc.user.repository.OutboxEventRepository;
 import foc.user.repository.PasswordResetOtpRepository;
 import foc.user.repository.PendingEmailChangeRepository;
 import foc.user.repository.PendingSignupRepository;
@@ -101,6 +107,9 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
     @Autowired
     private PendingEmailChangeRepository pendingEmailChangeRepository;
 
+    @Autowired
+    private OutboxEventRepository outboxEventRepository;
+
     @BeforeEach
     void cleanDatabase() {
         resetOtpRepository.deleteAll();
@@ -108,6 +117,7 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
         accountUpdateOtpRepository.deleteAll();
         pendingEmailChangeRepository.deleteAll();
         userRepository.deleteAll();
+        outboxEventRepository.deleteAll();
     }
 
     // the surviving-row assertions leave reset rows behind, and other
@@ -328,6 +338,8 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
         assertThat(userRepository.findAll()).extracting(User::getId).containsExactly(expired.getId());
         assertThat(resetOtpRepository.findAll()).hasSize(1);
         assertThat(pendingSignupRepository.findAll()).isEmpty();
+        // kept, so nothing to tell credit-service yet
+        assertThat(outboxEventRepository.findAll()).isEmpty();
     }
 
     @Test
@@ -345,6 +357,32 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
 
         assertThat(userRepository.findAll()).extracting(User::getId).containsExactly(expired.getId());
         assertThat(pendingSignupRepository.findAll()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Should write one user.purged per purged account, and none for the accounts kept")
+    void purgeWritesUserPurgedForEachPurgedAccount() {
+        saveUser("e1111111@u.nus.edu", "active_user", null);
+        saveUser("e2222222@u.nus.edu", "recently_deleted", Instant.now().minus(29, ChronoUnit.DAYS));
+        User first = saveUser("e3333333@u.nus.edu", "expired_deleted",
+            Instant.now().minus(31, ChronoUnit.DAYS));
+        User second = saveUser("e4444444@u.nus.edu", "long_deleted",
+            Instant.now().minus(40, ChronoUnit.DAYS));
+        userRepository.flush();
+
+        scheduler.purgeExpiredDeletedAccounts();
+
+        assertThat(outboxEventRepository.findAll())
+            .extracting(OutboxEvent::getEventType).containsOnly("user.purged");
+        assertThat(outboxEventRepository.findAll())
+            .extracting(OutboxEvent::getPayload)
+            .anySatisfy(payload -> assertThat(payload).contains("\"userId\":\"" + first.getId() + "\""))
+            .anySatisfy(payload -> assertThat(payload).contains("\"userId\":\"" + second.getId() + "\""))
+            .hasSize(2)
+            .allSatisfy(payload -> assertThat(payload)
+                .contains("\"eventType\":\"user.purged\"")
+                .contains("\"producer\":\"user-service\"")
+                .contains("\"parties\":[]"));
     }
 
     private User saveUser(String email, String username, Instant deletedAt) {

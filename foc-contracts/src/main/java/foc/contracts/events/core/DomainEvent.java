@@ -11,6 +11,9 @@
  * parties()'s comment states which events may name no one; Claude Code
  * (Opus 5.5).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: parties()'s comment
+ * names user events too (team decision, USR-1); author review: Ryan
+ * Ang, pending pull request review.
  */
 package foc.contracts.events.core;
 
@@ -70,8 +73,8 @@ public interface DomainEvent {
 
 	/**
 	 * User IDs to notify — one notification per entry (F1.1, F1.2). Never
-	 * null; empty only for credit events, since every request event names
-	 * someone.
+	 * null; empty only for credit and user events, since every request
+	 * event names someone.
 	 */
 	List<String> parties();
 

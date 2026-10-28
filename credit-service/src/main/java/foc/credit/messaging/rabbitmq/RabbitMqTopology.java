@@ -7,6 +7,9 @@
  * author's decisions (docs/credit-service.md D11).
  * 2026-10-25, Claude Code (Opus 5.5), issue #235: request.dispute-resolved
  * bound as a fifth consumed event (team decision, DSP-4).
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: the user-events work,
+ * retry and dead-letter queues, bound to user.created and user.purged
+ * (team decision USR-1).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
@@ -31,6 +34,8 @@ import foc.contracts.events.request.RequestCompleted;
 import foc.contracts.events.request.RequestDisputeResolved;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestSubmitted;
+import foc.contracts.events.user.UserCreated;
+import foc.contracts.events.user.UserPurged;
 
 /**
  * The saga's topology (docs/credit-service.md D7, D11): this service's
@@ -71,6 +76,18 @@ public class RabbitMqTopology {
 			RequestSubmitted.class, RequestCompleted.class, RequestCancelled.class, RequestExpired.class,
 			RequestDisputeResolved.class);
 
+	/** The user events' work queue (issue #267), laid out as the request one. */
+	public static final String USER_EVENTS_QUEUE = "credit-service.user-events";
+
+	/** Holds a failed user event for the retry delay, then returns it. */
+	public static final String USER_EVENTS_RETRY_QUEUE = USER_EVENTS_QUEUE + ".retry";
+
+	/** User events that ran out of attempts or never converted. */
+	public static final String USER_EVENTS_DEAD_LETTER_QUEUE = USER_EVENTS_QUEUE + ".dlq";
+
+	/** The user events the Credit Service acts on (USR-1), bound one by one. */
+	static final List<Class<?>> CONSUMED_USER_EVENTS = List.of(UserCreated.class, UserPurged.class);
+
 	/** The broker's default exchange routes by queue name. */
 	private static final String DEFAULT_EXCHANGE = "";
 
@@ -94,6 +111,36 @@ public class RabbitMqTopology {
 		for (Class<?> event : CONSUMED_EVENTS) {
 			// the key comes from the shared registry, never hand-written
 			declarables.add(BindingBuilder.bind(workQueue).to(requestEvents)
+					.with(EventTypeRegistry.routingKeyFor(event)));
+		}
+		return new Declarables(declarables);
+	}
+
+	/**
+	 * The user events' work, retry and dead-letter queues on the
+	 * {@code user-events} exchange (USR-1), with the same failure legs as
+	 * the saga's. The exchange is declared here too, so the queue can be
+	 * bound whether or not the User Service has started; until it is, a
+	 * user event has nowhere to go and the User Service's outbox keeps it
+	 * (USR-9).
+	 */
+	@Bean
+	Declarables userEventsTopology(@Value("${credit.rabbitmq.retry.ttl-ms}") int retryTtlMs) {
+		TopicExchange userEvents = new TopicExchange(EventContracts.USER_EVENTS_EXCHANGE, true, false);
+		Queue workQueue = QueueBuilder.durable(USER_EVENTS_QUEUE)
+				.deadLetterExchange(DEFAULT_EXCHANGE)
+				.deadLetterRoutingKey(USER_EVENTS_DEAD_LETTER_QUEUE)
+				.build();
+		Queue retryQueue = QueueBuilder.durable(USER_EVENTS_RETRY_QUEUE)
+				.ttl(retryTtlMs)
+				.deadLetterExchange(DEFAULT_EXCHANGE)
+				.deadLetterRoutingKey(USER_EVENTS_QUEUE)
+				.build();
+		Queue deadLetterQueue = QueueBuilder.durable(USER_EVENTS_DEAD_LETTER_QUEUE).build();
+
+		List<Declarable> declarables = new ArrayList<>(List.of(userEvents, workQueue, retryQueue, deadLetterQueue));
+		for (Class<?> event : CONSUMED_USER_EVENTS) {
+			declarables.add(BindingBuilder.bind(workQueue).to(userEvents)
 					.with(EventTypeRegistry.routingKeyFor(event)));
 		}
 		return new Declarables(declarables);

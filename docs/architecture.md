@@ -45,6 +45,9 @@
   2026-10-26 (Claude Code, Sonnet 5.5), issue #226: the open bookmark-
   cleanup decision moved to resolved (D12 in docs/supplier-service.md).
   Transcription only.
+  2026-10-28 (Claude Code, Opus 5.5), issue #267: the User Service →
+  Broker → Credit Service dependency row, per the team's USR-1 to USR-9
+  (docs/credit-service.md D14). Transcription only.
 -->
 
 # Favours on Campus (FoC) — High-Level Service Architecture
@@ -134,6 +137,7 @@ TBD = to be decided.
 | Order Service → Supplier Service | sync REST | validate pickup location is a known supplier/landmark; fetch supplier locations for the 1 km acceptance-proximity check | Order F1.1.1, F8.1 |
 | Order Service → Broker (RabbitMQ) → Credit Service | **async events** | reserve the reward on `request.submitted`, transfer on `request.completed`, release on `request.cancelled` / `request.expired`; repeated events for the same request processed once (see [`credit-service.md`](credit-service.md)) | Credit F2.1, F2.1.1, F3.1, F5.1, NFR1.1, NFR2.2, NFR2.2.1; **M6** |
 | Credit Service → Broker (RabbitMQ) → Order Service | **async events** | reservation reply: `credit.reserved` moves the request from pending to created, `credit.reservation-rejected` moves it to rejected when the available balance is insufficient (see [`credit-service.md`](credit-service.md), D7–D8) | Credit F2.1.3; Order F1.1.4; **M6** |
+| User Service → Broker (RabbitMQ) → Credit Service | **async events** | `user.created` when a verified sign-up inserts the user row opens the credit account (get-or-create stays the fallback); `user.purged` for each account the day-31 purge deletes closes it, moving its balance to the common pool so redistribution skips it (see [`credit-service.md`](credit-service.md), D14) | Credit F1.1, F6.1.1; User F3.1.3 |
 | Order Service → Broker (RabbitMQ) → Notification Service | **async events** | event on every request state transition (submitted/created/accepted/collected/completed/cancelled/expired/rejected); at-least-once, persisted across restarts; consumer deduplicates, retries, dead-letters exhausted retries; delivery failure never affects the producing operation; new event types need no publisher changes | Order F0.2; Notif F1.1, F1.3, F1.4, F2.1–F2.3, NFR1.1–1.2; **M6** |
 
 Timer-driven behaviors stay **inside** the owning service (no arrow):

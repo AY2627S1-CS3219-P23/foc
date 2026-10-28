@@ -20,6 +20,8 @@
  * 2026-10-22, Claude Code (Opus 5.5), PR #243 review follow-up: the
  * value-set test's javadoc says its strictness is deliberate; author
  * review: Ryan Ang, pending pull request review.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: a user event carries a
+ * userId instead; author review: Ryan Ang, pending pull request review.
  */
 package foc.contracts.events.request;
 
@@ -27,6 +29,7 @@ import foc.contracts.events.core.DomainEvent;
 import foc.contracts.events.credit.CreditEvent;
 import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.core.Nullable;
+import foc.contracts.events.user.UserEvent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -54,10 +57,23 @@ class RequestEventRecordsTest {
 	@Test
 	void everyRecordIsARequestOrCreditEventWithARequestId() {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
+			if (UserEvent.class.isAssignableFrom(entry.eventClass())) {
+				continue; // see everyUserEventCarriesAUserId
+			}
 			assertTrue(RequestEvent.class.isAssignableFrom(entry.eventClass())
 					|| CreditEvent.class.isAssignableFrom(entry.eventClass()),
 					entry.eventClass() + " must implement RequestEvent or CreditEvent");
 			assertTrue(componentNames(entry.eventClass()).contains("requestId"));
+		}
+	}
+
+	@Test
+	void everyUserEventCarriesAUserId() {
+		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
+			if (UserEvent.class.isAssignableFrom(entry.eventClass())) {
+				assertTrue(componentNames(entry.eventClass()).contains("userId"),
+						entry.eventClass() + " must carry a userId");
+			}
 		}
 	}
 

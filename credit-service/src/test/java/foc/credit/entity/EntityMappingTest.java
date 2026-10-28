@@ -10,6 +10,8 @@
  * the outbox case saves and reads back next_attempt_at (V2).
  * 2026-10-25, Claude Code (Opus 5.5), issue #235: a RESOLVED record
  * saves and reads back courier_share (V4).
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: V6's closed_at round
+ * trip, and a CLOSURE history row the type CHECK accepts.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.entity;
@@ -101,6 +103,27 @@ class EntityMappingTest extends PostgresTestContainer {
         assertThat(found.getAvailable()).isEqualTo(2);
         assertThat(found.getReserved()).isEqualTo(3);
         assertThat(found.getCreatedAt()).isEqualTo(NOW);
+        assertThat(found.getClosedAt()).isNull();
+        assertThat(found.isClosed()).isFalse();
+    }
+
+    @Test
+    void creditAccountClosedAt() {
+        accounts.findById(REQUESTER).orElseThrow().setClosedAt(NOW);
+        flushAndClear();
+
+        CreditAccount found = accounts.findById(REQUESTER).orElseThrow();
+        assertThat(found.getClosedAt()).isEqualTo(NOW);
+        assertThat(found.isClosed()).isTrue();
+    }
+
+    @Test
+    void creditHistoryEntryOfClosure() {
+        Long id = history.save(
+            new CreditHistoryEntry(REQUESTER, CreditHistoryType.CLOSURE, 5, null, NOW)).getId();
+        flushAndClear();
+
+        assertThat(history.findById(id).orElseThrow().getType()).isEqualTo(CreditHistoryType.CLOSURE);
     }
 
     @Test

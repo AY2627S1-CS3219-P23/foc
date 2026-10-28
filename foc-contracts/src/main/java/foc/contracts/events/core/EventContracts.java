@@ -11,6 +11,9 @@
  * 2026-10-08, Claude Code (Opus 5.5): credit-events exchange name added
  * (team design, docs/credit-service.md D7-D8); author review: Ryan Ang,
  * pending pull request review.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: user-events exchange
+ * name added (team decision, USR-1); author review: Ryan Ang, pending
+ * pull request review.
  */
 package foc.contracts.events.core;
 
@@ -46,6 +49,14 @@ public final class EventContracts {
 	 * (docs/credit-service.md D7-D8).
 	 */
 	public static final String CREDIT_EVENTS_EXCHANGE = "credit-events";
+
+	/**
+	 * Durable <strong>topic</strong> exchange for the user domain (USR-1,
+	 * issue #267): the User Service publishes account lifecycle facts
+	 * here ({@code user.created}, {@code user.purged}) and the Credit
+	 * Service consumes them.
+	 */
+	public static final String USER_EVENTS_EXCHANGE = "user-events";
 
 	private EventContracts() {
 	}

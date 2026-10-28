@@ -8,6 +8,7 @@
  * PR #193 review (Leong Wei Zhi), same day: a share's expiry from
  * EarnedCreditLifetime, shared with the transfer, per the reviewer's
  * comment.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: open accounts only (team decision USR-7).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -73,7 +74,8 @@ public class RedistributionService {
         if (runs.existsById(key)) {
             return RedistributionOutcome.alreadyRan(key);
         }
-        List<CreditAccount> all = accounts.findAllForUpdate();
+        // open accounts only: a purged user's account gets no share (USR-7)
+        List<CreditAccount> all = accounts.findAllOpenForUpdate();
         CommonPool common = pool.lockPool();
         // a run for this month that committed while this one waited for the locks
         if (runs.existsById(key)) {

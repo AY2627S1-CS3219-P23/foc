@@ -127,6 +127,10 @@ between the bcrypt check and the locked write (a concurrent reset) —
 the stale verdict is discarded in both directions, and three such
 rounds in a row answer as the 409 the concurrent-update handler
 already renders.
+2026-10-28 (Claude Code, Opus 5.5), issue #267: verifySignup writes
+user.created to the outbox in the transaction that inserts the user row
+(team decisions USR-2, USR-8). Author review: Ryan Ang, pending pull
+request review.
 */
 
 package foc.user.service;
@@ -185,6 +189,7 @@ public class AuthService {
     private final OtpService otpService;
     private final OtpEmailSender otpEmailSender;
     private final LoginAttempts loginAttempts;
+    private final EventOutbox eventOutbox;
     private final Clock clock;
     // matched against when no pending sign-up exists, so an unknown
     // email takes as long to verify as a wrong code (same trick login
@@ -199,9 +204,10 @@ public class AuthService {
             JwtIssuer jwtIssuer,
             OtpService otpService,
             OtpEmailSender otpEmailSender,
-            LoginAttempts loginAttempts) {
+            LoginAttempts loginAttempts,
+            EventOutbox eventOutbox) {
         this(userRepository, pendingSignupRepository, passwordEncoder, jwtIssuer,
-            otpService, otpEmailSender, loginAttempts, Clock.systemUTC());
+            otpService, otpEmailSender, loginAttempts, eventOutbox, Clock.systemUTC());
     }
 
     AuthService(
@@ -212,6 +218,7 @@ public class AuthService {
             OtpService otpService,
             OtpEmailSender otpEmailSender,
             LoginAttempts loginAttempts,
+            EventOutbox eventOutbox,
             Clock clock) {
         this.userRepository = userRepository;
         this.pendingSignupRepository = pendingSignupRepository;
@@ -220,6 +227,7 @@ public class AuthService {
         this.otpService = otpService;
         this.otpEmailSender = otpEmailSender;
         this.loginAttempts = loginAttempts;
+        this.eventOutbox = eventOutbox;
         this.clock = clock;
         this.unknownPendingCodeHash = otpService.hash("no-pending-signup");
     }
@@ -429,6 +437,9 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "Email or username was just taken; choose another");
         }
+        // in this transaction, so the account exists if and only if the
+        // event will be sent (USR-2); credit-service opens its account
+        eventOutbox.userCreated(user.getId());
         pendingSignupRepository.delete(pending);
         return UserResponse.from(user);
     }
