@@ -11,6 +11,9 @@
  * 2026-10-08, Claude Code (Opus 5.5): credit-events exchange name added
  * (team design, docs/credit-service.md D7-D8); author review: Ryan Ang,
  * pending pull request review.
+ * 2026-10-28, Claude Code (Opus 5), issue #249: rating-events exchange
+ * name added for the N1 rating system (scope decisions on #44); author
+ * review: Leong Wei Zhi, pending pull request review.
  */
 package foc.contracts.events.core;
 
@@ -46,6 +49,14 @@ public final class EventContracts {
 	 * (docs/credit-service.md D7-D8).
 	 */
 	public static final String CREDIT_EVENTS_EXCHANGE = "credit-events";
+
+	/**
+	 * Durable <strong>topic</strong> exchange for the rating domain
+	 * (D16: one per producing domain): the Rating Service publishes its
+	 * submitted ratings here and the Notification Service consumes them,
+	 * so the rated party is told without a synchronous call (D32, N1.1).
+	 */
+	public static final String RATING_EVENTS_EXCHANGE = "rating-events";
 
 	private EventContracts() {
 	}

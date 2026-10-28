@@ -22,6 +22,8 @@
   2026-10-20, Copilot SDK in VS Code (model not exposed): added the
   AuthServiceTest matcher-misuse fix entry below.
   Author review: Kwey Xiu Xi to review via pull request.
+  2026-10-28, Claude Code (Opus 5): appended the issue #249 entry below.
+  Author review: Leong Wei Zhi to review via pull request.
 -->
 
 # AI Usage Log
@@ -6519,3 +6521,34 @@ Entry template:
 - **Prompt(s):** "need fix?" answering Sinnez1's review comment. The change
   follows the reviewer's suggestion.
 - **Author review:** Alastair Tan Choon Wei to review before pushing.
+
+## 2026-10-28 — Leong Wei Zhi (contracts: rating-events + rating.submitted)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** generate
+- **Scope:** `foc-contracts` — `events/core/EventContracts.java`
+  (`RATING_EVENTS_EXCHANGE`), new `events/rating/` package (`RatingEvent`
+  marker, `RatingSubmitted` record), the `EventTypeRegistry` entry,
+  `src/main/resources/contracts/rating-submitted.example.json`, and the
+  registry-driven tests (`EventTypeRegistryTest` count + domain-prefix
+  helper, `RequestEventRecordsTest` domain-marker check);
+  `notification-service/src/test/java/foc/notification/event/DomainEventContractTest.java`
+  (producer and requestId helpers for the new domain, and the parties
+  rule restated as "only credit events notify no one");
+  `foc-contracts/README.md`, `foc-contracts/AGENTS.md`, `README.md`.
+  Issue #249, under #44.
+- **Prompt(s):** "make a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/249". The tool read
+  the issue, #44, and the module's own extension recipe, then asked two
+  options questions. The author chose: patch notification-service's
+  existing fixture gate rather than add a second one in `foc-contracts`
+  (and leave that module's inaccurate "fails loudly" AGENTS.md claim for
+  its own issue), and `Integer stars` over `int`. The event's identity,
+  field list (IDs only, D32), ratee-only `parties`, and the omission of
+  the review write-up come from the author's decisions on #44 and the
+  issue body; the tool transcribed them into the existing record,
+  fixture and test patterns.
+- **Author review:** `./mvnw test` green in `foc-contracts` (12 tests,
+  registry now 15 entries) and `DomainEventContractTest` green in
+  notification-service (15 fixtures bound); the fixture gate was proven
+  by temporarily removing `rating-submitted.example.json` and confirming
+  the test fails on it. Leong Wei Zhi reviews via pull request.

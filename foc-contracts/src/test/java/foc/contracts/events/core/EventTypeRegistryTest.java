@@ -14,6 +14,9 @@
  * 2026-10-21, Claude Code (Opus 5.5), issue #234: count bumped for
  * request.disputed and request.dispute-resolved; author review: Ryan
  * Ang, pending pull request review.
+ * 2026-10-28, Claude Code (Opus 5), issue #249: count bumped and the
+ * domain-prefix helper widened for the rating domain (scope decisions
+ * on #44); author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.contracts.events.core;
 
@@ -22,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import foc.contracts.events.credit.CreditEvent;
+import foc.contracts.events.rating.RatingEvent;
 import foc.contracts.events.request.RequestEvent;
 import java.util.HashSet;
 import java.util.Set;
@@ -30,8 +34,8 @@ import org.junit.jupiter.api.Test;
 class EventTypeRegistryTest {
 
 	@Test
-	void catalogsExactlyFourteenEvents() {
-		assertEquals(14, EventTypeRegistry.entries().size());
+	void catalogsExactlyFifteenEvents() {
+		assertEquals(15, EventTypeRegistry.entries().size());
 	}
 
 	@Test
@@ -78,6 +82,9 @@ class EventTypeRegistryTest {
 		}
 		if (CreditEvent.class.isAssignableFrom(eventClass)) {
 			return "credit.";
+		}
+		if (RatingEvent.class.isAssignableFrom(eventClass)) {
+			return "rating.";
 		}
 		throw new AssertionError(eventClass + " implements no domain marker interface");
 	}

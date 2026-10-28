@@ -6,6 +6,9 @@
   Scope: team allocation table and repository-structure notes
   transcribed from team decisions (2026-09-10); the AI Use Summary
   section is maintained as the policy's consolidated disclosure.
+  2026-10-28, Claude Code (Opus 5): AI Use Summary extended for the
+  rating-events exchange and the rating.submitted contract (issue
+  #249).
   2026-09-19: foc-contracts structure note added per team decision D15
   (docs/notification-service.md).
   2026-09-20: AI Use Summary wording extended for the notification
@@ -1113,6 +1116,18 @@ the request lists and detail, loaded once per page. The table's
 constraints, the dispute window, the resolution note and the read
 shape were decided by the team and transcribed into
 `docs/disputes.md`. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5) added the rating domain to the shared
+`foc-contracts` library (issue #249, the merge-first N1 contract under
+#44): the `rating-events` topic exchange constant, the `RatingEvent`
+marker and the `RatingSubmitted` record, its `EventTypeRegistry` entry
+and canonical JSON fixture, and the registry-driven tests in
+`foc-contracts` and notification-service widened to a third producing
+domain. The event's identity, its field list (IDs only, per D32), the
+ratee-only `parties`, and the decision to leave the review write-up out
+of the payload are the issue author's, recorded on #44; `stars` is
+boxed following the PR #163 review decision on `CreditReserved.amount`.
+Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

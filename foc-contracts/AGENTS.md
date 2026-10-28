@@ -15,6 +15,9 @@
   nullable-components note updated for the two dispute events and
   reasonCode (team decisions DSP-12, D18); author review: Ryan Ang,
   pending pull request review.
+  2026-10-28, Claude Code (Opus 5), issue #249: module map updated for
+  the rating domain and its exchange (scope decisions on #44); author
+  review: Leong Wei Zhi, pending pull request review.
 -->
 
 # foc-contracts/ — Agent Guide
@@ -32,11 +35,12 @@ design authority is
 
 | Package / path | Contents |
 | --- | --- |
-| `events/core/` | `DomainEvent` (base interface; `eventType()` derives the identity from the registry), `EventContracts` (shared names: `REQUEST_EVENTS_EXCHANGE`, `CREDIT_EVENTS_EXCHANGE`), `EventTypeRegistry` (single class↔identity source, D18), `Nullable` (marks optional wire fields) |
+| `events/core/` | `DomainEvent` (base interface; `eventType()` derives the identity from the registry), `EventContracts` (shared names: `REQUEST_EVENTS_EXCHANGE`, `CREDIT_EVENTS_EXCHANGE`, `RATING_EVENTS_EXCHANGE`), `EventTypeRegistry` (single class↔identity source, D18), `Nullable` (marks optional wire fields) |
 | `events/request/` | `RequestEvent` (domain marker) + the twelve records: `RequestCreated`, `RequestAccepted`, `RequestCollected`, `RequestCompleted`, `RequestCancelled`, `RequestDropped`, `RequestExpired`, `CourierArrived`, `RequestSubmitted`, `RequestRejected`, `RequestDisputed`, `RequestDisputeResolved` |
 | `events/credit/` | `CreditEvent` (domain marker) + the two records: `CreditReserved`, `CreditReservationRejected` |
+| `events/rating/` | `RatingEvent` (domain marker) + the one record: `RatingSubmitted` |
 | `src/main/resources/contracts/` | One canonical fixture per event, `<identity dots→hyphens>.example.json` (e.g. `request-courier-arrived.example.json`) — shipped on the jar's classpath |
-| `src/test/java/` | `EventTypeRegistryTest`, `RequestEventRecordsTest` — registry-driven: a new registry entry without a fixture (or vice versa) fails loudly |
+| `src/test/java/` | `EventTypeRegistryTest`, `RequestEventRecordsTest` — registry-driven over all three domains: a new registry entry without a fixture (or vice versa) fails loudly |
 
 ## Invariants — do not break
 

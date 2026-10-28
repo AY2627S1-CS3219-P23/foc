@@ -10,6 +10,8 @@
  * 2026-10-18, PR #212 review (Leong Wei Zhi), reviewer's suggestion:
  * parties()'s comment states which events may name no one; Claude Code
  * (Opus 5.5).
+ * 2026-10-28, Claude Code (Opus 5), issue #249: that comment names the
+ * rating domain too (scope decisions on #44).
  * Reviewed by: Leong Wei Zhi (via pull request).
  */
 package foc.contracts.events.core;
@@ -70,8 +72,8 @@ public interface DomainEvent {
 
 	/**
 	 * User IDs to notify — one notification per entry (F1.1, F1.2). Never
-	 * null; empty only for credit events, since every request event names
-	 * someone.
+	 * null; empty only for credit events — every request event names a
+	 * party, and a rating event names its ratee.
 	 */
 	List<String> parties();
 
