@@ -8,10 +8,17 @@
  * 2026-10-22, Claude Code (Opus 5.5), issue #238: runs against
  * Testcontainers Postgres built by Flyway (extends PostgresTestContainer)
  * instead of H2. Author review: Ryan Ang, pending pull request review.
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: the sweep's dispute
+ * escalation (only COLLECTED past the deadline plus the grace period;
+ * the stored dispute and its event) and one sweep doing both jobs.
+ * Author review: Ryan Ang, pending pull request review.
  */
 package foc.order;
 
+import foc.order.model.RequestDispute;
 import foc.order.model.Requests;
+import foc.order.repository.OutboxEventRepository;
+import foc.order.repository.RequestDisputeRepository;
 import foc.order.repository.RequestsRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,12 +33,19 @@ import static org.junit.jupiter.api.Assertions.*;
 class DeadlineExpirySweeperTests extends PostgresTestContainer {
 
 	private static final Long COURIER_ID = 7L;
+	private static final long GRACE_MS = 3_600_000;
 
 	@Autowired
 	private RequestsService requestsService;
 
 	@Autowired
 	private RequestsRepository requestsRepository;
+
+	@Autowired
+	private RequestDisputeRepository disputes;
+
+	@Autowired
+	private OutboxEventRepository outboxEvents;
 
 	@Test
 	void expiresOnlyCreatedAndAcceptedRequestsPastTheirDeadline() {
@@ -47,7 +61,7 @@ class DeadlineExpirySweeperTests extends PostgresTestContainer {
 			moveDeadlineToThePast(id);
 		}
 
-		new DeadlineExpirySweeper(requestsRepository, requestsService).expireOverdue();
+		sweeper().expireOverdue();
 
 		assertEquals(OrderStates.EXPIRED, status(createdOverdue));
 		assertEquals(OrderStates.EXPIRED, status(acceptedOverdue));
@@ -56,6 +70,62 @@ class DeadlineExpirySweeperTests extends PostgresTestContainer {
 		// PENDING has its own timeout
 		assertEquals(OrderStates.PENDING, status(pendingOverdue));
 		assertEquals(OrderStates.CREATED, status(createdOnTime));
+	}
+
+	@Test
+	void escalatesOnlyRequestsStillCollectedTheGracePeriodAfterTheirDeadline() {
+		Long overdue = collectedRequest();
+		setDeadline(overdue, Instant.now().minusMillis(GRACE_MS).minusSeconds(60));
+		Long withinGrace = collectedRequest();
+		setDeadline(withinGrace, Instant.now().minusSeconds(60));
+		Long arrived = collectedRequest();
+		requestsService.arrive(arrived, COURIER_ID);
+		setDeadline(arrived, Instant.now().minusMillis(GRACE_MS).minusSeconds(60));
+
+		sweeper().escalateOverdue();
+
+		assertEquals(OrderStates.DISPUTED, status(overdue));
+		RequestDispute dispute = disputes.findById(overdue).orElseThrow();
+		assertEquals(DisputeCategory.NOT_DELIVERED, dispute.getCategory());
+		assertEquals("auto-escalated: not delivered by deadline", dispute.getDisputeNote());
+		assertTrue(dispute.isAutoEscalated());
+		assertNull(dispute.getRaisedBy());
+		assertTrue(outboxEvents.findAll().stream()
+				.anyMatch(e -> overdue.equals(e.getRequestId()) && e.getEventType().equals("request.disputed")));
+		// the requester may still dispute it themselves during the grace period
+		assertEquals(OrderStates.COLLECTED, status(withinGrace));
+		// arrived: the requester confirms or disputes it
+		assertEquals(OrderStates.ARRIVED, status(arrived));
+	}
+
+	@Test
+	void oneSweepExpiresAndEscalates() {
+		Long created = reservedRequest();
+		moveDeadlineToThePast(created);
+		Long collected = collectedRequest();
+		setDeadline(collected, Instant.now().minusMillis(GRACE_MS).minusSeconds(60));
+
+		sweeper().sweep();
+
+		assertEquals(OrderStates.EXPIRED, status(created));
+		assertEquals(OrderStates.DISPUTED, status(collected));
+	}
+
+	private DeadlineExpirySweeper sweeper() {
+		return new DeadlineExpirySweeper(requestsRepository, requestsService, GRACE_MS);
+	}
+
+	private Long collectedRequest() {
+		Long id = reservedRequest();
+		requestsService.accept(id, COURIER_ID);
+		requestsService.collect(id, COURIER_ID);
+		return id;
+	}
+
+	private void setDeadline(Long id, Instant deadline) {
+		Requests stored = requestsRepository.findById(id).orElseThrow();
+		stored.setDeadline(deadline);
+		requestsRepository.save(stored);
 	}
 
 	private Long newRequest() {

@@ -30,6 +30,11 @@
   2026-10-23, Claude Code (Opus 5.5), issue #240: Flyway V2, closeReason
   in the reads, and the admin endpoints (team decisions DSP-1, DSP-5,
   DSP-10, DSP-17). Author review: Ryan Ang, pending pull request review.
+  2026-10-26, Claude Code (Opus 5.5), issue #239: Flyway V3, the dispute
+  states, /dispute, /resolve, the sweep's escalation and the dispute
+  object in the reads (team decisions DSP-2, DSP-5 to DSP-8, and the
+  #239 answers in docs/disputes.md). Author review: Ryan Ang, pending
+  pull request review.
 -->
 
 # Order Service
@@ -70,13 +75,20 @@ file; an applied migration is never edited.
   a new reason has a migration); `outbox_event.request_id` (nullable
   bigint, indexed, no foreign key, DSP-17), back-filled from each
   existing row's payload `correlationId`.
+- **Flyway V3** (`V3__disputes.sql`, issue #239): `DISPUTED` and
+  `RESOLVED` added to `requests_status_check`; the `request_dispute`
+  table (DSP-2), one row per disputed request, `request_id` a foreign
+  key to `requests`. `raised_by` is null when the sweep escalated it.
+  Named CHECKs cover the category, that a hand-raised dispute names who
+  raised it, that the resolution fields are set together, and that the
+  shares are non-negative.
 
 `close_reason` is set when a request ends abnormally: `/cancel` →
 `REQUESTER_CANCELLED`, the pending timeout → `RESERVATION_TIMEOUT`, the
 expiry sweep → `DEADLINE_PASSED`, and a Credit rejection → the reply's
 `reasonCode` mapped in `CreditReplyHandler` (`INSUFFICIENT_CREDITS` →
 `INSUFFICIENT_CREDITS`, `INVALID_AMOUNT` → `INVALID_REWARD`; a null or
-unknown code leaves it null). `DISPUTE_RESOLVED` is set by #239.
+unknown code leaves it null). `/resolve` sets `DISPUTE_RESOLVED`.
 
 **If the service fails to start after pulling V1** (Flyway reports a
 non-empty schema with no history table, or Hibernate validation fails):
@@ -130,7 +142,16 @@ The team's design is in [`docs/credit-service.md`](../docs/credit-service.md)
   ACCEPTED request past its deadline is EXPIRED (F6.1); a request
   ARRIVED for `ORDER_AUTO_COMPLETE_AFTER_MS` (default 1 h) without the
   requester's confirmation is COMPLETED for them, with the same
-  `request.completed` (F7.2).
+  `request.completed` (F7.2). The expiry sweep also escalates a request
+  still COLLECTED `ORDER_DISPUTE_ESCALATION_GRACE_MS` (default 1 h)
+  after its deadline to DISPUTED, as `NOT_DELIVERED` with the note
+  "auto-escalated: not delivered by deadline", publishing
+  `request.disputed` (DSP-6). A DISPUTED request is never
+  auto-completed (DSP-14).
+- **Disputes:** DISPUTE (ARRIVED or COLLECTED → DISPUTED) and ESCALATE
+  publish `request.disputed`; RESOLVE (DISPUTED → RESOLVED) publishes
+  `request.dispute-resolved`, on which the Credit Service divides the
+  held reward. Both have `parties` = requester and courier (DSP-9).
 - **Publishing:** a transactional outbox (`outbox_event` table), sent to
   the `request-events` exchange by a poller with publisher confirms —
   a copy of credit-service's (D10).
@@ -175,7 +196,22 @@ must be at least 1"}`.
 | `/drop` | `requestId` | the assigned courier |
 | `/cancel` | `requestId` | the requester |
 | `/complete` | `requestId` | the requester |
+| `/dispute` | `requestId`, `category`, `note` | the requester |
+| `/resolve` | `requestId`, `courierAmount`, `requesterAmount`, `note` | ADMIN / OWNER who is not the requester or the courier; anyone else 403 |
 | `/retry-settlement` | `requestId` | ADMIN / OWNER; anyone else 403 |
+
+`/dispute` (DSP-5, DSP-7) needs `category`: `NOT_DELIVERED`,
+`WRONG_ITEM`, `DAMAGED` or `OTHER`. `note` is optional, at most 500
+characters, and required for `OTHER`. Either is a 400 otherwise. An
+ARRIVED request can be disputed until `arrivedAt` + the auto-complete
+window (409 "The dispute window closed at ..." after it, even before
+the sweep has run). A COLLECTED request can be disputed once its
+deadline has passed (409 before). A second dispute is a 409.
+
+`/resolve` (DSP-5, DSP-8) divides the reward: both amounts 0 or more and
+adding up to the reward, else 400. `note` is optional, at most 500
+characters. 409 if the request is not DISPUTED or the admin is a party
+to it.
 
 `/retry-settlement` (DSP-10) makes the request's newest settlement event
 (`request.completed`, `request.cancelled`, `request.expired` or
@@ -192,8 +228,15 @@ supplier listing: `page` (from 0, default 0) and `size` (1-100, default
 20), answered as `{"content": [...], "page", "size", "totalElements",
 "totalPages"}`, each item trimmed to `id`, `status`, `closeReason`
 (null unless the request ended without completing), `supplierName`,
-`dropoffLocation`, `item`, `creditAmount`, `deadline`, `createdAt`. A bad
-`state`, `role`, `page` or `size` is a 400 with a `message`.
+`dropoffLocation`, `item`, `creditAmount`, `deadline`, `createdAt`, and
+`dispute`. A bad `state`, `role`, `page` or `size` is a 400 with a
+`message`.
+
+`dispute` (on the lists and the full request) is null unless the request
+was disputed: `{category, disputeNote, raisedAt, autoEscalated,
+resolvedAt, resolvedBy, courierAmount, requesterAmount, resolutionNote}`,
+the resolution fields null until it is resolved. A page's disputes are
+loaded in one query.
 
 Every list also takes these optional filters, combined with AND:
 
@@ -216,7 +259,7 @@ A range whose lower bound is not below its upper (`minCredit` above
 | `GET /requests/mine?role=requester&state=` | the caller's requests as requester, optionally in one state | the caller |
 | `GET /requests/mine?role=courier&state=` | the caller's assigned deliveries | the caller |
 | `GET /users/{id}/requests?state=` | that user's requests as requester or courier (admin view) | ADMIN / OWNER; anyone else 403 |
-| `GET /requests/admin?state=&closeReason=` | every user's requests; `closeReason` takes one or more `CloseReason` names, comma-separated like `state` (the dispute queue will be `state=DISPUTED`, #239) | ADMIN / OWNER; anyone else 403 |
+| `GET /requests/admin?state=&closeReason=` | every user's requests; `closeReason` takes one or more `CloseReason` names, comma-separated like `state` (the dispute queue is `state=DISPUTED`) | ADMIN / OWNER; anyone else 403 |
 | `POST /requests/admin/statuses` `{"ids": [42, 99]}` | each id's current state, `{"42": "COMPLETED", "99": null}`: an unknown id is `null`, a repeated one answered once, `[]` gives `{}`; more than 100 ids or a non-numeric id is a 400 | ADMIN / OWNER; anyone else 403 |
 
 ## Run

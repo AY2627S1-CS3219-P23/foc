@@ -18,6 +18,10 @@
  * 2026-10-22, Claude Code (Opus 5.5), issue #238: runs against
  * Testcontainers Postgres built by Flyway (extends PostgresTestContainer)
  * instead of H2. Author review: Ryan Ang, pending pull request review.
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: /dispute and /resolve
+ * over HTTP with their 400 / 401 / 403 / 404 / 409 answers (DSP-5),
+ * including a second dispute on the same request. Author review: Ryan
+ * Ang, pending pull request review.
  */
 package foc.order;
 
@@ -53,6 +57,8 @@ class RequestsControllerTests extends PostgresTestContainer {
 	private static final long REQUESTER = 1L;
 	private static final long COURIER = 7L;
 	private static final long STRANGER = 9L;
+	// resolves disputes: an admin who is neither party
+	private static final long ADMIN = 50L;
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -200,6 +206,75 @@ class RequestsControllerTests extends PostgresTestContainer {
 		assertEquals(OrderStates.CREATED, stored(id).getStatus());
 	}
 
+	@Test
+	void disputeAndResolveOverHttp() throws Exception {
+		Long id = createArrived();
+
+		send("/dispute", "{\"requestId\": " + id + ", \"category\": \"WRONG_ITEM\", \"note\": \"Fish soup\"}",
+				REQUESTER)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.message").value("Request " + id + " disputed"));
+		assertEquals(OrderStates.DISPUTED, stored(id).getStatus());
+
+		send("/resolve", resolveBody(id, 1, 2), ADMIN, "ADMIN")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.message").value("Request " + id + " resolved"));
+		assertEquals(OrderStates.RESOLVED, stored(id).getStatus());
+		assertEquals(CloseReason.DISPUTE_RESOLVED, stored(id).getCloseReason());
+	}
+
+	@Test
+	void disputeErrors() throws Exception {
+		Long id = createArrived();
+		Long accepted = createReserved();
+		send("/accept", idBody(accepted), COURIER);
+
+		send("/dispute", disputeBody(id, "LATE"), REQUESTER)
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(
+						"category must be one of NOT_DELIVERED, WRONG_ITEM, DAMAGED, OTHER"));
+		send("/dispute", disputeBody(id, "OTHER"), REQUESTER)
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("note is required when the category is OTHER"));
+		send("/dispute", disputeBody(id, "DAMAGED"), COURIER)
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.message").value("Request not found"));
+		send("/dispute", disputeBody(accepted, "DAMAGED"), REQUESTER)
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value("Cannot DISPUTE a request that is ACCEPTED"));
+
+		send("/dispute", disputeBody(id, "DAMAGED"), REQUESTER).andExpect(status().isOk());
+		// a second dispute on the same request
+		send("/dispute", disputeBody(id, "WRONG_ITEM"), REQUESTER)
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value("Cannot DISPUTE a request that is DISPUTED"));
+	}
+
+	@Test
+	void resolveErrors() throws Exception {
+		Long id = createArrived();
+		send("/dispute", disputeBody(id, "DAMAGED"), REQUESTER).andExpect(status().isOk());
+
+		mockMvc.perform(post("/resolve").contentType(MediaType.APPLICATION_JSON).content(resolveBody(id, 1, 2)))
+				.andExpect(status().isUnauthorized());
+		send("/resolve", resolveBody(id, 1, 2), STRANGER).andExpect(status().isForbidden());
+		send("/resolve", resolveBody(id, 1, 1), ADMIN, "ADMIN")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(
+						"courierAmount and requesterAmount must add up to the reward (3)"));
+		send("/resolve", resolveBody(id, -1, 4), ADMIN, "OWNER").andExpect(status().isBadRequest());
+		// an admin who is the courier
+		send("/resolve", resolveBody(id, 1, 2), COURIER, "ADMIN")
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value("An admin cannot resolve a dispute on their own request"));
+		send("/resolve", resolveBody(createArrived(), 1, 2), ADMIN, "ADMIN")
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value("Cannot RESOLVE a request that is ARRIVED"));
+		send("/resolve", resolveBody(999_999L, 1, 2), ADMIN, "ADMIN").andExpect(status().isNotFound());
+
+		assertEquals(OrderStates.DISPUTED, stored(id).getStatus());
+	}
+
 	// Posts /create as the requester and returns the id of the row it added.
 	private Long create() throws Exception {
 		send("/create", """
@@ -218,17 +293,35 @@ class RequestsControllerTests extends PostgresTestContainer {
 		return id;
 	}
 
+	// A request the courier has just marked arrived.
+	private Long createArrived() throws Exception {
+		Long id = createReserved();
+		send("/accept", idBody(id), COURIER);
+		send("/collect", idBody(id), COURIER);
+		send("/arrive", idBody(id), COURIER);
+		return id;
+	}
+
 	// Posts the body as the given user.
 	private ResultActions send(String path, String json, long userId) throws Exception {
+		return send(path, json, userId, "USER");
+	}
+
+	// Posts the body as the given user with the given role.
+	private ResultActions send(String path, String json, long userId, String role) throws Exception {
 		return mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(json)
-				.header("Authorization", "Bearer " + token(userId)));
+				.header("Authorization", "Bearer " + token(userId, role)));
 	}
 
 	// A token as user-service mints it: sub = user id, a role, an expiry.
 	private static String token(long userId) {
+		return token(userId, "USER");
+	}
+
+	private static String token(long userId, String role) {
 		return Jwts.builder()
 				.subject(Long.toString(userId))
-				.claim("role", "USER")
+				.claim("role", role)
 				.issuedAt(Date.from(Instant.now()))
 				.expiration(Date.from(Instant.now().plusSeconds(3600)))
 				.signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
@@ -237,6 +330,15 @@ class RequestsControllerTests extends PostgresTestContainer {
 
 	private static String idBody(Long id) {
 		return "{\"requestId\": " + id + "}";
+	}
+
+	private static String disputeBody(Long id, String category) {
+		return "{\"requestId\": " + id + ", \"category\": \"" + category + "\"}";
+	}
+
+	private static String resolveBody(Long id, int courierAmount, int requesterAmount) {
+		return "{\"requestId\": " + id + ", \"courierAmount\": " + courierAmount
+				+ ", \"requesterAmount\": " + requesterAmount + "}";
 	}
 
 	private Requests stored(Long id) {

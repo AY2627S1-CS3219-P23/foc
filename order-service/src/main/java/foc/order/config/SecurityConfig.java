@@ -12,6 +12,9 @@
  * 2026-10-23, Claude Code (Opus 5.5), issue #240: the admin list, the
  * batch status lookup and retry settlement limited to ADMIN / OWNER
  * (DSP-5). Author review: Ryan Ang, pending pull request review.
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: resolving a dispute
+ * limited to ADMIN / OWNER (DSP-5). Author review: Ryan Ang, pending pull
+ * request review.
  */
 package foc.order.config;
 
@@ -77,6 +80,8 @@ public class SecurityConfig {
                         // settlement: admin tools (DSP-5)
                         .requestMatchers("/requests/admin", "/requests/admin/**").hasAnyRole("ADMIN", "OWNER")
                         .requestMatchers(HttpMethod.POST, "/retry-settlement").hasAnyRole("ADMIN", "OWNER")
+                        // dividing a disputed request's reward (DSP-5)
+                        .requestMatchers(HttpMethod.POST, "/resolve").hasAnyRole("ADMIN", "OWNER")
                         // every request route acts as the caller
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
