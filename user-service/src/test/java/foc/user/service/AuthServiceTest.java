@@ -61,7 +61,8 @@ argument matchers accidentally used as constructor values with literals;
 this prevented leaked matchers from corrupting repository stubs.
 Author review: Kwey Xiu Xi to review via PR.
 2026-10-28, Claude Code (Opus 5.5), issue #267: a verified sign-up writes
-user.created for the new account, and a failed one writes nothing.
+user.created for the new account, and a failed one writes nothing; the
+insert goes through a real UserCreation over the mocks (revised USR-8).
 Author review: Ryan Ang, pending pull request review.
 */
 
@@ -169,7 +170,7 @@ class AuthServiceTest {
             new OtpService(PLAIN_ENCODER, OTP_TTL, OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN);
         authService = new AuthService(userRepository, pendingSignupRepository, PLAIN_ENCODER,
             issuer, otpService, otpEmailSender,
-            new LoginAttempts(userRepository, entityManager, 30), eventOutbox,
+            new LoginAttempts(userRepository, entityManager, 30), new UserCreation(userRepository, eventOutbox),
             Clock.fixed(NOW, ZoneOffset.UTC));
 
         user = new User("e1234567@u.nus.edu", "student_alex", PLAIN_ENCODER.encode(PASSWORD), Role.USER);

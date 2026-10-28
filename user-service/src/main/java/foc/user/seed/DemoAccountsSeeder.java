@@ -19,6 +19,10 @@ Scope: demo accounts for local testing and demos — 1 OWNER, 3 ADMINs and
        leaving the accounts to the other instance (Ryan's choice among
        the reviewer's options).
 Author review: Ryan to review via the PR.
+2026-10-28 (Claude Code, Opus 5.5), issue #267, revised USR-8 (team
+decision): each account is inserted through UserCreation, so every demo
+user has its user.created and a credit account once the stack is up.
+Author review: Ryan Ang, pending pull request review.
 */
 
 package foc.user.seed;
@@ -41,6 +45,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.repository.UserRepository;
+import foc.user.service.UserCreation;
 
 @Component
 @ConditionalOnProperty(name = "user.seed.demo", havingValue = "true")
@@ -66,14 +71,17 @@ public class DemoAccountsSeeder implements CommandLineRunner {
     }
 
     private final UserRepository userRepository;
+    private final UserCreation userCreation;
     private final PasswordEncoder passwordEncoder;
     private final TransactionTemplate transaction;
 
     public DemoAccountsSeeder(
             UserRepository userRepository,
+            UserCreation userCreation,
             PasswordEncoder passwordEncoder,
             PlatformTransactionManager transactionManager) {
         this.userRepository = userRepository;
+        this.userCreation = userCreation;
         this.passwordEncoder = passwordEncoder;
         this.transaction = new TransactionTemplate(transactionManager);
     }
@@ -162,7 +170,8 @@ public class DemoAccountsSeeder implements CommandLineRunner {
                 case ADMIN -> adminHash;
                 case USER -> userHash;
             };
-            userRepository.save(new User(account.email(), account.username(), hash, account.role()));
+            // with its user.created, in the run's one transaction (USR-8)
+            userCreation.create(new User(account.email(), account.username(), hash, account.role()));
             created++;
         }
         log.info("Demo accounts: {} created, {} already present (USER_SEED_DEMO=true)",

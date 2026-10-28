@@ -7,6 +7,7 @@ Scope: issue #267 (team decision USR-2): a copy of order-service's
        Copied, not shared.
        Same day, PR review (team decision): correlationId is the user's
        id, so a user's events can be traced together across services.
+       Then USR-8 revised: userCreated is called by UserCreation only.
 Author review: Ryan Ang, pending pull request review.
 */
 
@@ -53,7 +54,10 @@ public class EventOutbox {
     // The correlationId is the user's id, as a request event's is the
     // request's: every event about one user can be found together.
 
-    /** user.created, for an account whose row was just inserted (USR-8). */
+    /**
+     * user.created, for an account whose row was just inserted (USR-8).
+     * Called by {@link UserCreation}, the one way a user row is inserted.
+     */
     @Transactional(propagation = Propagation.MANDATORY)
     public void userCreated(long userId) {
         String user = Long.toString(userId);

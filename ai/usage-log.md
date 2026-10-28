@@ -119,8 +119,18 @@ Entry template:
   retention scheduler and query, and a Testcontainers RabbitMQ test
   that an event published before any queue is bound is returned, kept
   and retried, then delivered with the user's id as correlationId);
-  credit-service `./mvnw test` green (358). Pending pull request
-  review.
+  credit-service `./mvnw test` green (358).
+- **Same day, USR-8 revised (team decision, transcribed):** every insert
+  of a user row writes `user.created` in the same transaction, through
+  one shared method. New `UserCreation` (insert + outbox write);
+  `AuthService.verifySignup`, `OwnerSignupService.verifySignup` and
+  `DemoAccountsSeeder` insert through it. Tests: `UserCreatedEventTest`
+  new (sign-up, owner setup and the seeder each leave exactly one
+  `user.created` per user, with the user's id as correlationId);
+  `OwnerSignupServiceTest` asserts the event; `DemoAccountsSeederTest`
+  stubs `saveAndFlush` and pins one event per seeded account and none
+  on a rerun; `AuthServiceTest` builds a real `UserCreation` over its
+  mocks. Pending pull request review.
 
 ---
 ## 2026-10-26 — Leong Wei Zhi (feat: rating-service scaffold, issue #250)

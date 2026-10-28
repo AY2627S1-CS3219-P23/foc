@@ -26,6 +26,10 @@ AI Assistance Disclosure:
        logged once per process rather than on every request.
 Author review: Ryan validated that the endpoint logic matches the feature design.
 2026-10-19: Parts copied from AuthService which was AI-assisted
+2026-10-28 (Claude Code, Opus 5.5), issue #267, revised USR-8 (team
+decision): the verified owner setup inserts through UserCreation, so it
+writes user.created like a sign-up does. Author review: Ryan Ang,
+pending pull request review.
 */
 
 package foc.user.service;
@@ -86,6 +90,7 @@ public class OwnerSignupService {
     // used before #146 made its messages revealing; these stay identical)
     private final String unknownPendingCodeHash;
     private final String expectedOwnerKey;
+    private final UserCreation userCreation;
     
     @Autowired
     public OwnerSignupService(
@@ -94,9 +99,10 @@ public class OwnerSignupService {
             PasswordEncoder passwordEncoder,
             OtpService otpService,
             OtpEmailSender otpEmailSender,
-            @Value("${owner.setup.token:}") String expectedOwnerKey) {
+            @Value("${owner.setup.token:}") String expectedOwnerKey,
+            UserCreation userCreation) {
         this(userRepository, pendingSignupRepository, passwordEncoder,
-            otpService, otpEmailSender, Clock.systemUTC(), expectedOwnerKey);
+            otpService, otpEmailSender, Clock.systemUTC(), expectedOwnerKey, userCreation);
     }
 
     OwnerSignupService(
@@ -106,7 +112,8 @@ public class OwnerSignupService {
             OtpService otpService,
             OtpEmailSender otpEmailSender,
             Clock clock,
-            String expectedOwnerKey) {
+            String expectedOwnerKey,
+            UserCreation userCreation) {
         this.userRepository = userRepository;
         this.pendingSignupRepository = pendingSignupRepository;
         this.passwordEncoder = passwordEncoder;
@@ -115,6 +122,7 @@ public class OwnerSignupService {
         this.clock = clock;
         this.unknownPendingCodeHash = otpService.hash("no-pending-signup");
         this.expectedOwnerKey = expectedOwnerKey;
+        this.userCreation = userCreation;
     }
 
     @Transactional
@@ -229,7 +237,8 @@ public class OwnerSignupService {
         User user = new User(email, pending.getUsername(), pending.getPasswordHash(),
             pending.getIsOwner() ? Role.OWNER : Role.USER);
         try {
-            user = userRepository.saveAndFlush(user);
+            // with its user.created, in this transaction (USR-8)
+            user = userCreation.create(user);
         } catch (DataIntegrityViolationException e) {
             // A concurrent sign-up took the email or username after the checks
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,

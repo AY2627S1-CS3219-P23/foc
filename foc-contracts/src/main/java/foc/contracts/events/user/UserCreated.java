@@ -14,8 +14,8 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * The User Service created a user account: its row was inserted, after
- * the sign-up's email was verified. Identity {@code user.created} (see
+ * The User Service created a user account: its row was inserted, by a
+ * verified sign-up or owner setup, or by the demo seeder (USR-8). Identity {@code user.created} (see
  * {@link EventTypeRegistry}). Carries no personal data; {@code parties}
  * is always empty.
  */

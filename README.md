@@ -1125,7 +1125,9 @@ their handling, and the deploy order were decided by the team (USR-1 to
 USR-9) and transcribed into `docs/credit-service.md` as D14, with the
 review's follow-ups (user id as correlationId, an event naming no user
 dead-lettered at once, a User Service that neither waits for nor reports
-on the broker, and a 30-day purge of its sent events). Recorded in
+on the broker, and a 30-day purge of its sent events), and every path
+that inserts a user (sign-up, owner setup, the demo seeder) writing
+`user.created` through one shared method. Recorded in
 `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
