@@ -1,0 +1,13 @@
+{
+  "eventType": "rating.submitted",
+  "eventId": "9b2f6b3c-1e9d-4d55-8f6a-0c2f4a7d9e32",
+  "occurredAt": "2026-09-19T09:30:00Z",
+  "producer": "rating-service",
+  "correlationId": "corr-7f3a1c9e",
+  "parties": ["usr-cou-2002"],
+  "ratingId": "rat-20260919-0001",
+  "requestId": "req-20260919-0042",
+  "raterId": "usr-req-1001",
+  "rateeId": "usr-cou-2002",
+  "stars": 5
+}

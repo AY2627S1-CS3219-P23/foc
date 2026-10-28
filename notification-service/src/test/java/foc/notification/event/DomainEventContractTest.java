@@ -35,6 +35,11 @@
  * check), and the resolution's amounts are distinct. Author review: Ryan
  * Ang, pending pull request review. Same review, second round: the
  * split is checked against the request-submitted fixture's reward (DSP-8).
+ * 2026-10-28, Claude Code (Opus 5), issue #249: the producer and
+ * requestId helpers cover the rating domain, and the parties rule is
+ * stated the way it holds — only credit events notify no one, so the
+ * rating fixture must name its ratee (scope decisions on #44). Author
+ * review: Leong Wei Zhi, pending pull request review.
  */
 package foc.notification.event;
 
@@ -44,6 +49,7 @@ import foc.contracts.events.core.DomainEvent;
 import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.credit.CreditEvent;
 import foc.contracts.events.credit.CreditReservationRejected;
+import foc.contracts.events.rating.RatingEvent;
 import foc.contracts.events.request.RequestAccepted;
 import foc.contracts.events.request.RequestDisputeResolved;
 import foc.contracts.events.request.RequestDisputed;
@@ -69,8 +75,9 @@ import tools.jackson.databind.ObjectMapper;
  * that fixture must bind to the registered record class. Iterating the
  * registry means a newly added event is covered the moment its entry
  * exists — or fails loudly if its fixture is missing. The catalog spans
- * two producing domains (request and credit), so the expected producer
- * and the request reference come from each event's domain marker.
+ * three producing domains (request, credit and rating), so the expected
+ * producer and the request reference come from each event's domain
+ * marker.
  *
  * <p>{@code @JsonTest} injects Boot's auto-configured
  * {@link ObjectMapper} — the same mapper the AMQP message converter
@@ -100,11 +107,11 @@ class DomainEventContractTest {
 			assertThat(event.occurredAt()).isNotNull();
 			assertThat(event.producer()).isEqualTo(expectedProducer(event));
 			assertThat(event.correlationId()).isNotBlank();
-			// credit events notify no one; every request event names someone
-			if (event instanceof RequestEvent) {
-				assertThat(event.parties()).isNotEmpty();
-			} else {
+			// credit events notify no one; every other event names someone
+			if (event instanceof CreditEvent) {
 				assertThat(event.parties()).isNotNull();
+			} else {
+				assertThat(event.parties()).isNotEmpty();
 			}
 			assertThat(requestIdOf(event)).isEqualTo("req-20260919-0042");
 		}
@@ -195,6 +202,9 @@ class DomainEventContractTest {
 		if (event instanceof CreditEvent) {
 			return "credit-service";
 		}
+		if (event instanceof RatingEvent) {
+			return "rating-service";
+		}
 		throw new AssertionError(event.eventType() + " implements no domain marker interface");
 	}
 
@@ -204,6 +214,9 @@ class DomainEventContractTest {
 		}
 		if (event instanceof CreditEvent creditEvent) {
 			return creditEvent.requestId();
+		}
+		if (event instanceof RatingEvent ratingEvent) {
+			return ratingEvent.requestId();
 		}
 		throw new AssertionError(event.eventType() + " implements no domain marker interface");
 	}

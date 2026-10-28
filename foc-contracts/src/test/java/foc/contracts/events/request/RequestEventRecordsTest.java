@@ -20,6 +20,9 @@
  * 2026-10-22, Claude Code (Opus 5.5), PR #243 review follow-up: the
  * value-set test's javadoc says its strictness is deliberate; author
  * review: Ryan Ang, pending pull request review.
+ * 2026-10-28, Claude Code (Opus 5), issue #249: the domain-marker test
+ * widened to the rating domain (scope decisions on #44); author review:
+ * Leong Wei Zhi, pending pull request review.
  */
 package foc.contracts.events.request;
 
@@ -27,6 +30,7 @@ import foc.contracts.events.core.DomainEvent;
 import foc.contracts.events.credit.CreditEvent;
 import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.core.Nullable;
+import foc.contracts.events.rating.RatingEvent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -52,11 +56,13 @@ class RequestEventRecordsTest {
 	}
 
 	@Test
-	void everyRecordIsARequestOrCreditEventWithARequestId() {
+	void everyRecordHasADomainMarkerAndARequestId() {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
 			assertTrue(RequestEvent.class.isAssignableFrom(entry.eventClass())
-					|| CreditEvent.class.isAssignableFrom(entry.eventClass()),
-					entry.eventClass() + " must implement RequestEvent or CreditEvent");
+					|| CreditEvent.class.isAssignableFrom(entry.eventClass())
+					|| RatingEvent.class.isAssignableFrom(entry.eventClass()),
+					entry.eventClass()
+							+ " must implement RequestEvent, CreditEvent or RatingEvent");
 			assertTrue(componentNames(entry.eventClass()).contains("requestId"));
 		}
 	}
