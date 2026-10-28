@@ -1,0 +1,35 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5), 2026-10-26, issue #250.
+# Scope: service configuration scaffolded following the supplier-service
+# / order-service pattern — application name, datasource bound to the
+# service-owned rating-db, the shared JWT secret, CORS origin, and the
+# actuator health endpoint. Flyway owns the schema (credit-service
+# precedent), so ddl-auto is none.
+# Reviewed by: [pending]
+
+spring:
+  application:
+    name: rating-service
+  datasource:
+    url: jdbc:postgresql://${RATING_DB_HOST:localhost}:${RATING_DB_PORT:5432}/${RATING_DB_NAME:rating}
+    username: ${RATING_DB_USER:rating}
+    password: ${RATING_DB_PASSWORD:}
+  jpa:
+    hibernate:
+      # Flyway (db/migration) owns the schema; Hibernate never changes it
+      ddl-auto: none
+    open-in-view: false
+
+rating:
+  web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
+  jwt:
+    # Shared platform secret (HS256). Empty default so the yaml stays
+    # parseable; JwtVerifier turns a missing/short value into a clear
+    # startup failure.
+    secret: ${JWT_SECRET:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

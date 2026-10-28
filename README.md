@@ -234,6 +234,11 @@
   2026-10-26: AI Use Summary extended for order-service disputes
   (issue #239), by Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-26: AI Use Summary extended for the rating-service scaffold
+  (issue #250), and the Repository Structure tree updated now that the
+  N1 nice-to-have fills the <n2h-service> slot, by Claude Code
+  (Fable 5).
+  Author review: Leong Wei Zhi, pending pull request review.
   2026-10-27: AI Use Summary extended for the admin failed and stuck
   orders (issue #242), by Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
@@ -267,8 +272,8 @@ withdrawn, or exchanged for money, and only circulate within the platform.
 
 This repository follows a **one-service-per-folder** structure: each
 microservice (`user-service/`, `supplier-service/`, `order-service/`,
-`credit-service/`, `notification-service/`) lives in its own top-level
-folder. The frontend lives in `web/`.
+`credit-service/`, `notification-service/`, `rating-service/`) lives in
+its own top-level folder. The frontend lives in `web/`.
 
 ```text
 .
@@ -278,8 +283,8 @@ folder. The frontend lives in `web/`.
 ├── order-service/
 ├── credit-service/
 ├── notification-service/
+├── rating-service/
 ├── foc-contracts/
-├── <n2h-service>/
 └── README.md
 ```
 
@@ -1085,6 +1090,14 @@ notification per party, acked, redelivery deduped) and a contract test
 pinning the fields they add, and adjusted the `request.dispute-resolved`
 example fixture's amounts in `foc-contracts`. Recorded in
 `ai/usage-log.md`.
+Claude Code (Fable 5) scaffolded the rating-service walking skeleton
+(issue #250, the first N1 PR under #44): pom, security chain, JWT
+verifier and application/test classes copied from the order-service /
+supplier-service pattern, an empty Flyway baseline (the schema lands
+with the feature issues), the contracts-aware Dockerfile, and the
+rating-db / gateway-route / compose / `.env.example` wiring, with the
+Flyway-baseline and lean-pom scope decided by the author via
+neutral-options Q&A. Recorded in `ai/usage-log.md`.
 
 Claude Code (Opus 5.5) implemented order-service's disputes (issue
 #239, team decisions DSP-2, DSP-5 to DSP-8, DSP-14): Flyway V3 with the
