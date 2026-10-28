@@ -9,7 +9,8 @@
 // email or id through user-service's GET /users?search= and sent as an
 // id; a request closed before closedAt was recorded shows its creation
 // time, marked as such. Dates are the browser's local days, as on the
-// credit history page.
+// credit history page. PR #265 review: the lookup lists its matches for
+// the admin to pick from instead of guessing at an exact one.
 // Author review: Ryan Ang, pending pull request review.
 
 import { type FormEvent, useEffect, useState } from 'react'
@@ -17,6 +18,7 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { localDayStart } from '@/features/credit/history'
 import type { PagedResponse } from '@/features/supplier/types'
 import { adminUserApi } from '@/features/user/adminApi'
+import type { AdminUser } from '@/features/user/types'
 import { errorMessage } from '@/lib/api/http'
 import { Pagination } from '@/shared/components/Pagination'
 import { orderAdminApi } from '../adminApi'
@@ -25,6 +27,9 @@ import type { CloseReason, RequestStatus, RequestSummary } from '../types'
 import { StatusChip } from './StatusChip'
 
 export const FAILED_ORDERS_PAGE_SIZE = 20
+
+// matches offered per user lookup (a size user-service accepts)
+const USER_MATCHES_SIZE = 20
 
 const FAILED_STATES: RequestStatus[] = ['REJECTED', 'CANCELLED', 'EXPIRED']
 
@@ -78,6 +83,13 @@ function dateRange(
   return { from: start, to: end }
 }
 
+// The accounts a lookup found, for the admin to pick one.
+interface UserMatches {
+  typed: string
+  users: AdminUser[]
+  total: number
+}
+
 interface LoadResult {
   key: string
   data: PagedResponse<RequestSummary> | null
@@ -93,6 +105,7 @@ export function FailedOrdersSection() {
   const [userInput, setUserInput] = useState('')
   const [userError, setUserError] = useState<string | null>(null)
   const [findingUser, setFindingUser] = useState(false)
+  const [userMatches, setUserMatches] = useState<UserMatches | null>(null)
 
   const range = dateRange(filters.from, filters.to)
   const rangeError = 'error' in range ? range.error : null
@@ -144,12 +157,13 @@ export function FailedOrdersSection() {
     setPage(1)
   }
 
-  // Resolves the typed username, email or id to one account, removed
-  // accounts included (their past orders still matter).
+  // Looks up the typed username, email or id, removed accounts included
+  // (their past orders still matter), and lists the matches to pick from.
   async function handleUserSubmit(e: FormEvent) {
     e.preventDefault()
     const typed = userInput.trim()
     setUserError(null)
+    setUserMatches(null)
     if (!typed) {
       update({ user: null })
       return
@@ -160,26 +174,28 @@ export function FailedOrdersSection() {
         search: typed,
         includeDeleted: true,
         page: 0,
-        size: 20,
+        size: USER_MATCHES_SIZE,
       })
-      const wanted = typed.toLowerCase()
-      const match = found.content.find(
-        (u) =>
-          u.username.toLowerCase() === wanted ||
-          u.email.toLowerCase() === wanted ||
-          String(u.id) === typed,
-      )
-      if (match) {
-        update({ user: { id: match.id, username: match.username } })
-        setUserInput('')
-      } else {
+      if (found.content.length === 0) {
         setUserError(`No user matches "${typed}".`)
+      } else {
+        setUserMatches({
+          typed,
+          users: found.content,
+          total: found.page.totalElements,
+        })
       }
     } catch (err) {
       setUserError(errorMessage(err, 'Could not look up that user.'))
     } finally {
       setFindingUser(false)
     }
+  }
+
+  function pickUser(picked: AdminUser) {
+    update({ user: { id: picked.id, username: picked.username } })
+    setUserInput('')
+    setUserMatches(null)
   }
 
   const filtered =
@@ -233,7 +249,10 @@ export function FailedOrdersSection() {
                 id="failed-orders-user"
                 type="search"
                 value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
+                onChange={(e) => {
+                  setUserInput(e.target.value)
+                  setUserMatches(null)
+                }}
                 placeholder="Username, email or ID"
                 className={inputClass}
               />
@@ -250,6 +269,43 @@ export function FailedOrdersSection() {
             <p role="alert" className="text-xs text-red-700">
               {userError}
             </p>
+          )}
+          {userMatches && !filters.user && (
+            <div className="rounded-md border border-gray-200 bg-white text-sm shadow-sm">
+              <ul
+                aria-label={`Users matching "${userMatches.typed}"`}
+                className="max-h-60 divide-y divide-gray-100 overflow-y-auto"
+              >
+                {userMatches.users.map((u) => (
+                  <li key={u.id}>
+                    <button
+                      type="button"
+                      onClick={() => pickUser(u)}
+                      aria-label={`Filter by ${u.username}`}
+                      className="w-full px-3 py-2 text-left hover:bg-gray-50"
+                    >
+                      <span className="block truncate font-medium text-gray-900">
+                        {u.username}
+                        {u.deletedAt && (
+                          <span className="ml-1 text-xs font-normal text-gray-500">
+                            (removed)
+                          </span>
+                        )}
+                      </span>
+                      <span className="block truncate text-xs text-gray-500">
+                        #{u.id} · {u.email}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {userMatches.total > userMatches.users.length && (
+                <p className="border-t border-gray-100 px-3 py-2 text-xs text-gray-500">
+                  Showing {userMatches.users.length} of {userMatches.total}{' '}
+                  matches; type more to narrow them down.
+                </p>
+              )}
+            </div>
           )}
         </form>
 

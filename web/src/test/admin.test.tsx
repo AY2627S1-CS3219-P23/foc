@@ -32,6 +32,10 @@
 // states and reasons, the closed time and its fallback, and the user,
 // reason and date filters together.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-28, Claude Code (Opus 5.5), PR #265 review: held credits for an
+// unknown order are named and not counted as in progress; the user lookup
+// lists its matches to pick from, with a notice when there are more.
+// Author review: Ryan Ang, pending pull request review.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -1001,6 +1005,37 @@ describe('Stuck Orders section', () => {
     }
     expect(await table.findByText('user_2')).toBeInTheDocument()
     expect(table.getByText('5 Credits')).toBeInTheDocument()
+    // not stuck in the retry sense, but not hidden either
+    expect(
+      (await findRegion('Stuck Orders')).getByText(
+        '1 held reservation is for an order order-service has no record of: #45.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  test('an unknown order is not counted as in progress', async () => {
+    vi.mocked(creditApi.getHeldReservations).mockResolvedValue({
+      items: [held('42'), held('45'), held('46')],
+      truncated: false,
+    })
+    vi.mocked(orderAdminApi.getStatuses).mockResolvedValue({
+      '42': 'ACCEPTED',
+      '45': null,
+    })
+    renderAdmin()
+
+    const region = await findRegion('Stuck Orders')
+    expect(await region.findByText('No stuck orders.')).toBeInTheDocument()
+    expect(
+      region.getByText(
+        '2 held reservations are for orders order-service has no record of: #45, #46.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      region.getByText(
+        '1 of 3 held longer than 1 hour are for orders still in progress.',
+      ),
+    ).toBeInTheDocument()
   })
 
   test('says so when nothing is stuck', async () => {
@@ -1219,6 +1254,9 @@ describe('Failed Orders section', () => {
       page: 0,
       size: 20,
     })
+    await user.click(
+      await region.findByRole('button', { name: 'Filter by student_alex' }),
+    )
     expect(
       await region.findByRole('button', { name: 'Clear user student_alex' }),
     ).toBeInTheDocument()
@@ -1254,6 +1292,39 @@ describe('Failed Orders section', () => {
       region.getByRole('button', { name: 'Clear user student_alex' }),
     )
     await waitFor(() => expect(lastAdminListParams()?.userId).toBeUndefined())
+  })
+
+  test('a broad lookup lists its matches to pick from', async () => {
+    const user = userEvent.setup()
+    users = [...seedUsers, ...manyUsers(25)]
+    renderAdmin()
+    const region = await findRegion('Failed Orders')
+
+    await user.type(
+      region.getByLabelText('User (requester or courier)'),
+      'user_',
+    )
+    await user.click(region.getByRole('button', { name: 'Find' }))
+
+    const matches = within(
+      await region.findByRole('list', { name: 'Users matching "user_"' }),
+    )
+    // nothing picked on the admin's behalf
+    expect(lastAdminListParams()?.userId).toBeUndefined()
+    expect(matches.getAllByRole('button')).toHaveLength(20)
+    expect(
+      region.getByText(
+        'Showing 20 of 25 matches; type more to narrow them down.',
+      ),
+    ).toBeInTheDocument()
+
+    await user.click(
+      matches.getByRole('button', { name: `Filter by ${nth(3)}` }),
+    )
+    await waitFor(() => expect(lastAdminListParams()?.userId).toBe(1002))
+    expect(
+      region.queryByRole('list', { name: 'Users matching "user_"' }),
+    ).not.toBeInTheDocument()
   })
 
   test('an unknown user is reported and not queried', async () => {

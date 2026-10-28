@@ -8,7 +8,9 @@
 // and is never flagged. Each stuck order has a "Retry settlement" button
 // (DSP-10), its 409s shown as order-service words them. Team decisions:
 // the threshold presets (15 min, 1 h, 24 h, 7 days; 1 h by default),
-// remembered per browser; the truncation notice.
+// remembered per browser; the truncation notice. PR #265 review: held
+// credits for an order order-service has no record of are counted and
+// named rather than dropped.
 // Author review: Ryan Ang, pending pull request review.
 
 import { useEffect, useState } from 'react'
@@ -77,6 +79,8 @@ type Load =
       status: 'ready'
       held: number // reservations checked
       stuck: StuckOrder[]
+      // request ids order-service has no record of
+      unknown: string[]
       truncated: boolean
     }
 
@@ -89,14 +93,17 @@ async function loadStuck(olderThan: Threshold): Promise<Load> {
       ? {}
       : await orderAdminApi.getStatuses(held.items.map((r) => r.requestId))
   const stuck: StuckOrder[] = []
+  const unknown: string[] = []
   for (const reservation of held.items) {
     const status = statuses[reservation.requestId]
-    if (status && FINISHED.includes(status)) stuck.push({ reservation, status })
+    if (!status) unknown.push(reservation.requestId)
+    else if (FINISHED.includes(status)) stuck.push({ reservation, status })
   }
   return {
     status: 'ready',
     held: held.items.length,
     stuck,
+    unknown,
     truncated: held.truncated,
   }
 }
@@ -237,13 +244,25 @@ export function StuckOrdersSection() {
               Showing the oldest 100; more are held.
             </p>
           )}
+          {load.unknown.length > 0 && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              {load.unknown.length === 1
+                ? '1 held reservation is'
+                : `${load.unknown.length} held reservations are`}{' '}
+              for {load.unknown.length === 1 ? 'an order' : 'orders'}{' '}
+              order-service has no record of:{' '}
+              {load.unknown.map((id) => `#${id}`).join(', ')}.
+            </p>
+          )}
           {load.stuck.length === 0 ? (
             <div className="rounded-lg border border-gray-200 bg-white py-10 text-center">
               <p className="font-medium text-gray-900">No stuck orders.</p>
               <p className="mt-1 text-sm text-gray-500">
                 {load.held === 0
                   ? `No credits have been held longer than ${thresholdLabel}.`
-                  : `${load.held} held longer than ${thresholdLabel}, all for orders still in progress.`}
+                  : load.unknown.length === 0
+                    ? `${load.held} held longer than ${thresholdLabel}, all for orders still in progress.`
+                    : `${load.held - load.unknown.length} of ${load.held} held longer than ${thresholdLabel} are for orders still in progress.`}
               </p>
             </div>
           ) : (

@@ -242,6 +242,9 @@
   2026-10-27: AI Use Summary extended for the admin failed and stuck
   orders (issue #242), by Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-28: AI Use Summary extended for the PR #265 review fixes, by
+  Claude Code (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1123,7 +1126,10 @@ those whose order is finished (never a disputed one), and offers
 `closedFrom` / `closedTo` filter on its lists, and `userId` on the admin
 list. The filters, the close time and its fallback, and the threshold
 presets were decided by the team and transcribed into
-`docs/disputes.md`. Recorded in `ai/usage-log.md`.
+`docs/disputes.md`. After review, Stuck Orders also names held credits
+for orders order-service has no record of, and the user lookup lists its
+matches for the admin to pick from (team decisions). Recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

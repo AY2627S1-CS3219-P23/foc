@@ -42,6 +42,28 @@ Entry template:
 ```
 
 ---
+## 2026-10-28 — Ryan Ang (fix: PR #265 review, issue #242)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** web (`features/order/components/StuckOrdersSection.tsx`,
+  `FailedOrdersSection.tsx`; `test/admin.test.tsx`).
+- **Prompt(s):** Address two PR #265 review findings as the team decided:
+  - Stuck Orders: held reservations whose order order-service has no
+    record of were dropped and the empty state still said "all for
+    orders still in progress". Team decision: the minimum fix. They are
+    now counted and their request ids named in a notice, and the empty
+    state counts only the in-progress ones; they get no row or Retry
+    button.
+  - Failed Orders: the user lookup kept only an exact username, email or
+    id match within the first 20 results, so a broad search could miss
+    the intended account. Team decision: let the admin pick. The lookup
+    now lists its matches (username, id, email, removed accounts marked)
+    and says when there are more than it shows; nothing is picked until
+    the admin clicks one.
+- **Author review:** web `vitest run` green (321 tests; 2 new and 2
+  updated in `admin.test.tsx`), `tsc -b`, `eslint` and `prettier` clean.
+
+---
 ## 2026-10-27 — Ryan Ang (feat: admin failed and stuck orders, issue #242)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs
