@@ -930,7 +930,13 @@ click marking a row read, and — after the PR #199 review — a read row
 leaving the Unread view) were decided by the author via options Q&A and
 recorded in `web/AGENTS.md` and `ai/usage-log.md`. The same tool
 addressed that review's bot findings, including the paging and
-count-sync races it and a live browser run surfaced.
+count-sync races it and a live browser run surfaced. For issue #232
+Claude Code (Fable 5) made rows that reference a request clickable:
+the click opens the request at the delivery-detail page and an unread
+row is marked read on the way, while rows without a request keep the
+mark-read-only click — the landing target and the read behavior were
+the author's decisions via options Q&A, recorded in the same two
+files.
 
 Claude Code (Opus 5.5) applied follow-ups from Leong Wei Zhi's PR #163
 re-review (issue #165), each the reviewer's suggestion taken by the

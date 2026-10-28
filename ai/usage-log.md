@@ -133,6 +133,54 @@ Entry template:
   mocks. Pending pull request review.
 
 ---
+## 2026-10-27 — Leong Wei Zhi (feat: clicking a notification opens the request it is about, issue #232)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate, docs
+- **Scope:** `web/src/features/notifications/eventMessage.ts`
+  (`requestIdOf` exported, `requestLabel` refactored onto it),
+  `web/src/features/notifications/NotificationCenter.tsx` (a row whose
+  payload carries `requestId` navigates to `/deliveries/{requestId}`;
+  an unread one is also marked read, fire-and-forget, before
+  navigating; read request rows become clickable; request-less rows
+  keep the mark-read-only click), `web/src/test/notification-center.test.tsx`
+  (three new click-path cases, labels swapped to "select to open the
+  request", the mark-read-in-place regression tests moved to
+  request-less fixtures, and the mocked order base made real so the
+  landing page's fetch reaches the stub), `web/AGENTS.md`
+  (notification-center.png row), `README.md` (AI Use Summary).
+- **Prompt(s):** Plan and resolve issue #232. The landing target
+  (always the delivery-detail page) and the click-marks-read behavior
+  were the author's decisions via options Q&A; the issue had left both
+  open.
+- **Author review:** `npm test` (308/308), lint, format and build
+  green. Leong Wei Zhi to review via the PR.
+- **PR #263 review follow-up:** the payload's request id is
+  URL-encoded before interpolation into the navigate path (a non-numeric
+  id containing `/`, `?` or `#` could otherwise route somewhere
+  unintended); tests re-run green.
+  Round 2 (both notes optional, reviewer found nothing blocking): a
+  regression test pins the encoding (an id with `/`, `?`, `#` lands as
+  one path segment with empty search/hash), and the deliberate
+  skip-the-per-row-PATCH-during-mark-all behavior is documented in a
+  comment at the guard.
+  Round 3 (@Sinnez1, approved with four inline notes, none blocking):
+  the `web/AGENTS.md` clause order is fixed (the #232 "fifth" clause
+  now follows the "fourth" one). The two timing nits the reviewer
+  himself called fine to leave (a row pushed mid-mark-all staying
+  unread; a fast Back showing the row unread until the PATCH commits)
+  are already documented at the guard and left as is. The ex-courier
+  note was checked against the code rather than taken at face value:
+  `request.cancelled` carries the requester only and a request can be
+  cancelled only before any courier accepted, so the reviewer's
+  example cannot occur; the real case is a courier who drops, since
+  `drop()` nulls `courierId` — which also removes the request from
+  their own history, so no landing page can show it. Left as is and
+  filed as a follow-up issue (the author's decision via options Q&A).
+  Main merged in: the only conflict was this file, both sides having
+  appended entries under the same `---`; both kept, the #232 entry
+  first.
+
+---
 ## 2026-10-26 — Leong Wei Zhi (feat: rating-service scaffold, issue #250)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate, docs

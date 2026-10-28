@@ -27,6 +27,16 @@
 // degrade case now waits for the usr-ghost lookup to settle before
 // asserting — the same copy renders pre-settle, so the old assertion
 // could not fail on the behaviour it checked.
+// 2026-10-27, Claude Code (Fable 5), issue #232: rows that reference a
+// request navigate to /deliveries/{id} — new cases for the three click
+// paths (unread+request: PATCH then navigate; read+request: navigate,
+// no PATCH; unread without a request: pre-#232 mark-read-in-place);
+// labels swap to "select to open the request" on request rows, and the
+// mark-read-in-place regression tests switch to request-less fixtures
+// so their clicks stay on the page under test.
+// 2026-10-27, same tool, PR #263 review round 2 (@claude): a case that
+// a request id carrying `/`, `?` or `#` lands as one encoded path
+// segment (regression cover for the round-1 encode fix).
 
 import {
   act,
@@ -51,7 +61,10 @@ vi.mock('@/lib/api/config', () => ({
   serviceBaseUrls: {
     user: 'http://user.test',
     supplier: '',
-    order: '',
+    // a real base: the navigation cases land on ActiveDelivery, whose
+    // GET /requests/{id} must reach the fetch stub (an empty base makes
+    // apiFetch reject before fetching) — issue #232
+    order: 'http://order.test',
     credit: '',
     notification: 'http://gateway.test/api/notification',
   },
@@ -329,7 +342,7 @@ const acceptedBy = (id: number) =>
 const listRows = () => within(screen.getByRole('list')).getAllByRole('button')
 
 describe('notification center page', () => {
-  test("renders the caller's rows: titles, unread dot rows clickable, read rows inert and grayed", async () => {
+  test("renders the caller's rows: titles, unread dots, request rows clickable read or not", async () => {
     pages = [
       pageOf(
         [
@@ -365,18 +378,19 @@ describe('notification center page', () => {
     // display-name copy hydrates from courierId at read time (D32) —
     // awaited, since the lookup is a round-trip behind the first paint
     const unreadRow = await screen.findByRole('button', {
-      name: 'Request #1048 accepted by courier_maya — unread, select to mark read',
+      name: 'Request #1048 accepted by courier_maya — unread, select to open the request',
     })
     expect(unreadRow).toBeEnabled()
     expect(unreadRow).toHaveTextContent('10 min ago')
     screen.getByRole('button', {
-      name: 'Courier has arrived at drop-off for Request #1042 — unread, select to mark read',
+      name: 'Courier has arrived at drop-off for Request #1042 — unread, select to open the request',
     })
-    // a read row is inert — no mark-unread control exists on purpose
+    // a read row that references a request stays clickable (issue #232:
+    // it navigates — no mark-unread control exists on purpose)
     const readRow = screen.getByRole('button', {
-      name: 'Request #1039 marked as completed',
+      name: 'Request #1039 marked as completed — select to open the request',
     })
-    expect(readRow).toBeDisabled()
+    expect(readRow).toBeEnabled()
     expect(readRow).toHaveTextContent('3h ago')
   })
 
@@ -408,7 +422,7 @@ describe('notification center page', () => {
     await renderCenter()
 
     await screen.findByRole('button', {
-      name: 'Request #1051 dropped by courier_maya — unread, select to mark read',
+      name: 'Request #1051 dropped by courier_maya — unread, select to open the request',
     })
     // wait for the usr-ghost lookup itself to settle: the actor-less
     // copy also renders before the 404 lands, so asserting it without
@@ -421,7 +435,7 @@ describe('notification center page', () => {
     )
     await act(async () => {})
     screen.getByRole('button', {
-      name: 'Request #1052 was dropped by its courier — unread, select to mark read',
+      name: 'Request #1052 was dropped by its courier — unread, select to open the request',
     })
   })
 
@@ -432,7 +446,7 @@ describe('notification center page', () => {
     screen.getByText("You're all caught up for today.")
   })
 
-  test('clicking an unread row PATCHes it read and re-fetches the badge count', async () => {
+  test('clicking an unread request row PATCHes it read and opens the request', async () => {
     const user = userEvent.setup()
     pages = [
       pageOf(
@@ -450,7 +464,7 @@ describe('notification center page', () => {
     unreadCountOnServer = 0
     await user.click(
       screen.getByRole('button', {
-        name: 'Request #1045 cancelled — unread, select to mark read',
+        name: 'Request #1045 cancelled — unread, select to open the request',
       }),
     )
 
@@ -459,15 +473,109 @@ describe('notification center page', () => {
     )
     expect(patch?.[1]).toMatchObject({ method: 'PATCH' })
     expect(JSON.parse(String(patch?.[1]?.body))).toEqual({ read: true })
-    // row grayed in place, badge re-synced from the server (not locally
-    // decremented — options Q&A decision)
+    // navigated to /deliveries/1045: the real route table mounts
+    // ActiveDelivery, which asks the (unstubbed → 404) order endpoint
+    // and renders its error view — proof the click left the Center
+    await screen.findByRole('link', { name: '← Back to requests' })
     expect(
-      screen.getByRole('button', { name: 'Request #1045 cancelled' }),
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).endsWith('/requests/1045'),
+      ),
+    ).toBe(true)
+    // badge re-synced from the server (not locally decremented — options
+    // Q&A decision); the bell outlives the route switch
+    await screen.findByRole('link', { name: 'Notifications' })
+  })
+
+  test('clicking a read request row opens the request without a PATCH', async () => {
+    const user = userEvent.setup()
+    pages = [
+      pageOf(
+        [notification(7, 'request.cancelled', { requestId: '1045' }, true)],
+        0,
+        1,
+        1,
+      ),
+    ]
+    await renderCenter()
+
+    const row = screen.getByRole('button', {
+      name: 'Request #1045 cancelled — select to open the request',
+    })
+    expect(row).toBeEnabled()
+    await user.click(row)
+
+    await screen.findByRole('link', { name: '← Back to requests' })
+    expect(
+      fetchMock.mock.calls.some(
+        ([, init]) => (init as RequestInit)?.method === 'PATCH',
+      ),
+    ).toBe(false)
+  })
+
+  test('a request id with path characters is encoded in the navigated path', async () => {
+    const user = userEvent.setup()
+    // ids are arbitrary payload strings (the contract fixtures use
+    // req-… forms): raw interpolation would let a `/`, `?` or `#`
+    // route somewhere unintended (PR #263 review)
+    pages = [
+      pageOf(
+        [notification(7, 'request.created', { requestId: 'req/9?x#y' }, true)],
+        0,
+        1,
+        1,
+      ),
+    ]
+    localStorage.setItem('user', JSON.stringify(session))
+    const router = createMemoryRouter(routes, {
+      initialEntries: ['/notifications'],
+    })
+    render(<RouterProvider router={router} />)
+    await act(async () => {})
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Request req/9?x#y created — select to open the request',
+      }),
+    )
+
+    // the whole id stays one path segment — not a deeper route, and no
+    // part of it read as a query or fragment
+    expect(router.state.location.pathname).toBe('/deliveries/req%2F9%3Fx%23y')
+    expect(router.state.location.search).toBe('')
+    expect(router.state.location.hash).toBe('')
+    // a non-numeric id renders the delivery page's error view
+    await screen.findByRole('link', { name: '← Back to requests' })
+  })
+
+  test('clicking an unread row without a request marks it read in place', async () => {
+    const user = userEvent.setup()
+    // an uncataloged type with no requestId: nothing to navigate to, so
+    // the pre-#232 behavior holds — mark read, gray in place, stay here
+    pages = [pageOf([notification(7, 'sys.maintenance', {}, false)], 0, 1, 1)]
+    unreadCountOnServer = 1
+    await renderCenter()
+    await screen.findByRole('link', { name: 'Notifications (1 unread)' })
+
+    unreadCountOnServer = 0
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Update: sys.maintenance — unread, select to mark read',
+      }),
+    )
+
+    const patch = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith('/notifications/me/7'),
+    )
+    expect(patch?.[1]).toMatchObject({ method: 'PATCH' })
+    // still on the Center, row grayed in place and now inert
+    expect(
+      screen.getByRole('button', { name: 'Update: sys.maintenance' }),
     ).toBeDisabled()
     await screen.findByRole('link', { name: 'Notifications' })
   })
 
-  test('"Mark all as read" hits the bulk endpoint, grays every row and zeroes the badge', async () => {
+  test('"Mark all as read" hits the bulk endpoint, marks every row read and zeroes the badge', async () => {
     const user = userEvent.setup()
     pages = [
       pageOf(
@@ -494,12 +602,14 @@ describe('notification center page', () => {
           (init as RequestInit)?.method === 'POST',
       ),
     ).toBe(true)
-    expect(
-      screen.getByRole('button', { name: 'Request #1050 expired' }),
-    ).toBeDisabled()
-    expect(
-      screen.getByRole('button', { name: 'Request #1049 created' }),
-    ).toBeDisabled()
+    // read request rows stay clickable (they navigate, issue #232) —
+    // their labels dropping "unread" is what shows the flip
+    screen.getByRole('button', {
+      name: 'Request #1050 expired — select to open the request',
+    })
+    screen.getByRole('button', {
+      name: 'Request #1049 created — select to open the request',
+    })
     await screen.findByRole('link', { name: 'Notifications' })
   })
 
@@ -542,7 +652,7 @@ describe('notification center page', () => {
     const list = screen.getByRole('list')
     expect(within(list).getAllByRole('button')).toHaveLength(1)
     within(list).getByRole('button', {
-      name: 'Request #2 created — unread, select to mark read',
+      name: 'Request #2 created — unread, select to open the request',
     })
   })
 
@@ -574,16 +684,18 @@ describe('notification center page', () => {
     ]
     await renderCenter()
     screen.getByRole('button', {
-      name: 'Request #12 created — unread, select to mark read',
+      name: 'Request #12 created — unread, select to open the request',
     })
 
     await user.click(screen.getByRole('button', { name: 'Load more' }))
 
     expect(listRequests().some((p) => p.get('page') === '1')).toBe(true)
     // both pages visible, oldest appended last, pager gone (no page 2)
-    screen.getByRole('button', { name: 'Request #11 created' })
     screen.getByRole('button', {
-      name: 'Request #12 created — unread, select to mark read',
+      name: 'Request #11 created — select to open the request',
+    })
+    screen.getByRole('button', {
+      name: 'Request #12 created — unread, select to open the request',
     })
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
   })
@@ -622,7 +734,7 @@ describe('notification center page', () => {
     await waitFor(() => {
       const rows = within(screen.getByRole('list')).getAllByRole('button')
       expect(rows[0]).toHaveAccessibleName(
-        'Request #1048 accepted by courier_maya — unread, select to mark read',
+        'Request #1048 accepted by courier_maya — unread, select to open the request',
       )
       expect(rows).toHaveLength(2)
     })
@@ -678,7 +790,9 @@ describe('notification center page', () => {
     // asked for page 1 twice and never skipped ahead to page 2
     expect(requested.filter((p) => p === '1')).toHaveLength(2)
     expect(requested).not.toContain('2')
-    screen.getByRole('button', { name: 'Request #11 created' })
+    screen.getByRole('button', {
+      name: 'Request #11 created — select to open the request',
+    })
   })
 
   test("switching filters drops the other filter's page count", async () => {
@@ -738,18 +852,20 @@ describe('notification center page', () => {
     // arrives when the courierId hydrates
     await waitFor(() =>
       expect(listRows()[0]).toHaveAccessibleName(
-        'Request #1048 accepted by courier_maya — unread, select to mark read',
+        'Request #1048 accepted by courier_maya — unread, select to open the request',
       ),
     )
   })
 
   test('under the Unread filter, a row marked read leaves the list', async () => {
     const user = userEvent.setup()
+    // request-less rows: clicking marks read in place (a request row
+    // would navigate away and unmount the list under test, issue #232)
     unreadPages = [
       pageOf(
         [
-          notification(2, 'request.created', { requestId: '2' }, false),
-          notification(1, 'request.expired', { requestId: '1' }, false),
+          notification(2, 'sys.note-2', {}, false),
+          notification(1, 'sys.note-1', {}, false),
         ],
         0,
         1,
@@ -764,17 +880,17 @@ describe('notification center page', () => {
     unreadCountOnServer = 1
     await user.click(
       screen.getByRole('button', {
-        name: 'Request #2 created — unread, select to mark read',
+        name: 'Update: sys.note-2 — unread, select to mark read',
       }),
     )
 
     // an Unread view must not keep showing a row it just marked read
     expect(listRows()).toHaveLength(1)
     expect(
-      screen.queryByRole('button', { name: 'Request #2 created' }),
+      screen.queryByRole('button', { name: 'Update: sys.note-2' }),
     ).toBeNull()
     screen.getByRole('button', {
-      name: 'Request #1 expired — unread, select to mark read',
+      name: 'Update: sys.note-1 — unread, select to mark read',
     })
   })
 
@@ -822,8 +938,10 @@ describe('notification center page', () => {
     // 13 unread; page 0 is the first 10. Marking 3 read shortens the
     // server's set to 10, so a page-1 request (offset 10) would return
     // nothing and rows 11-13 would never be reachable (PR #199 review).
+    // Request-less rows: clicking must mark read in place, not navigate
+    // off the page under test (issue #232).
     serverUnread = Array.from({ length: 13 }, (_, i) =>
-      notification(200 + i, 'request.created', { requestId: `${i}` }, false),
+      notification(200 + i, `sys.note-${i}`, {}, false),
     )
     unreadCountOnServer = 13
     await renderCenter()
@@ -833,7 +951,7 @@ describe('notification center page', () => {
     for (const i of [0, 1, 2]) {
       await user.click(
         screen.getByRole('button', {
-          name: `Request #${i} created — unread, select to mark read`,
+          name: `Update: sys.note-${i} — unread, select to mark read`,
         }),
       )
     }
@@ -845,7 +963,7 @@ describe('notification center page', () => {
     await waitFor(() => expect(listRows()).toHaveLength(10))
     for (const i of [10, 11, 12]) {
       screen.getByRole('button', {
-        name: `Request #${i} created — unread, select to mark read`,
+        name: `Update: sys.note-${i} — unread, select to mark read`,
       })
     }
     // and nothing is left to ask for
@@ -892,15 +1010,18 @@ describe('notification center page', () => {
     await user.click(screen.getByRole('button', { name: 'Load more' }))
 
     await waitFor(() => expect(listRows()).toHaveLength(20))
-    screen.getByRole('button', { name: 'Request #14 created' })
+    screen.getByRole('button', {
+      name: 'Request #14 created — select to open the request',
+    })
   })
 
   test('a row read in the Unread view does not conjure a pager', async () => {
     const user = userEvent.setup()
     // exactly one page of unread rows: reading one takes it out of the
     // server's set too, so there is still nothing left to ask for
+    // (request-less rows so the click stays on this page, issue #232)
     serverUnread = Array.from({ length: 10 }, (_, i) =>
-      notification(400 + i, 'request.created', { requestId: `${i}` }, false),
+      notification(400 + i, `sys.note-${i}`, {}, false),
     )
     unreadCountOnServer = 10
     await renderCenter()
@@ -910,7 +1031,7 @@ describe('notification center page', () => {
 
     await user.click(
       screen.getByRole('button', {
-        name: 'Request #0 created — unread, select to mark read',
+        name: 'Update: sys.note-0 — unread, select to mark read',
       }),
     )
 
@@ -950,14 +1071,15 @@ describe('notification center page', () => {
       held.release()
     })
 
-    expect(
-      screen.getByRole('button', { name: 'Request #1 created' }),
-    ).toBeDisabled()
-    // marking it read here would leave the badge counting a row the
-    // list renders as inert, with no way to click it
+    // the covered row flipped read (its label dropped "unread")
+    screen.getByRole('button', {
+      name: 'Request #1 created — select to open the request',
+    })
+    // marking the late frame read here would leave the badge counting a
+    // row the list shows as already read
     expect(
       screen.getByRole('button', {
-        name: 'Request #1048 accepted by courier_maya — unread, select to mark read',
+        name: 'Request #1048 accepted by courier_maya — unread, select to open the request',
       }),
     ).toBeEnabled()
   })
@@ -985,7 +1107,7 @@ describe('notification center page', () => {
     await renderCenter()
 
     screen.getByRole('button', {
-      name: 'Request #1 created — unread, select to mark read',
+      name: 'Request #1 created — unread, select to open the request',
     })
     // an unread row on screen is proof there is something to mark
     expect(
@@ -1024,10 +1146,10 @@ describe('notification center page', () => {
     expect(rows).toHaveLength(3)
     // newest first, and neither frame lost to the other
     expect(rows[0]).toHaveAccessibleName(
-      'Request #99 created — unread, select to mark read',
+      'Request #99 created — unread, select to open the request',
     )
     expect(rows[1]).toHaveAccessibleName(
-      'Request #98 expired — unread, select to mark read',
+      'Request #98 expired — unread, select to open the request',
     )
   })
 
