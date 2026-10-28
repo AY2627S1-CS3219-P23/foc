@@ -50,6 +50,12 @@
  * request's id (DSP-17); retrySettlement marks the request's newest final
  * event unsent again (DSP-10). Author review: Ryan Ang, pending pull
  * request review.
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: dispute, escalate and
+ * resolve (team decisions DSP-2, DSP-5 to DSP-8, docs/disputes.md, and
+ * the #239 answers: an ARRIVED request is disputable only within the
+ * auto-complete window, the resolution note is optional), each storing
+ * the request_dispute row and writing its event in the same transaction.
+ * Author review: Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -59,13 +65,18 @@ import foc.contracts.events.request.RequestCompleted;
 import foc.contracts.events.request.RequestDisputeResolved;
 import foc.contracts.events.request.RequestExpired;
 import foc.order.model.OutboxEvent;
+import foc.order.model.RequestDispute;
 import foc.order.model.Requests;
 import foc.order.repository.OutboxEventRepository;
+import foc.order.repository.RequestDisputeRepository;
 import foc.order.repository.RequestsRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -80,15 +91,28 @@ public class RequestsService {
                     RequestCompleted.class, RequestCancelled.class, RequestExpired.class, RequestDisputeResolved.class)
             .map(EventTypeRegistry::routingKeyFor).toList();
 
+    // longest dispute or resolution note (DSP-7)
+    static final int MAX_NOTE_LENGTH = 500;
+
+    // the note stored on a dispute the sweep raised (DSP-7)
+    static final String AUTO_ESCALATION_NOTE = "auto-escalated: not delivered by deadline";
+
     private final RequestsRepository requestsRepository;
     private final EventOutbox outbox;
     private final OutboxEventRepository outboxEvents;
+    private final RequestDisputeRepository disputes;
+    // how long an ARRIVED request may wait for the requester (F7.2); also
+    // how long they have to dispute it
+    private final Duration autoCompleteDelay;
 
     public RequestsService(RequestsRepository requestsRepository, EventOutbox outbox,
-            OutboxEventRepository outboxEvents) {
+            OutboxEventRepository outboxEvents, RequestDisputeRepository disputes,
+            @Value("${order.auto-complete.after-ms}") long autoCompleteDelayMs) {
         this.requestsRepository = requestsRepository;
         this.outbox = outbox;
         this.outboxEvents = outboxEvents;
+        this.disputes = disputes;
+        this.autoCompleteDelay = Duration.ofMillis(autoCompleteDelayMs);
     }
 
     // CREATE: the caller fills in the request's own fields; status and
@@ -224,6 +248,94 @@ public class RequestsService {
     private Requests completed(Requests request) {
         outbox.enqueue(RequestEvents.completed(request), request.getId());
         return request;
+    }
+
+    // DISPUTE (the requester, DSP-5): an ARRIVED request until it would
+    // be auto-completed, or a COLLECTED one whose deadline has passed. The
+    // window is the rule, not the sweep's timing: an ARRIVED request past
+    // it is refused even if the auto-complete sweep has not run yet. The
+    // reward stays held; request.disputed tells both parties. Fields are
+    // checked first (400), then the caller (404), then the state (409).
+    @Transactional
+    public Requests dispute(Long requestId, Long callerId, String category, String note) {
+        DisputeCategory parsed = DisputeCategory.parse(category);
+        String disputeNote = checkNote(note);
+        if (parsed == DisputeCategory.OTHER && disputeNote == null) {
+            throw new InvalidRequestException("note is required when the category is OTHER");
+        }
+        Requests request = asRequester(requestId, callerId);
+        Instant now = Instant.now();
+        if (request.getStatus() == OrderStates.ARRIVED) {
+            Instant windowEnd = request.getArrivedAt().plus(autoCompleteDelay);
+            if (!now.isBefore(windowEnd)) {
+                // to the second: the stored time has microseconds nobody needs
+                throw new IllegalStateException(
+                        "The dispute window closed at " + windowEnd.truncatedTo(ChronoUnit.SECONDS));
+            }
+        }
+        if (request.getStatus() == OrderStates.COLLECTED && request.getDeadline().isAfter(now)) {
+            throw new IllegalStateException("The request's deadline has not passed yet");
+        }
+        transition(request, OrderEvents.DISPUTE);
+        return disputed(request, new RequestDispute(requestId, parsed, disputeNote, callerId, now, false));
+    }
+
+    // ESCALATE (the expiry sweep, DSP-6): a request still COLLECTED a grace
+    // period after its deadline is disputed for the requester as not
+    // delivered, with no person as the one who raised it.
+    @Transactional
+    public Requests escalate(Long requestId) {
+        Requests request = transition(requestId, OrderEvents.ESCALATE);
+        return disputed(request, new RequestDispute(requestId, DisputeCategory.NOT_DELIVERED,
+                AUTO_ESCALATION_NOTE, null, Instant.now(), true));
+    }
+
+    private Requests disputed(Requests request, RequestDispute dispute) {
+        disputes.save(dispute);
+        outbox.enqueue(RequestEvents.disputed(request, dispute), request.getId());
+        return request;
+    }
+
+    // RESOLVE (ADMIN / OWNER, DSP-5, DSP-8): an admin who is neither the
+    // requester nor the courier divides the held reward, both shares 0 or
+    // more and adding up to the reward. request.dispute-resolved tells the
+    // Credit Service to settle it so, and tells both parties.
+    @Transactional
+    public Requests resolve(Long requestId, Long adminId, Integer courierAmount, Integer requesterAmount,
+            String note) {
+        List<String> problems = new ArrayList<>();
+        if (courierAmount == null || courierAmount < 0) problems.add("courierAmount must be 0 or more");
+        if (requesterAmount == null || requesterAmount < 0) problems.add("requesterAmount must be 0 or more");
+        if (!problems.isEmpty()) {
+            throw new InvalidRequestException(String.join("; ", problems));
+        }
+        String resolutionNote = checkNote(note);
+        Requests request = transition(requestId, OrderEvents.RESOLVE);
+        if (adminId.equals(request.getRequesterId()) || adminId.equals(request.getCourierId())) {
+            throw new IllegalStateException("An admin cannot resolve a dispute on their own request");
+        }
+        if (courierAmount + requesterAmount != request.getCreditAmount()) {
+            throw new InvalidRequestException("courierAmount and requesterAmount must add up to the reward ("
+                    + request.getCreditAmount() + ")");
+        }
+        RequestDispute dispute = disputes.findById(requestId).orElseThrow(
+                () -> new IllegalStateException("Request " + requestId + " has no dispute"));
+        dispute.resolve(adminId, Instant.now(), courierAmount, requesterAmount, resolutionNote);
+        request.setCloseReason(CloseReason.DISPUTE_RESOLVED);
+        outbox.enqueue(RequestEvents.disputeResolved(request, dispute), request.getId());
+        return request;
+    }
+
+    // An optional note: blank counts as none (null); longer than
+    // MAX_NOTE_LENGTH is an InvalidRequestException (400).
+    private static String checkNote(String note) {
+        if (isBlank(note)) {
+            return null;
+        }
+        if (note.length() > MAX_NOTE_LENGTH) {
+            throw new InvalidRequestException("note must be at most " + MAX_NOTE_LENGTH + " characters");
+        }
+        return note;
     }
 
     // RETRY SETTLEMENT (ADMIN / OWNER, DSP-10): the request's newest final

@@ -20,6 +20,10 @@
  * detail, the batch status lookup (null for an unknown id, {} for none,
  * its 400s) and retry settlement over HTTP. Author review: Ryan Ang,
  * pending pull request review.
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: the dispute object on
+ * the lists and the detail (null if never disputed, resolution fields
+ * once resolved) and the admin dispute queue (state=DISPUTED). Author
+ * review: Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -369,6 +373,53 @@ class RequestsReadEndpointsTests extends PostgresTestContainer {
 	}
 
 	@Test
+	void listsAndTheDetailShowTheDispute() throws Exception {
+		Long disputed = arrivedRequest();
+		requestsService.dispute(disputed, requester, "WRONG_ITEM", "Fish soup");
+		Long open = createdRequest();
+
+		JsonNode page = getJson("/requests/mine?role=requester", requester);
+		JsonNode dispute = item(page, disputed).get("dispute");
+		assertEquals("WRONG_ITEM", dispute.get("category").stringValue());
+		assertEquals("Fish soup", dispute.get("disputeNote").stringValue());
+		assertNotNull(dispute.get("raisedAt").stringValue());
+		assertFalse(dispute.get("autoEscalated").booleanValue());
+		assertTrue(dispute.get("resolvedAt").isNull(), "present, null until resolved");
+		assertTrue(item(page, open).get("dispute").isNull(), "present, null if never disputed");
+		assertTrue(getJson("/requests/" + open, requester).get("dispute").isNull());
+
+		requestsService.resolve(disputed, stranger, 1, 2, "Partly refunded");
+
+		JsonNode detail = getJson("/requests/" + disputed, courier);
+		assertEquals("RESOLVED", detail.get("status").stringValue());
+		assertEquals("DISPUTE_RESOLVED", detail.get("closeReason").stringValue());
+		JsonNode resolved = detail.get("dispute");
+		assertEquals("WRONG_ITEM", resolved.get("category").stringValue());
+		assertEquals(stranger, resolved.get("resolvedBy").longValue());
+		assertNotNull(resolved.get("resolvedAt").stringValue());
+		assertEquals(1, resolved.get("courierAmount").intValue());
+		assertEquals(2, resolved.get("requesterAmount").intValue());
+		assertEquals("Partly refunded", resolved.get("resolutionNote").stringValue());
+	}
+
+	@Test
+	void theAdminDisputeQueueIsTheDisputedStateWithEachDispute() throws Exception {
+		long supplier = NEXT_USER.incrementAndGet(); // scopes the all-users list to this test
+		Long disputed = createdRequestWith(requester, supplier);
+		requestsService.accept(disputed, courier);
+		requestsService.collect(disputed, courier);
+		requestsService.arrive(disputed, courier);
+		requestsService.dispute(disputed, requester, "DAMAGED", null);
+		Long open = createdRequestWith(requester, supplier);
+
+		JsonNode queue = getJson("/requests/admin?state=DISPUTED&supplierId=" + supplier, stranger, "ADMIN");
+
+		assertEquals(List.of(disputed), ids(queue));
+		assertEquals("DAMAGED", item(queue, disputed).get("dispute").get("category").stringValue());
+		assertTrue(ids(getJson("/requests/admin?supplierId=" + supplier, stranger, "ADMIN")).contains(open));
+	}
+
+	@Test
 	void adminListIsForAdminsAndChecksItsParameters() throws Exception {
 		send(get("/requests/admin"), requester).andExpect(status().isForbidden());
 		mockMvc.perform(get("/requests/admin")).andExpect(status().isUnauthorized());
@@ -492,6 +543,15 @@ class RequestsReadEndpointsTests extends PostgresTestContainer {
 				.andExpect(status().isOk());
 		return requestsRepository.findAll().stream()
 				.map(r -> r.getId()).max(Comparator.naturalOrder()).orElseThrow();
+	}
+
+	// A request the courier has just marked arrived.
+	private Long arrivedRequest() throws Exception {
+		Long id = createdRequest();
+		requestsService.accept(id, courier);
+		requestsService.collect(id, courier);
+		requestsService.arrive(id, courier);
+		return id;
 	}
 
 	// A request whose reward is reserved, as after credit.reserved.

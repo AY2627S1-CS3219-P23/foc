@@ -7,6 +7,10 @@
  * 2026-10-15: the saga's PENDING transitions and REJECTED.
  * 2026-10-16: ARRIVED between COLLECTED and COMPLETED.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: the dispute
+ * transitions (DISPUTE, ESCALATE, RESOLVE), RESOLVED terminal, and no
+ * COMPLETE from DISPUTED (DSP-14). Author review: Ryan Ang, pending pull
+ * request review.
  */
 package foc.order;
 
@@ -25,7 +29,8 @@ class OrderStateMachineTests {
 			"PENDING,RESERVE", "PENDING,REJECT", "PENDING,TIMEOUT",
 			"CREATED,ACCEPT", "CREATED,CANCEL", "CREATED,EXPIRE",
 			"ACCEPTED,COLLECT", "ACCEPTED,DROP", "ACCEPTED,EXPIRE",
-			"COLLECTED,ARRIVE", "ARRIVED,COMPLETE");
+			"COLLECTED,ARRIVE", "ARRIVED,COMPLETE",
+			"COLLECTED,DISPUTE", "COLLECTED,ESCALATE", "ARRIVED,DISPUTE", "DISPUTED,RESOLVE");
 
 	@ParameterizedTest
 	@CsvSource({
@@ -39,7 +44,11 @@ class OrderStateMachineTests {
 			"ACCEPTED, DROP, CREATED",
 			"ACCEPTED, EXPIRE, EXPIRED",
 			"COLLECTED, ARRIVE, ARRIVED",
-			"ARRIVED, COMPLETE, COMPLETED"
+			"ARRIVED, COMPLETE, COMPLETED",
+			"COLLECTED, DISPUTE, DISPUTED",
+			"COLLECTED, ESCALATE, DISPUTED",
+			"ARRIVED, DISPUTE, DISPUTED",
+			"DISPUTED, RESOLVE, RESOLVED"
 	})
 	void permittedTransitionLeadsToTarget(OrderStates from, OrderEvents event, OrderStates to) {
 		assertTrue(OrderStateMachine.canFire(from, event));
@@ -69,8 +78,11 @@ class OrderStateMachineTests {
 	}
 
 	@Test
-	void onlyCompletedCancelledExpiredAndRejectedAreTerminal() {
+	void onlyCompletedCancelledExpiredRejectedAndResolvedAreTerminal() {
 		assertTrue(OrderStateMachine.isTerminal(OrderStates.COMPLETED));
+		assertTrue(OrderStateMachine.isTerminal(OrderStates.RESOLVED));
+		// it still has to be resolved; retry settlement treats it as active
+		assertFalse(OrderStateMachine.isTerminal(OrderStates.DISPUTED));
 		assertTrue(OrderStateMachine.isTerminal(OrderStates.CANCELLED));
 		assertTrue(OrderStateMachine.isTerminal(OrderStates.EXPIRED));
 		assertTrue(OrderStateMachine.isTerminal(OrderStates.REJECTED));
@@ -79,6 +91,12 @@ class OrderStateMachineTests {
 		assertFalse(OrderStateMachine.isTerminal(OrderStates.ACCEPTED));
 		assertFalse(OrderStateMachine.isTerminal(OrderStates.COLLECTED));
 		assertFalse(OrderStateMachine.isTerminal(OrderStates.ARRIVED));
+	}
+
+	// DSP-14: the auto-complete sweep fires COMPLETE, which DISPUTED refuses
+	@Test
+	void aDisputedRequestCannotBeCompleted() {
+		assertFalse(OrderStateMachine.canFire(OrderStates.DISPUTED, OrderEvents.COMPLETE));
 	}
 
 }

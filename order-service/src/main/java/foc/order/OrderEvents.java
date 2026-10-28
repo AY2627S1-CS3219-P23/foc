@@ -8,6 +8,9 @@
  * 2026-10-16: ARRIVE added for the author's ARRIVED state
  * (COLLECTED -> ARRIVED, then COMPLETE).
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: DISPUTE, ESCALATE and
+ * RESOLVE (team decision, docs/disputes.md). Author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.order;
 
@@ -22,5 +25,8 @@ public enum OrderEvents {
     COMPLETE,//Reuqester and courier meet, publishes event (credit payout)
     RESERVE, // Credit Service reserved the reward (credit.reserved), PENDING -> CREATED
     REJECT, // Credit Service refused the reward (credit.reservation-rejected), PENDING -> REJECTED
-    TIMEOUT // no reply from the Credit Service in time, PENDING -> CANCELLED
+    TIMEOUT, // no reply from the Credit Service in time, PENDING -> CANCELLED
+    DISPUTE, // the requester reports a problem: ARRIVED (within the auto-complete window) or COLLECTED (deadline passed) -> DISPUTED
+    ESCALATE, // the expiry sweep: still COLLECTED a grace period after the deadline -> DISPUTED
+    RESOLVE // an admin who is not a party divides the reward, DISPUTED -> RESOLVED
 }

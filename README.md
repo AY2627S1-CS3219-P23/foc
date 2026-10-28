@@ -231,6 +231,9 @@
   2026-10-26: AI Use Summary extended for notification-service's
   dispute-event tests (issue #237), by Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-26: AI Use Summary extended for order-service disputes
+  (issue #239), by Claude Code (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
   2026-10-26: AI Use Summary extended for the rating-service scaffold
   (issue #250), and the Repository Structure tree updated now that the
   N1 nice-to-have fills the <n2h-service> slot, by Claude Code
@@ -1092,6 +1095,18 @@ with the feature issues), the contracts-aware Dockerfile, and the
 rating-db / gateway-route / compose / `.env.example` wiring, with the
 Flyway-baseline and lean-pom scope decided by the author via
 neutral-options Q&A. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) implemented order-service's disputes (issue
+#239, team decisions DSP-2, DSP-5 to DSP-8, DSP-14): Flyway V3 with the
+`DISPUTED` and `RESOLVED` states and the `request_dispute` table,
+`POST /dispute` for the requester, escalation of orders still collected
+a grace period after their deadline in the expiry sweep, and `POST
+/resolve` for an admin who is not a party. Each step writes its event
+to the outbox in the same transaction. A `dispute` object was added to
+the request lists and detail, loaded once per page. The table's
+constraints, the dispute window, the resolution note and the read
+shape were decided by the team and transcribed into
+`docs/disputes.md`. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

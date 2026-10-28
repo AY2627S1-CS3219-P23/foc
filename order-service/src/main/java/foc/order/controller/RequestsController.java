@@ -41,6 +41,11 @@
  * team decision DSP-5 (GET /requests/admin, POST /requests/admin/statuses,
  * POST /retry-settlement), ADMIN / OWNER in SecurityConfig. Author review:
  * Ryan Ang, pending pull request review.
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: POST /dispute (the
+ * requester) and POST /resolve (ADMIN / OWNER in SecurityConfig) of team
+ * decision DSP-5; every list and the detail carry the request's dispute,
+ * loaded once per page (team decision). Author review: Ryan Ang, pending
+ * pull request review.
  */
 package foc.order.controller;
 
@@ -52,8 +57,10 @@ import foc.order.RequestsService;
 import foc.order.dto.PageResponse;
 import foc.order.dto.RequestDetail;
 import foc.order.dto.RequestSummary;
+import foc.order.model.RequestDispute;
 import foc.order.model.Requests;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.BindException;
@@ -84,6 +91,13 @@ public class RequestsController {
     public record RequestIdBody(Long requestId) {
     }
 
+    // category: NOT_DELIVERED, WRONG_ITEM, DAMAGED or OTHER (DSP-7)
+    public record DisputeBody(Long requestId, String category, String note) {
+    }
+
+    public record ResolveBody(Long requestId, Integer courierAmount, Integer requesterAmount, String note) {
+    }
+
     // Strings, so a non-numeric id gets the service's 400 message rather
     // than a JSON parse error; JSON numbers bind here too.
     public record IdsBody(List<String> ids) {
@@ -110,7 +124,7 @@ public class RequestsController {
             RequestFilter filter,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return PageResponse.of(queries.openRequests(state, filter, page, size), RequestSummary::of);
+        return summaries(queries.openRequests(state, filter, page, size));
     }
 
     // The caller's requests, as requester or as courier.
@@ -122,13 +136,14 @@ public class RequestsController {
             RequestFilter filter,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return PageResponse.of(queries.mine(callerId(caller), role, state, filter, page, size), RequestSummary::of);
+        return summaries(queries.mine(callerId(caller), role, state, filter, page, size));
     }
 
     // One request in full: its requester, its courier, or ADMIN / OWNER.
     @GetMapping("/requests/{id}")
     public RequestDetail detail(@PathVariable Long id, Authentication caller) {
-        return RequestDetail.of(queries.detail(id, callerId(caller), isAdmin(caller)));
+        Requests request = queries.detail(id, callerId(caller), isAdmin(caller));
+        return RequestDetail.of(request, queries.disputeOf(request));
     }
 
     // Any user's requests, as requester or courier: ADMIN / OWNER only
@@ -140,7 +155,7 @@ public class RequestsController {
             RequestFilter filter,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return PageResponse.of(queries.involving(userId, state, filter, page, size), RequestSummary::of);
+        return summaries(queries.involving(userId, state, filter, page, size));
     }
 
     // Every user's requests by state and close reason (both may list
@@ -153,7 +168,7 @@ public class RequestsController {
             RequestFilter filter,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return PageResponse.of(queries.admin(state, closeReason, filter, page, size), RequestSummary::of);
+        return summaries(queries.admin(state, closeReason, filter, page, size));
     }
 
     // The current state of up to 100 requests, {"42": "COMPLETED", "99":
@@ -225,6 +240,22 @@ public class RequestsController {
         return message(requestsService.complete(body.requestId(), callerId(caller)), "completed");
     }
 
+    // OrderEvents.DISPUTE: the requester only, on an ARRIVED request
+    // within the auto-complete window or a COLLECTED one past its deadline
+    @PostMapping("/dispute")
+    public MessageResponse dispute(@RequestBody DisputeBody body, Authentication caller) {
+        return message(requestsService.dispute(body.requestId(), callerId(caller), body.category(), body.note()),
+                "disputed");
+    }
+
+    // OrderEvents.RESOLVE: ADMIN / OWNER (SecurityConfig), not a party to
+    // the request; the shares add up to the reward
+    @PostMapping("/resolve")
+    public MessageResponse resolve(@RequestBody ResolveBody body, Authentication caller) {
+        return message(requestsService.resolve(body.requestId(), callerId(caller), body.courierAmount(),
+                body.requesterAmount(), body.note()), "resolved");
+    }
+
     // A finished request's settlement event sent again (ADMIN / OWNER,
     // DSP-10); 409 if the request is still active or has no such event.
     @PostMapping("/retry-settlement")
@@ -278,6 +309,13 @@ public class RequestsController {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public MessageResponse handleUnknownRequest(NoSuchElementException e) {
         return new MessageResponse("Request not found");
+    }
+
+    // A page of requests as list items, each with its dispute; the
+    // disputes are loaded in one query for the whole page.
+    private PageResponse<RequestSummary> summaries(Page<Requests> page) {
+        Map<Long, RequestDispute> disputes = queries.disputesOf(page.getContent());
+        return PageResponse.of(page, r -> RequestSummary.of(r, disputes.get(r.getId())));
     }
 
     private static boolean isAdmin(Authentication caller) {

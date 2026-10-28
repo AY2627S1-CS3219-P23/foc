@@ -12,6 +12,9 @@
  * COMPLETED; COMPLETE is now only allowed from ARRIVED (the author's
  * decision).
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-26, Claude Code (Opus 5.5), issue #239: the dispute transitions
+ * of docs/disputes.md (team decision). Author review: Ryan Ang, pending
+ * pull request review.
  */
 package foc.order;
 
@@ -45,11 +48,20 @@ public final class OrderStateMachine {
         permit(ACCEPTED, EXPIRE, EXPIRED);
 
         permit(COLLECTED, ARRIVE, ARRIVED);
+        // the deadline has passed: by the requester, or by the expiry
+        // sweep a grace period later (RequestsService checks the times)
+        permit(COLLECTED, DISPUTE, DISPUTED);
+        permit(COLLECTED, ESCALATE, DISPUTED);
 
         permit(ARRIVED, COMPLETE, COMPLETED);
+        // within the auto-complete window (RequestsService checks it)
+        permit(ARRIVED, DISPUTE, DISPUTED);
 
-        // COMPLETED, CANCELLED, EXPIRED and REJECTED are terminal: no
-        // transitions out.
+        // no COMPLETE: a disputed request is never auto-completed (DSP-14)
+        permit(DISPUTED, RESOLVE, RESOLVED);
+
+        // COMPLETED, CANCELLED, EXPIRED, REJECTED and RESOLVED are
+        // terminal: no transitions out.
     }
 
     private OrderStateMachine() {
