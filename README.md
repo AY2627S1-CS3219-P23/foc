@@ -245,6 +245,10 @@
   2026-10-28: AI Use Summary extended for the PR #265 review fixes, by
   Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-27: AI Use Summary extended for the order pages' push-driven
+  live refresh (issue #233), by Claude Code (Fable 5); extended again
+  2026-10-28 for the PR #264 review round, by Claude Code (Opus 5).
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -530,7 +534,13 @@ open indefinitely), the resend cooldown now travels in the 202 body with
 part of issue #109) without which registration through the site
 dead-ended at a failed login — with the fix-versus-restructure choice,
 the dialog's shape and the cooldown's route all decided by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`.
+neutral-options Q&A and recorded in `ai/usage-log.md`. Claude Code (Opus 5)
+then applied @Sinnez1's PR #264 review: a background reload no longer
+tears a page down on a transient failure, the expanded cards' detail
+fetches are keyed per request rather than off every list refetch, the
+pushed frame's fields are read defensively, and a push-channel
+reconnect — exposed as `pushReconnects` — is a refetch trigger too, so
+frames missed while the socket was down no longer leave a page stale.
 `ai/usage-log.md`; and an
 opt-in demo-account seeder for user-service (`USER_SEED_DEMO`: 1
 owner, 3 admins, 100 users), with the mechanism, the off-by-default
@@ -933,7 +943,13 @@ click marking a row read, and — after the PR #199 review — a read row
 leaving the Unread view) were decided by the author via options Q&A and
 recorded in `web/AGENTS.md` and `ai/usage-log.md`. The same tool
 addressed that review's bot findings, including the paging and
-count-sync races it and a live browser run surfaced.
+count-sync races it and a live browser run surfaced. For issue #232
+Claude Code (Fable 5) made rows that reference a request clickable:
+the click opens the request at the delivery-detail page and an unread
+row is marked read on the way, while rows without a request keep the
+mark-read-only click — the landing target and the read behavior were
+the author's decisions via options Q&A, recorded in the same two
+files.
 
 Claude Code (Opus 5.5) applied follow-ups from Leong Wei Zhi's PR #163
 re-review (issue #165), each the reviewer's suggestion taken by the
@@ -1130,6 +1146,17 @@ presets were decided by the team and transcribed into
 for orders order-service has no record of, and the user lookup lists its
 matches for the admin to pick from (team decisions). Recorded in
 `ai/usage-log.md`.
+
+Claude Code (Fable 5) made the order pages live-refresh when a pushed
+notification concerns a request they show (issue #233): a
+`useRequestRefetch` hook in `web/src/features/notifications/` consumes
+the existing STOMP stream, matches `payload.requestId` against the
+page's shown ids, and debounces matches into one re-run of the page's
+existing REST fetch — the push is only the trigger, REST stays the
+source of truth (D32's read-side pattern). The issue's open questions
+(all four order pages in scope, bursts debounced, the provider's stream
+reused over a second subscription) were decided by Leong Wei Zhi via
+options Q&A and recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

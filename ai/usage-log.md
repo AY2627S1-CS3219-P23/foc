@@ -111,6 +111,131 @@ Entry template:
   `admin.test.tsx`), `tsc -b` and `eslint` clean.
 
 ---
+## 2026-10-28 — Leong Wei Zhi (PR #264 review fixes, issue #233)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debug + refactor
+- **Source:** all seven items are @Sinnez1's PR #264 review comments
+  (three substantive, four nits).
+- **Scope:**
+  - **`active-delivery.tsx`:** `reload()` takes a `background` flag.
+    A push-triggered reload now only replaces the view on a definitive
+    answer (403/404 — gone, or no longer ours to read); a 502 or a
+    dropped connection arriving with a push leaves the delivery on
+    screen instead of wiping it to "Could not load this request" with
+    no user action behind it (the blocking item).
+  - **`my-requests.tsx`:** the expanded cards' detail fetches are keyed
+    per request (`detailVersions`) instead of off `refreshKey`, so the
+    2 s PENDING poll no longer sends a `GET /requests/{id}` for every
+    expanded card every two seconds — only the rows a push named, plus
+    the one an action touched, re-read their detail. The list fetch
+    clears its error on success, like Request History and Open
+    Requests, so a failed background refetch stops leaving a stale
+    banner up.
+  - **`useRequestRefetch.ts`:** `onMatch` is handed the ids that
+    matched (what the per-card keying above needs); `eventType` and
+    `payload` are read defensively, as `eventMessage.ts` does, so a
+    frame missing either is ignored rather than throwing inside the
+    effect; the cleanup resets `timer.current` to null, so an effect
+    teardown without a remount (StrictMode, Fast Refresh) cannot
+    swallow every later match.
+  - **`NotificationProvider.tsx` / `useNotifications.tsx`:** new
+    `pushReconnects` — reconnects of this session's socket, never its
+    first connect. Frames sent while the socket was down reach nobody,
+    and the badge already re-seeded on reconnect while the pages had no
+    signal; the hook now treats a bump as a trigger and refetches what
+    the page shows.
+  - Tests: seven more in `request-refetch.test.tsx` (per-card detail
+    versions under the PENDING poll and under a push, the transient vs.
+    definitive background-reload failures, the error banner clearing,
+    a frame with no `eventType` and a null `payload`, the reconnect
+    trigger), and the unmount test now asserts `vi.getTimerCount()` —
+    the old call-count assertion passed with the `clearTimeout`
+    deleted, since a leaked timer's `setState` is a no-op after
+    unmount.
+- **Author review:** Leong Wei Zhi to review via the PR; full web suite
+  320/320, eslint, prettier and the production build clean.
+- **Main merged in** (`origin/main` at the #263 merge): the only
+  conflict was this file, both sides having appended entries under the
+  same `---` — all five kept, newest first. `README.md` auto-merged
+  (its AI Use Summary gained the #232, #239 and #250 paragraphs
+  alongside the #233 one) and the missing changelog line for #233 was
+  added. #232's `NotificationCenter` navigation and this branch's
+  pages do not overlap; the suite is green on the merge result.
+
+## 2026-10-27 — Leong Wei Zhi (web: live-refresh request pages on matching notifications, issue #233)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `web/src/features/notifications/useRequestRefetch.ts` (new
+  hook: consumes the NotificationProvider's pushed queue, matches
+  `payload.requestId` against the page's shown ids with string
+  coercion, debounces matches into one refetch per 400 ms window; a
+  no-op outside the provider), wired into the four order pages —
+  `active-delivery.tsx` (re-runs `reload()`), `my-requests.tsx` (bumps
+  `refreshKey`; `useDetail` gains a version param so an expanded card's
+  courier/arrival detail refreshes with the list), `open-requests.tsx`
+  (feed + deliveries strip ids), `request-history.tsx` (new
+  `refreshKey`) — and `web/src/test/request-refetch.test.tsx` (seven
+  tests driving a stub NotificationsContext).
+- **Prompt(s):** "make a plan to resolve issue #233" then plan
+  execution. The issue's open questions were decided by the author via
+  options Q&A: all four pages in scope, bursts debounced into one
+  refetch, and the existing provider stream reused rather than a second
+  STOMP subscription. The push stays a trigger only — REST remains the
+  source of truth (D32's read-side pattern).
+- **Author review:** Leong Wei Zhi to review via pull request. Full web
+  suite 313/313 (orders.test.tsx unchanged — its provider-less renders
+  are the regression test for the hook's no-op path), lint and build
+  clean.
+
+---
+## 2026-10-27 — Leong Wei Zhi (feat: clicking a notification opens the request it is about, issue #232)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate, docs
+- **Scope:** `web/src/features/notifications/eventMessage.ts`
+  (`requestIdOf` exported, `requestLabel` refactored onto it),
+  `web/src/features/notifications/NotificationCenter.tsx` (a row whose
+  payload carries `requestId` navigates to `/deliveries/{requestId}`;
+  an unread one is also marked read, fire-and-forget, before
+  navigating; read request rows become clickable; request-less rows
+  keep the mark-read-only click), `web/src/test/notification-center.test.tsx`
+  (three new click-path cases, labels swapped to "select to open the
+  request", the mark-read-in-place regression tests moved to
+  request-less fixtures, and the mocked order base made real so the
+  landing page's fetch reaches the stub), `web/AGENTS.md`
+  (notification-center.png row), `README.md` (AI Use Summary).
+- **Prompt(s):** Plan and resolve issue #232. The landing target
+  (always the delivery-detail page) and the click-marks-read behavior
+  were the author's decisions via options Q&A; the issue had left both
+  open.
+- **Author review:** `npm test` (308/308), lint, format and build
+  green. Leong Wei Zhi to review via the PR.
+- **PR #263 review follow-up:** the payload's request id is
+  URL-encoded before interpolation into the navigate path (a non-numeric
+  id containing `/`, `?` or `#` could otherwise route somewhere
+  unintended); tests re-run green.
+  Round 2 (both notes optional, reviewer found nothing blocking): a
+  regression test pins the encoding (an id with `/`, `?`, `#` lands as
+  one path segment with empty search/hash), and the deliberate
+  skip-the-per-row-PATCH-during-mark-all behavior is documented in a
+  comment at the guard.
+  Round 3 (@Sinnez1, approved with four inline notes, none blocking):
+  the `web/AGENTS.md` clause order is fixed (the #232 "fifth" clause
+  now follows the "fourth" one). The two timing nits the reviewer
+  himself called fine to leave (a row pushed mid-mark-all staying
+  unread; a fast Back showing the row unread until the PATCH commits)
+  are already documented at the guard and left as is. The ex-courier
+  note was checked against the code rather than taken at face value:
+  `request.cancelled` carries the requester only and a request can be
+  cancelled only before any courier accepted, so the reviewer's
+  example cannot occur; the real case is a courier who drops, since
+  `drop()` nulls `courierId` — which also removes the request from
+  their own history, so no landing page can show it. Left as is and
+  filed as a follow-up issue (the author's decision via options Q&A).
+  Main merged in: the only conflict was this file, both sides having
+  appended entries under the same `---`; both kept, the #232 entry
+  first.
+
+---
 ## 2026-10-26 — Leong Wei Zhi (feat: rating-service scaffold, issue #250)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate, docs

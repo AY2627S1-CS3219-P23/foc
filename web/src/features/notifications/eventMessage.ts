@@ -20,6 +20,9 @@
 // carry courierId only; the caller passes a resolved-name map and the
 // stored requesterName/courierName keys of pre-D32 rows are ignored.
 // The actor-less copy doubles as the loading/lookup-failed rendering.
+// 2026-10-27, Claude Code (Fable 5), issue #232: requestIdOf exported so
+// rows can navigate to the referenced request; requestLabel refactored
+// onto it (same copy).
 
 import type { NotificationDto } from './types'
 
@@ -34,11 +37,21 @@ function text(payload: Record<string, unknown>, key: string): string | null {
   return typeof value === 'string' && value !== '' ? value : null
 }
 
+// Every cataloged request event carries requestId (a numeric string in
+// production — order-service stringifies the Long); null means the row
+// references no request and cannot navigate.
+export function requestIdOf(payload: Record<string, unknown>): string | null {
+  const value = payload.requestId
+  if (typeof value === 'string' && value !== '') return value
+  if (typeof value === 'number') return String(value)
+  return null
+}
+
 // "Request #1048" for numeric IDs, "Request req-…" otherwise — the
 // wireframe's copy uses the # form
 function requestLabel(payload: Record<string, unknown>): string {
-  const id = text(payload, 'requestId') ?? String(payload.requestId ?? '')
-  if (id === '') return 'A request'
+  const id = requestIdOf(payload)
+  if (id === null) return 'A request'
   return /^\d+$/.test(id) ? `Request #${id}` : `Request ${id}`
 }
 

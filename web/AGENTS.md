@@ -54,6 +54,12 @@
   row records the Stuck Orders and Failed Orders sections, which the
   wireframe doesn't draw (team decisions).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-27, Claude Code (Fable 5), issue #232: the
+  notification-center.png row records that clicking a request row now
+  opens the request at the delivery-detail page (unread rows mark read
+  on the way; request-less rows keep the mark-read-only click) — author
+  decisions via options Q&A.
+  Author review: Leong Wei Zhi to review via the PR.
 -->
 
 # web/ — Frontend Agent Guide
@@ -101,7 +107,7 @@ first**; they cost nothing to read, unlike Figma MCP calls:
 | `docs/wireframes/admin-dashboard.png` | Admin dashboard — user/vendor management (not drawn, added for issue #242 between the Common Pool box and the Users section: **Stuck Orders**, finished orders whose credits credit-service still holds, with a "Held longer than" preset and a **Retry settlement** button per order; and **Failed Orders**, every user's rejected, cancelled and expired requests with their close reason and close time, filtered by user, reason and a created or closed date range; both table on desktop, cards on mobile) |
 | `docs/wireframes/forgot-password.png` | Forgot/reset password — email step + reset form |
 | `docs/wireframes/account-recovery.png` | Account recovery — restore a deleted account within 30 days |
-| `docs/wireframes/notification-center.png` | Notification center — bell with unread badge, read/unread list, empty state (built in the web half of issue #66: rows, blue unread dot, grayed read rows, "Mark all as read", empty-state copy as drawn; three additions the wireframe doesn't show, each an author decision via options Q&A — an **All/Unread filter toggle**, a **"Load more"** button (the wireframe draws no paging control; the REST list is paged), and **clicking an unread row marks it read** (no per-row control is drawn; mark-unread exists in the API but has no UI affordance); a fourth addition from the notification-sound follow-up — a **header sound toggle** muting the arrival chime, mirrored by the profile page's Preferences switch (author decision via options Q&A); and one rendering note from issue #221 — **courier names hydrate client-side** (D32 read-time lookup through the gateway), so a freshly loaded or pushed row can show the actor-less copy briefly before the name resolves in place) |
+| `docs/wireframes/notification-center.png` | Notification center — bell with unread badge, read/unread list, empty state (built in the web half of issue #66: rows, blue unread dot, grayed read rows, "Mark all as read", empty-state copy as drawn; three additions the wireframe doesn't show, each an author decision via options Q&A — an **All/Unread filter toggle**, a **"Load more"** button (the wireframe draws no paging control; the REST list is paged), and **clicking an unread row marks it read** (no per-row control is drawn; mark-unread exists in the API but has no UI affordance); a fourth addition from the notification-sound follow-up — a **header sound toggle** muting the arrival chime, mirrored by the profile page's Preferences switch (author decision via options Q&A); a fifth from issue #232 — **clicking a row that references a request opens it** at the delivery-detail page (`/deliveries/{requestId}`): an unread request row is also marked read on the way, read request rows stay clickable to navigate, and only rows without a `payload.requestId` keep the mark-read-only click (read ones stay inert), all author decisions via options Q&A; and one rendering note from issue #221 — **courier names hydrate client-side** (D32 read-time lookup through the gateway), so a freshly loaded or pushed row can show the actor-less copy briefly before the name resolves in place) |
 | `docs/wireframes/add-edit-supplier.png` | Add/edit supplier (admin) — form modal + delete confirmation |
 | `docs/wireframes/public-profile.png` | Public profile — another user's minimal profile view |
 | `docs/wireframes/rating-review.png` | Rating & review — post-completion star rating, write-up, report user |
