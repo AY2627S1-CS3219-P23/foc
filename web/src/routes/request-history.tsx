@@ -13,10 +13,15 @@
 // default, sent as one comma-separated state list — while active ones
 // stay on My Requests (the author's decision).
 // Author review: [pending]
+// 2026-10-27, Claude Code (Fable 5), issue #233: a pushed request event
+// for a listed id bumps a new refreshKey (useRequestRefetch). Rows here
+// are terminal, so matches are rare; a finished request *entering*
+// history is out of scope — only shown ids are matched.
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 
+import { useRequestRefetch } from '@/features/notifications/useRequestRefetch'
 import { orderApi } from '@/features/order/api'
 import { Banner } from '@/features/order/components/Banner'
 import {
@@ -89,6 +94,7 @@ export function RequestHistory() {
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -117,7 +123,12 @@ export function RequestHistory() {
     return () => {
       cancelled = true
     }
-  }, [role, filter, page])
+  }, [role, filter, page, refreshKey])
+
+  useRequestRefetch(
+    requests.map((r) => r.id),
+    () => setRefreshKey((k) => k + 1),
+  )
 
   function selectRole(next: RequestRole) {
     if (next === role) return

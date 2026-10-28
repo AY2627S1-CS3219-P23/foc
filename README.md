@@ -8,7 +8,10 @@
   section is maintained as the policy's consolidated disclosure.
   2026-10-28, Claude Code (Opus 5): AI Use Summary extended for the
   rating-events exchange and the rating.submitted contract (issue
-  #249).
+  #249). Same day, PR #269's main merge: the AI Use Summary was the
+  only conflict here — both sides had appended a 2026-10-28 paragraph
+  (#233's live refresh and #249's) — so both were kept, main's first;
+  nothing reworded or removed.
   2026-09-19: foc-contracts structure note added per team decision D15
   (docs/notification-service.md).
   2026-09-20: AI Use Summary wording extended for the notification
@@ -241,6 +244,10 @@
   (issue #250), and the Repository Structure tree updated now that the
   N1 nice-to-have fills the <n2h-service> slot, by Claude Code
   (Fable 5).
+  Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-27: AI Use Summary extended for the order pages' push-driven
+  live refresh (issue #233), by Claude Code (Fable 5); extended again
+  2026-10-28 for the PR #264 review round, by Claude Code (Opus 5).
   Author review: Leong Wei Zhi, pending pull request review.
 -->
 
@@ -527,7 +534,13 @@ open indefinitely), the resend cooldown now travels in the 202 body with
 part of issue #109) without which registration through the site
 dead-ended at a failed login — with the fix-versus-restructure choice,
 the dialog's shape and the cooldown's route all decided by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`.
+neutral-options Q&A and recorded in `ai/usage-log.md`. Claude Code (Opus 5)
+then applied @Sinnez1's PR #264 review: a background reload no longer
+tears a page down on a transient failure, the expanded cards' detail
+fetches are keyed per request rather than off every list refetch, the
+pushed frame's fields are read defensively, and a push-channel
+reconnect — exposed as `pushReconnects` — is a refetch trigger too, so
+frames missed while the socket was down no longer leave a page stale.
 `ai/usage-log.md`; and an
 opt-in demo-account seeder for user-service (`USER_SEED_DEMO`: 1
 owner, 3 admins, 100 users), with the mechanism, the off-by-default
@@ -1116,6 +1129,17 @@ the request lists and detail, loaded once per page. The table's
 constraints, the dispute window, the resolution note and the read
 shape were decided by the team and transcribed into
 `docs/disputes.md`. Recorded in `ai/usage-log.md`.
+
+Claude Code (Fable 5) made the order pages live-refresh when a pushed
+notification concerns a request they show (issue #233): a
+`useRequestRefetch` hook in `web/src/features/notifications/` consumes
+the existing STOMP stream, matches `payload.requestId` against the
+page's shown ids, and debounces matches into one re-run of the page's
+existing REST fetch — the push is only the trigger, REST stays the
+source of truth (D32's read-side pattern). The issue's open questions
+(all four order pages in scope, bursts debounced, the provider's stream
+reused over a second subscription) were decided by Leong Wei Zhi via
+options Q&A and recorded in `ai/usage-log.md`.
 
 Claude Code (Opus 5) added the rating domain to the shared
 `foc-contracts` library (issue #249, the merge-first N1 contract under
