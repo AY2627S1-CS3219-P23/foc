@@ -13,10 +13,17 @@
 // carry no requester, so the "Your request" button and "Requested by" line
 // are gone; order-service refuses a self-accept with a 409, shown as-is.
 // Author review: [pending]
+// 2026-10-27, Claude Code (Fable 5), issue #233: a pushed request event
+// matching a shown id — feed or deliveries strip — bumps refreshKey
+// (useRequestRefetch). Pushes are recipient-scoped, so in practice only
+// strip ids match (e.g. a requester cancels an accepted delivery, which
+// also puts the reopened request back in the feed); strangers' new open
+// requests still arrive only via Refresh or paging.
 
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 
+import { useRequestRefetch } from '@/features/notifications/useRequestRefetch'
 import { orderApi } from '@/features/order/api'
 import { Banner } from '@/features/order/components/Banner'
 import { StatusChip } from '@/features/order/components/StatusChip'
@@ -90,6 +97,11 @@ export function OpenRequests() {
       cancelled = true
     }
   }, [page, refreshKey])
+
+  useRequestRefetch(
+    [...requests, ...deliveries].map((r) => r.id),
+    () => setRefreshKey((k) => k + 1),
+  )
 
   const accept = useCallback(
     async (request: RequestSummary) => {

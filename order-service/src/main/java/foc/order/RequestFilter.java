@@ -7,6 +7,10 @@
  * string; ranges follow credit-service's history (lower bound inclusive,
  * upper exclusive, amounts at least 1). Checked by RequestsQueryService.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-10-27, Claude Code (Opus 5.5), issue #242: closedFrom / closedTo
+ * (team decision: filter by when a request ended; a request without a
+ * closedAt never matches). Author review: Ryan Ang, pending pull request
+ * review.
  */
 package foc.order;
 
@@ -25,6 +29,8 @@ import java.time.OffsetDateTime;
  * @param deadlineBefore deadline before this instant
  * @param createdFrom    created at or after this instant
  * @param createdTo      created before this instant
+ * @param closedFrom     closed at or after this instant
+ * @param closedTo       closed before this instant
  * @param sort           {@code createdAt} (newest first, the default) or
  *                       {@code deadline} (nearest first)
  */
@@ -36,8 +42,11 @@ public record RequestFilter(
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime deadlineBefore,
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdFrom,
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo,
+        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime closedFrom,
+        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime closedTo,
         String sort) {
 
     /** No filter, default order. */
-    public static final RequestFilter NONE = new RequestFilter(null, null, null, null, null, null, null, null);
+    public static final RequestFilter NONE =
+            new RequestFilter(null, null, null, null, null, null, null, null, null, null);
 }

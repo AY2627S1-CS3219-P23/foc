@@ -22,6 +22,12 @@
   2026-10-20, Copilot SDK in VS Code (model not exposed): added the
   AuthServiceTest matcher-misuse fix entry below.
   Author review: Kwey Xiu Xi to review via pull request.
+  2026-10-28, Claude Code (Opus 5): appended the issue #249 entry below.
+  PR #269's main merge: this file merged cleanly (main appends at the
+  top, the #249 entry at the bottom, so both sides' entries are
+  intact); README.md's AI Use Summary was the only conflict and both
+  2026-10-28 paragraphs were kept there.
+  Author review: Leong Wei Zhi to review via pull request.
 -->
 
 # AI Usage Log
@@ -137,6 +143,150 @@ Entry template:
   `user-service` as their producer and checks their `userId` where the
   others' `requestId` is checked; notification-service `./mvnw test`
   green (91). Pending pull request review.
+## 2026-10-28 — Ryan Ang (fix: PR #265 review, issue #242)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** web (`features/order/components/StuckOrdersSection.tsx`,
+  `FailedOrdersSection.tsx`; `test/admin.test.tsx`).
+- **Prompt(s):** Address two PR #265 review findings as the team decided:
+  - Stuck Orders: held reservations whose order order-service has no
+    record of were dropped and the empty state still said "all for
+    orders still in progress". Team decision: the minimum fix. They are
+    now counted and their request ids named in a notice, and the empty
+    state counts only the in-progress ones; they get no row or Retry
+    button.
+  - Failed Orders: the user lookup kept only an exact username, email or
+    id match within the first 20 results, so a broad search could miss
+    the intended account. Team decision: let the admin pick. The lookup
+    now lists its matches (username, id, email, removed accounts marked)
+    and says when there are more than it shows; nothing is picked until
+    the admin clicks one.
+- **Author review:** web `vitest run` green (321 tests; 2 new and 2
+  updated in `admin.test.tsx`), `tsc -b`, `eslint` and `prettier` clean.
+
+---
+## 2026-10-27 — Ryan Ang (feat: admin failed and stuck orders, issue #242)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** order-service (`db/migration/V4__closed_at.sql` new;
+  `model/Requests.java`: `closedAt`; `RequestsService.java`:
+  `transition()` sets it on a final state; `RequestFilter.java`:
+  `closedFrom` / `closedTo`; `RequestsQueryService.java`: those and the
+  admin list's `userId`; `RequestsController.java`: `userId` on
+  `GET /requests/admin`; `RequestSummary.java`, `RequestDetail.java`:
+  `closedAt`; `README.md`; tests: `RequestsServiceTests`,
+  `RequestsReadEndpointsTests`, `FlywayMigrationTests`).
+  web (`features/order/adminApi.ts`,
+  `features/order/components/FailedOrdersSection.tsx` and
+  `StuckOrdersSection.tsx` new; `features/order/types.ts`, `status.ts`,
+  `api.ts`; `features/credit/api.ts`, `types.ts`, `history.ts`;
+  `routes/admin.tsx`; `test/admin.test.tsx`; `AGENTS.md`).
+  `docs/disputes.md` (#242 revision entry). `README.md` (AI Use Summary
+  and header line).
+- **Prompt(s):** Implement issue #242 as written there (DSP-10, DSP-11).
+  Before coding, the tool listed four points the issue and the existing
+  endpoints left open, with the following decisions:
+  - The user filter is an optional `userId` on `GET /requests/admin`
+    (requester or courier), so it combines with the close-reason filter;
+    tests cover the requester side, the courier side and the combination.
+    The web looks the user up by username through user-service and sends
+    the id.
+  - A new `closed_at` column (Flyway V4), set only in `transition()` on a
+    final state, null for existing rows, with no CHECK against `status`;
+    `closedAt` on both read DTOs; `closedFrom` / `closedTo` on the shared
+    filter with a partial index; the table falls back to the creation
+    time, marked, when it is null, and the date filter switches between
+    created and closed.
+  - The stuck threshold is picked from presets (15 min, 1 h, 24 h,
+    7 days; 1 h by default), remembered in the browser, with a notice
+    when the list is truncated.
+  - RESOLVED orders stay out of the failed-orders table, and
+    `DISPUTE_RESOLVED` is not offered as a reason.
+  The tool kept `userId` off the shared `RequestFilter`, since the open
+  list shares it and there it would reveal whose requests those are.
+- **Author review:** order-service `./mvnw test` green (172 tests, the
+  new ones included: closed_at on every final transition and none on the
+  others, a final step losing a race, V4 leaving existing rows null,
+  `userId` on either side and with `closeReason`, the closed range and
+  its 400s). web `vitest run` green (319 tests; 13 new in
+  `admin.test.tsx`), `tsc -b` and `eslint` clean.
+
+---
+## 2026-10-28 — Leong Wei Zhi (PR #264 review fixes, issue #233)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** debug + refactor
+- **Source:** all seven items are @Sinnez1's PR #264 review comments
+  (three substantive, four nits).
+- **Scope:**
+  - **`active-delivery.tsx`:** `reload()` takes a `background` flag.
+    A push-triggered reload now only replaces the view on a definitive
+    answer (403/404 — gone, or no longer ours to read); a 502 or a
+    dropped connection arriving with a push leaves the delivery on
+    screen instead of wiping it to "Could not load this request" with
+    no user action behind it (the blocking item).
+  - **`my-requests.tsx`:** the expanded cards' detail fetches are keyed
+    per request (`detailVersions`) instead of off `refreshKey`, so the
+    2 s PENDING poll no longer sends a `GET /requests/{id}` for every
+    expanded card every two seconds — only the rows a push named, plus
+    the one an action touched, re-read their detail. The list fetch
+    clears its error on success, like Request History and Open
+    Requests, so a failed background refetch stops leaving a stale
+    banner up.
+  - **`useRequestRefetch.ts`:** `onMatch` is handed the ids that
+    matched (what the per-card keying above needs); `eventType` and
+    `payload` are read defensively, as `eventMessage.ts` does, so a
+    frame missing either is ignored rather than throwing inside the
+    effect; the cleanup resets `timer.current` to null, so an effect
+    teardown without a remount (StrictMode, Fast Refresh) cannot
+    swallow every later match.
+  - **`NotificationProvider.tsx` / `useNotifications.tsx`:** new
+    `pushReconnects` — reconnects of this session's socket, never its
+    first connect. Frames sent while the socket was down reach nobody,
+    and the badge already re-seeded on reconnect while the pages had no
+    signal; the hook now treats a bump as a trigger and refetches what
+    the page shows.
+  - Tests: seven more in `request-refetch.test.tsx` (per-card detail
+    versions under the PENDING poll and under a push, the transient vs.
+    definitive background-reload failures, the error banner clearing,
+    a frame with no `eventType` and a null `payload`, the reconnect
+    trigger), and the unmount test now asserts `vi.getTimerCount()` —
+    the old call-count assertion passed with the `clearTimeout`
+    deleted, since a leaked timer's `setState` is a no-op after
+    unmount.
+- **Author review:** Leong Wei Zhi to review via the PR; full web suite
+  320/320, eslint, prettier and the production build clean.
+- **Main merged in** (`origin/main` at the #263 merge): the only
+  conflict was this file, both sides having appended entries under the
+  same `---` — all five kept, newest first. `README.md` auto-merged
+  (its AI Use Summary gained the #232, #239 and #250 paragraphs
+  alongside the #233 one) and the missing changelog line for #233 was
+  added. #232's `NotificationCenter` navigation and this branch's
+  pages do not overlap; the suite is green on the merge result.
+
+## 2026-10-27 — Leong Wei Zhi (web: live-refresh request pages on matching notifications, issue #233)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `web/src/features/notifications/useRequestRefetch.ts` (new
+  hook: consumes the NotificationProvider's pushed queue, matches
+  `payload.requestId` against the page's shown ids with string
+  coercion, debounces matches into one refetch per 400 ms window; a
+  no-op outside the provider), wired into the four order pages —
+  `active-delivery.tsx` (re-runs `reload()`), `my-requests.tsx` (bumps
+  `refreshKey`; `useDetail` gains a version param so an expanded card's
+  courier/arrival detail refreshes with the list), `open-requests.tsx`
+  (feed + deliveries strip ids), `request-history.tsx` (new
+  `refreshKey`) — and `web/src/test/request-refetch.test.tsx` (seven
+  tests driving a stub NotificationsContext).
+- **Prompt(s):** "make a plan to resolve issue #233" then plan
+  execution. The issue's open questions were decided by the author via
+  options Q&A: all four pages in scope, bursts debounced into one
+  refetch, and the existing provider stream reused rather than a second
+  STOMP subscription. The push stays a trigger only — REST remains the
+  source of truth (D32's read-side pattern).
+- **Author review:** Leong Wei Zhi to review via pull request. Full web
+  suite 313/313 (orders.test.tsx unchanged — its provider-less renders
+  are the regression test for the hook's no-op path), lint and build
+  clean.
 
 ---
 ## 2026-10-27 — Leong Wei Zhi (feat: clicking a notification opens the request it is about, issue #232)
@@ -6616,3 +6766,34 @@ Entry template:
 - **Prompt(s):** "need fix?" answering Sinnez1's review comment. The change
   follows the reviewer's suggestion.
 - **Author review:** Alastair Tan Choon Wei to review before pushing.
+
+## 2026-10-28 — Leong Wei Zhi (contracts: rating-events + rating.submitted)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** generate
+- **Scope:** `foc-contracts` — `events/core/EventContracts.java`
+  (`RATING_EVENTS_EXCHANGE`), new `events/rating/` package (`RatingEvent`
+  marker, `RatingSubmitted` record), the `EventTypeRegistry` entry,
+  `src/main/resources/contracts/rating-submitted.example.json`, and the
+  registry-driven tests (`EventTypeRegistryTest` count + domain-prefix
+  helper, `RequestEventRecordsTest` domain-marker check);
+  `notification-service/src/test/java/foc/notification/event/DomainEventContractTest.java`
+  (producer and requestId helpers for the new domain, and the parties
+  rule restated as "only credit events notify no one");
+  `foc-contracts/README.md`, `foc-contracts/AGENTS.md`, `README.md`.
+  Issue #249, under #44.
+- **Prompt(s):** "make a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/249". The tool read
+  the issue, #44, and the module's own extension recipe, then asked two
+  options questions. The author chose: patch notification-service's
+  existing fixture gate rather than add a second one in `foc-contracts`
+  (and leave that module's inaccurate "fails loudly" AGENTS.md claim for
+  its own issue), and `Integer stars` over `int`. The event's identity,
+  field list (IDs only, D32), ratee-only `parties`, and the omission of
+  the review write-up come from the author's decisions on #44 and the
+  issue body; the tool transcribed them into the existing record,
+  fixture and test patterns.
+- **Author review:** `./mvnw test` green in `foc-contracts` (12 tests,
+  registry now 15 entries) and `DomainEventContractTest` green in
+  notification-service (15 fixtures bound); the fixture gate was proven
+  by temporarily removing `rating-submitted.example.json` and confirming
+  the test fails on it. Leong Wei Zhi reviews via pull request.

@@ -4,6 +4,9 @@
 // contract" in docs/credit-service.md.
 // 2026-10-17: the admin routes' bodies (the common pool box).
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-27, Claude Code (Opus 5.5), issue #242: the held-reservations
+// body, for the admin dashboard's stuck orders.
+// Author review: Ryan Ang, pending pull request review.
 
 // GET /credits/me; total is available + reserved
 export interface CreditBalance {
@@ -81,4 +84,20 @@ export interface PoolSummary {
   remainder: number
   lastRun: RedistributionRun | null
   nextRunAt: string
+}
+
+// one reservation of GET /credits/admin/reservations/held; the ids are
+// decimal strings, heldSince is when the reward was reserved
+export interface HeldReservation {
+  requestId: string
+  requesterId: string
+  amount: number
+  heldSince: string // ISO-8601 instant
+}
+
+// GET /credits/admin/reservations/held (ADMIN and OWNER), oldest first;
+// truncated: more were held than the 100 listed
+export interface HeldReservations {
+  items: HeldReservation[]
+  truncated: boolean
 }

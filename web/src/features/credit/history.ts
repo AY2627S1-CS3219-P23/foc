@@ -7,6 +7,9 @@
 // reserved balance, shown as a loss, as the wireframe's signs read. The
 // date conversion follows the contract's "For the web page" notes.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-27, Claude Code (Opus 5.5), issue #242: localDayStart exported
+// for the admin failed-orders date filter.
+// Author review: Ryan Ang, pending pull request review.
 
 import type {
   CreditHistoryEntry,
@@ -102,7 +105,7 @@ export type ParsedFilters =
 // the start of a local day as a UTC instant, or null when `date` is not
 // a yyyy-mm-dd date; `dayOffset` 1 gives the start of the next day,
 // which is the exclusive end of a range
-function localDayStart(date: string, dayOffset = 0): string | null {
+export function localDayStart(date: string, dayOffset = 0): string | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
   if (!match) return null
   const [year, month, day] = match.slice(1).map(Number)

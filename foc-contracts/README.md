@@ -27,6 +27,10 @@
   2026-10-22, Claude Code (Opus 5.5), PR #243 review follow-up:
   RequestDropped added to the record list (it was missing). Author
   review: Ryan Ang, pending pull request review.
+  2026-10-28, Claude Code (Opus 5), issue #249: exchange, record,
+  package-layout and topology-naming lists updated for the rating
+  domain (scope decisions on #44); author review: Leong Wei Zhi,
+  pending pull request review.
   2026-10-28, Claude Code (Opus 5.5), issue #267: the user domain
   (UserEvent, UserCreated, UserPurged, user-events) in the exchange,
   record, package and topology lists (team decision USR-1); author
@@ -44,14 +48,16 @@ Only things that are a *contract between services* belong here:
 - **Contract names** both producer and consumer must agree on, e.g.
   the broker exchange names (`EventContracts.REQUEST_EVENTS_EXCHANGE`,
   `EventContracts.CREDIT_EVENTS_EXCHANGE`,
+  `EventContracts.RATING_EVENTS_EXCHANGE`,
   `EventContracts.USER_EVENTS_EXCHANGE`).
 - **The typed event contracts** (D17): the `DomainEvent` /
-  `RequestEvent` / `CreditEvent` / `UserEvent` interfaces and one flat record per
-  broker event — `RequestCreated`, `RequestAccepted`,
-  `RequestCollected`, `RequestCompleted`, `RequestCancelled`,
-  `RequestDropped`, `RequestExpired`, `CourierArrived`, `RequestSubmitted`,
-  `RequestRejected`, `RequestDisputed`, `RequestDisputeResolved`,
-  `CreditReserved`, `CreditReservationRejected`, `UserCreated`,
+  `RequestEvent` / `CreditEvent` / `RatingEvent` / `UserEvent`
+  interfaces and one flat record per broker event — `RequestCreated`,
+  `RequestAccepted`, `RequestCollected`, `RequestCompleted`,
+  `RequestCancelled`, `RequestDropped`, `RequestExpired`,
+  `CourierArrived`, `RequestSubmitted`, `RequestRejected`,
+  `RequestDisputed`, `RequestDisputeResolved`, `CreditReserved`,
+  `CreditReservationRejected`, `RatingSubmitted`, `UserCreated`,
   `UserPurged`. Where a field takes a
   fixed set of values, the field is a `String` and the record holds
   each value as a `String` constant plus one `Set` of them all
@@ -86,8 +92,8 @@ Package layout (D22): shared machinery — `DomainEvent`,
 `EventTypeRegistry`, `EventContracts`, `Nullable` — lives in
 `foc.contracts.events.core`; each producing domain's marker interface
 and records live in a sibling package (`foc.contracts.events.request`,
-`foc.contracts.events.credit` and `foc.contracts.events.user`
-today; a future domain adds its own).
+`foc.contracts.events.credit`, `foc.contracts.events.rating` and
+`foc.contracts.events.user` today; a future domain adds its own).
 
 Service-private names (queue names, table names, internal config) stay
 in their service. The published jar has **no dependencies** — plain
@@ -151,7 +157,8 @@ Leong Wei Zhi — D16–D19 in
    these dead-letter to the consumer's DLQ for replay).
 
 5. **Topology naming.** One durable **topic exchange per producing
-   domain** (`request-events`, `credit-events`, `user-events`); consumer queues are
+   domain** (`request-events`, `credit-events`, `rating-events`,
+   `user-events`); consumer queues are
    `<service>.<domain>-events` (+ `.retry` / `.dlq` per D13);
    consumers bind patterns (`request.#` for a consumer that wants
    every request event).

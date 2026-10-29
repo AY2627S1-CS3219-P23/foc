@@ -22,6 +22,9 @@
  * 2026-10-21, Claude Code (Opus 5.5), issue #234: request.disputed and
  * request.dispute-resolved entries for N3 (team decision, DSP-12);
  * author review: Ryan Ang, pending pull request review.
+ * 2026-10-28, Claude Code (Opus 5), issue #249: rating.submitted entry
+ * for the N1 rating system (scope decisions on #44); author review:
+ * Leong Wei Zhi, pending pull request review.
  * 2026-10-28, Claude Code (Opus 5.5), issue #267: user.created and
  * user.purged entries (team decision, USR-1); author review: Ryan Ang,
  * pending pull request review.
@@ -30,6 +33,7 @@ package foc.contracts.events.core;
 
 import foc.contracts.events.credit.CreditReservationRejected;
 import foc.contracts.events.credit.CreditReserved;
+import foc.contracts.events.rating.RatingSubmitted;
 import foc.contracts.events.request.CourierArrived;
 import foc.contracts.events.request.RequestAccepted;
 import foc.contracts.events.request.RequestCancelled;
@@ -91,6 +95,7 @@ public final class EventTypeRegistry {
 			new Entry(RequestDisputeResolved.class, "request.dispute-resolved"),
 			new Entry(CreditReserved.class, "credit.reserved"),
 			new Entry(CreditReservationRejected.class, "credit.reservation-rejected"),
+			new Entry(RatingSubmitted.class, "rating.submitted"),
 			new Entry(UserCreated.class, "user.created"),
 			new Entry(UserPurged.class, "user.purged"));
 
