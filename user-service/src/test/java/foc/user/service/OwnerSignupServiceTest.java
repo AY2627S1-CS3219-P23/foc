@@ -23,8 +23,9 @@ Author review: Ryan validated test assertions to match intended behaviour.
 2026-10-19: Parts copied from AuthServiceTest, which was AI-assisted
 2026-10-28 (Claude Code, Opus 5.5), issue #267, revised USR-8: built with a
 real UserCreation over the mocked repository and a mocked EventOutbox, and
-a verified owner setup writes user.created. Author review: Ryan Ang,
-pending pull request review.
+a verified owner setup writes user.created. PR #268 review: that line's
+comment put on its own line. Author review: Ryan Ang, pending pull
+request review.
 */
 
 package foc.user.service;
@@ -169,7 +170,8 @@ class OwnerSignupServiceTest {
 
         assertThat(captor.getValue().getRole()).isEqualTo(Role.OWNER);
         assertThat(captor.getValue().getPasswordHash()).isEqualTo(PLAIN_ENCODER.encode(PASSWORD));
-        assertThat(verifyResponse.email()).isEqualTo("e1234567@u.nus.edu");        // credit-service opens the owner's account from this (revised USR-8)
+        assertThat(verifyResponse.email()).isEqualTo("e1234567@u.nus.edu");
+        // credit-service opens the owner's account from this (revised USR-8)
         verify(eventOutbox).userCreated(7L);
     }
 

@@ -16,7 +16,8 @@
  * (USR-7), and the copied checks replay CLOSURE as
  * CreditOperationsServiceTest's do. Same day, PR review: that case also
  * checks the pool preview counts the same open accounts and the
- * remainder goes to open accounts only.
+ * remainder goes to open accounts only. PR #268 review: fillPool's
+ * comment moved back above it.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -333,7 +334,6 @@ class ExpiryAndRedistributionTest extends PostgresTestContainer {
             java.sql.Timestamp.from(now.minus(1, ChronoUnit.DAYS)), user);
     }
 
-    // 3 credits through a real expiry, so the books still balance
     @Test
     void aClosedAccountGetsNoShareAndThePreviewCountsTheSameAccounts() {
         String closed = "u-closed-" + UUID.randomUUID();
@@ -362,6 +362,7 @@ class ExpiryAndRedistributionTest extends PostgresTestContainer {
             .containsExactly("PROVISION", "CLOSURE");
     }
 
+    // 3 credits through a real expiry, so the books still balance
     private void fillPool() {
         String user = "u-pool-" + UUID.randomUUID();
         earn(user, 3);

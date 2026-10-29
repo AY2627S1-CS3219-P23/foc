@@ -54,7 +54,8 @@
   2026-10-28, Claude Code (Opus 5.5), issue #267: the package map and
   invariants updated for the user events (D14): V6, the user-events
   listener and handler, RetryingListener, account closure and the
-  open-accounts query.
+  open-accounts query. PR #268 review: the redistribution lock-order
+  invariant names findAllOpenForUpdate.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -176,8 +177,8 @@ IDs (D1–D13) when touching related code.
 - **The expiry and redistribution runs keep the D2 lock order.** Expiry
   is one transaction per account: the owner's account, then their lots
   read again under that lock, then the pool. Redistribution locks every
-  account with `CreditAccountRepository.findAllForUpdate`, then the
-  pool. That query orders by `user_id collate "C"` so it matches the
+  open account with `CreditAccountRepository.findAllOpenForUpdate`,
+  then the pool. That query orders by `user_id collate "C"` so it matches the
   Java `String.compareTo` order the transfer locks two accounts in;
   do not drop the collation.
 - **A month is redistributed once.** `RedistributionService` checks

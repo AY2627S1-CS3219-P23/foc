@@ -48,6 +48,31 @@ Entry template:
 ```
 
 ---
+## 2026-10-29 — Ryan Ang (fix: PR #268 review, issue #267)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** credit-service (`ConsumedUserEventsHandledTest` new;
+  `ExpiryAndRedistributionTest` comment placement; `AGENTS.md`
+  lock-order invariant); user-service (`OwnerSignupServiceTest` comment
+  placement); this log's #267 entry.
+- **Prompt(s):** Address the PR #268 review comments:
+  - A user event bound to the queue without a handler arm would be
+    acked and logged as `DUPLICATE`. Added a test, modelled on
+    `ConsumedEventsHandledTest`, tying `CONSUMED_USER_EVENTS` to
+    `UserEventHandler`'s arms; the handler is unchanged.
+  - The redistribution lock-order invariant named the renamed
+    `findAllForUpdate`; it now names `findAllOpenForUpdate` and says
+    open accounts.
+  - The #267 entry listed `RabbitMqTopologyInitializer` as new in
+    user-service, though the branch has none; removed.
+  - Two misplaced test comments moved to their own lines.
+  - The per-account purge insert under row locks was left for a team
+    decision.
+- **Author review:** full credit-service (360 tests) and user-service
+  (426 tests) suites run with Docker up, Testcontainers included: all
+  passing, among them the new `ConsumedUserEventsHandledTest`,
+  `ExpiryAndRedistributionTest` and `OwnerSignupServiceTest`.
+
 ## 2026-10-28 — Ryan Ang (feat: user events for credit accounts, issue #267)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, refactor, docs
@@ -57,8 +82,8 @@ Entry template:
   `README.md`, `AGENTS.md`). user-service (V9 `outbox_event`;
   `OutboxEvent`, `OutboxEventRepository`, `EventOutbox`,
   `EventPublisher`, `OutboxPublisher`, `messaging/rabbitmq/`
-  `RabbitEventPublisher`, `RabbitMqTopology`,
-  `RabbitMqTopologyInitializer` new, copied from order-service;
+  `RabbitEventPublisher`, `RabbitMqTopology` new, copied from
+  order-service;
   `AuthService.verifySignup` and `AccountPurgeScheduler` write the
   events; pom, Dockerfile, `application.yaml`, test yaml; tests:
   `AuthServiceTest`, `AccountPurgeSchedulerTest`, `FlywayMigrationTest`).
