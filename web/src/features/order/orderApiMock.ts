@@ -21,14 +21,21 @@
 // spec for the backend: order-service is.
 // 2026-10-20: the state filter takes several states.
 // Author review: [pending]
+// 2026-10-29, Claude Code (Opus 5.5), issue #241: autoCompleteAt filled in
+// as order-service works it out (the web app no longer knows the window;
+// the mock plays order-service's default 1 h setting), and /dispute with
+// its rules (category, note, the window, no window without an arrival
+// time, a COLLECTED request's deadline).
+// Author review: Ryan Ang, pending pull request review.
 
 import { adminUserApi } from '@/features/user/adminApi'
 import { ApiError } from '@/lib/api/http'
 import type { CreditBalance } from '@/features/credit/types'
 import type { PagedResponse } from '@/features/supplier/types'
-import { AUTO_COMPLETE_MS } from './status'
+import { MAX_DISPUTE_NOTE } from './status'
 import type {
   CreateRequestInput,
+  DisputeInput,
   ListMineParams,
   ListOpenParams,
   MessageResponse,
@@ -42,6 +49,9 @@ import type {
 let meId = 0
 const names = new Map<number, string>()
 const STARTING_CREDITS = 42
+// order-service's ORDER_AUTO_COMPLETE_AFTER_MS default
+const AUTO_COMPLETE_MS = 60 * 60 * 1000
+const DISPUTE_CATEGORIES = ['NOT_DELIVERED', 'WRONG_ITEM', 'DAMAGED', 'OTHER']
 // how long the stand-in credit-service takes to reserve a reward
 const RESERVE_DELAY_MS = 1500
 
@@ -83,7 +93,9 @@ function heldBy(userId: number) {
     .filter(
       (r) =>
         r.requesterId === userId &&
-        ['CREATED', 'ACCEPTED', 'COLLECTED', 'ARRIVED'].includes(r.status),
+        ['CREATED', 'ACCEPTED', 'COLLECTED', 'ARRIVED', 'DISPUTED'].includes(
+          r.status,
+        ),
     )
     .reduce((sum, r) => sum + r.creditAmount, 0)
 }
@@ -112,14 +124,19 @@ function sweep() {
     ) {
       r.status = 'EXPIRED'
     }
-    if (
-      r.status === 'ARRIVED' &&
-      r.arrivedAt &&
-      now - new Date(r.arrivedAt).getTime() >= AUTO_COMPLETE_MS
-    ) {
+    const autoAt = autoCompleteAt(r)
+    if (autoAt !== null && now >= new Date(autoAt).getTime()) {
       finish(r)
     }
   }
+}
+
+// as order-service's RequestsService.autoCompleteAt
+function autoCompleteAt(r: RequestDetail): string | null {
+  if (r.status !== 'ARRIVED' || !r.arrivedAt) return null
+  return new Date(
+    new Date(r.arrivedAt).getTime() + AUTO_COMPLETE_MS,
+  ).toISOString()
 }
 
 function finish(r: RequestDetail) {
@@ -169,6 +186,7 @@ function summary(r: RequestDetail): RequestSummary {
     creditAmount,
     deadline,
     createdAt,
+    dispute,
   } = r
   return {
     id,
@@ -179,6 +197,8 @@ function summary(r: RequestDetail): RequestSummary {
     creditAmount,
     deadline,
     createdAt,
+    autoCompleteAt: autoCompleteAt(r),
+    dispute,
   }
 }
 
@@ -233,6 +253,7 @@ export const mockOrderApi = {
       creditAmount: input.creditAmount,
       deadline: input.deadline,
       createdAt: now,
+      autoCompleteAt: null, // worked out on each read
       acceptedAt: null,
       collectedAt: null,
       arrivedAt: null,
@@ -271,7 +292,7 @@ export const mockOrderApi = {
     const r = find(id)
     if (r.requesterId !== meId && r.courierId !== meId)
       fail(404, 'Request not found')
-    return { ...r }
+    return { ...r, autoCompleteAt: autoCompleteAt(r) }
   },
 
   async accept(id: number) {
@@ -330,6 +351,39 @@ export const mockOrderApi = {
       fail(409, `Cannot COMPLETE a request that is ${r.status}`)
     finish(r)
     return ok(r, 'completed')
+  },
+
+  async dispute(id: number, input: DisputeInput) {
+    await enter()
+    if (!DISPUTE_CATEGORIES.includes(input.category))
+      fail(400, 'Invalid value for category')
+    const note = input.note?.trim() || null
+    if (note && note.length > MAX_DISPUTE_NOTE)
+      fail(400, `note must be at most ${MAX_DISPUTE_NOTE} characters`)
+    if (input.category === 'OTHER' && !note)
+      fail(400, 'note is required when the category is OTHER')
+    const r = asRequester(id)
+    const now = Date.now()
+    if (r.status === 'ARRIVED' && !r.arrivedAt)
+      fail(409, 'No arrival time is recorded for this request')
+    const windowEnd = autoCompleteAt(r)
+    if (windowEnd !== null && now >= new Date(windowEnd).getTime())
+      fail(409, `The dispute window closed at ${windowEnd}`)
+    if (r.status === 'COLLECTED' && new Date(r.deadline).getTime() > now)
+      fail(409, "The request's deadline has not passed yet")
+    move(r, 'DISPUTE', ['ARRIVED', 'COLLECTED'], 'DISPUTED')
+    r.dispute = {
+      category: input.category,
+      disputeNote: note,
+      raisedAt: new Date(now).toISOString(),
+      autoEscalated: false,
+      resolvedAt: null,
+      resolvedBy: null,
+      courierAmount: null,
+      requesterAmount: null,
+      resolutionNote: null,
+    }
+    return ok(r, 'disputed')
   },
 
   async getUsername(userId: number): Promise<string> {

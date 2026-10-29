@@ -21,6 +21,9 @@
   added, transcribing the team's answers to the questions the
   implementation raised. Author review: Ryan Ang, pending pull request
   review.
+  2026-10-29, Claude Code (Opus 5.5), issue #241: a #241 revision entry
+  added, transcribing the team's answers to the questions the issue left
+  open. Author review: Ryan Ang, pending pull request review.
 -->
 
 # N3 — Dispute Resolution and Failed-Order Management
@@ -91,6 +94,14 @@ takes any back from a courier.
 
 ## Revisions (2026-10-21)
 
+- **#241 (2026-10-29):**
+  - `RequestSummary` and `RequestDetail` carry a nullable `autoCompleteAt`: `arrivedAt` + `ORDER_AUTO_COMPLETE_AFTER_MS` while ARRIVED, otherwise null (also for an ARRIVED row with no `arrivedAt`). `RequestsService.autoCompleteAt()` is the one place it is worked out, and `/dispute` checks its window against it (DSP-5, DSP-7).
+  - The web drops its own 1 h constant and shows the server's time.
+  - "Report a problem" shows on an ARRIVED order while now is before `autoCompleteAt`, and on a COLLECTED order once its deadline has passed. An ARRIVED order past `autoCompleteAt` that the sweep hasn't completed yet shows "Completing automatically…" with no countdown and no button. The countdown and the button use a clock that ticks.
+  - An ARRIVED order with no `arrivedAt` (dev rows from before 16 Oct) has no window, so `/dispute` refuses it with 409 "No arrival time is recorded for this request", matching the web, which shows no button for it. No timestamp is guessed (as in #242). The requester can still confirm it.
+  - RESOLVED orders are finished: History lists them for both parties. The amount is the courier's share, `−courierAmount` for the requester and `+courierAmount` for the courier (0 for a full refund), labelled "Resolved: refunded", "Resolved: paid" or "Resolved: split".
+  - "Report a problem" in the confirm-delivery dialog follows the same rule as the card's button.
+  - No migration, and no change to events or contracts.
 - **#242 (2026-10-27):**
   - `GET /requests/admin` takes an optional `userId`, matching requests the user is the requester or the courier of, so it combines with `closeReason` and every other filter (DSP-5). The web resolves a username through user-service's `GET /users?search=` and sends the id.
   - Flyway V4 adds a nullable `closed_at` to `requests`. `RequestsService.transition()` sets it on every transition into a final state, and nothing else does. Existing rows stay null (no guessed timestamps). There is no CHECK tying it to `status`. A partial index covers the non-null rows.

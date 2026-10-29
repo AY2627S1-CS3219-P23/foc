@@ -39,6 +39,9 @@
   closedAt in the reads, the closedFrom / closedTo filter and the admin
   list's userId (team decisions). Author review: Ryan Ang, pending pull
   request review.
+  2026-10-29, Claude Code (Opus 5.5), issue #241: autoCompleteAt in the
+  reads (team decision). Author review: Ryan Ang, pending pull request
+  review.
 -->
 
 # Order Service
@@ -213,9 +216,10 @@ must be at least 1"}`.
 `/dispute` (DSP-5, DSP-7) needs `category`: `NOT_DELIVERED`,
 `WRONG_ITEM`, `DAMAGED` or `OTHER`. `note` is optional, at most 500
 characters, and required for `OTHER`. Either is a 400 otherwise. An
-ARRIVED request can be disputed until `arrivedAt` + the auto-complete
-window (409 "The dispute window closed at ..." after it, even before
-the sweep has run). A COLLECTED request can be disputed once its
+ARRIVED request can be disputed until its `autoCompleteAt` (409 "The
+dispute window closed at ..." after it, even before the sweep has run;
+409 "No arrival time is recorded for this request" if it has no
+`arrivedAt`, so no window). A COLLECTED request can be disputed once its
 deadline has passed (409 before). A second dispute is a 409.
 
 `/resolve` (DSP-5, DSP-8) divides the reward: both amounts 0 or more and
@@ -240,8 +244,13 @@ supplier listing: `page` (from 0, default 0) and `size` (1-100, default
 (null unless the request ended without completing), `supplierName`,
 `dropoffLocation`, `item`, `creditAmount`, `deadline`, `createdAt`,
 `closedAt` (null while active, and for requests that closed before it
-was recorded), and `dispute`. A bad `state`, `role`, `page` or `size` is a 400 with a
+was recorded), `autoCompleteAt`, and `dispute`. A bad `state`, `role`, `page` or `size` is a 400 with a
 `message`.
+
+`autoCompleteAt` (on the lists and the full request) is when an ARRIVED
+request completes by itself: `arrivedAt` + `ORDER_AUTO_COMPLETE_AFTER_MS`,
+worked out on each read from the current setting. It is also when the
+requester's dispute window closes. Null in any other state.
 
 `dispute` (on the lists and the full request) is null unless the request
 was disputed: `{category, disputeNote, raisedAt, autoEscalated,
@@ -267,7 +276,7 @@ A range whose lower bound is not below its upper (`minCredit` above
 | Path | Returns | Who may call it |
 | --- | --- | --- |
 | `GET /requests?state=CREATED&page=&size=` | open errands for couriers (F2.1): CREATED requests whose deadline is still ahead; `state` may only be `CREATED` (the default) | any logged-in user |
-| `GET /requests/{id}` | the request in full (every column, incl. `requesterId`, `courierId`, `closeReason`, `closedAt` and the step timestamps) | its requester, its assigned courier, or ADMIN / OWNER; anyone else 404 |
+| `GET /requests/{id}` | the request in full (every column, incl. `requesterId`, `courierId`, `closeReason`, `closedAt` and the step timestamps, plus `autoCompleteAt`) | its requester, its assigned courier, or ADMIN / OWNER; anyone else 404 |
 | `GET /requests/mine?role=requester&state=` | the caller's requests as requester, optionally in one state | the caller |
 | `GET /requests/mine?role=courier&state=` | the caller's assigned deliveries | the caller |
 | `GET /users/{id}/requests?state=` | that user's requests as requester or courier (admin view) | ADMIN / OWNER; anyone else 403 |

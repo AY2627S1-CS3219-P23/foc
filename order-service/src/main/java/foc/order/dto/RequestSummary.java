@@ -16,6 +16,10 @@
  * active and for requests closed before it was recorded (team decision:
  * the admin failed-orders table shows it). Author review: Ryan Ang,
  * pending pull request review.
+ * 2026-10-29, Claude Code (Opus 5.5), issue #241: autoCompleteAt, null
+ * unless ARRIVED (team decision: the requester's cards show the time left
+ * and hide "Report a problem" after it). Author review: Ryan Ang, pending
+ * pull request review.
  */
 package foc.order.dto;
 
@@ -28,12 +32,13 @@ import java.time.Instant;
 
 public record RequestSummary(Long id, OrderStates status, CloseReason closeReason, String supplierName,
         String dropoffLocation, String item, Integer creditAmount, Instant deadline, Instant createdAt,
-        Instant closedAt, Dispute dispute) {
+        Instant closedAt, Instant autoCompleteAt, Dispute dispute) {
 
-    // dispute: the request's stored dispute, null if it has none
-    public static RequestSummary of(Requests r, RequestDispute dispute) {
+    // autoCompleteAt: RequestsService.autoCompleteAt(r); dispute: the
+    // request's stored dispute, null if it has none
+    public static RequestSummary of(Requests r, Instant autoCompleteAt, RequestDispute dispute) {
         return new RequestSummary(r.getId(), r.getStatus(), r.getCloseReason(), r.getSupplierName(),
                 r.getDropoffLocation(), r.getItem(), r.getCreditAmount(), r.getDeadline(), r.getCreatedAt(),
-                r.getClosedAt(), Dispute.of(dispute));
+                r.getClosedAt(), autoCompleteAt, Dispute.of(dispute));
     }
 }

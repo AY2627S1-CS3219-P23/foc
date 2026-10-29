@@ -14,6 +14,15 @@
 // 2026-10-20: My Requests refetches every 2 seconds while a request is
 // PENDING, and stops once none is.
 // Author review: [pending]
+// 2026-10-29, Claude Code (Opus 5.5), issue #241: fixtures carry
+// autoCompleteAt; My Requests lists DISPUTED; "Confirm delivery" asks
+// first and going back changes nothing; the countdown comes from the list
+// item; "Report a problem" shows only while order-service would accept it
+// and disappears when the window closes; the dispute dialog's checks, its
+// /dispute body and a 409 shown in it; a DISPUTED card's category; the
+// confirm dialog's link closing with the window; History's RESOLVED rows
+// and their amounts.
+// Author review: Ryan Ang, pending pull request review.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -43,6 +52,7 @@ const summary: RequestSummary = {
   creditAmount: 3,
   deadline: new Date(Date.now() + 3_600_000).toISOString(),
   createdAt: new Date().toISOString(),
+  autoCompleteAt: null,
 }
 
 const detail = (over: Partial<RequestDetail> = {}): RequestDetail => ({
@@ -407,7 +417,14 @@ describe('my requests', () => {
     await screen.findByText('Request #1')
     expect(mine).toHaveBeenLastCalledWith({
       role: 'requester',
-      state: ['PENDING', 'CREATED', 'ACCEPTED', 'COLLECTED', 'ARRIVED'],
+      state: [
+        'PENDING',
+        'CREATED',
+        'ACCEPTED',
+        'COLLECTED',
+        'ARRIVED',
+        'DISPUTED',
+      ],
       page: 0,
       size: 10,
     })
@@ -436,7 +453,14 @@ describe('my requests', () => {
       within(group)
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['All active', 'Open', 'Accepted', 'Collected', 'Arrived'])
+    ).toEqual([
+      'All active',
+      'Open',
+      'Accepted',
+      'Collected',
+      'Arrived',
+      'Disputed',
+    ])
   })
 
   it('explains a PENDING and a REJECTED request', async () => {
@@ -505,17 +529,13 @@ describe('my requests', () => {
     await waitFor(() => expect(mine).toHaveBeenCalledTimes(2))
   })
 
-  it('confirms an ARRIVED request, showing the courier and the auto-complete time', async () => {
+  it("confirms an ARRIVED request only from the dialog, showing the courier and order-service's auto-complete time", async () => {
     const user = userEvent.setup()
     vi.spyOn(orderApi, 'listMyRequests').mockResolvedValue(
-      pageOf([{ ...summary, status: 'ARRIVED' }]),
+      pageOf([arrived(40 * 60_000)]),
     )
     vi.spyOn(orderApi, 'getRequest').mockResolvedValue(
-      detail({
-        status: 'ARRIVED',
-        courierId: 9,
-        arrivedAt: new Date().toISOString(),
-      }),
+      detail({ status: 'ARRIVED', courierId: 9 }),
     )
     const complete = vi
       .spyOn(orderApi, 'complete')
@@ -523,34 +543,311 @@ describe('my requests', () => {
     renderAt('/my-requests')
 
     expect(await screen.findByText('dave')).toBeInTheDocument()
-    expect(screen.getByText(/Auto-completes at/)).toBeInTheDocument()
+    expect(screen.getByText(/Auto-completes in 40 min/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Confirm delivery' }))
+
+    const dialog = within(
+      screen.getByRole('dialog', { name: 'Confirm delivery?' }),
+    )
+    expect(dialog.getByText('3 Credits')).toBeInTheDocument()
+    expect(dialog.getByText(/can’t be undone/)).toBeInTheDocument()
+    expect(complete).not.toHaveBeenCalled()
+    await user.click(dialog.getByRole('button', { name: 'Confirm delivery' }))
 
     expect(complete).toHaveBeenCalledWith(1)
     expect(await screen.findByText(/Delivery confirmed/)).toBeInTheDocument()
   })
 
-  it('offers no dispute or re-release (the backend has neither)', async () => {
+  it('changes nothing when the confirm dialog is cancelled', async () => {
+    const user = userEvent.setup()
+    const mine = vi
+      .spyOn(orderApi, 'listMyRequests')
+      .mockResolvedValue(pageOf([arrived(40 * 60_000)]))
+    vi.spyOn(orderApi, 'getRequest').mockResolvedValue(
+      detail({ status: 'ARRIVED', courierId: 9 }),
+    )
+    const complete = vi.spyOn(orderApi, 'complete')
+    renderAt('/my-requests')
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Confirm delivery' }),
+    )
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Cancel',
+      }),
+    )
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(complete).not.toHaveBeenCalled()
+    expect(mine).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers "Report a problem" only while order-service would accept it', async () => {
+    const past = new Date(Date.now() - 60_000).toISOString()
     vi.spyOn(orderApi, 'listMyRequests').mockResolvedValue(
       pageOf([
-        { ...summary, id: 1, status: 'EXPIRED' },
-        { ...summary, id: 2, status: 'ARRIVED' },
+        arrived(40 * 60_000, 1),
+        // past autoCompleteAt, the sweep not run yet
+        arrived(-60_000, 2),
+        // no autoCompleteAt known
+        { ...summary, id: 3, status: 'ARRIVED' },
+        { ...summary, id: 4, status: 'COLLECTED', deadline: past },
+        { ...summary, id: 5, status: 'COLLECTED' },
+        { ...summary, id: 6, status: 'EXPIRED' },
       ]),
+    )
+    vi.spyOn(orderApi, 'getRequest').mockImplementation(async (id) =>
+      detail({ id, courierId: 9 }),
+    )
+    renderAt('/my-requests')
+
+    const card = async (id: number) => {
+      const heading = await screen.findByText(`Request #${id}`)
+      return within(heading.closest('li') as HTMLElement)
+    }
+    const report = { name: 'Report a problem' }
+    expect((await card(1)).getByRole('button', report)).toBeInTheDocument()
+    expect((await card(2)).queryByRole('button', report)).toBeNull()
+    expect(
+      (await card(2)).getByText(/Completing automatically…/),
+    ).toBeInTheDocument()
+    expect((await card(2)).queryByText(/Auto-completes in/)).toBeNull()
+    expect((await card(3)).queryByRole('button', report)).toBeNull()
+    expect((await card(4)).getByRole('button', report)).toBeInTheDocument()
+    expect((await card(5)).queryByRole('button', report)).toBeNull()
+    expect((await card(6)).queryByRole('button', report)).toBeNull()
+  })
+
+  it('hides "Report a problem" once the window closes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      vi.spyOn(orderApi, 'listMyRequests').mockResolvedValue(
+        pageOf([arrived(3000)]),
+      )
+      vi.spyOn(orderApi, 'getRequest').mockResolvedValue(
+        detail({ status: 'ARRIVED', courierId: 9 }),
+      )
+      renderAt('/my-requests')
+
+      await screen.findByRole('button', { name: 'Report a problem' })
+      await vi.advanceTimersByTimeAsync(4000)
+
+      expect(
+        screen.queryByRole('button', { name: 'Report a problem' }),
+      ).not.toBeInTheDocument()
+      expect(screen.getByText(/Completing automatically…/)).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reports a problem: category required, a note required for Other, then /dispute', async () => {
+    const user = userEvent.setup()
+    const mine = vi
+      .spyOn(orderApi, 'listMyRequests')
+      .mockResolvedValue(pageOf([arrived(40 * 60_000)]))
+    vi.spyOn(orderApi, 'getRequest').mockResolvedValue(
+      detail({ status: 'ARRIVED', courierId: 9 }),
+    )
+    const dispute = vi
+      .spyOn(orderApi, 'dispute')
+      .mockResolvedValue({ message: 'Request 1 disputed' })
+    renderAt('/my-requests')
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Report a problem' }),
+    )
+    const dialog = within(
+      screen.getByRole('dialog', { name: 'Report a problem' }),
+    )
+    await user.click(dialog.getByRole('button', { name: 'Report problem' }))
+    expect(dialog.getByText('Choose what went wrong.')).toBeInTheDocument()
+
+    await user.click(dialog.getByLabelText('Other'))
+    await user.click(dialog.getByRole('button', { name: 'Report problem' }))
+    expect(dialog.getByText('Describe the problem.')).toBeInTheDocument()
+
+    await user.type(dialog.getByLabelText(/Details/), 'Courier left early')
+    await user.click(dialog.getByRole('button', { name: 'Report problem' }))
+
+    expect(dispute).toHaveBeenCalledTimes(1)
+    expect(dispute).toHaveBeenCalledWith(1, {
+      category: 'OTHER',
+      note: 'Courier left early',
+    })
+    expect(
+      await screen.findByText(/Problem reported for request #1/),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() => expect(mine).toHaveBeenCalledTimes(2))
+  })
+
+  it('refuses a note over 500 characters before calling the API', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(orderApi, 'listMyRequests').mockResolvedValue(
+      pageOf([arrived(40 * 60_000)]),
     )
     vi.spyOn(orderApi, 'getRequest').mockResolvedValue(
       detail({ status: 'ARRIVED', courierId: 9 }),
     )
+    const dispute = vi.spyOn(orderApi, 'dispute')
     renderAt('/my-requests')
 
-    await screen.findByText('Request #1')
+    await user.click(
+      await screen.findByRole('button', { name: 'Report a problem' }),
+    )
+    const dialog = within(screen.getByRole('dialog'))
+    await user.click(dialog.getByLabelText('Damaged item'))
+    await user.click(dialog.getByLabelText(/Details/))
+    await user.paste('x'.repeat(501))
+    await user.click(dialog.getByRole('button', { name: 'Report problem' }))
+
     expect(
-      screen.queryByRole('button', { name: /Dispute/ }),
+      dialog.getByText('Keep the note to 500 characters.'),
+    ).toBeInTheDocument()
+    expect(dispute).not.toHaveBeenCalled()
+  })
+
+  it("shows order-service's 409 in the dialog", async () => {
+    const user = userEvent.setup()
+    vi.spyOn(orderApi, 'listMyRequests').mockResolvedValue(
+      pageOf([arrived(40 * 60_000)]),
+    )
+    vi.spyOn(orderApi, 'getRequest').mockResolvedValue(
+      detail({ status: 'ARRIVED', courierId: 9 }),
+    )
+    vi.spyOn(orderApi, 'dispute').mockRejectedValue(
+      new ApiError(409, {
+        status: 409,
+        detail: 'The dispute window closed at 2026-10-29T07:00:00Z',
+      }),
+    )
+    renderAt('/my-requests')
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Report a problem' }),
+    )
+    const dialog = within(screen.getByRole('dialog'))
+    await user.click(dialog.getByLabelText('Wrong item'))
+    await user.click(dialog.getByRole('button', { name: 'Report problem' }))
+
+    expect(await dialog.findByRole('alert')).toHaveTextContent(
+      'The dispute window closed at 2026-10-29T07:00:00Z',
+    )
+  })
+
+  it("drops the confirm dialog's report link once the window closes", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const user = userEvent.setup({
+        advanceTimers: vi.advanceTimersByTime.bind(vi),
+      })
+      vi.spyOn(orderApi, 'listMyRequests').mockResolvedValue(
+        pageOf([arrived(3000)]),
+      )
+      vi.spyOn(orderApi, 'getRequest').mockResolvedValue(
+        detail({ status: 'ARRIVED', courierId: 9 }),
+      )
+      renderAt('/my-requests')
+
+      await user.click(
+        await screen.findByRole('button', { name: 'Confirm delivery' }),
+      )
+      const dialog = within(
+        screen.getByRole('dialog', { name: 'Confirm delivery?' }),
+      )
+      expect(
+        dialog.getByRole('button', { name: 'Report a problem' }),
+      ).toBeInTheDocument()
+
+      await vi.advanceTimersByTimeAsync(4000)
+
+      expect(
+        dialog.queryByRole('button', { name: 'Report a problem' }),
+      ).not.toBeInTheDocument()
+      // confirming is still offered
+      expect(
+        dialog.getByRole('button', { name: 'Confirm delivery' }),
+      ).toBeEnabled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("opens the report dialog from the confirm dialog's link", async () => {
+    const user = userEvent.setup()
+    vi.spyOn(orderApi, 'listMyRequests').mockResolvedValue(
+      pageOf([arrived(40 * 60_000)]),
+    )
+    vi.spyOn(orderApi, 'getRequest').mockResolvedValue(
+      detail({ status: 'ARRIVED', courierId: 9 }),
+    )
+    const complete = vi.spyOn(orderApi, 'complete')
+    renderAt('/my-requests')
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Confirm delivery' }),
+    )
+    await user.click(
+      within(
+        screen.getByRole('dialog', { name: 'Confirm delivery?' }),
+      ).getByRole('button', { name: 'Report a problem' }),
+    )
+
+    expect(
+      screen.queryByRole('dialog', { name: 'Confirm delivery?' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: /Re-release/ }),
-    ).not.toBeInTheDocument()
+      screen.getByRole('dialog', { name: 'Report a problem' }),
+    ).toBeInTheDocument()
+    expect(complete).not.toHaveBeenCalled()
+  })
+
+  it('shows a DISPUTED request with its category and no actions', async () => {
+    vi.spyOn(orderApi, 'listMyRequests').mockResolvedValue(
+      pageOf([
+        {
+          ...summary,
+          status: 'DISPUTED',
+          dispute: {
+            category: 'WRONG_ITEM',
+            disputeNote: 'Got a mocha',
+            raisedAt: new Date().toISOString(),
+            autoEscalated: false,
+            resolvedAt: null,
+            resolvedBy: null,
+            courierAmount: null,
+            requesterAmount: null,
+            resolutionNote: null,
+          },
+        },
+      ]),
+    )
+    vi.spyOn(orderApi, 'getRequest').mockResolvedValue(
+      detail({ status: 'DISPUTED', courierId: 9 }),
+    )
+    renderAt('/my-requests')
+
+    expect(
+      await screen.findByText(/PROBLEM REPORTED — WRONG ITEM/),
+    ).toBeInTheDocument()
+    expect(screen.getByText('“Got a mocha”')).toBeInTheDocument()
+    expect(
+      screen.queryAllByRole('button', { name: /Confirm|Report|Cancel/ }),
+    ).toHaveLength(0)
   })
 })
+
+// An ARRIVED list item that auto-completes `inMs` from now.
+function arrived(inMs: number, id = 1): RequestSummary {
+  return {
+    ...summary,
+    id,
+    status: 'ARRIVED',
+    autoCompleteAt: new Date(Date.now() + inMs).toISOString(),
+  }
+}
 
 describe('request history', () => {
   it('starts on all finished requests and switches sides', async () => {
@@ -564,7 +861,7 @@ describe('request history', () => {
     expect((await screen.findAllByText('−3 credits')).length).toBeGreaterThan(0)
     expect(mine).toHaveBeenLastCalledWith({
       role: 'requester',
-      state: ['COMPLETED', 'CANCELLED', 'EXPIRED', 'REJECTED'],
+      state: ['COMPLETED', 'CANCELLED', 'EXPIRED', 'REJECTED', 'RESOLVED'],
       page: 0,
       size: 10,
     })
@@ -575,7 +872,7 @@ describe('request history', () => {
     expect(mine).toHaveBeenLastCalledWith(
       expect.objectContaining({
         role: 'courier',
-        state: ['COMPLETED', 'EXPIRED'],
+        state: ['COMPLETED', 'EXPIRED', 'RESOLVED'],
       }),
     )
     // a courier's request can't be cancelled or rejected
@@ -583,7 +880,51 @@ describe('request history', () => {
       within(screen.getByRole('group', { name: 'Filter by state' }))
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['All finished', 'Completed', 'Expired'])
+    ).toEqual(['All finished', 'Completed', 'Expired', 'Resolved'])
+  })
+
+  it("shows a resolved request's courier share, labelled by outcome", async () => {
+    const user = userEvent.setup()
+    const resolved = (id: number, courierAmount: number): RequestSummary => ({
+      ...summary,
+      id,
+      status: 'RESOLVED',
+      closeReason: 'DISPUTE_RESOLVED',
+      dispute: {
+        category: 'WRONG_ITEM',
+        disputeNote: null,
+        raisedAt: new Date().toISOString(),
+        autoEscalated: false,
+        resolvedAt: new Date().toISOString(),
+        resolvedBy: 99,
+        courierAmount,
+        requesterAmount: 3 - courierAmount,
+        resolutionNote: null,
+      },
+    })
+    vi.spyOn(orderApi, 'listMyRequests').mockResolvedValue(
+      pageOf([resolved(1, 1), resolved(2, 0), resolved(3, 3)]),
+    )
+    renderAt('/history')
+
+    // the table is re-rendered after a tab switch, so look it up each time
+    const row = (id: number) =>
+      within(
+        within(screen.getByRole('table'))
+          .getByText(`#${id}`)
+          .closest('tr') as HTMLElement,
+      )
+    await screen.findByRole('table')
+    expect(row(1).getByText('−1 credits')).toBeInTheDocument()
+    expect(row(1).getByText('Resolved: split')).toBeInTheDocument()
+    expect(row(2).getByText('0 credits')).toBeInTheDocument()
+    expect(row(2).getByText('Resolved: refunded')).toBeInTheDocument()
+    expect(row(3).getByText('−3 credits')).toBeInTheDocument()
+    expect(row(3).getByText('Resolved: paid')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: /As Courier/ }))
+    expect((await screen.findAllByText('+1 credits')).length).toBeGreaterThan(0)
+    expect(row(2).getByText('0 credits')).toBeInTheDocument()
   })
 
   it('steps back a page when the requested page no longer exists', async () => {

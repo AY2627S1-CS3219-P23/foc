@@ -19,6 +19,10 @@
 // CloseReason, closeReason / closedAt on a list item (closedAt is a team
 // decision) and the admin list's parameters.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-29, Claude Code (Opus 5.5), issue #241: autoCompleteAt on a list
+// item, worked out by order-service (team decision); the dispute object
+// (DSP-5) and its categories (DSP-7); the /dispute and /resolve bodies.
+// Author review: Ryan Ang, pending pull request review.
 
 // order-service's OrderStates, by name
 export type RequestStatus =
@@ -43,6 +47,24 @@ export type CloseReason =
   | 'DEADLINE_PASSED'
   | 'DISPUTE_RESOLVED'
 
+// What a requester can report (DSP-7)
+export type DisputeCategory =
+  'NOT_DELIVERED' | 'WRONG_ITEM' | 'DAMAGED' | 'OTHER'
+
+// A request's dispute; the resolution fields are null until an admin
+// resolves it
+export interface Dispute {
+  category: DisputeCategory
+  disputeNote: string | null
+  raisedAt: string
+  autoEscalated: boolean // raised by the expiry sweep, not the requester
+  resolvedAt: string | null
+  resolvedBy: number | null
+  courierAmount: number | null
+  requesterAmount: number | null
+  resolutionNote: string | null
+}
+
 // One request in a list (GET /requests, /requests/mine)
 export interface RequestSummary {
   id: number
@@ -58,6 +80,12 @@ export interface RequestSummary {
   // was recorded
   closeReason?: CloseReason | null
   closedAt?: string | null
+  // when an ARRIVED request completes by itself, which also closes its
+  // dispute window; null in any other state
+  autoCompleteAt: string | null
+  // null unless the request was disputed; the dev mock leaves it out
+  // until it is
+  dispute?: Dispute | null
 }
 
 // One request in full (GET /requests/{id}): its requester, its courier, or
@@ -68,7 +96,7 @@ export interface RequestDetail extends RequestSummary {
   supplierId: number
   acceptedAt: string | null
   collectedAt: string | null
-  arrivedAt: string | null // starts the 1-hour auto-complete window
+  arrivedAt: string | null
 }
 
 // POST /create; the requester is the signed-in user
@@ -79,6 +107,21 @@ export interface CreateRequestInput {
   item: string
   creditAmount: number
   deadline: string // ISO-8601 instant
+}
+
+// POST /dispute (the requester); note at most 500 characters, required
+// for OTHER
+export interface DisputeInput {
+  category: DisputeCategory
+  note?: string
+}
+
+// POST /resolve (ADMIN / OWNER, not a party); the two shares add up to
+// the reward
+export interface ResolveInput {
+  courierAmount: number
+  requesterAmount: number
+  note?: string
 }
 
 // What every POST step answers, e.g. "Request 5 accepted"

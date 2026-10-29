@@ -7,6 +7,11 @@
  * plain unit test: RequestsService built by hand with a 2 h delay and
  * mocked collaborators, no Spring context.
  * Author review: Ryan Ang, pending pull request review.
+ * 2026-10-29, Claude Code (Opus 5.5), issue #241: autoCompleteAt, the time
+ * the window closes, from the same delay (team decision): arrivedAt +
+ * delay while ARRIVED, null in any other state or with no arrivedAt;
+ * an ARRIVED request with no arrivedAt cannot be disputed (409, team
+ * decision). Author review: Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -63,6 +68,41 @@ class DisputeWindowTests {
 
 		Instant windowEnd = request.getArrivedAt().plus(AUTO_COMPLETE_DELAY);
 		assertEquals("The dispute window closed at " + windowEnd.truncatedTo(ChronoUnit.SECONDS), e.getMessage());
+		assertEquals(OrderStates.ARRIVED, request.getStatus());
+		verify(outbox, never()).enqueue(any(), anyLong());
+	}
+
+	@Test
+	void autoCompleteAtIsArrivedAtPlusTheConfiguredDelay() {
+		Requests request = arrivedMinutesAgo(3L, 10);
+
+		assertEquals(request.getArrivedAt().plus(AUTO_COMPLETE_DELAY), requestsService.autoCompleteAt(request));
+	}
+
+	@Test
+	void autoCompleteAtIsNullUnlessArrivedWithAnArrivalTime() {
+		Requests collected = arrivedMinutesAgo(4L, 10);
+		collected.setStatus(OrderStates.COLLECTED);
+		assertNull(requestsService.autoCompleteAt(collected));
+
+		Requests completed = arrivedMinutesAgo(5L, 10);
+		completed.setStatus(OrderStates.COMPLETED);
+		assertNull(requestsService.autoCompleteAt(completed));
+
+		Requests noArrivalTime = arrivedMinutesAgo(6L, 10);
+		noArrivalTime.setArrivedAt(null);
+		assertNull(requestsService.autoCompleteAt(noArrivalTime));
+	}
+
+	@Test
+	void anArrivedRequestWithNoArrivalTimeCannotBeDisputed() {
+		Requests request = arrivedMinutesAgo(7L, 10);
+		request.setArrivedAt(null);
+
+		IllegalStateException e = assertThrows(IllegalStateException.class,
+				() -> requestsService.dispute(7L, REQUESTER_ID, "WRONG_ITEM", null));
+
+		assertEquals("No arrival time is recorded for this request", e.getMessage());
 		assertEquals(OrderStates.ARRIVED, request.getStatus());
 		verify(outbox, never()).enqueue(any(), anyLong());
 	}

@@ -48,6 +48,61 @@ Entry template:
 ```
 
 ---
+## 2026-10-29 — Ryan Ang (feat: report a problem and admin dispute queue, issue #241)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** order-service (`RequestsService.java`: `autoCompleteAt()`,
+  also used by `dispute()`'s window check; `RequestSummary.java`,
+  `RequestDetail.java`: `autoCompleteAt`; `RequestsController.java`
+  passes it into every list and the detail; `README.md`; tests:
+  `DisputeWindowTests`, `RequestsReadEndpointsTests`).
+  web (`features/order/components/DisputeModal.tsx` and
+  `DisputeQueueSection.tsx` new; `features/order/types.ts`, `status.ts`,
+  `api.ts`, `adminApi.ts`, `orderApiMock.ts`;
+  `features/notifications/eventMessage.ts`; `routes/my-requests.tsx`,
+  `routes/admin.tsx`, `routes/request-history.tsx`; tests: `orders.test.tsx`, `admin.test.tsx`,
+  `notification-center.test.tsx`, `request-refetch.test.tsx`;
+  `AGENTS.md`). `docs/disputes.md` (#241 revision entry). `README.md`
+  (AI Use Summary and header line).
+- **Prompt(s):** Implement issue #241 as written there (DSP-3, DSP-5,
+  DSP-7 to DSP-9). The issue left two questions open; team decisions:
+  - `RequestSummary` and `RequestDetail` carry a nullable
+    `autoCompleteAt`, worked out by order-service in one method
+    (`arrivedAt` + `ORDER_AUTO_COMPLETE_AFTER_MS` while ARRIVED, else
+    null), which `dispute()` also uses; the web app drops its 1 h
+    constant.
+  - "Report a problem" shows on an ARRIVED order before
+    `autoCompleteAt` and on a COLLECTED order past its deadline; an
+    ARRIVED order past `autoCompleteAt` shows "Completing
+    automatically…" with no countdown and no button; the clock ticks.
+  The tool then implemented the rest of the issue's checklist and listed
+  the choices it had made within that scope. The team's answers:
+  - DISPUTED stays on My Requests (with its own chip), and "Confirm
+    delivery" stays available past `autoCompleteAt`; "no button" meant
+    "Report a problem" only, and the confirm dialog's link follows the
+    same rule.
+  - RESOLVED orders are finished and History lists them for both
+    parties; the amount is the courier's share (requester −, courier +,
+    0 for a full refund) with a "Resolved: refunded / paid / split"
+    label.
+  - An ARRIVED order with no `arrivedAt` is refused by `/dispute` with
+    409 "No arrival time is recorded for this request", so the server
+    and the web agree; a test covers it.
+  - `listDisputes` stays a wrapper over `GET /requests/admin?state=DISPUTED`;
+    the badge uses `totalElements`.
+  The split is entered as the courier's share, the requester's being the
+  rest; one ticking clock on My Requests serves every card and dialog.
+- **Author review:** order-service `./mvnw test` green (177 tests, 5 new).
+  web: `tsc -b`, `eslint` and `prettier` clean; `vitest run` passes
+  everything touched (353 tests), except that the full parallel run can
+  time out "changing the search or role filter goes back to page 1" in
+  the Users section at 5 s, which also happens on `main` (it passes when
+  `admin.test.tsx` runs alone). Desktop (1280 px) and mobile (375 px)
+  checked in a browser against a stubbed API: My Requests, both dialogs,
+  History and the admin Disputes section and resolve dialog, with no
+  horizontal overflow. Ryan Ang reviews via pull request.
+
+---
 ## 2026-10-28 — Ryan Ang (fix: PR #265 review, issue #242)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate

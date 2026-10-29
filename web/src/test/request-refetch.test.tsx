@@ -44,6 +44,7 @@ const summary: RequestSummary = {
   creditAmount: 3,
   deadline: new Date(Date.now() + 3_600_000).toISOString(),
   createdAt: new Date().toISOString(),
+  autoCompleteAt: null,
 }
 
 const detail = (over: Partial<RequestDetail> = {}): RequestDetail => ({
