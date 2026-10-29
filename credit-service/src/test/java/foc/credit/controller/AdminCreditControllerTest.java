@@ -11,6 +11,8 @@
  * its boundary, PT0S, and the olderThan 400s. PR #248 review: truncated
  * at exactly the cap and one past it; a blank olderThan takes the
  * default, and weeks, months and years are refused with the new message.
+ * 2026-10-28, issue #267: the expected count is the open accounts
+ * (team decision USR-7).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.controller;
@@ -112,7 +114,7 @@ class AdminCreditControllerTest extends PostgresTestContainer {
         // at least two accounts, so 2 * count + 1 shares out as 2 each and 1 over
         operations.getOrCreate("u-" + UUID.randomUUID());
         operations.getOrCreate("u-" + UUID.randomUUID());
-        long count = accounts.count();
+        long count = accounts.countOpen();
         jdbc.update("update common_pool set balance = ?", 2 * count + 1);
         run("9998-12", 4, 0, "2026-09-30T16:00:00Z");
         run("9999-01", 7, 1, "2026-10-31T16:00:00Z");

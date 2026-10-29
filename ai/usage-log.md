@@ -48,6 +48,126 @@ Entry template:
 ```
 
 ---
+## 2026-10-29 — Ryan Ang (fix: PR #268 review, issue #267)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** credit-service (`ConsumedUserEventsHandledTest` new;
+  `ExpiryAndRedistributionTest` comment placement; `AGENTS.md`
+  lock-order invariant); user-service (`OwnerSignupServiceTest` comment
+  placement); this log's #267 entry.
+- **Prompt(s):** Address the PR #268 review comments:
+  - A user event bound to the queue without a handler arm would be
+    acked and logged as `DUPLICATE`. Added a test, modelled on
+    `ConsumedEventsHandledTest`, tying `CONSUMED_USER_EVENTS` to
+    `UserEventHandler`'s arms; the handler is unchanged.
+  - The redistribution lock-order invariant named the renamed
+    `findAllForUpdate`; it now names `findAllOpenForUpdate` and says
+    open accounts.
+  - The #267 entry listed `RabbitMqTopologyInitializer` as new in
+    user-service, though the branch has none; removed.
+  - Two misplaced test comments moved to their own lines.
+  - The per-account purge insert under row locks was left for a team
+    decision.
+- **Author review:** full credit-service (360 tests) and user-service
+  (426 tests) suites run with Docker up, Testcontainers included: all
+  passing, among them the new `ConsumedUserEventsHandledTest`,
+  `ExpiryAndRedistributionTest` and `OwnerSignupServiceTest`.
+
+## 2026-10-28 — Ryan Ang (feat: user events for credit accounts, issue #267)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, refactor, docs
+- **Scope:** foc-contracts (`events/user/`: `UserEvent`, `UserCreated`,
+  `UserPurged` new; `USER_EVENTS_EXCHANGE`; registry entries; two
+  fixtures; `DomainEvent.parties` comment; registry and record tests;
+  `README.md`, `AGENTS.md`). user-service (V9 `outbox_event`;
+  `OutboxEvent`, `OutboxEventRepository`, `EventOutbox`,
+  `EventPublisher`, `OutboxPublisher`, `messaging/rabbitmq/`
+  `RabbitEventPublisher`, `RabbitMqTopology` new, copied from
+  order-service;
+  `AuthService.verifySignup` and `AccountPurgeScheduler` write the
+  events; pom, Dockerfile, `application.yaml`, test yaml; tests:
+  `AuthServiceTest`, `AccountPurgeSchedulerTest`, `FlywayMigrationTest`).
+  credit-service (V6 `closed_at` and `CLOSURE`; `CreditAccount`,
+  `CreditHistoryType`, `CreditAccountRepository`; `CreditOperations` /
+  `CreditOperationsService` open, close and the closed-account sweep;
+  `AccountResult`, `UserEventHandler`, `UserEventsListener` new;
+  `RetryingListener` new, `RequestEventsListener`'s failure path moved
+  there unchanged; `RabbitMqTopology` user-events queues;
+  `RedistributionService`, `PoolQueryService` open accounts only;
+  tests: `CreditOperationsServiceTest`, `ExpiryAndRedistributionTest`,
+  `EntityMappingTest`, `RabbitMqTopologyTest`, `PoolQueryServiceTest`,
+  `AdminCreditControllerTest`, `CreditOperationsConfigurationTest`,
+  `UserEventHandlerTest` and `UserEventsListenerTest` new; `AGENTS.md`).
+  `compose.yaml`, `.github/workflows/ci.yml`, `docs/credit-service.md`
+  (D14 and the sections it touches), `docs/architecture.md` / `.mmd`,
+  `README.md` (AI Use Summary and header line).
+- **Prompt(s):** Asked what the codebase already had for a user-created
+  event and a purged-account event; the tool listed the existing pieces
+  and the open questions, without recommending answers. The team then
+  decided USR-1 to USR-9 (transcribed in issue #267 and as D14 in
+  `docs/credit-service.md`) and asked for one issue covering all of it,
+  implemented in one change. Where the decisions left details open the
+  tool chose and lists them here for the author to confirm:
+  - `correlationId` of a user event is its own `eventId` (no flow to
+    correlate with).
+  - A credit reaching a closed account is first booked as usual (the
+    `RELEASE` / `TRANSFER_IN` row and its lot), then moved to the pool
+    in the same transaction with a `CLOSURE` row, so the history replay
+    and the lot invariants still hold.
+  - A blank `userId` is retried and then dead-lettered like any failure.
+  - The user-events queue reuses the request queue's retry values, and
+    user-service's rabbit health check stays on, as in order-service.
+  - The listener's failure path was moved, unchanged, into a shared base
+    class rather than copied a second time.
+- **Author review:** foc-contracts `./mvnw install` green; user-service
+  `./mvnw test` green (389 tests; new: user.created on a verified
+  sign-up and none on a failed one, one user.purged per purged account
+  and none when the bookmark cleanup fails, V9 in the migration test);
+  credit-service `./mvnw test` green (355 tests; new: open and close by
+  account state, closure moving the balance to the pool with held
+  credits kept, a release, a transfer and both resolution shares
+  reaching a closed account going on to the pool, a close racing a
+  first get-or-create, a closed account getting no redistribution share,
+  the user-events listener, handler and topology, the closed_at mapping).
+  Docker smoke test on a separate compose project: a sign-up verified
+  through Mailpit produced user.created and a credit account with 5
+  credits and no credit call; a soft delete backdated 40 days was purged
+  and the account closed with its 5 credits in the common pool.
+- **Same day, team review of the five details above and two side
+  effects (team decisions, transcribed):** the correlationId is the
+  user's id; booking the credit and then sweeping it with `CLOSURE`
+  stays; a blank `userId` is dead-lettered at once (`NO_USER`) before
+  any query; the retry values and the shared base class stay, with the
+  user-events listener given its own retry, returned-copy, requeue and
+  dead-letter tests. user-service no longer waits for RabbitMQ in
+  compose, has no startup topology declaration (Spring AMQP declares
+  the exchange on connect) and its rabbit health check is off. Sent
+  user events are purged after 30 days, a copy of credit-service's
+  retention purge (V10 index, scheduler, query), with one scheduler
+  thread per job. The redistribution test now also checks that the pool
+  preview counts the same open accounts and the remainder goes to open
+  accounts only. Tests: user-service `./mvnw test` green (394; new: the
+  retention scheduler and query, and a Testcontainers RabbitMQ test
+  that an event published before any queue is bound is returned, kept
+  and retried, then delivered with the user's id as correlationId);
+  credit-service `./mvnw test` green (358).
+- **Same day, USR-8 revised (team decision, transcribed):** every insert
+  of a user row writes `user.created` in the same transaction, through
+  one shared method. New `UserCreation` (insert + outbox write);
+  `AuthService.verifySignup`, `OwnerSignupService.verifySignup` and
+  `DemoAccountsSeeder` insert through it. Tests: `UserCreatedEventTest`
+  new (sign-up, owner setup and the seeder each leave exactly one
+  `user.created` per user, with the user's id as correlationId);
+  `OwnerSignupServiceTest` asserts the event; `DemoAccountsSeederTest`
+  stubs `saveAndFlush` and pins one event per seeded account and none
+  on a rerun; `AuthServiceTest` builds a real `UserCreation` over its
+  mocks.
+- **Same day, CI fix:** notification-service's `DomainEventContractTest`
+  iterates the whole event registry and knew only request and credit
+  events, so the two user events failed it. The test now expects
+  `user-service` as their producer and checks their `userId` where the
+  others' `requestId` is checked; notification-service `./mvnw test`
+  green (91). Pending pull request review.
 ## 2026-10-28 — Ryan Ang (fix: PR #265 review, issue #242)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate

@@ -7,6 +7,7 @@
  * run, in Singapore time, for a recorded month, a month still missing,
  * and the first hours of a Singapore month that is still the previous
  * month in UTC.
+ * 2026-10-28, issue #267: the count is the open accounts (USR-7).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -111,7 +112,7 @@ class PoolQueryServiceTest {
         CommonPool common = mock(CommonPool.class);
         when(common.getBalance()).thenReturn(balance);
         when(pool.findById(CommonPool.ID)).thenReturn(Optional.of(common));
-        when(accounts.count()).thenReturn(accountCount);
+        when(accounts.countOpen()).thenReturn(accountCount);
         when(runs.findAll(any(Pageable.class)))
             .thenReturn(new PageImpl<>(last == null ? List.of() : List.of(last)));
     }

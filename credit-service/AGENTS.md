@@ -51,6 +51,11 @@
   route, its DTO and ReservationQueryService in the package map; V5 in
   the entity invariant (PR #247 review follow-up). PR #248 review: V5's
   index in the entity invariant.
+  2026-10-28, Claude Code (Opus 5.5), issue #267: the package map and
+  invariants updated for the user events (D14): V6, the user-events
+  listener and handler, RetryingListener, account closure and the
+  open-accounts query. PR #268 review: the redistribution lock-order
+  invariant names findAllOpenForUpdate.
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -72,8 +77,8 @@ IDs (D1–D13) when touching related code.
 | `security/` | `JwtVerifier` (HS256, shared `JWT_SECRET`), `JwtAuthenticationFilter`, 401/403 problem+json handlers |
 | `entity/` | One JPA entity per table (`CreditAccount`, `Reserved`, `CreditReservationSlice`, `CreditLot`, `CreditHistoryEntry`, `CommonPool`, `RedistributionRun`, `OutboxEvent`) and the `ReservationStatus` / `CreditHistoryType` enums. No logic |
 | `repository/` | One `JpaRepository` per entity, with the locking and insert-once queries the credit operations use |
-| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API, `PoolQueryService` and `ReservationQueryService`, the admin routes' reads, and `ExpiryAndRedistributionScheduler` with `LotExpiryService` and `RedistributionService` (D12), and `EarnedCreditLifetime`, the earned-credit expiry both the transfer and the redistribution use (D4), and `OutboxRetentionScheduler`, the daily purge of sent replies (D13) |
-| `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (queues, the five bindings, both exchanges), `RabbitMqTopologyInitializer`, `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), `RequestEventsListener` (settles each request event on the handler's outcome: ack, dead-letter, or a confirmed republish to the retry queue), and `DomainEventMessageConverter`, a copy of notification-service's |
+| `service/` | `CreditOperations` and its implementation `CreditOperationsService`, `ReplyOutbox` and its implementation `ReplyOutboxService`, `OutboxPublisher` (the scheduled poll) and the `ReplyPublisher` interface it sends through, `ReserveResult` / `SettleResult`, `RequestEventHandler`, which owns the transaction for one request event, `CreditQueryService` with `HistoryFilter`, the two reads behind the REST API, `PoolQueryService` and `ReservationQueryService`, the admin routes' reads, and `ExpiryAndRedistributionScheduler` with `LotExpiryService` and `RedistributionService` (D12), and `EarnedCreditLifetime`, the earned-credit expiry both the transfer and the redistribution use (D4), and `OutboxRetentionScheduler`, the daily purge of sent replies (D13), and `UserEventHandler` with `AccountResult`, which open and close an account for `user.created` / `user.purged` (D14) |
+| `messaging/rabbitmq/` | The only package that imports broker types: `RabbitMqTopology` (the request-events queues and five bindings, the user-events queues and two bindings, all three exchanges), `RabbitMqTopologyInitializer`, `RetryingListener` (the retry and dead-letter path both listeners share), `UserEventsListener` (acks every user event the handler applies, D14), `RabbitReplyPublisher` (the `ReplyPublisher` implementation: mandatory publish, correlated confirm), `RequestEventsListener` (settles each request event on the handler's outcome: ack, dead-letter, or a confirmed republish to the retry queue), and `DomainEventMessageConverter`, a copy of notification-service's |
 
 ## Invariants — do not break
 
@@ -84,9 +89,10 @@ IDs (D1–D13) when touching related code.
 - **The schema follows the design doc's "Database" section**: a schema
   change is a design change, so update the doc with it.
 - **Entities mirror the migrations** (V1, V2 for
-  `outbox_event.next_attempt_at`, and V4 for
-  `credit_reservation.courier_share`; V3 adds only an index, V5 a
-  CHECK and an index). With `ddl-auto: none` nothing validates the
+  `outbox_event.next_attempt_at`, V4 for
+  `credit_reservation.courier_share`, and V6 for
+  `credit_account.closed_at` and the `CLOSURE` history type; V3 adds
+  only an index, V5 a CHECK and an index). With `ddl-auto: none` nothing validates the
   mappings at startup; `EntityMappingTest` saves and reads each one back.
   A new column needs a migration, the entity field and that test.
 - **A reply is enqueued inside the transaction that owes it.**
@@ -171,8 +177,8 @@ IDs (D1–D13) when touching related code.
 - **The expiry and redistribution runs keep the D2 lock order.** Expiry
   is one transaction per account: the owner's account, then their lots
   read again under that lock, then the pool. Redistribution locks every
-  account with `CreditAccountRepository.findAllForUpdate`, then the
-  pool. That query orders by `user_id collate "C"` so it matches the
+  open account with `CreditAccountRepository.findAllOpenForUpdate`,
+  then the pool. That query orders by `user_id collate "C"` so it matches the
   Java `String.compareTo` order the transfer locks two accounts in;
   do not drop the collation.
 - **A month is redistributed once.** `RedistributionService` checks
@@ -191,6 +197,16 @@ IDs (D1–D13) when touching related code.
   instants and periods. `ExpiryAndRedistributionTest` commits and its
   redistributions share the pool out to every account in the test
   database, so its assertions are about changes, not totals.
+- **A closed account holds no available credits** (D14). Closing it
+  empties its lots into the pool with a `CLOSURE` row, and any
+  operation that credits a closed account moves what it brought to the
+  pool in the same transaction, after the row that brought it. A closed
+  account is never reopened: `getOrCreate`, `open` and a reserve find
+  the row and grant nothing. `CreditOperationsServiceTest` checks the
+  first rule after every test.
+- **Redistribution and the pool preview count the same accounts**:
+  `findAllOpenForUpdate` and `countOpen` both skip closed ones. Change
+  one, change the other.
 - **What each operation answers is specified** in the design doc ("What
   each operation answers"); the handler depends on it.
 - **The REST API only reads, and only the caller's own data.** The user

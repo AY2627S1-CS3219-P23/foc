@@ -255,6 +255,9 @@
   live refresh (issue #233), by Claude Code (Fable 5); extended again
   2026-10-28 for the PR #264 review round, by Claude Code (Opus 5).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-28: AI Use Summary extended for the user events that open and
+  close credit accounts (issue #267), by Claude Code (Opus 5.5).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1175,6 +1178,25 @@ ratee-only `parties`, and the decision to leave the review write-up out
 of the payload are the issue author's, recorded on #44; `stars` is
 boxed following the PR #163 review decision on `CreditReserved.amount`.
 Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) implemented the user events behind credit
+accounts (issue #267). foc-contracts gained `user.created`, `user.purged`
+and the `user-events` exchange; user-service publishes them through an
+outbox copied from order-service's, `user.created` when a verified
+sign-up inserts the user and `user.purged` inside the day-31 purge; and
+credit-service consumes them on its own queue: it opens the account,
+or closes it by moving every available credit to the common pool with a
+new `CLOSURE` history row (Flyway V6), sends credits that reach a closed
+account on to the pool, and shares redistribution among open accounts
+only. The event names and fields, the outbox, the account states and
+their handling, and the deploy order were decided by the team (USR-1 to
+USR-9) and transcribed into `docs/credit-service.md` as D14, with the
+review's follow-ups (user id as correlationId, an event naming no user
+dead-lettered at once, a User Service that neither waits for nor reports
+on the broker, and a 30-day purge of its sent events), and every path
+that inserts a user (sign-up, owner setup, the demo seeder) writing
+`user.created` through one shared method. Recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

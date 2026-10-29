@@ -14,6 +14,9 @@
  * 2026-10-28, Claude Code (Opus 5), issue #249: rating-events exchange
  * name added for the N1 rating system (scope decisions on #44); author
  * review: Leong Wei Zhi, pending pull request review.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: user-events exchange
+ * name added (team decision, USR-1); author review: Ryan Ang, pending
+ * pull request review.
  */
 package foc.contracts.events.core;
 
@@ -57,6 +60,14 @@ public final class EventContracts {
 	 * so the rated party is told without a synchronous call (D32, N1.1).
 	 */
 	public static final String RATING_EVENTS_EXCHANGE = "rating-events";
+
+	/**
+	 * Durable <strong>topic</strong> exchange for the user domain (USR-1,
+	 * issue #267): the User Service publishes account lifecycle facts
+	 * here ({@code user.created}, {@code user.purged}) and the Credit
+	 * Service consumes them.
+	 */
+	public static final String USER_EVENTS_EXCHANGE = "user-events";
 
 	private EventContracts() {
 	}

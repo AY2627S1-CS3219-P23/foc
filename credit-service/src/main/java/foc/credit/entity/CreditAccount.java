@@ -3,6 +3,8 @@
  * Tool: Claude Code (Opus 5.5), 2026-10-10.
  * Scope: JPA entity for the credit_account table, transcribed from
  * V1__baseline.sql (docs/credit-service.md "Schema"); no logic.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: closedAt, V6's
+ * closed_at (team decision USR-4).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.entity;
@@ -34,6 +36,10 @@ public class CreditAccount {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    // when the user was purged; null = open (USR-4)
+    @Column(name = "closed_at")
+    private Instant closedAt;
 
     protected CreditAccount() {
     }
@@ -67,5 +73,17 @@ public class CreditAccount {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Instant getClosedAt() {
+        return closedAt;
+    }
+
+    public void setClosedAt(Instant closedAt) {
+        this.closedAt = closedAt;
+    }
+
+    public boolean isClosed() {
+        return closedAt != null;
     }
 }

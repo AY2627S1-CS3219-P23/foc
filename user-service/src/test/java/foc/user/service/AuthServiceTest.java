@@ -60,6 +60,10 @@ discarded and the login re-checks against the fresh hash.
 argument matchers accidentally used as constructor values with literals;
 this prevented leaked matchers from corrupting repository stubs.
 Author review: Kwey Xiu Xi to review via PR.
+2026-10-28, Claude Code (Opus 5.5), issue #267: a verified sign-up writes
+user.created for the new account, and a failed one writes nothing; the
+insert goes through a real UserCreation over the mocks (revised USR-8).
+Author review: Ryan Ang, pending pull request review.
 */
 
 package foc.user.service;
@@ -87,6 +91,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -152,6 +157,9 @@ class AuthServiceTest {
     @Mock
     private EntityManager entityManager;
 
+    @Mock
+    private EventOutbox eventOutbox;
+
     private AuthService authService;
     private User user;
 
@@ -162,7 +170,8 @@ class AuthServiceTest {
             new OtpService(PLAIN_ENCODER, OTP_TTL, OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN);
         authService = new AuthService(userRepository, pendingSignupRepository, PLAIN_ENCODER,
             issuer, otpService, otpEmailSender,
-            new LoginAttempts(userRepository, entityManager, 30), Clock.fixed(NOW, ZoneOffset.UTC));
+            new LoginAttempts(userRepository, entityManager, 30), new UserCreation(userRepository, eventOutbox),
+            Clock.fixed(NOW, ZoneOffset.UTC));
 
         user = new User("e1234567@u.nus.edu", "student_alex", PLAIN_ENCODER.encode(PASSWORD), Role.USER);
         ReflectionTestUtils.setField(user, "id", 42L);
@@ -486,7 +495,11 @@ class AuthServiceTest {
     @DisplayName("The right code inserts the user with the stored hash and clears the pending row")
     void verify_createsUser() {
         PendingSignup pending = pendingWithCode("123456");
-        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(inv -> {
+            User inserted = inv.getArgument(0);
+            ReflectionTestUtils.setField(inserted, "id", 7L);
+            return inserted;
+        });
 
         UserResponse response = authService.verifySignup(
             new SignupVerifyRequest(" E1234567@U.NUS.EDU ", "123456"));
@@ -500,6 +513,8 @@ class AuthServiceTest {
         assertThat(saved.getValue().getRole()).isEqualTo(Role.USER);
         assertThat(response.role()).isEqualTo("USER");
         verify(pendingSignupRepository).delete(pending);
+        // credit-service opens the account from this (USR-8)
+        verify(eventOutbox).userCreated(7L);
     }
 
     @Test
@@ -644,6 +659,7 @@ class AuthServiceTest {
         Throwable thrown = catchThrowable(() -> verifyCode("123456"));
 
         assertBadRequest(thrown, "Email or username was just taken; choose another");
+        verifyNoInteractions(eventOutbox);
     }
 
     // ---- login ----

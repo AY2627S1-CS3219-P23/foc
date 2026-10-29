@@ -34,6 +34,10 @@ title: "Favours on Campus (FoC) — High-Level Service Architecture"
 %% 2026-10-15 (Claude Code, Opus 5.5), PR #187 review (Leong Wei Zhi):
 %% Order DB labelled PostgreSQL (chosen by Ko-Khan via options Q&A when
 %% order-db was wired into compose.yaml, 2026-10-10).
+%% 2026-10-28 (Claude Code, Opus 5.5), issue #267: the user-events
+%% exchange in the broker node and the user.created / user.purged path
+%% from the User Service to the Credit Service (team decision USR-1).
+%% Author review: Ryan Ang, pending pull request review.
 %% Legend and dependency table: see docs/architecture.md
 flowchart TB
     USERS(["Users: requester / courier / admin<br/>(NUS students and platform admins)"])
@@ -50,7 +54,7 @@ flowchart TB
     ORDER_SVC["<b>Order Service</b><br/>Java + Spring Boot — request lifecycle states (Order F0.1):<br/>pending, created, accepted, collected, completed, cancelled,<br/>expired, rejected (pending/rejected: Credit saga, docs/credit-service.md);<br/>1 km acceptance-proximity rule (Order F8.1);<br/>schedulers: expire overdue requests (Order F6.1–F6.2),<br/>auto-complete 1 h after courier arrival (Order F7.2)"]
     CREDIT_SVC["<b>Credit Service</b><br/>Java + Spring Boot — balances (available + reserved),<br/>consumes request events for reservation, atomic transfer<br/>and release; publishes reservation replies; transaction history;<br/>scheduler: expire earned credits after 3 months into common<br/>pool + monthly redistribution (Credit F6)"]
     NOTIF_SVC["<b>Notification Service</b><br/>Java + Spring Boot — consumes request events,<br/>notifies each party; idempotent, with retries;<br/>retains notifications for a defined window"]
-    BROKER[/"<b>Message Broker</b> — RabbitMQ<br/>shared platform infrastructure, own Docker container;<br/>durable request-events and credit-events exchanges + durable<br/>work/retry/dead-letter queues (docs/notification-service.md,<br/>docs/credit-service.md)"/]
+    BROKER[/"<b>Message Broker</b> — RabbitMQ<br/>shared platform infrastructure, own Docker container;<br/>durable request-events, credit-events and user-events exchanges + durable<br/>work/retry/dead-letter queues (docs/notification-service.md,<br/>docs/credit-service.md)"/]
     EMAIL[["<b>External Email Provider</b><br/>Gmail SMTP (Mailpit locally) — delivers<br/>OTP emails to users' u.nus.edu inboxes"]]
 
     GATEWAY -->|"REST/JSON: sign-up, login/logout, OTP flows, account<br/>update/delete/recover, roles, admin user management,<br/>profiles (User F1–F8)"| USER_SVC
@@ -67,6 +71,8 @@ flowchart TB
     BROKER ==>|"deliver request.submitted / completed / cancelled / expired:<br/>reserve on submission (Credit F2.1), transfer on completion<br/>(Credit F3.1, F5.1), release on cancel/expiry (Credit F2.1.1);<br/>repeated events processed once (Credit NFR2.2.1)"| CREDIT_SVC
     CREDIT_SVC ==>|"publish credit.reserved /<br/>credit.reservation-rejected"| BROKER
     BROKER ==>|"deliver reservation replies: request moves from<br/>pending to created, or to rejected when the balance<br/>is insufficient (Credit F2.1.3, Order F1.1.4)"| ORDER_SVC
+    USER_SVC ==>|"publish user.created (verified sign-up) /<br/>user.purged (day-31 purge), through an outbox"| BROKER
+    BROKER ==>|"deliver user events: open the credit account;<br/>close it, its balance to the common pool,<br/>no further redistribution shares (Credit F1.1, F6.1.1)"| CREDIT_SVC
 
     USER_DB[("User DB<br/>PostgreSQL<br/>60 000 accounts (User NFR2)")]
     SUP_DB[("Supplier DB<br/>PostgreSQL<br/>1,000 suppliers (Supplier NFR2)")]

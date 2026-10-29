@@ -1,0 +1,9 @@
+{
+  "eventType": "user.created",
+  "eventId": "5d1c2a7e-3b4f-4e6a-9c8d-1f2e3a4b5c6d",
+  "occurredAt": "2026-10-28T03:15:00Z",
+  "producer": "user-service",
+  "correlationId": "42",
+  "parties": [],
+  "userId": "42"
+}

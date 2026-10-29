@@ -25,6 +25,9 @@
  * 2026-10-28, Claude Code (Opus 5), issue #249: rating.submitted entry
  * for the N1 rating system (scope decisions on #44); author review:
  * Leong Wei Zhi, pending pull request review.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: user.created and
+ * user.purged entries (team decision, USR-1); author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.contracts.events.core;
 
@@ -43,6 +46,8 @@ import foc.contracts.events.request.RequestDropped;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestRejected;
 import foc.contracts.events.request.RequestSubmitted;
+import foc.contracts.events.user.UserCreated;
+import foc.contracts.events.user.UserPurged;
 
 import java.util.HashMap;
 import java.util.List;
@@ -90,7 +95,9 @@ public final class EventTypeRegistry {
 			new Entry(RequestDisputeResolved.class, "request.dispute-resolved"),
 			new Entry(CreditReserved.class, "credit.reserved"),
 			new Entry(CreditReservationRejected.class, "credit.reservation-rejected"),
-			new Entry(RatingSubmitted.class, "rating.submitted"));
+			new Entry(RatingSubmitted.class, "rating.submitted"),
+			new Entry(UserCreated.class, "user.created"),
+			new Entry(UserPurged.class, "user.purged"));
 
 	private static final Map<String, Entry> BY_EVENT_TYPE = new HashMap<>();
 	private static final Map<Class<?>, Entry> BY_CLASS = new HashMap<>();

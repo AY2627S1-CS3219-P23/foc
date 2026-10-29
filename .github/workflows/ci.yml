@@ -14,6 +14,9 @@
 # the java and docker filters (with foc-contracts/** in the docker one —
 # its image build installs the library even though the pom doesn't use
 # it yet). Author review: Leong Wei Zhi, pending pull request review.
+# 2026-10-28, Claude Code (Opus 5.5), issue #267: user-service rebuilds
+# on foc-contracts changes too, now that it depends on the library.
+# Author review: Ryan Ang, pending pull request review.
 
 # One always-running workflow with dorny/paths-filter inside, instead of
 # per-workflow `on.paths`: a required check from a paths-filtered workflow
@@ -47,7 +50,7 @@ jobs:
           fetch-depth: 0 # paths-filter needs history on push events
 
       # Workflow edits rerun everything, so every filter also matches
-      # .github/workflows/**. order/credit/notification also rebuild when
+      # .github/workflows/**. user/order/credit/notification also rebuild when
       # foc-contracts changes (they depend on foc:foc-contracts:0.0.1-SNAPSHOT).
       - uses: dorny/paths-filter@v3
         id: java
@@ -58,6 +61,7 @@ jobs:
               - '.github/workflows/**'
             user-service:
               - 'user-service/**'
+              - 'foc-contracts/**'
               - '.github/workflows/**'
             supplier-service:
               - 'supplier-service/**'
@@ -87,6 +91,7 @@ jobs:
           filters: |
             user-service:
               - 'user-service/**'
+              - 'foc-contracts/**'
               - '.github/workflows/**'
             supplier-service:
               - 'supplier-service/**'
@@ -143,7 +148,7 @@ jobs:
           cache-dependency-path: |
             ${{ matrix.module }}/pom.xml
             foc-contracts/pom.xml
-      # Unconditional: order/credit/notification need the snapshot jar in
+      # Unconditional: user/order/credit/notification need the snapshot jar in
       # the local repo; for the other legs it is a cheap no-op-sized step.
       - name: Install shared contracts
         run: ./mvnw -B -ntp install -DskipTests

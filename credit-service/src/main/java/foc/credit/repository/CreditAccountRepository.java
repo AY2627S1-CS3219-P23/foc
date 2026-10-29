@@ -7,6 +7,9 @@
  * locking queries the credit operations need (D2, D6).
  * 2026-10-16, Claude Code (Opus 5.5), issue #173: every account locked
  * in ascending user ID order, for the monthly redistribution.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: the closed placeholder
+ * insert, and the redistribution's lock and the pool preview's count
+ * narrowed to open accounts (team decisions USR-6, USR-7).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.repository;
@@ -40,20 +43,43 @@ public interface CreditAccountRepository extends JpaRepository<CreditAccount, St
     int insertIfAbsent(@Param("userId") String userId, @Param("available") int available,
             @Param("createdAt") Instant createdAt);
 
+    /**
+     * Creates a closed account holding nothing unless one exists, for a
+     * {@code user.purged} that arrived before the account was ever
+     * created (USR-6). Returns 1 if this call created it. Taking the row
+     * is what stops a late {@code user.created} or get-or-create from
+     * granting the sign-up credits, as both insert only when no row is
+     * there.
+     */
+    @Modifying
+    @Query(value = """
+        insert into credit_account (user_id, available, reserved, created_at, closed_at)
+        values (:userId, 0, 0, :now, :now)
+        on conflict (user_id) do nothing
+        """, nativeQuery = true)
+    int insertClosedIfAbsent(@Param("userId") String userId, @Param("now") Instant now);
+
     // the row lock a balance change is made under (D2)
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select a from CreditAccount a where a.userId = :userId")
     Optional<CreditAccount> findForUpdate(@Param("userId") String userId);
 
     /**
-     * Every account, locked in ascending user ID order (D2), for the
-     * redistribution. Postgres locks the rows after sorting them. The
+     * Every open account, locked in ascending user ID order (D2), for the
+     * redistribution: a closed one gets no share (USR-7).
+     * {@link #countOpen} is the same set, for the pool preview. Postgres locks the rows after sorting them. The
      * "C" collation compares by code point, the order Java's
      * {@code String.compareTo} gives the credit operations' transfer;
      * the database's default collation could order two IDs the other
      * way round and deadlock against it.
      */
-    @Query(value = "select * from credit_account order by user_id collate \"C\" for update",
-        nativeQuery = true)
-    List<CreditAccount> findAllForUpdate();
+    @Query(value = """
+        select * from credit_account where closed_at is null
+        order by user_id collate "C" for update
+        """, nativeQuery = true)
+    List<CreditAccount> findAllOpenForUpdate();
+
+    // the accounts a redistribution now would share among (USR-7)
+    @Query("select count(a) from CreditAccount a where a.closedAt is null")
+    long countOpen();
 }

@@ -23,6 +23,8 @@
  * 2026-10-28, Claude Code (Opus 5), issue #249: the domain-marker test
  * widened to the rating domain (scope decisions on #44); author review:
  * Leong Wei Zhi, pending pull request review.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: a user event carries a
+ * userId instead; author review: Ryan Ang, pending pull request review.
  */
 package foc.contracts.events.request;
 
@@ -31,6 +33,7 @@ import foc.contracts.events.credit.CreditEvent;
 import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.core.Nullable;
 import foc.contracts.events.rating.RatingEvent;
+import foc.contracts.events.user.UserEvent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -58,12 +61,25 @@ class RequestEventRecordsTest {
 	@Test
 	void everyRecordHasADomainMarkerAndARequestId() {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
+			if (UserEvent.class.isAssignableFrom(entry.eventClass())) {
+				continue; // see everyUserEventCarriesAUserId
+			}
 			assertTrue(RequestEvent.class.isAssignableFrom(entry.eventClass())
 					|| CreditEvent.class.isAssignableFrom(entry.eventClass())
 					|| RatingEvent.class.isAssignableFrom(entry.eventClass()),
 					entry.eventClass()
 							+ " must implement RequestEvent, CreditEvent or RatingEvent");
 			assertTrue(componentNames(entry.eventClass()).contains("requestId"));
+		}
+	}
+
+	@Test
+	void everyUserEventCarriesAUserId() {
+		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
+			if (UserEvent.class.isAssignableFrom(entry.eventClass())) {
+				assertTrue(componentNames(entry.eventClass()).contains("userId"),
+						entry.eventClass() + " must carry a userId");
+			}
 		}
 	}
 

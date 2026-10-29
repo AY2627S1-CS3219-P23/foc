@@ -6,6 +6,8 @@
  * constructed. Written by the tool from the reviewer's comment.
  * 2026-10-16, PR #193 review: the lifetime check is now
  * EarnedCreditLifetime's, shared with the redistribution.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: the constructor takes
+ * the common pool too.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -61,7 +63,7 @@ class CreditOperationsConfigurationTest extends PostgresTestContainer {
     @ParameterizedTest
     @ValueSource(ints = { 0, -1 })
     void aSignUpAmountBelowOneIsRefused(int signUpCredits) {
-        assertThatThrownBy(() -> new CreditOperationsService(null, null, null, null, null, signUpCredits,
+        assertThatThrownBy(() -> new CreditOperationsService(null, null, null, null, null, null, signUpCredits,
             new EarnedCreditLifetime(3)))
             .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("credit.sign-up-credits");
     }

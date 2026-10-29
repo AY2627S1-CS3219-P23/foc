@@ -21,6 +21,11 @@ Author review: Ryan validated test assertions to match intended behaviour.
 2026-10-10 (Claude Code, Opus 5.5), PR #162 re-review (Leong Wei Zhi): the
        unconfigured-token log line is checked to be written once.
 2026-10-19: Parts copied from AuthServiceTest, which was AI-assisted
+2026-10-28 (Claude Code, Opus 5.5), issue #267, revised USR-8: built with a
+real UserCreation over the mocked repository and a mocked EventOutbox, and
+a verified owner setup writes user.created. PR #268 review: that line's
+comment put on its own line. Author review: Ryan Ang, pending pull
+request review.
 */
 
 package foc.user.service;
@@ -100,11 +105,21 @@ class OwnerSignupServiceTest {
     @Mock
     private OtpService otpService;
 
+    @Mock
+    private EventOutbox eventOutbox;
+
     //@Mock
     //private PasswordEncoder passwordEncoder;
 
     @InjectMocks
     private OwnerSignupService ownerSignupService;
+
+    // what saveAndFlush answers: the user, now with the id the insert gave it
+    private static User insertedWithId(org.mockito.invocation.InvocationOnMock inv) {
+        User inserted = inv.getArgument(0);
+        ReflectionTestUtils.setField(inserted, "id", 7L);
+        return inserted;
+    }
 
     @BeforeEach
     void setUpDefaultStubs() {
@@ -116,7 +131,8 @@ class OwnerSignupServiceTest {
             new OtpService(PLAIN_ENCODER, OTP_TTL, OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN);
 
         ownerSignupService = new OwnerSignupService(userRepository, pendingSignupRepository, PLAIN_ENCODER,
-            otpService, otpEmailSender, Clock.fixed(NOW, ZoneOffset.UTC), VALID_SETUP_KEY);
+            otpService, otpEmailSender, Clock.fixed(NOW, ZoneOffset.UTC), VALID_SETUP_KEY,
+            new UserCreation(userRepository, eventOutbox));
 
         reset(pendingSignupRepository);
         reset(userRepository);
@@ -129,7 +145,7 @@ class OwnerSignupServiceTest {
     @DisplayName("Signup and verify creates owner")
     void signupOwner_savesOwnerAndReturnsResponse() {
         when(userRepository.saveAndFlush(any(User.class)))
-            .thenAnswer(inv -> inv.getArgument(0));
+            .thenAnswer(OwnerSignupServiceTest::insertedWithId);
 
         SignupOwnerRequest signRequest = new SignupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", PASSWORD, VALID_SETUP_KEY
@@ -155,13 +171,15 @@ class OwnerSignupServiceTest {
         assertThat(captor.getValue().getRole()).isEqualTo(Role.OWNER);
         assertThat(captor.getValue().getPasswordHash()).isEqualTo(PLAIN_ENCODER.encode(PASSWORD));
         assertThat(verifyResponse.email()).isEqualTo("e1234567@u.nus.edu");
+        // credit-service opens the owner's account from this (revised USR-8)
+        verify(eventOutbox).userCreated(7L);
     }
 
     @Test
     @DisplayName("Missing owner key should create user, notified via otp email")
     void signupOwner_KeyMissing() {
         when(userRepository.saveAndFlush(any(User.class)))
-            .thenAnswer(inv -> inv.getArgument(0));
+            .thenAnswer(OwnerSignupServiceTest::insertedWithId);
 
         SignupOwnerRequest signRequest = new SignupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", PASSWORD, null);
@@ -189,7 +207,7 @@ class OwnerSignupServiceTest {
     @DisplayName("Wrong owner key should create user, notified via otp email")
     void signupOwner_WrongKey() {
         when(userRepository.saveAndFlush(any(User.class)))
-            .thenAnswer(inv -> inv.getArgument(0));
+            .thenAnswer(OwnerSignupServiceTest::insertedWithId);
 
         SignupOwnerRequest signRequest = new SignupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", PASSWORD, "wrongkey");
@@ -221,7 +239,7 @@ class OwnerSignupServiceTest {
         when(pendingSignupRepository.findWithLockByEmail("e1234567@u.nus.edu"))
             .thenReturn(Optional.of(expired));
         when(userRepository.saveAndFlush(any(User.class)))
-            .thenAnswer(inv -> inv.getArgument(0));
+            .thenAnswer(OwnerSignupServiceTest::insertedWithId);
 
         SignupOwnerRequest signRequest = new SignupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", PASSWORD, VALID_SETUP_KEY
@@ -314,7 +332,7 @@ class OwnerSignupServiceTest {
     @DisplayName("Should normalise email to lowercase before saving")
     void signupOwner_normalisesEmailToLowercase() {
         when(userRepository.saveAndFlush(any(User.class)))
-            .thenAnswer(inv -> inv.getArgument(0));
+            .thenAnswer(OwnerSignupServiceTest::insertedWithId);
 
         SignupOwnerRequest signRequest = new SignupOwnerRequest(
             " E1234567@u.nus.edu ", "owner_user", PASSWORD, VALID_SETUP_KEY
@@ -340,7 +358,7 @@ class OwnerSignupServiceTest {
     @DisplayName("Should trim leading and trailing whitespace from username before saving")
     void signupOwner_trimsUsernameWhitespace() {
                 when(userRepository.saveAndFlush(any(User.class)))
-            .thenAnswer(inv -> inv.getArgument(0));
+            .thenAnswer(OwnerSignupServiceTest::insertedWithId);
 
         SignupOwnerRequest signRequest = new SignupOwnerRequest(
             "e1234567@u.nus.edu", "  owner_user  ", PASSWORD, VALID_SETUP_KEY

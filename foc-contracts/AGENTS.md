@@ -18,6 +18,9 @@
   2026-10-28, Claude Code (Opus 5), issue #249: module map updated for
   the rating domain and its exchange (scope decisions on #44); author
   review: Leong Wei Zhi, pending pull request review.
+  2026-10-28, Claude Code (Opus 5.5), issue #267: module map updated
+  for the user domain (team decision USR-1); author review: Ryan Ang,
+  pending pull request review.
 -->
 
 # foc-contracts/ — Agent Guide
@@ -35,12 +38,13 @@ design authority is
 
 | Package / path | Contents |
 | --- | --- |
-| `events/core/` | `DomainEvent` (base interface; `eventType()` derives the identity from the registry), `EventContracts` (shared names: `REQUEST_EVENTS_EXCHANGE`, `CREDIT_EVENTS_EXCHANGE`, `RATING_EVENTS_EXCHANGE`), `EventTypeRegistry` (single class↔identity source, D18), `Nullable` (marks optional wire fields) |
+| `events/core/` | `DomainEvent` (base interface; `eventType()` derives the identity from the registry), `EventContracts` (shared names: `REQUEST_EVENTS_EXCHANGE`, `CREDIT_EVENTS_EXCHANGE`, `RATING_EVENTS_EXCHANGE`, `USER_EVENTS_EXCHANGE`), `EventTypeRegistry` (single class↔identity source, D18), `Nullable` (marks optional wire fields) |
 | `events/request/` | `RequestEvent` (domain marker) + the twelve records: `RequestCreated`, `RequestAccepted`, `RequestCollected`, `RequestCompleted`, `RequestCancelled`, `RequestDropped`, `RequestExpired`, `CourierArrived`, `RequestSubmitted`, `RequestRejected`, `RequestDisputed`, `RequestDisputeResolved` |
 | `events/credit/` | `CreditEvent` (domain marker) + the two records: `CreditReserved`, `CreditReservationRejected` |
 | `events/rating/` | `RatingEvent` (domain marker) + the one record: `RatingSubmitted` |
+| `events/user/` | `UserEvent` (domain marker, `userId()`) + the two records: `UserCreated`, `UserPurged` (envelope and `userId` only; `parties` always empty) |
 | `src/main/resources/contracts/` | One canonical fixture per event, `<identity dots→hyphens>.example.json` (e.g. `request-courier-arrived.example.json`) — shipped on the jar's classpath |
-| `src/test/java/` | `EventTypeRegistryTest`, `RequestEventRecordsTest` — registry-driven over all three domains: a new registry entry without a fixture (or vice versa) fails loudly |
+| `src/test/java/` | `EventTypeRegistryTest`, `RequestEventRecordsTest` — registry-driven over all four domains: a new registry entry without a fixture (or vice versa) fails loudly |
 
 ## Invariants — do not break
 
@@ -99,7 +103,8 @@ notification pipeline) need only the jar bump.
 
 ## Producer conventions
 
-For any service that publishes events (the future order-service):
+For any service that publishes events (order-service, credit-service,
+user-service):
 
 - Publish **after** the local DB commit; enable **publisher
   confirms**; send messages **persistent** (RabbitTemplate's default).
