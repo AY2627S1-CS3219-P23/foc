@@ -69,7 +69,10 @@ function PublicProfileView({ userId }: { userId: string }) {
         } else {
           setGate({
             kind: 'error',
-            message: errorMessage(err, 'Could not load this profile. Try again.'),
+            message: errorMessage(
+              err,
+              'Could not load this profile. Try again.',
+            ),
           })
         }
       })

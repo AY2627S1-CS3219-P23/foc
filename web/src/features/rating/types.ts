@@ -53,10 +53,7 @@ export interface ReviewResponse {
 
 // Mirrors rating-service's ReportReason enum, British spelling included.
 export type ReportReason =
-  | 'NO_SHOW'
-  | 'ABUSIVE_BEHAVIOUR'
-  | 'UNSAFE_HANDLING'
-  | 'OTHER'
+  'NO_SHOW' | 'ABUSIVE_BEHAVIOUR' | 'UNSAFE_HANDLING' | 'OTHER'
 
 export const reportReasonLabels: Record<ReportReason, string> = {
   NO_SHOW: 'No-show',

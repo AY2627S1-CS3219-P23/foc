@@ -118,7 +118,8 @@ export function ReportUserModal({
             htmlFor="report-details"
             className="text-sm font-medium text-gray-900"
           >
-            Details <span className="font-normal text-gray-500">(optional)</span>
+            Details{' '}
+            <span className="font-normal text-gray-500">(optional)</span>
           </label>
           <textarea
             id="report-details"

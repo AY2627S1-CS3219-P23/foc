@@ -126,9 +126,7 @@ afterEach(() => {
 const reportDialog = () => screen.getByRole('dialog', { name: 'Report User' })
 
 async function openReportDialog(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(
-    await screen.findByRole('button', { name: /Report User/ }),
-  )
+  await user.click(await screen.findByRole('button', { name: /Report User/ }))
   return within(reportDialog())
 }
 
