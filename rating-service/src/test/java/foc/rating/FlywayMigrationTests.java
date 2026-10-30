@@ -10,6 +10,10 @@
  * real Postgres — one rating per (request, rater), the stars range
  * check, the FK to rateable_request, and the outbox primary key.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), issue #253: V4's read index exists
+ * on real Postgres — the H2 tests never run the migration, so this is
+ * the only check it parses and lands.
+ * Author review: [pending]
  */
 package foc.rating;
 
@@ -116,5 +120,23 @@ class FlywayMigrationTests extends PostgresTestContainer {
         assertThrows(DuplicateKeyException.class, () ->
                 jdbc.update("insert into " + SCHEMA + ".outbox_event (event_id, event_type, payload, created_at) "
                         + "values (?, ?, ?, ?)", eventId, "rating.submitted", "{}", now));
+    }
+
+    @Test
+    void v4CreatesTheRatingReadIndex() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        Flyway.configure()
+                .dataSource(dataSource)
+                .schemas(SCHEMA)
+                .locations("classpath:db/migration")
+                .load()
+                .migrate();
+
+        // the profile reads' index (#253): by ratee, newest first
+        assertEquals(1, jdbc.queryForObject(
+                "select count(*) from pg_indexes where schemaname = ? and indexname = ?",
+                Integer.class, SCHEMA, "idx_rating_ratee_created"));
     }
 }
