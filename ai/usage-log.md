@@ -6854,3 +6854,28 @@ Entry template:
 - **Author review:** `./mvnw test` green in rating-service (49 tests,
   0 skipped — the broker integration test and the Flyway test ran
   against real containers). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (PR #271 review fixes)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `rating-service` — `ProcessedEvent` implements
+  `Persistable` via the PostPersist/PostLoad callback pattern so the
+  dedupe insert persists instead of merging (the merge SELECT would
+  adopt a concurrently committed duplicate, so the documented PK
+  backstop never fired; also one SELECT fewer — a constant-true isNew
+  was tried and reverted, it breaks repository deletes); `EventProcessor`/`RatingEligibilityProcessor` return applied
+  vs duplicate and the listener logs `HANDLED` vs `DUPLICATE`; an
+  upsert that changes an existing row's parties is logged at WARN;
+  `RetryingListener`'s settled-then-rethrown exception is wrapped in a
+  non-fatal `EventFailedException` (a fatal classification in MANUAL
+  mode would reject the already-settled tag and close the channel);
+  new `SchemaValidationTest` boots the context on Postgres with Flyway
+  + `ddl-auto: validate` to pin the entities to V2 (production stays
+  `none` per precedent); the listener/processor tests updated for the
+  wrapper and the return value.
+- **Prompt(s):** "address pr comments". All five changes follow
+  Sinnez1's inline review comments on PR #271; the choice to keep
+  production `ddl-auto: none` and cover drift with a test instead is
+  the author's.
+- **Author review:** `./mvnw test` green in rating-service (52 tests,
+  0 skipped). Leong Wei Zhi reviews via pull request.

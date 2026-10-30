@@ -7,6 +7,9 @@
  * no-op, and this service's upsert stance on a repeated requestId
  * under a fresh eventId.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), PR #271 review (Sinnez1): the
+ * applied vs duplicate return value is pinned.
+ * Author review: [pending]
  */
 package foc.rating.service;
 
@@ -56,7 +59,7 @@ class RatingEligibilityProcessorTest {
 
     @Test
     void storesOneEligibilityRowPerEvent() {
-        eventProcessor.process(completed("e-1", "req-1", OCCURRED_AT));
+        assertThat(eventProcessor.process(completed("e-1", "req-1", OCCURRED_AT))).isTrue();
 
         List<RateableRequest> rows = rateableRequests.findAll();
         assertThat(rows).singleElement().satisfies(row -> {
@@ -73,8 +76,9 @@ class RatingEligibilityProcessorTest {
     @Test
     void duplicateEventIdIsSilentNoOp() {
         RequestCompleted event = completed("e-1", "req-1", OCCURRED_AT);
-        eventProcessor.process(event);
-        eventProcessor.process(event);
+        assertThat(eventProcessor.process(event)).isTrue();
+        // the duplicate is reported discarded, so the listener logs it apart
+        assertThat(eventProcessor.process(event)).isFalse();
 
         assertThat(rateableRequests.count()).isEqualTo(1);
     }

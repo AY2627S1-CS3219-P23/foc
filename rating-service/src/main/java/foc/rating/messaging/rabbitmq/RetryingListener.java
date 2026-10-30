@@ -8,6 +8,13 @@
  * requeue otherwise), with only the package changed. Copied, not
  * shared, as the team does for everything but foc-contracts.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), PR #271 review (Sinnez1): the
+ * final rethrow is wrapped in EventFailedException so the container's
+ * error handler can never classify it fatal — a fatal classification
+ * in MANUAL mode rejects the already-settled delivery (rejectManual)
+ * and closes the channel with PRECONDITION_FAILED. A divergence from
+ * credit-service's copy, where the same edge exists.
+ * Author review: [pending]
  */
 package foc.rating.messaging.rabbitmq;
 
@@ -66,9 +73,9 @@ abstract class RetryingListener {
 
     /**
      * Settles the delivery of an event whose handler threw {@code ex},
-     * then rethrows it for the container's failure log. {@code subject}
-     * names what the event is about in the log lines, e.g.
-     * {@code request=42}.
+     * then throws it wrapped in {@link EventFailedException} for the
+     * container's failure log. {@code subject} names what the event is
+     * about in the log lines, e.g. {@code request=42}.
      */
     final void retryOrDeadLetter(DomainEvent event, String subject, RuntimeException ex, Message amqpMessage,
             Channel channel, long deliveryTag) throws IOException {
@@ -108,11 +115,14 @@ abstract class RetryingListener {
             log.warn("{} eventId={} {} outcome=RETRY after attempt {}/{} failed: {}",
                     event.eventType(), event.eventId(), subject, attempts, maxAttempts, ex.getMessage());
         }
-        // Rethrown for the container's failure log only. In MANUAL mode
-        // the container settles nothing itself unless the exception is a
-        // ManualAckListenerExecutionRuntimeException, so this delivery is
-        // not settled twice.
-        throw ex;
+        // Rethrown for the container's failure log only, wrapped so the
+        // delivery cannot be settled twice: a bare exception the error
+        // handler classifies as fatal (e.g. a ClassCastException out of
+        // the handler) would, in MANUAL mode, make the container reject
+        // this already-settled tag (rejectManual) and close the channel
+        // with PRECONDITION_FAILED (PR #271 review). AmqpException is
+        // never classified fatal.
+        throw new EventFailedException(event, subject, ex);
     }
 
     private void pauseBeforeRequeue() {
@@ -161,6 +171,21 @@ abstract class RetryingListener {
 
         RetryCopyReturnedException(String replyText) {
             super("retry copy returned as unroutable: " + replyText);
+        }
+    }
+
+    /**
+     * Carries the event handler's failure to the container's log after
+     * the delivery is already settled. Deliberately an
+     * {@link AmqpException}, which the container's error handler never
+     * classifies fatal — a fatal classification would reject the
+     * settled tag again and close the channel.
+     */
+    static final class EventFailedException extends AmqpException {
+
+        EventFailedException(DomainEvent event, String subject, RuntimeException cause) {
+            super(event.eventType() + " eventId=" + event.eventId() + " " + subject
+                    + " failed; the delivery is settled", cause);
         }
     }
 }

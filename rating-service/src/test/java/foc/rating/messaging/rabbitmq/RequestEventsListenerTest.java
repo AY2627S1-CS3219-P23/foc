@@ -6,6 +6,11 @@
  * handler's place and the INVALID_STATE / overtake cases dropped — this
  * listener settles on success or exception only.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), PR #271 review (Sinnez1): the
+ * settled-then-rethrown paths now expect the non-fatal
+ * EventFailedException wrapper with the handler's failure as cause,
+ * and the ack case pins the applied vs duplicate outcome.
+ * Author review: [pending]
  */
 package foc.rating.messaging.rabbitmq;
 
@@ -22,6 +27,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import java.net.ConnectException;
 import java.time.Instant;
@@ -62,6 +68,8 @@ class RequestEventsListenerTest {
 
     @Test
     void aProcessedEventIsAcknowledged() throws Exception {
+        when(processor.process(event)).thenReturn(true);
+
         listener.onRequestCompleted(event, delivery(null), channel, TAG);
 
         verify(processor).process(event);
@@ -71,13 +79,28 @@ class RequestEventsListenerTest {
     }
 
     @Test
+    void aDiscardedDuplicateIsAcknowledgedToo() throws Exception {
+        // a duplicate is a deliberate discard, not a failure: ack, no retry
+        when(processor.process(event)).thenReturn(false);
+
+        listener.onRequestCompleted(event, delivery(null), channel, TAG);
+
+        verify(channel).basicAck(TAG, false);
+        verify(channel, never()).basicNack(anyLong(), anyBoolean(), anyBoolean());
+        verifyNoInteractions(rabbitTemplate);
+    }
+
+    @Test
     void aFirstFailureIsRepublishedToTheRetryQueueAndTheOriginalAcknowledged() throws Exception {
-        doThrow(new IllegalStateException("database down")).when(processor).process(event);
+        IllegalStateException failure = new IllegalStateException("database down");
+        doThrow(failure).when(processor).process(event);
         brokerAnswers(RequestEventsListenerTest::confirmed);
         Message delivery = delivery(null);
 
+        // wrapped non-fatal so the container can never settle the tag again
         assertThatThrownBy(() -> listener.onRequestCompleted(event, delivery, channel, TAG))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(RequestEventsListener.EventFailedException.class)
+                .hasCause(failure);
 
         ArgumentCaptor<Message> copy = ArgumentCaptor.forClass(Message.class);
         verify(rabbitTemplate).send(eq(""), eq(RabbitMqTopology.REQUEST_EVENTS_RETRY_QUEUE),
@@ -91,11 +114,13 @@ class RequestEventsListenerTest {
 
     @Test
     void eachRetryStampsOneMoreAttempt() throws Exception {
-        doThrow(new IllegalStateException("database down")).when(processor).process(event);
+        IllegalStateException failure = new IllegalStateException("database down");
+        doThrow(failure).when(processor).process(event);
         brokerAnswers(RequestEventsListenerTest::confirmed);
 
         assertThatThrownBy(() -> listener.onRequestCompleted(event, delivery(2L), channel, TAG))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(RequestEventsListener.EventFailedException.class)
+                .hasCause(failure);
 
         ArgumentCaptor<Message> copy = ArgumentCaptor.forClass(Message.class);
         verify(rabbitTemplate).send(any(), any(), copy.capture(), any(CorrelationData.class));
@@ -105,11 +130,13 @@ class RequestEventsListenerTest {
 
     @Test
     void theLastAttemptIsDeadLetteredNotRetried() throws Exception {
-        doThrow(new IllegalStateException("database down")).when(processor).process(event);
+        IllegalStateException failure = new IllegalStateException("database down");
+        doThrow(failure).when(processor).process(event);
 
         // four attempts already stamped: the delivery in hand is the fifth
         assertThatThrownBy(() -> listener.onRequestCompleted(event, delivery(4L), channel, TAG))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(RequestEventsListener.EventFailedException.class)
+                .hasCause(failure);
 
         verify(channel).basicNack(TAG, false, false);
         verify(channel, never()).basicAck(anyLong(), anyBoolean());

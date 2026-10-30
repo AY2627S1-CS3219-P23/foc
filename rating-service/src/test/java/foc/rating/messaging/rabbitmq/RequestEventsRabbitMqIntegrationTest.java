@@ -111,7 +111,7 @@ class RequestEventsRabbitMqIntegrationTest {
                 if (event.eventId().startsWith("flaky-") && alreadyFailed.add(event.eventId())) {
                     throw new IllegalStateException("injected transient failure: " + event.eventId());
                 }
-                delegate.process(event);
+                return delegate.process(event);
             };
         }
     }

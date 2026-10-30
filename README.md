@@ -259,7 +259,8 @@
   close credit accounts (issue #267), by Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
   2026-10-30: AI Use Summary extended for rating-service's
-  request.completed ingest (issue #251), by Claude Code (Fable 5).
+  request.completed ingest (issue #251), by Claude Code (Fable 5);
+  extended again the same day for the PR #271 review fixes.
   Author review: Leong Wei Zhi, pending pull request review.
 -->
 
@@ -1213,7 +1214,12 @@ redelivery dedupe, unknown and unconsumed types dead-lettered intact,
 retry/DLQ attempt evidence, V2 on real Postgres). The listener pattern
 (credit's hardened retry base over notification's original) and the
 upsert stance on a repeated completion were decided by the author via
-neutral-options Q&A. Recorded in `ai/usage-log.md`.
+neutral-options Q&A. After review, the dedupe insert persists instead
+of merging so the PK backstop holds under concurrency, an upsert that
+changes a row's parties warns, duplicates log apart from applied
+events, the settled delivery's rethrow is wrapped non-fatal, and a
+schema-validation test pins the entities to the Flyway migrations
+(reviewer suggestions). Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

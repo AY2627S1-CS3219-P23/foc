@@ -7,6 +7,10 @@
  * processor has no invalid-state answer: a duplicate is a deliberate
  * discard, everything else either commits or throws.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), PR #271 review (Sinnez1): the
+ * outcome log tells an applied event (HANDLED) from a discarded
+ * duplicate (DUPLICATE), on the processor's new return value.
+ * Author review: [pending]
  */
 package foc.rating.messaging.rabbitmq;
 
@@ -86,14 +90,16 @@ class RequestEventsListener extends RetryingListener {
     @RabbitListener(queues = RabbitMqTopology.REQUEST_EVENTS_QUEUE)
     void onRequestCompleted(@Payload RequestCompleted event, Message amqpMessage, Channel channel,
             @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) throws IOException {
+        boolean applied;
         try {
-            processor.process(event);
+            applied = processor.process(event);
         } catch (RuntimeException ex) {
             retryOrDeadLetter(event, "request=" + event.requestId(), ex, amqpMessage, channel, deliveryTag);
             return; // not reached: retryOrDeadLetter always throws
         }
         channel.basicAck(deliveryTag, false);
-        log.info("{} eventId={} request={} outcome=HANDLED",
-                event.eventType(), event.eventId(), event.requestId());
+        log.info("{} eventId={} request={} outcome={}",
+                event.eventType(), event.eventId(), event.requestId(),
+                applied ? "HANDLED" : "DUPLICATE");
     }
 }

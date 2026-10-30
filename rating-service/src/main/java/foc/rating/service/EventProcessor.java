@@ -5,6 +5,10 @@
  * (its D11 ports-and-adapters decision) with the signature narrowed to
  * RequestCompleted — the one event this service consumes.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), PR #271 review (Sinnez1): returns
+ * whether the event was applied, so the listener's log can tell an
+ * applied event from a discarded duplicate.
+ * Author review: [pending]
  */
 package foc.rating.service;
 
@@ -16,11 +20,12 @@ import foc.contracts.events.request.RequestCompleted;
  * service layer behind it has zero broker imports.
  *
  * <p>Contract for callers: a normal return means the event's effects
- * are durably committed (or it was a duplicate and was deliberately
- * discarded) — safe to acknowledge. A thrown exception means nothing
- * was committed — safe to redeliver.
+ * are durably committed ({@code true}), or it was an already-seen
+ * duplicate and was deliberately discarded ({@code false}) — either
+ * way, safe to acknowledge. A thrown exception means nothing was
+ * committed — safe to redeliver.
  */
 public interface EventProcessor {
 
-    void process(RequestCompleted event);
+    boolean process(RequestCompleted event);
 }

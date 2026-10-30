@@ -7,6 +7,11 @@
  * stance on a repeated requestId is the author's decision (plan Q&A),
  * flagged in the pull request.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), PR #271 review (Sinnez1): process
+ * reports applied vs duplicate; an upsert that changes the parties of
+ * an existing row is logged at WARN (#252's eligibility reads this
+ * row); the dedupe insert persists instead of merging (ProcessedEvent).
+ * Author review: [pending]
  */
 package foc.rating.service;
 
@@ -15,6 +20,8 @@ import foc.rating.entity.ProcessedEvent;
 import foc.rating.entity.RateableRequest;
 import foc.rating.repository.ProcessedEventRepository;
 import foc.rating.repository.RateableRequestRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,10 +43,13 @@ import org.springframework.transaction.annotation.Transactional;
  * (a producer bug or a corrected replay — order-service emits one
  * completion per request) upserts the row rather than dead-lettering:
  * {@code save} on the assigned {@code request_id} merges, last write
- * wins.
+ * wins. One that changes who may rate whom is logged at WARN, since
+ * #252's eligibility checks read this row (PR #271 review).
  */
 @Service
 class RatingEligibilityProcessor implements EventProcessor {
+
+    private static final Logger log = LoggerFactory.getLogger(RatingEligibilityProcessor.class);
 
     private final ProcessedEventRepository processedEvents;
     private final RateableRequestRepository rateableRequests;
@@ -52,12 +62,21 @@ class RatingEligibilityProcessor implements EventProcessor {
 
     @Override
     @Transactional
-    public void process(RequestCompleted event) {
+    public boolean process(RequestCompleted event) {
         if (processedEvents.existsById(event.eventId())) {
-            return;
+            return false;
         }
         processedEvents.save(new ProcessedEvent(event.eventId()));
+        rateableRequests.findById(event.requestId())
+                .filter(existing -> !existing.getRequesterId().equals(event.requesterId())
+                        || !existing.getCourierId().equals(event.courierId()))
+                .ifPresent(existing -> log.warn(
+                        "request={} completion replayed with different parties:"
+                                + " requester {} -> {}, courier {} -> {} (eventId={})",
+                        event.requestId(), existing.getRequesterId(), event.requesterId(),
+                        existing.getCourierId(), event.courierId(), event.eventId()));
         rateableRequests.save(new RateableRequest(event.requestId(), event.requesterId(),
                 event.courierId(), event.occurredAt()));
+        return true;
     }
 }
