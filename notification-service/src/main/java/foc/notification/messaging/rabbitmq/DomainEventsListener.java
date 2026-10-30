@@ -21,6 +21,12 @@
  * 2026-09-20: order→request event vocabulary rename applied (author
  * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-30, Claude Code (Fable 5), issue #255: the rating work queue
+ * joins the queues list, and scheduleRetry derives each delivery's
+ * retry queue from its consuming queue (the <work>.retry naming
+ * invariant) instead of hard-coding the request retry queue — a failed
+ * rating event would otherwise park in the request trio. Author
+ * review: Leong Wei Zhi, pending pull request review.
  */
 package foc.notification.messaging.rabbitmq;
 
@@ -28,6 +34,7 @@ import com.rabbitmq.client.Channel;
 import foc.contracts.events.core.DomainEvent;
 import foc.notification.service.EventProcessor;
 import java.io.IOException;
+import java.util.Objects;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -80,9 +87,12 @@ import org.springframework.stereotype.Component;
  * retrying them could never succeed (author decision, 2026-09-20).
  *
  * <p>Event-type-agnostic by construction: any event the registry
- * catalogs flows through unchanged, so a future second domain queue
- * is one more entry in the {@code queues} list below — the class
- * never changes. Only the queue references are domain-specific.
+ * catalogs flows through unchanged, so a new domain queue is one more
+ * entry in the {@code queues} list below (the rating queue arrived
+ * with issue #255). Nothing here is domain-specific: the retry target
+ * is derived per delivery from its consuming queue, relying on the
+ * {@code <work-queue>.retry} naming invariant stated in
+ * {@link RabbitMqTopology}.
  */
 @Component
 class DomainEventsListener {
@@ -109,7 +119,9 @@ class DomainEventsListener {
 		this.maxAttempts = maxAttempts;
 	}
 
-	@RabbitListener(queues = RabbitMqTopology.REQUEST_EVENTS_QUEUE)
+	@RabbitListener(queues = {
+			RabbitMqTopology.REQUEST_EVENTS_QUEUE,
+			RabbitMqTopology.RATING_EVENTS_QUEUE })
 	void onDomainEvent(@Payload DomainEvent event, Message amqpMessage, Channel channel,
 			@Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) throws IOException {
 		try {
@@ -141,6 +153,13 @@ class DomainEventsListener {
 	}
 
 	private void scheduleRetry(Message message, long attempts) {
+		// Each work queue parks failures in its own trio's retry queue,
+		// found via the <work-queue>.retry naming invariant; a delivery
+		// missing its consumer queue throws before the ack, so the
+		// original is redelivered — never misrouted, never lost.
+		String retryQueue = Objects.requireNonNull(
+				message.getMessageProperties().getConsumerQueue(),
+				"delivery carries no consumer queue") + ".retry";
 		message.getMessageProperties().setHeader(RETRY_ATTEMPTS_HEADER, attempts);
 		message.getMessageProperties().setDeliveryMode(MessageDeliveryMode.PERSISTENT);
 		// Confirmed publish (needs spring.rabbitmq.publisher-confirm-type:
@@ -148,7 +167,7 @@ class DomainEventsListener {
 		// so a publish the broker never accepted throws instead of
 		// silently losing the event.
 		rabbitTemplate.invoke(operations -> {
-			operations.send("", RabbitMqTopology.REQUEST_EVENTS_RETRY_QUEUE, message);
+			operations.send("", retryQueue, message);
 			operations.waitForConfirmsOrDie(RETRY_CONFIRM_TIMEOUT_MS);
 			return null;
 		});
