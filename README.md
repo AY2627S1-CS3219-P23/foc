@@ -271,6 +271,9 @@
   2026-10-30: AI Use Summary extended for rating-service's profile
   read APIs (issue #253), by Claude Code (Fable 5).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-30: AI Use Summary extended for rating-service's report-a-user
+  API (issue #254), by Claude Code (Fable 5).
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1274,6 +1277,18 @@ a user with no ratings and the raw (unrounded) mean were the author's
 decisions via neutral-options Q&A; the list returns rater ids only
 (D32 — the web hydrates usernames at read time). Recorded in
 `ai/usage-log.md`.
+
+Claude Code (Fable 5) implemented rating-service's report-a-user API
+(issue #254, N1.4 under #44): `POST /reports` (reason from the issue's
+fixed list, optional details and request reference, self-reports
+refused with 400) and the ADMIN/OWNER-gated `GET /reports` (newest
+first, paged like the review history), with Flyway V5 adding the
+`user_report` table. The ADMIN+OWNER pair for the gate (the repo-wide
+precedent over the issue's literal "ADMIN only"), the paged list shape,
+and storing `requestId` as an opaque unverified reference (no FK —
+`rateable_request` holds completed requests only, and reports often
+concern requests that never completed) were the author's decisions via
+neutral-options Q&A. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

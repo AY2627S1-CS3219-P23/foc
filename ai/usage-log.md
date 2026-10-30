@@ -7028,3 +7028,40 @@ Entry template:
 - **Author review:** `./mvnw test` green in rating-service (83 tests,
   0 skipped; Flyway V4 ran on real Postgres). Leong Wei Zhi reviews via
   pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: report a user, issue #254)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `rating-service` — `controller/` (`ReportController`:
+  `POST /reports`, `GET /reports?page=&size=` with
+  `UserRatingsController`'s page/size checks; the self-report 400
+  handler in `ProblemDetailAdvice`), `dto/` (`SubmitReportRequest` —
+  reason required from the fixed list, details capped at 1000 like the
+  rating write-up, 255-char caps on the ids so an oversized value is a
+  400, not the varchar columns' 500; `ReportResponse`), `entity/`
+  (`UserReport`, `ReportReason`), `service/` (`ReportService`,
+  `SelfReportException`), `repository/` (`UserReportRepository`),
+  `config/SecurityConfig` (the GET's `hasAnyRole("ADMIN", "OWNER")`
+  gate), Flyway `V5__user_report.sql` (the `user_report` table and its
+  newest-first list index), and the tests (`ReportControllerTest`; the
+  V5 case in `FlywayMigrationTests`); `rating-service/README.md` and
+  this README section. Under #44 (N1.4); stacked on PR #273's branch.
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/254". The tool read
+  the issue, PR #273's branch and the repo's admin-gate and pagination
+  precedents, then asked four options questions. The author chose:
+  stack on PR #273 with the migration as V5 (V4 is #273's); the list
+  gate is ADMIN + OWNER (the repo-wide `hasAnyRole` pair over the
+  issue's literal "ADMIN only"); the list is paged with the platform's
+  `PageResponse` shape; and `requestId` is stored opaque with no FK to
+  `rateable_request` — that table holds completed requests only, and
+  reports about cancelled/dropped requests are the most report-worthy
+  (difference explained on request before deciding). The tool's
+  recorded decisions: no existence check on the reported user (the
+  service has no user table); blank details/requestId normalised to
+  null; an unknown reason answered by the existing unreadable-body 400;
+  no event published (a report is a moderation flag, not an N3
+  dispute).
+- **Author review:** `./mvnw test` green in rating-service (97 tests,
+  0 skipped; Flyway V5 ran on real Postgres). Leong Wei Zhi reviews via
+  pull request.

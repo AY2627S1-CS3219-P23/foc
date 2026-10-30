@@ -9,6 +9,10 @@
  * yet, so there are no role gates; they stay in-service when the
  * feature issues under #44 add them.
  * Reviewed by: [pending]
+ * 2026-10-30, Claude Code (Fable 5), issue #254: the report list's
+ * ADMIN/OWNER gate (the repo-wide hasAnyRole pair over the issue's
+ * literal "ADMIN only", the author's decision via options Q&A).
+ * Author review: [pending]
  */
 package foc.rating.config;
 
@@ -20,6 +24,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -67,7 +72,12 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         // health checks (compose depends_on / probes) carry no credentials
                         .requestMatchers("/actuator/health").permitAll()
-                        // every rating route acts as the caller
+                        // the report list is moderation (N1.4): ADMIN/OWNER only,
+                        // checked here rather than on the controller so a non-admin
+                        // gets 403 before any parameter is parsed (user-service
+                        // precedent). POST /reports stays open to any caller below.
+                        .requestMatchers(HttpMethod.GET, "/reports").hasAnyRole("ADMIN", "OWNER")
+                        // every other rating route acts as the caller
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(restAuthEntryPoint)
