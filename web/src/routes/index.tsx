@@ -49,6 +49,11 @@
 // stays inside ProtectedRoute, now under the CreditBalanceProvider
 // layout #195 added; the public four keep their place in the shell.
 // Author review: Leong Wei Zhi to review via the PR.
+// 2026-10-30, Claude Code (Fable 5), issue #257: /users/:id (public
+// profile) inside ProtectedRoute — every API it reads wants a session.
+// Reached by link (requests, deliveries), not from the nav, like
+// /credits.
+// Author review: [pending]
 
 import { createBrowserRouter, type RouteObject } from 'react-router'
 
@@ -63,6 +68,7 @@ import { Credits } from './credits'
 import { Home } from './home'
 import { Notifications } from './notifications'
 import { Profile } from './profile'
+import { PublicProfile } from './public-profile'
 import { RequestHistory } from './request-history'
 import { Suppliers } from './suppliers'
 import { AccountRecovery } from '../features/user/account-recovery'
@@ -121,6 +127,7 @@ export const routes: RouteObject[] = [
                       { path: 'requests', element: <OpenRequests /> },
                       { path: 'deliveries/:id', element: <ActiveDelivery /> },
                       { path: 'history', element: <RequestHistory /> },
+                      { path: 'users/:id', element: <PublicProfile /> },
                       {
                         Component: AdminRoute,
                         children: [{ path: 'admin', element: <Admin /> }],

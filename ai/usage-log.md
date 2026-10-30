@@ -7042,3 +7042,31 @@ Entry template:
   @Sinnez1's inline review comment on PR #273.
 - **Author review:** `./mvnw test` green in rating-service (86 tests,
   0 skipped). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (web: public profile with reviews and report user, issue #257)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `web` — `routes/public-profile.tsx` (`/users/:id`: the
+  username gate on user-service's public profile, the rating summary
+  with the rounded raw mean, paged Recent Reviews with rater names
+  hydrated at read time per D32, and Report User), `features/rating/`
+  (`StarDisplay`, `ReportUserModal`, the summary/reviews/report calls
+  and types), the route entry, profile links from My Requests' courier
+  and Active Delivery's requester names, and the tests
+  (`public-profile.test.tsx` new, `rating-api.test.ts` extended).
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/257". The tool read
+  the issue, the #256 branch and the rating/order/user web patterns,
+  then asked three options questions. The author chose: stack on PR
+  #278's branch; omit the wireframe's joined-date and
+  deliveries-completed tiles (no API carries either) and file a backend
+  follow-up issue instead; entry links from My Requests and Active
+  Delivery only. The tool's recorded decisions: a read-only
+  `StarDisplay` sibling of #256's `StarRating` input (radios sharing
+  one group name would collide on a page of reviews); the page gates on
+  a direct public-profile fetch so a 404 reads "user not found" while
+  the usernames hook keeps swallowing 404s for review rows; the report
+  success copy promises review, not a one-time flag (the service keeps
+  every submission — no duplicate check, its documented gap).
+- **Author review:** `npm test` green in web (387 tests, 20 files),
+  eslint clean. Leong Wei Zhi reviews via pull request.

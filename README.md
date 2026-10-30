@@ -1275,5 +1275,18 @@ decisions via neutral-options Q&A; the list returns rater ids only
 (D32 — the web hydrates usernames at read time). Recorded in
 `ai/usage-log.md`.
 
+Claude Code (Fable 5) built the public profile page (issue #257,
+N1.3/N1.4 under #44): `/users/:id` with the username from
+user-service's public profile (a 404 there reads "user not found"),
+the star row and Avg-rating tile from the rounded raw mean, paged
+Recent Reviews whose rater names hydrate at read time (D32), and the
+Report User dialog posting rating-service's fixed reason list, hidden
+on the viewer's own profile; the assigned courier's name on My
+Requests and the requester's name on Active Delivery link here.
+Stacking on PR #278's branch, omitting the wireframe's joined-date and
+deliveries-completed tiles (no API carries either; follow-up issue
+filed instead) and the choice of entry links were the author's
+decisions via neutral-options Q&A. Recorded in `ai/usage-log.md`.
+
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
