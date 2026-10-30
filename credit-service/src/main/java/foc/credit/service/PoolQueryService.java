@@ -11,6 +11,9 @@
  * no recorded run.
  * 2026-10-17, issue #207 (PR #195 review nit): a schedule that never
  * fires fails with its cause instead of a bare NullPointerException.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: the preview counts
+ * open accounts only, the set the redistribution shares among (team
+ * decision USR-7).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -66,7 +69,8 @@ public class PoolQueryService {
     @Transactional(readOnly = true)
     public PoolSummary summary(Instant now) {
         int balance = pool.findById(CommonPool.ID).orElseThrow().getBalance();
-        long count = accounts.count();
+        // the accounts the redistribution shares among (USR-7)
+        long count = accounts.countOpen();
         Optional<RedistributionRun> last = runs.findAll(PageRequest.of(0, 1, LATEST_FIRST)).stream().findFirst();
         return new PoolSummary(balance, count, count == 0 ? 0 : balance / count, count == 0 ? 0 : balance % count,
             last.orElse(null), nextRunAt(now, last));

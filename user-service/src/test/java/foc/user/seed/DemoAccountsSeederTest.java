@@ -17,6 +17,10 @@ Scope: tests for DemoAccountsSeeder with USER_SEED_DEMO on: 1 owner, 3
        Zhi): a lost race seeds again; losing it twice is logged, not
        thrown.
 Author review: Ryan to review via the PR.
+2026-10-28 (Claude Code, Opus 5.5), issue #267, revised USR-8: the inserts
+go through UserCreation, so the stubs answer saveAndFlush, and a case pins
+one user.created per seeded account and none on a rerun. Author review:
+Ryan Ang, pending pull request review.
 */
 
 package foc.user.seed;
@@ -57,7 +61,10 @@ import foc.user.PostgresTestContainer;
 import foc.user.dto.AccountRules;
 import foc.user.entity.Role;
 import foc.user.entity.User;
+import foc.user.repository.OutboxEventRepository;
 import foc.user.repository.UserRepository;
+import foc.user.service.EventOutbox;
+import foc.user.service.UserCreation;
 
 // @TestPropertySource, not @SpringBootTest(properties): it has to outrank
 // the user.seed.demo=false that PostgresTestContainer sets the same way
@@ -81,10 +88,17 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    @Autowired
+    private EventOutbox eventOutbox;
+
+    @Autowired
+    private OutboxEventRepository outboxEvents;
+
     // the seeder already ran at startup; start each test from a known state
     @BeforeEach
     void seedFresh() {
         userRepository.deleteAll();
+        outboxEvents.deleteAll();
         seeder.run();
     }
 
@@ -92,6 +106,7 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
     @AfterEach
     void cleanUp() {
         userRepository.deleteAll();
+        outboxEvents.deleteAll();
     }
 
     private Map<Role, Long> countByRole() {
@@ -124,6 +139,24 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
         login("demo_user_042", DemoAccountsSeeder.USER_PASSWORD, 200);
         // another role's password is wrong
         login("demo_user_043", DemoAccountsSeeder.ADMIN_PASSWORD, 401);
+    }
+
+    @Test
+    @DisplayName("Every seeded account gets exactly one user.created, and a rerun writes none")
+    void eachSeededAccountGetsOneUserCreated() {
+        assertThat(outboxEvents.findAll())
+            .hasSize(1 + DemoAccountsSeeder.ADMINS + DemoAccountsSeeder.USERS)
+            .allSatisfy(event -> assertThat(event.getEventType()).isEqualTo("user.created"));
+        for (User user : userRepository.findAll()) {
+            assertThat(outboxEvents.findAll())
+                .filteredOn(event -> event.getPayload().contains("\"userId\":\"" + user.getId() + "\""))
+                .as("user.created for " + user.getUsername())
+                .hasSize(1);
+        }
+
+        seeder.run();
+
+        assertThat(outboxEvents.count()).isEqualTo(1 + DemoAccountsSeeder.ADMINS + DemoAccountsSeeder.USERS);
     }
 
     @Test
@@ -182,13 +215,13 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
             .thenAnswer(inv -> userRepository.existsByEmail(inv.getArgument(0)));
         when(racing.existsByUsernameIgnoreCase(anyString()))
             .thenAnswer(inv -> userRepository.existsByUsernameIgnoreCase(inv.getArgument(0)));
-        when(racing.save(any(User.class)))
+        when(racing.saveAndFlush(any(User.class)))
             .thenThrow(new DataIntegrityViolationException("idx_users_email",
                 new SQLException("duplicate key", "23505")))
-            .thenAnswer(inv -> userRepository.save(inv.getArgument(0)));
+            .thenAnswer(inv -> userRepository.saveAndFlush(inv.getArgument(0)));
         userRepository.deleteAll();
 
-        new DemoAccountsSeeder(racing, passwordEncoder, transactionManager).run();
+        new DemoAccountsSeeder(racing, new UserCreation(racing, eventOutbox), passwordEncoder, transactionManager).run();
 
         assertThat(userRepository.count()).isEqualTo(1 + DemoAccountsSeeder.ADMINS + DemoAccountsSeeder.USERS);
     }
@@ -198,16 +231,16 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
     void lostInsertRaceTwiceDoesNotThrow() {
         // every account looks missing, then the insert hits the unique index
         UserRepository racing = mock(UserRepository.class);
-        when(racing.save(any(User.class)))
+        when(racing.saveAndFlush(any(User.class)))
             .thenThrow(new DataIntegrityViolationException("idx_users_email",
                 new SQLException("duplicate key", "23505")));
         long before = userRepository.count();
 
-        assertThatCode(() -> new DemoAccountsSeeder(racing, passwordEncoder, transactionManager).run())
+        assertThatCode(() -> new DemoAccountsSeeder(racing, new UserCreation(racing, eventOutbox), passwordEncoder, transactionManager).run())
             .doesNotThrowAnyException();
 
         // one retry, no more
-        verify(racing, times(2)).save(any(User.class));
+        verify(racing, times(2)).saveAndFlush(any(User.class));
         assertThat(userRepository.count()).isEqualTo(before);
     }
 
@@ -216,11 +249,11 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
     void otherIntegrityFailureIsRethrown() {
         // 23502 is not_null_violation: not the race, so not swallowed
         UserRepository broken = mock(UserRepository.class);
-        when(broken.save(any(User.class)))
+        when(broken.saveAndFlush(any(User.class)))
             .thenThrow(new DataIntegrityViolationException("users.email",
                 new SQLException("null value", "23502")));
 
-        assertThatThrownBy(() -> new DemoAccountsSeeder(broken, passwordEncoder, transactionManager).run())
+        assertThatThrownBy(() -> new DemoAccountsSeeder(broken, new UserCreation(broken, eventOutbox), passwordEncoder, transactionManager).run())
             .isInstanceOf(DataIntegrityViolationException.class);
     }
 

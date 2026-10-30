@@ -124,6 +124,12 @@
 # ORDER_DISPUTE_ESCALATION_GRACE_MS passed to the order service for the
 # expiry sweep's dispute escalation (team decision DSP-6). Author review:
 # Ryan Ang, pending pull request review.
+# 2026-10-28, Claude Code (Opus 5.5), issue #267: the user service gets
+# the RabbitMQ connection, now that it publishes user.created /
+# user.purged (team decision USR-2), but does not wait for the broker
+# (PR review, team decision): login and sign-up need none, and the
+# outbox holds the events. Author review: Ryan Ang, pending pull request
+# review.
 
 name: foc
 
@@ -317,8 +323,8 @@ services:
     restart: unless-stopped
 
   user-service:
-    # Context is the repo root (repo compose convention), even though
-    # this service has no shared-library build stage yet.
+    # Context is the repo root (see the Dockerfile) so the shared
+    # foc-contracts library can be built alongside the service.
     build:
       context: .
       dockerfile: user-service/Dockerfile
@@ -363,9 +369,16 @@ services:
       # gateway is what reads them on every request.
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      # user.created / user.purged go out through here (issue #267)
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-foc}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set in .env}
     # No redis dependency on purpose (PR #176 Copilot review): the
     # logout write is best-effort (G9, finite 2 s timeouts), so the
-    # whole service must not wait on — or fail with — Redis.
+    # whole service must not wait on — or fail with — Redis. No rabbitmq
+    # one either (issue #267): the outbox keeps the user events until the
+    # broker is reachable.
     depends_on:
       user-db:
         condition: service_healthy

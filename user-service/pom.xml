@@ -33,6 +33,12 @@
   for writing the logout denylist keys (team decision: Redis-only denylist,
   enforced at the API gateway — chosen by Leong Wei Zhi via options Q&A).
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-10-28, Claude Code (Opus 5.5), issue #267: foc-contracts and
+  spring-boot-starter-amqp for publishing user.created / user.purged
+  (team decisions USR-1, USR-2). Author review: Ryan Ang, pending pull
+  request review.
+  Same day, PR review: testcontainers-rabbitmq (test scope), as
+  credit-service has it, for the publisher's real-broker test.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -67,9 +73,19 @@
 		<jjwt.version>0.13.0</jjwt.version>
 	</properties>
 	<dependencies>
+		<!-- shared event contracts (D15); install foc-contracts first -->
+		<dependency>
+			<groupId>foc</groupId>
+			<artifactId>foc-contracts</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-amqp</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -153,6 +169,12 @@
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers-postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- the outbox publisher against a real broker (issue #267) -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-rabbitmq</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>

@@ -16,6 +16,8 @@
  * 2026-10-25, issue #235: resolve, the split settlement of a resolved
  * dispute (team decisions DSP-4, DSP-8, DSP-13); reserve on a RESOLVED
  * record is DUPLICATE (team decision).
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: open and close for
+ * user.created and user.purged (team decisions USR-3, USR-4, USR-6).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -30,8 +32,36 @@ import foc.credit.entity.CreditAccount;
  */
 public interface CreditOperations {
 
-    /** The user's account, created on first sight of the ID (D6). */
+    /**
+     * The user's account, created on first sight of the ID (D6). An
+     * account closed by {@link #close} is returned as it is: never
+     * reopened, and no sign-up credits granted again (USR-3).
+     */
     CreditAccount getOrCreate(String userId);
+
+    /**
+     * Opens the user's account for {@code user.created} (USR-6): with
+     * none, creates it with the sign-up credits, exactly as
+     * {@link #getOrCreate} would ({@link AccountResult#CREATED}); an open
+     * one is {@link AccountResult#DUPLICATE}; a closed one is
+     * {@link AccountResult#IGNORED_CLOSED} and stays closed.
+     */
+    AccountResult open(String userId);
+
+    /**
+     * Closes the user's account for {@code user.purged} (USR-4, USR-6).
+     * An open account is {@link AccountResult#CLOSED}: every available
+     * credit, the sign-up credits included, moves to the common pool with
+     * a {@code CLOSURE} row; held credits stay held and settle as usual.
+     * A closed one is {@link AccountResult#DUPLICATE}. With none, a
+     * closed account holding nothing is created
+     * ({@link AccountResult#CLOSED_PLACEHOLDER}).
+     *
+     * <p>From then on, credits a transfer, release or dispute share
+     * brings to the account go on to the pool in the same transaction,
+     * each with its own {@code CLOSURE} row.
+     */
+    AccountResult close(String userId);
 
     /**
      * Reserves a request's reward from the requester, or refuses (D8).

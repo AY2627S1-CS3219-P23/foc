@@ -47,6 +47,13 @@
 # (added for issue #66's D31 lookups) removed with the
 # InternalServiceTokenFilter — D32 supersedes D30/D31; the web hydrates
 # names at read time with the caller's own JWT.
+# 2026-10-28, Claude Code (Opus 5.5), issue #267: spring.rabbitmq
+# (connection, correlated confirms with returns) and user.outbox.publisher,
+# copied from order-service with the same values (team decision USR-2).
+# Author review: Ryan Ang, pending pull request review.
+# Same day, PR review (team decisions): the rabbit health check off (the
+# service works without the broker), user.outbox.retention (credit's
+# values), and one scheduler thread per job, as order-service has.
 
 spring:
   application:
@@ -60,6 +67,14 @@ spring:
       # Flyway (db/migration) owns the schema; Hibernate never changes it
       ddl-auto: none
     open-in-view: false
+  task:
+    scheduling:
+      pool:
+        # One thread per @Scheduled job: the account purge, the outbox
+        # poll and the outbox retention purge. The poll can block on a
+        # confirm (up to confirm-timeout-ms) and must not hold up the
+        # others.
+        size: 3
   mail:
     # SMTP target for OTP emails (issue #88). The defaults reach the
     # compose Mailpit container (web inbox: http://localhost:8025); for
@@ -98,6 +113,19 @@ spring:
       # gateway's 60 s proxy timeout answered 504 instead of 204.
       connect-timeout: 2s
       timeout: 2s
+  rabbitmq:
+    # the broker user.created / user.purged go to (issue #267)
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:foc}
+    password: ${RABBITMQ_PASSWORD:}
+    # Correlated confirms with returns: a publish is confirmed by the
+    # broker AND reported back if no queue took it, so an event is marked
+    # sent only when it was confirmed and not returned.
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
 
 management:
   endpoints:
@@ -114,6 +142,10 @@ management:
       # Same rationale for Redis: logout's denylist write is best-effort
       # (issue #151 — a failed write just leaves the token valid until its
       # exp), so a Redis outage must not mark the service down.
+      enabled: false
+    rabbit:
+      # And for RabbitMQ (issue #267): login and sign-up work without the
+      # broker, and the outbox keeps the user events until it is back.
       enabled: false
 
 user:
@@ -146,6 +178,28 @@ user:
   # /purge/bookmarks directly, with a SERVICE token.
   supplier:
     base-url: ${SUPPLIER_SERVICE_URL:http://supplier-service:8080}
+  outbox:
+    # user events (issue #267), the same values as order-service's
+    publisher:
+      # Delay between the end of one outbox poll and the start of the
+      # next. A delay, not a rate, so polls never overlap.
+      poll-interval-ms: 1000
+      # Most events published in one poll, so a backlog after an outage
+      # drains over several polls.
+      batch-size: 100
+      # Longest wait for the broker to confirm one event; after it the
+      # poll stops, and the next poll tries the event again.
+      confirm-timeout-ms: 5000
+      # How long an event the broker returned as unroutable (no queue
+      # bound yet, USR-9) waits before it is due again.
+      unroutable-retry-delay-ms: 30000
+    retention:
+      # Days an event is kept after it was sent (credit-service's value).
+      # At least 1; a smaller value fails startup. Unsent events are never
+      # purged.
+      days: ${USER_OUTBOX_RETENTION_DAYS:30}
+      # When the purge runs (server time, like the account purge).
+      purge-cron: "${USER_OUTBOX_PURGE_CRON:0 0 3 * * *}"
   mail:
     # From-address on OTP emails. With Gmail SMTP this must equal
     # MAIL_USERNAME (Gmail rewrites anything else).

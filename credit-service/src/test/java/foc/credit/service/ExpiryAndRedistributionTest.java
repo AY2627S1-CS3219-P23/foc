@@ -11,6 +11,13 @@
  * from CreditOperationsServiceTest.
  * PR #193 review (Leong Wei Zhi), same day: the small-pool test makes
  * its own accounts instead of relying on what earlier tests left.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: the share-out is over
+ * open accounts only, a case that a closed account gets no share
+ * (USR-7), and the copied checks replay CLOSURE as
+ * CreditOperationsServiceTest's do. Same day, PR review: that case also
+ * checks the pool preview counts the same open accounts and the
+ * remainder goes to open accounts only. PR #268 review: fillPool's
+ * comment moved back above it.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
@@ -43,8 +50,9 @@ import foc.credit.PostgresTestContainer;
 import foc.credit.service.RedistributionService.RedistributionOutcome;
 
 // Not @Transactional: each run commits, as it does on the schedule.
-// Redistribution shares the pool out to every account in the database,
-// other test classes' included, so the assertions are about changes.
+// Redistribution shares the pool out to every open account in the
+// database, other test classes' included, so the assertions are about
+// changes.
 @SpringBootTest
 class ExpiryAndRedistributionTest extends PostgresTestContainer {
 
@@ -62,6 +70,9 @@ class ExpiryAndRedistributionTest extends PostgresTestContainer {
 
     @Autowired
     private RedistributionService redistribution;
+
+    @Autowired
+    private PoolQueryService poolQuery;
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -94,7 +105,7 @@ class ExpiryAndRedistributionTest extends PostgresTestContainer {
             group by a.user_id, a.available, a.reserved
             having a.available <> coalesce(sum(case
                     when h.type in ('PROVISION', 'RELEASE', 'TRANSFER_IN', 'REDISTRIBUTION') then h.amount
-                    when h.type in ('RESERVE', 'EXPIRY') then -h.amount
+                    when h.type in ('RESERVE', 'EXPIRY', 'CLOSURE') then -h.amount
                     else 0 end), 0)
                 or a.reserved <> coalesce(sum(case
                     when h.type = 'RESERVE' then h.amount
@@ -323,6 +334,34 @@ class ExpiryAndRedistributionTest extends PostgresTestContainer {
             java.sql.Timestamp.from(now.minus(1, ChronoUnit.DAYS)), user);
     }
 
+    @Test
+    void aClosedAccountGetsNoShareAndThePreviewCountsTheSameAccounts() {
+        String closed = "u-closed-" + UUID.randomUUID();
+        operations.getOrCreate(closed);
+        operations.close(closed);
+        fillPool();
+        Map<String, Integer> before = availableByUser();
+        int pool = poolBalance();
+        // the preview shares among exactly the accounts the run will
+        assertThat(poolQuery.summary(now).accounts()).isEqualTo(before.size());
+        assertThat(before).doesNotContainKey(closed);
+
+        RedistributionOutcome outcome = redistribution.redistribute(newPeriod(), now);
+
+        assertThat(outcome.accounts()).isEqualTo(before.size());
+        assertThat(outcome.remainder()).isEqualTo(pool % before.size());
+        // every credit taken from the pool, the remainder included, went to
+        // an open account
+        Map<String, Integer> after = availableByUser();
+        int received = before.entrySet().stream()
+            .mapToInt(entry -> after.get(entry.getKey()) - entry.getValue()).sum();
+        assertThat(received).isEqualTo(pool).isEqualTo(outcome.distributed());
+        assertThat(available(closed)).isZero();
+        assertThat(jdbc.queryForList(
+            "select type from credit_history where user_id = ? order by id", String.class, closed))
+            .containsExactly("PROVISION", "CLOSURE");
+    }
+
     // 3 credits through a real expiry, so the books still balance
     private void fillPool() {
         String user = "u-pool-" + UUID.randomUUID();
@@ -343,9 +382,10 @@ class ExpiryAndRedistributionTest extends PostgresTestContainer {
         return jdbc.queryForObject("select available from credit_account where user_id = ?", Integer.class, user);
     }
 
+    // the open accounts: the ones a redistribution shares among (USR-7)
     private Map<String, Integer> availableByUser() {
         Map<String, Integer> available = new HashMap<>();
-        jdbc.query("select user_id, available from credit_account",
+        jdbc.query("select user_id, available from credit_account where closed_at is null",
             row -> {
                 available.put(row.getString("user_id"), row.getInt("available"));
             });

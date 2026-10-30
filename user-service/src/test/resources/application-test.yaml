@@ -21,6 +21,12 @@
 # Author review: Ryan to review via the PR.
 # 2026-10-19, Claude Code (Fable 5), issue #221: the fixed internal token
 # removed with the filter and its tests (D32 supersedes D30/D31).
+# 2026-10-28, Claude Code (Opus 5.5), issue #267: the outbox publisher
+# and the outbox retention purge off, so the context loads without
+# RabbitMQ and the clock purges nothing a test stored. Nothing declares
+# the topology at startup, and the rabbit health check is off in the main
+# config.
+# Author review: Ryan Ang, pending pull request review.
 
 user:
   jwt:
@@ -32,3 +38,8 @@ user:
     # covered by AuthServiceTest (fixed clock) and SignupResendCooldownTest
     # (which overrides this to the real default).
     resend-cooldown: 0s
+  outbox:
+    publisher:
+      enabled: false
+    retention:
+      enabled: false

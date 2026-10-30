@@ -40,6 +40,11 @@
  * stated the way it holds — only credit events notify no one, so the
  * rating fixture must name its ratee (scope decisions on #44). Author
  * review: Leong Wei Zhi, pending pull request review.
+ * 2026-10-28, Claude Code (Opus 5.5), issue #267: the registry now holds
+ * user events too (user.created, user.purged; team decision USR-1), so
+ * the fixture test knows their producer and checks their userId where a
+ * request or credit event's requestId is checked. Author review: Ryan
+ * Ang, pending pull request review.
  */
 package foc.notification.event;
 
@@ -55,6 +60,7 @@ import foc.contracts.events.request.RequestDisputeResolved;
 import foc.contracts.events.request.RequestDisputed;
 import foc.contracts.events.request.RequestEvent;
 import foc.contracts.events.request.RequestSubmitted;
+import foc.contracts.events.user.UserEvent;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
@@ -107,13 +113,18 @@ class DomainEventContractTest {
 			assertThat(event.occurredAt()).isNotNull();
 			assertThat(event.producer()).isEqualTo(expectedProducer(event));
 			assertThat(event.correlationId()).isNotBlank();
-			// credit events notify no one; every other event names someone
-			if (event instanceof CreditEvent) {
+			// credit and user events notify no one; every other event names someone
+			if (event instanceof CreditEvent || event instanceof UserEvent) {
 				assertThat(event.parties()).isNotNull();
 			} else {
 				assertThat(event.parties()).isNotEmpty();
 			}
-			assertThat(requestIdOf(event)).isEqualTo("req-20260919-0042");
+			// a user event is about a user, not a request
+			if (event instanceof UserEvent userEvent) {
+				assertThat(userEvent.userId()).isEqualTo("42");
+			} else {
+				assertThat(requestIdOf(event)).isEqualTo("req-20260919-0042");
+			}
 		}
 	}
 
@@ -204,6 +215,9 @@ class DomainEventContractTest {
 		}
 		if (event instanceof RatingEvent) {
 			return "rating-service";
+		}
+		if (event instanceof UserEvent) {
+			return "user-service";
 		}
 		throw new AssertionError(event.eventType() + " implements no domain marker interface");
 	}
