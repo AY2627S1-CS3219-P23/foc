@@ -23,6 +23,12 @@
 // whole reward, with a label saying how the dispute was resolved so a 0
 // doesn't read as a cancellation.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-30, Claude Code (Fable 5), issue #256: Actions column — each
+// COMPLETED row offers "Rate" (the Rate Your Experience dialog) until
+// GET /ratings/mine says the viewer already rated it, then shows the
+// given stars. History, not My Requests, is the entry point: completed
+// requests only ever appear here (My Requests lists active states).
+// Author review: [pending]
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
@@ -45,6 +51,13 @@ import type {
   RequestStatus,
   RequestSummary,
 } from '@/features/order/types'
+import { useCurrentUserId } from '@/features/order/useCurrentUserId'
+import { RateExperienceModal } from '@/features/rating/components/RateExperienceModal'
+import {
+  clearMyRating,
+  recordMyRating,
+  useMyRating,
+} from '@/features/rating/useMyRating'
 import { errorMessage } from '@/lib/api/http'
 import { Pagination } from '@/shared/components/Pagination'
 
@@ -123,6 +136,40 @@ function CreditEffect({ r, role }: { r: RequestSummary; role: RequestRole }) {
   )
 }
 
+// The rate control for one row: nothing while loading or when the
+// request is not rateable (not COMPLETED, or rating-service answers
+// 403/404), a "Rate" button until the viewer rates it, then the stars.
+function RateCell({
+  r,
+  version,
+  onRate,
+}: {
+  r: RequestSummary
+  version: number
+  onRate: () => void
+}) {
+  const state = useMyRating(r.id, r.status === 'COMPLETED', version)
+  if (state === null || state.kind === 'not-rateable') return null
+  if (state.kind === 'rated')
+    return (
+      <span
+        aria-label={`Rated ${state.rating.stars} stars`}
+        className="text-sm whitespace-nowrap text-gray-500"
+      >
+        Rated ★{state.rating.stars}
+      </span>
+    )
+  return (
+    <button
+      type="button"
+      onClick={onRate}
+      className="rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+    >
+      Rate
+    </button>
+  )
+}
+
 export function RequestHistory() {
   const [role, setRole] = useState<RequestRole>('requester')
   const [filterKey, setFilterKey] = useState('ALL')
@@ -135,6 +182,15 @@ export function RequestHistory() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const userId = useCurrentUserId()
+  const [ratingTarget, setRatingTarget] = useState<RequestSummary | null>(null)
+  const [ratingVersions, setRatingVersions] = useState<Record<number, number>>(
+    {},
+  )
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const bumpRating = (id: number) =>
+    setRatingVersions((v) => ({ ...v, [id]: (v[id] ?? 0) + 1 }))
 
   useEffect(() => {
     let cancelled = false
@@ -174,6 +230,8 @@ export function RequestHistory() {
     if (next === role) return
     setLoading(true)
     setRole(next)
+    // the dialog belongs to a row of the tab it was opened from
+    setRatingTarget(null)
     // keep the chip if the other side offers it, else back to All finished
     if (!filters[next].some((f) => f.key === filterKey)) setFilterKey('ALL')
     setPage(0)
@@ -237,6 +295,7 @@ export function RequestHistory() {
       />
 
       {error && <Banner kind="error">{error}</Banner>}
+      {notice && <Banner kind="success">{notice}</Banner>}
 
       {loading ? (
         <p className="text-sm text-gray-500">Loading history…</p>
@@ -262,6 +321,7 @@ export function RequestHistory() {
                   <th className="px-4 py-3 font-semibold">Drop-off</th>
                   <th className="px-4 py-3 font-semibold">Reward</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-4 py-3 font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -287,6 +347,13 @@ export function RequestHistory() {
                     </td>
                     <td className="px-4 py-3">
                       <StatusChip status={r.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <RateCell
+                        r={r}
+                        version={ratingVersions[r.id] ?? 0}
+                        onRate={() => setRatingTarget(r)}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -321,6 +388,13 @@ export function RequestHistory() {
                     <CreditEffect r={r} role={role} />
                   </span>
                 </div>
+                <div className="mt-2 empty:hidden">
+                  <RateCell
+                    r={r}
+                    version={ratingVersions[r.id] ?? 0}
+                    onRate={() => setRatingTarget(r)}
+                  />
+                </div>
               </li>
             ))}
           </ul>
@@ -339,6 +413,26 @@ export function RequestHistory() {
             )}
           </div>
         </>
+      )}
+
+      {ratingTarget && (
+        <RateExperienceModal
+          request={ratingTarget}
+          role={role}
+          onClose={() => setRatingTarget(null)}
+          onRated={(rating) => {
+            if (userId !== null) recordMyRating(userId, ratingTarget.id, rating)
+            bumpRating(ratingTarget.id)
+            setNotice(
+              `Thanks — your rating of request #${ratingTarget.id} is in.`,
+            )
+            setRatingTarget(null)
+          }}
+          onAlreadyRated={() => {
+            if (userId !== null) clearMyRating(userId, ratingTarget.id)
+            bumpRating(ratingTarget.id)
+          }}
+        />
       )}
     </div>
   )
