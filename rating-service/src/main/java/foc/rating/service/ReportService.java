@@ -6,6 +6,11 @@
  * the reported user or the request — rating-service has no user table
  * and request_id is opaque (the author's decisions via options Q&A).
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), PR #274 review (claude[bot]):
+ * reportedUserId trimmed before the self-check and the save — @NotBlank
+ * admits padding, which dodged the 400 and stored an id matching no
+ * user.
+ * Author review: [pending]
  */
 package foc.rating.service;
 
@@ -40,10 +45,13 @@ public class ReportService {
     @Transactional
     public UserReport file(String reporterId, String reportedUserId, ReportReason reason, String details,
             String requestId) {
-        if (reporterId.equals(reportedUserId)) {
+        // @NotBlank admits padding: trimmed, or " <my-id>" dodges the
+        // self-check and stores an id that matches no user
+        String reported = reportedUserId.trim();
+        if (reporterId.equals(reported)) {
             throw new SelfReportException();
         }
-        return reports.save(new UserReport(reportedUserId, reporterId, normalized(requestId), reason,
+        return reports.save(new UserReport(reported, reporterId, normalized(requestId), reason,
                 normalized(details), Instant.now()));
     }
 

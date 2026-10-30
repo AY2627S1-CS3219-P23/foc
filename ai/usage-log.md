@@ -7065,3 +7065,19 @@ Entry template:
 - **Author review:** `./mvnw test` green in rating-service (97 tests,
   0 skipped; Flyway V5 ran on real Postgres). Leong Wei Zhi reviews via
   pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: PR #274 review fixes, issue #254)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `rating-service` — `ReportService.file` trims
+  `reportedUserId` before the self-check and the save (`@NotBlank`
+  admits padding, so `" <my-id>"` dodged the self-report 400 and stored
+  an id matching no user); `ReportControllerTest` adds the padded
+  self-id case and asserts stored ids come back trimmed;
+  `rating-service/README.md` notes the reviewer's other point as a
+  known gap — no duplicate or rate limit on reports (N1 scope: store
+  and list only).
+- **Prompt(s):** "address the latest pr comments? should i fix?" Both
+  changes follow claude[bot]'s inline review comment on PR #274.
+- **Author review:** `./mvnw test` green in rating-service (98 tests,
+  0 skipped). Leong Wei Zhi reviews via pull request.

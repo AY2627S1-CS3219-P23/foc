@@ -8,6 +8,10 @@
  * clear of rows other tests leave in the shared H2 database — the
  * author's decision.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), PR #274 review (claude[bot]): the
+ * padded self-id case — trimming must keep it a 400 and store trimmed
+ * ids.
+ * Author review: [pending]
  */
 package foc.rating.controller;
 
@@ -113,6 +117,20 @@ class ReportControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.detail").value("You cannot report yourself"));
+    }
+
+    @Test
+    @DisplayName("A padded self-id is still a self-report, and stored ids come back trimmed")
+    void paddedSelfReport() throws Exception {
+        // @NotBlank admits padding; it must not dodge the self-check
+        file(REPORTER, "{\"reportedUserId\": \" " + REPORTER + " \", \"reason\": \"OTHER\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("You cannot report yourself"));
+
+        // ...nor store an id that matches no user
+        file(REPORTER, "{\"reportedUserId\": \" usr-bad-r9 \", \"reason\": \"OTHER\"}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.reportedUserId").value("usr-bad-r9"));
     }
 
     @Test

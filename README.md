@@ -272,7 +272,8 @@
   read APIs (issue #253), by Claude Code (Fable 5).
   Author review: Leong Wei Zhi, pending pull request review.
   2026-10-30: AI Use Summary extended for rating-service's report-a-user
-  API (issue #254), by Claude Code (Fable 5).
+  API (issue #254), by Claude Code (Fable 5); extended again the same
+  day for the PR #274 review fix.
   Author review: Leong Wei Zhi, pending pull request review.
 -->
 
@@ -1288,7 +1289,10 @@ precedent over the issue's literal "ADMIN only"), the paged list shape,
 and storing `requestId` as an opaque unverified reference (no FK —
 `rateable_request` holds completed requests only, and reports often
 concern requests that never completed) were the author's decisions via
-neutral-options Q&A. Recorded in `ai/usage-log.md`.
+neutral-options Q&A. After review, `reportedUserId` is trimmed before
+the self-check and the save, so a padded self-id can neither dodge the
+400 nor store an id matching no user (reviewer finding). Recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

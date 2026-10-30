@@ -18,6 +18,9 @@
   2026-10-30, Claude Code (Fable 5), issue #254: the report routes in
   the Endpoints table and the intro's feature list.
   Author review: [pending]
+  2026-10-30, Claude Code (Fable 5), PR #274 review (claude[bot]): the
+  no-duplicate/rate-limit known gap noted on POST /reports.
+  Author review: [pending]
 -->
 
 # rating-service
@@ -77,7 +80,7 @@ Flyway disabled (the migrations are PostgreSQL-flavored).
 | GET | `/ratings/mine?requestId=` | bearer | the caller's own rating of that request: 200 `{"rating": {...}}`, or `{"rating": null}` until they rate (same 400/403/404 refusals as POST) |
 | GET | `/users/{id}/ratings/summary` | bearer | the user's aggregate for the profile's star row: 200 `{average, count}`; `average` is the raw mean (the UI rounds) and null — not 0 — while `count` is 0 |
 | GET | `/users/{id}/ratings?page=&size=` | bearer | the user's review history, newest first: 200 paged `{content: [{raterId, stars, text, createdAt}], page, size, totalElements, totalPages}` (IDs only; the web hydrates usernames, D32). `page` ≥ 0 (default 0), 1 ≤ `size` ≤ 100 (default 20); problem+json 400 outside those bounds |
-| POST | `/reports` | bearer | `{reportedUserId, reason (NO_SHOW \| ABUSIVE_BEHAVIOUR \| UNSAFE_HANDLING \| OTHER), details? (≤1000 chars), requestId?}`; report a user for irresponsible behaviour (N1.4). `requestId` is unverified context. 201 with the stored report; problem+json 400 self-report, unknown reason or invalid fields |
+| POST | `/reports` | bearer | `{reportedUserId, reason (NO_SHOW \| ABUSIVE_BEHAVIOUR \| UNSAFE_HANDLING \| OTHER), details? (≤1000 chars), requestId?}`; report a user for irresponsible behaviour (N1.4). `requestId` is unverified context. 201 with the stored report; problem+json 400 self-report, unknown reason or invalid fields. Known gap (N1 scope: store and list only): no duplicate or rate limit, so one user can file repeat reports against another |
 | GET | `/reports?page=&size=` | bearer, **ADMIN/OWNER** (403 otherwise) | all reports, newest first, paged like the review history (same page/size bounds and 400s) |
 
 Everything else is answered 401 by the service itself without a valid
