@@ -56,9 +56,12 @@ import org.springframework.context.annotation.Configuration;
  * queue dead-letters to the durable DLQ, and the durable retry queue
  * parks a failed event for {@code notification.rabbitmq.retry.ttl-ms}
  * before its own dead-letter leg returns it to the work queue for
- * another attempt. The {@code <work-queue>.retry} naming is an
- * invariant {@link DomainEventsListener} relies on to derive each
- * delivery's retry queue from its consuming queue.
+ * another attempt. {@link DomainEventsListener} routes each failed
+ * delivery via its explicit work→retry queue map over these constants
+ * (PR #276 review: a derived name could target an undeclared queue and
+ * be dropped-yet-confirmed), so a new trio needs a row there too; the
+ * {@code <work-queue>.retry} naming stays a convention, not a routing
+ * mechanism.
  * Both legs use the <em>default exchange</em> as their dead-letter
  * exchange (author decision, 2026-09-20): zero extra declarables, at
  * the cost that the routing key is rewritten to the target queue name
