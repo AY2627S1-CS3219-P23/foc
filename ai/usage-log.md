@@ -6877,5 +6877,5 @@ Entry template:
   Sinnez1's inline review comments on PR #271; the choice to keep
   production `ddl-auto: none` and cover drift with a test instead is
   the author's.
-- **Author review:** `./mvnw test` green in rating-service (52 tests,
+- **Author review:** `./mvnw test` green in rating-service (51 tests,
   0 skipped). Leong Wei Zhi reviews via pull request.
