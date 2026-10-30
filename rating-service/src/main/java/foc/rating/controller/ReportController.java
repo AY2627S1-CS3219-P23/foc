@@ -6,6 +6,10 @@
  * UserRatingsController. The GET's ADMIN/OWNER gate lives in
  * SecurityConfig, not here.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), main merge: the page-offset
+ * overflow 400 PR #273's review added to UserRatingsController, applied
+ * to the identical list here.
+ * Author review: [pending]
  */
 package foc.rating.controller;
 
@@ -61,6 +65,13 @@ class ReportController {
         }
         if (size < 1 || size > MAX_PAGE_SIZE) {
             throw new InvalidQueryParameterException("size must be between 1 and " + MAX_PAGE_SIZE);
+        }
+        // the offset (page * size) must fit in an int, or spring-data
+        // refuses the query deep inside as a 500, not the contract's
+        // 400 (PR #273 review)
+        int maxPage = Integer.MAX_VALUE / size;
+        if (page > maxPage) {
+            throw new InvalidQueryParameterException("page must be at most " + maxPage);
         }
         return PageResponse.of(reportService.list(page, size), ReportResponse::of);
     }

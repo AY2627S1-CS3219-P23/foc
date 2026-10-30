@@ -12,6 +12,9 @@
  * padded self-id case — trimming must keep it a 400 and store trimmed
  * ids.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), main merge: the page-offset
+ * overflow 400 (PR #273's review case, applied to this list).
+ * Author review: [pending]
  */
 package foc.rating.controller;
 
@@ -220,5 +223,10 @@ class ReportControllerTest {
         list("ADMIN", "size", "101")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("size must be between 1 and 100"));
+        // past Integer.MAX_VALUE / size the offset overflows: the
+        // contract's 400, not spring-data's 500 (PR #273 review)
+        list("ADMIN", "size", "20", "page", String.valueOf(Integer.MAX_VALUE))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("page must be at most " + (Integer.MAX_VALUE / 20)));
     }
 }

@@ -8,6 +8,10 @@
  * null-average and raw-double contracts are the author's decisions via
  * options Q&A.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), PR #273 review (@Sinnez1): the
+ * int-overflow page is a 400, and the last addressable page still
+ * answers.
+ * Author review: [pending]
  */
 package foc.rating.controller;
 
@@ -195,6 +199,23 @@ class UserRatingsControllerTest {
         reviews("usr-ratee-ur6", "size", "101")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("size must be between 1 and 100"));
+    }
+
+    @Test
+    @DisplayName("A page whose offset overflows an int is 400, not spring-data's 500")
+    void pageOffsetOverflow() throws Exception {
+        // Integer.MAX_VALUE / 100 = 21474836: the last page whose
+        // offset fits in an int at size 100
+        reviews("usr-ratee-ur9", "page", String.valueOf(Integer.MAX_VALUE), "size", "100")
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value("page must be at most 21474836"));
+        reviews("usr-ratee-ur9", "page", "21474837", "size", "100")
+                .andExpect(status().isBadRequest());
+        // the boundary itself still answers (empty, way past the data)
+        reviews("usr-ratee-ur9", "page", "21474836", "size", "100")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isEmpty());
     }
 
     @Test
