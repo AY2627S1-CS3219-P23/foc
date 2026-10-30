@@ -258,6 +258,9 @@
   2026-10-28: AI Use Summary extended for the user events that open and
   close credit accounts (issue #267), by Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
+  2026-10-30: AI Use Summary extended for rating-service's
+  request.completed ingest (issue #251), by Claude Code (Fable 5).
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1197,6 +1200,20 @@ on the broker, and a 30-day purge of its sent events), and every path
 that inserts a user (sign-up, owner setup, the demo seeder) writing
 `user.created` through one shared method. Recorded in
 `ai/usage-log.md`.
+
+Claude Code (Fable 5) implemented rating-service's `request.completed`
+ingest (issue #251, the N1.1 prerequisite under #44): the consumer
+topology (work/retry/dlq queues bound to `request-events` on the one
+registry key), the message converter, retrying listener and startup
+initializer copied from the credit-/notification-service patterns, an
+idempotent processor storing one `rateable_request` eligibility row per
+completed request behind the `processed_events` event-ID dedupe (Flyway
+V2), and the broker/Postgres tests (fixture replay, FIFO-sentinel
+redelivery dedupe, unknown and unconsumed types dead-lettered intact,
+retry/DLQ attempt evidence, V2 on real Postgres). The listener pattern
+(credit's hardened retry base over notification's original) and the
+upsert stance on a repeated completion were decided by the author via
+neutral-options Q&A. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

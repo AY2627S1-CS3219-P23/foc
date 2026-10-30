@@ -2,10 +2,12 @@
 # Tool: Claude Code (Fable 5), 2026-10-26, issue #250.
 # Scope: multi-stage build copied from order-service (repo-root build
 # context, shared foc-contracts library built first per team decision
-# D15); only the service name changed. The pom does not depend on
-# foc-contracts yet — the contracts stage is kept so the event wiring
-# under #44 lands without touching the infra (issue #250 decision).
+# D15); only the service name changed.
 # Reviewed by: [pending]
+# 2026-10-30, Claude Code (Fable 5), issue #251: comment only — the pom
+# now depends on foc-contracts (the request.completed consumer), so the
+# "not used yet" note from #250 is gone; no stage changed. Author
+# review: [pending]
 
 # Build context is the REPO ROOT (see compose.yaml) so the shared
 # foc-contracts library can be built alongside the service.

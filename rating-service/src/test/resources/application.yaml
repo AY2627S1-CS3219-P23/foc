@@ -6,6 +6,12 @@
 # the migrations are PostgreSQL-flavored, so H2 schemas come from the
 # JPA entities instead.
 # Reviewed by: [pending]
+# 2026-10-30, Claude Code (Fable 5), issue #251: the broker-free rabbit
+# settings (notification/credit precedent) — listener off, provisioning
+# off, unresolvable host so a cached-context restart can never reach a
+# real local broker, rabbit health off so /actuator/health stays 200
+# in SecurityConfigTest — and a 500 ms retry TTL so the integration
+# test's park-and-return cycles complete fast. Author review: [pending]
 
 # This file replaces the main application.yaml on the test classpath
 # (same name), so every rating.* setting the beans read is repeated here
@@ -23,8 +29,34 @@ spring:
   flyway:
     # PostgreSQL-flavored migrations don't run on H2
     enabled: false
+  rabbitmq:
+    # a cached-context restart must not reach a real local broker; an
+    # unresolvable host is harmless, an auth failure would not be
+    host: broker.invalid
+    listener:
+      simple:
+        acknowledge-mode: manual
+        # only the broker integration test turns the listener on
+        auto-startup: false
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
 
 rating:
   web-allowed-origin: http://localhost:5173
   jwt:
     secret: test-secret-0123456789abcdef0123456789abcdef
+  rabbitmq:
+    provision-on-startup: false
+    retry:
+      # fast park-and-return cycles in the broker integration test
+      ttl-ms: 500
+      max-attempts: 3
+      confirm-timeout-ms: 2000
+
+management:
+  health:
+    rabbit:
+      # no broker in tests; /actuator/health must stay UP (SecurityConfigTest)
+      enabled: false

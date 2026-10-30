@@ -6822,3 +6822,35 @@ Entry template:
   notification-service (15 fixtures bound); the fixture gate was proven
   by temporarily removing `rating-submitted.example.json` and confirming
   the test fails on it. Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: request.completed ingest)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `rating-service` — `messaging/rabbitmq/` (`RabbitMqTopology`
+  with the D13 queues bound to `request-events` on the registry's
+  `request.completed` key, `RabbitMqTopologyInitializer`,
+  `DomainEventMessageConverter` + config, `RetryingListener`,
+  `RequestEventsListener`), `service/` (`EventProcessor` port,
+  `RatingEligibilityProcessor`), `entity/` + `repository/`
+  (`ProcessedEvent`, `RateableRequest`), Flyway `V2__rating_eligibility.sql`,
+  pom (AMQP, foc-contracts, Testcontainers), main/test application.yaml,
+  and the tests (`RequestEventsRabbitMqIntegrationTest` through a real
+  broker, `FlywayMigrationTests` on real Postgres, plus the topology,
+  converter, listener and processor tests); `compose.yaml` and
+  `.env.example` RabbitMQ/retry wiring; a comment refresh in the
+  Dockerfile. Issue #251, under #44.
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/251". The tool read
+  the issue, the merged #250/#249 state and the notification-/credit-
+  service patterns, then asked two options questions. The author chose:
+  copy credit-service's hardened `RetryingListener` (correlated
+  confirms; PR #268, newer than the issue text's notification-service
+  pointer, and no confirm-mode switch when #252 adds publishing), and
+  add a Postgres Flyway migration test since the H2 test yaml never
+  runs V2. The upsert stance on a repeated completion under a fresh
+  eventId (last write wins, flagged in the PR) is the author's; the
+  messaging and idempotency designs are notification-service's team
+  decisions, transcribed.
+- **Author review:** `./mvnw test` green in rating-service (49 tests,
+  0 skipped — the broker integration test and the Flyway test ran
+  against real containers). Leong Wei Zhi reviews via pull request.

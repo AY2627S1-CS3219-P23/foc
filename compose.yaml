@@ -130,6 +130,10 @@
 # (PR review, team decision): login and sign-up need none, and the
 # outbox holds the events. Author review: Ryan Ang, pending pull request
 # review.
+# 2026-10-30, Claude Code (Fable 5), issue #251: rating-service gets the
+# RabbitMQ connection, retry knobs and depends_on rabbitmq (a pure
+# consumer with no outbox, like notification-service), now that it
+# consumes request.completed. Author review: [pending]
 
 name: foc
 
@@ -561,8 +565,7 @@ services:
 
   rating-service:
     # Context is the repo root so the build can include the shared
-    # foc-contracts library (D15). The pom does not use it yet; see the
-    # Dockerfile note.
+    # foc-contracts library (D15).
     build:
       context: .
       dockerfile: rating-service/Dockerfile
@@ -572,12 +575,23 @@ services:
       RATING_DB_NAME: ${RATING_DB_NAME:-rating}
       RATING_DB_USER: ${RATING_DB_USER:-rating}
       RATING_DB_PASSWORD: ${RATING_DB_PASSWORD:?set in .env}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-foc}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set in .env}
+      RATING_RETRY_TTL_MS: ${RATING_RETRY_TTL_MS:-10000}
+      RATING_RETRY_MAX_ATTEMPTS: ${RATING_RETRY_MAX_ATTEMPTS:-3}
+      RATING_RETRY_CONFIRM_TIMEOUT_MS: ${RATING_RETRY_CONFIRM_TIMEOUT_MS:-5000}
       # verifies the caller's bearer token
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       # the SPA's origin, for CORS
       WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
     depends_on:
       rating-db:
+        condition: service_healthy
+      # a pure consumer: the startup initializer declares its queues
+      # against the broker, so wait for it (notification-service pattern)
+      rabbitmq:
         condition: service_healthy
     restart: unless-stopped
 
