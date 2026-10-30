@@ -17,6 +17,9 @@
  * statement, no entity load (author decision via options Q&A,
  * docs/notification-service.md D26).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-30, Claude Code (Fable 5), issue #266: payload-pattern bulk
+ * delete for the request.dropped ingest prune (author decision D33 via
+ * options Q&A, docs/notification-service.md).
  */
 package foc.notification.repository;
 
@@ -74,4 +77,19 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 	@Transactional
 	@Query("delete from Notification n where n.createdAt < :cutoff")
 	int deleteByCreatedAtBefore(@Param("cutoff") Instant cutoff);
+
+	/**
+	 * Hard-deletes one recipient's rows whose payload matches
+	 * {@code pattern} (a {@code LIKE} pattern, {@code \} the escape
+	 * character). The ingest prune on {@code request.dropped} (D33): the
+	 * request reference lives inside the JSON payload, not in a column,
+	 * so the match is textual — portable across H2 and Postgres where a
+	 * {@code jsonb} query would not be. No {@code @Transactional} here,
+	 * unlike the purge above: the only caller is the ingest processor,
+	 * whose transaction must also cover this delete so a redelivered
+	 * event replays both or neither.
+	 */
+	@Modifying(clearAutomatically = true)
+	@Query("delete from Notification n where n.recipientId = :recipientId and n.payload like :pattern escape '\\'")
+	int deleteByRecipientIdAndPayloadLike(@Param("recipientId") String recipientId, @Param("pattern") String pattern);
 }

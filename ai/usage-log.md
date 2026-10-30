@@ -6995,3 +6995,36 @@ Entry template:
   follow claude[bot]'s inline review comments on PR #272.
 - **Author review:** `./mvnw test` green in rating-service (76 tests,
   0 skipped, both rounds). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (fix: dropped-courier notifications dead-end, issue #266)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate, fix, docs
+- **Scope:** notification-service (`NotificationRepository.java`:
+  payload-pattern bulk delete; `IdempotentEventProcessor.java`:
+  `request.dropped` prunes the dropping courier's rows for that
+  request, before the dedupe insert — `clearAutomatically` would
+  discard its unflushed assigned-PK insert otherwise;
+  `IdempotentEventProcessorTest`: prune scope, LIKE prefix safety,
+  idempotent redelivery, requester row survives).
+  web (`NotificationProvider.tsx` / `useNotifications.tsx`:
+  `pendingReadIds` + `markReadPending`, the optimistic mark-read lifted
+  out of the Center so it survives click-to-navigate unmounting;
+  `NotificationCenter.tsx`: rows render through the pending overlay and
+  the `marking` gate left the per-row PATCH; tests:
+  `notification-center.test.tsx` three new cases + a PATCH gate/failure
+  switch in the stub, `request-refetch.test.tsx` stub gains the two new
+  context fields). `docs/notification-service.md` (D33 row + section).
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/266", then "execute
+  the plan". The issue required a direction decision; the author chose,
+  via neutral options Q&A: prune the courier's notifications on drop
+  (over a past-party read-access record in order-service, and over
+  web-only 404 softening), and fold in both #263-review timing nits.
+  The tool's recorded decisions: JPQL `LIKE` on the payload column
+  (portable to the H2 tests) with both quotes in the pattern and
+  escaped wildcards; successful optimistic ids stay in the set, failed
+  ones leave so the next fetch shows the truth.
+- **Author review:** `./mvnw test` green in notification-service (94
+  tests, 0 skipped, including a first run that caught the
+  prune-after-dedupe ordering bug); web `vitest` 361/361, `tsc` and
+  `eslint` clean. Leong Wei Zhi reviews via pull request.

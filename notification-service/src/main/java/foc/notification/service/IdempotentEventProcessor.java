@@ -27,10 +27,18 @@
  * hydrates names at read time. Reverted to @Transactional: the
  * lookup-before-transaction ordering was the sole reason for the
  * programmatic TransactionTemplate.
+ * 2026-10-30, Claude Code (Fable 5), issue #266: request.dropped now
+ * prunes the dropping courier's rows for that request, per the
+ * author's D33 decision (options Q&A: prune chosen over past-party
+ * read access and over web-only 404 softening) — the drop removes
+ * them as a party, so their rows could only dead-end on the detail
+ * 404. Same transaction as the dedupe insert, so a redelivered event
+ * replays both or neither.
  */
 package foc.notification.service;
 
 import foc.contracts.events.core.DomainEvent;
+import foc.contracts.events.request.RequestDropped;
 import foc.notification.entity.Notification;
 import foc.notification.entity.ProcessedEvent;
 import foc.notification.repository.NotificationRepository;
@@ -90,6 +98,19 @@ class IdempotentEventProcessor implements EventProcessor {
 		if (processedEvents.existsById(event.eventId())) {
 			return;
 		}
+		// A drop removes the courier as a party (order-service nulls
+		// courierId), so every row they hold for this request now
+		// dead-ends on the detail 404 — delete them (D33, issue #266).
+		// MUST run before the saves below: the bulk query's
+		// clearAutomatically empties the persistence context, and the
+		// dedupe row's insert (assigned PK, so queued until flush, unlike
+		// the notifications' immediate IDENTITY inserts) would be
+		// discarded with it — a redelivery would then prune again and
+		// store the requester's row twice.
+		if (event instanceof RequestDropped dropped) {
+			notifications.deleteByRecipientIdAndPayloadLike(
+					dropped.courierId(), requestIdPattern(dropped.requestId()));
+		}
 		processedEvents.save(new ProcessedEvent(event.eventId()));
 		String payloadJson = objectMapper.writeValueAsString(businessFields(event));
 		for (String party : event.parties()) {
@@ -104,5 +125,18 @@ class IdempotentEventProcessor implements EventProcessor {
 		Map<String, Object> fields = objectMapper.convertValue(event, Map.class);
 		fields.keySet().removeAll(DomainEvent.METADATA_FIELDS);
 		return fields;
+	}
+
+	// Matches the payload's serialized "requestId":"<id>" — both quotes
+	// in the pattern, so request 12 can never match request 123's rows.
+	// LIKE wildcards in the id are escaped (the repository query declares
+	// '\' as the escape character); real ids are numeric strings, but the
+	// contract type is String, so this must not trust that.
+	private static String requestIdPattern(String requestId) {
+		String escaped = requestId
+				.replace("\\", "\\\\")
+				.replace("%", "\\%")
+				.replace("_", "\\_");
+		return "%\"requestId\":\"" + escaped + "\"%";
 	}
 }

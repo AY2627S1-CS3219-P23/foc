@@ -49,6 +49,16 @@
 // mark-read-only behavior).
 // 2026-10-27, same tool, PR #263 review (@claude): the payload's id is
 // URL-encoded before it is interpolated into the navigate path.
+// 2026-10-30, Claude Code (Fable 5), issue #266 (the #263 review's two
+// timing nits): the click-to-navigate mark-read goes through the
+// provider's markReadPending, and fetched rows render through a
+// pendingReadIds overlay — a Back that outruns the PATCH no longer
+// flashes the row unread, and a failed PATCH resurfaces as truth on the
+// next fetch instead of vanishing. The `marking` gate left the per-row
+// PATCH: a row pushed while mark-all was in flight is not covered by
+// the bulk call, so skipping its PATCH left it unread forever after a
+// click-through; the PATCH is idempotent server-side, so double-marking
+// a covered row is harmless.
 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
@@ -94,6 +104,8 @@ export function NotificationCenter() {
   const {
     unreadCount,
     pushedNotifications,
+    pendingReadIds,
+    markReadPending,
     refreshUnreadCount,
     soundEnabled,
     setSoundEnabled,
@@ -228,23 +240,25 @@ export function NotificationCenter() {
   async function handleRowClick(notification: NotificationDto) {
     const requestId = requestIdOf(notification.payload)
     if (requestId !== null) {
-      if (!notification.read && !marking) {
-        // Fire-and-forget: navigation unmounts this page, so no list
-        // surgery — a failure just leaves the row unread server-side.
-        // The provider outlives the route, so the badge refresh lands.
-        // During mark-all (`marking`) the bulk call covers this row, so
-        // the per-row PATCH is skipped but the click still navigates
-        // (PR #263 review).
-        setNotificationRead(notification.id, true)
-          .then(() => refreshUnreadCount())
-          .catch(() => {})
+      if (!notification.read) {
+        // Through the provider, which outlives the navigation that
+        // unmounts this page: the id joins pendingReadIds up front, so
+        // an immediate Back renders the row read while the PATCH is
+        // still in flight, and a failed PATCH resurfaces the row unread
+        // on the next fetch (issue #266). No `marking` gate: a row
+        // pushed while mark-all was in flight is not covered by the
+        // bulk call, and the PATCH is idempotent for rows that are.
+        markReadPending(notification.id)
       }
       // the id is an arbitrary payload string — encoded so a `/`, `?`
       // or `#` in it cannot route somewhere unintended (PR #263 review)
       navigate(`/deliveries/${encodeURIComponent(requestId)}`)
       return
     }
-    if (notification.read || marking) return
+    // No `marking` gate here either (issue #266): the bulk call missed
+    // any row pushed after it started, and both completions do their
+    // list surgery by id, so they compose in either order.
+    if (notification.read) return
     try {
       await setNotificationRead(notification.id, true)
       setItems((prev) =>
@@ -339,6 +353,22 @@ export function NotificationCenter() {
   )
   const names = useUsernames(courierIds)
 
+  // The rows as the viewer should see them: a row whose read PATCH is
+  // still in flight — or committed after this page's snapshot was
+  // fetched — renders read, and under the Unread filter leaves the
+  // list, so a Back that outruns the PATCH never flashes it unread
+  // (issue #266). A render-time overlay, not a merge-time rewrite:
+  // `items` stays the server's snapshot, which the pager math above
+  // (`hasMore`, `nextPage`) must measure against the server's totals.
+  const displayItems = useMemo(() => {
+    if (pendingReadIds.size === 0) return items
+    return filter === 'unread'
+      ? items.filter((n) => !pendingReadIds.has(n.id))
+      : items.map((n) =>
+          !n.read && pendingReadIds.has(n.id) ? { ...n, read: true } : n,
+        )
+  }, [items, filter, pendingReadIds])
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -427,7 +457,7 @@ export function NotificationCenter() {
       {/* An empty list only means "all caught up" when the load worked;
           behind an error banner it would be a reassuring lie (PR #199
           review). */}
-      {!loading && items.length === 0 && !error && (
+      {!loading && displayItems.length === 0 && !error && (
         <div className="rounded-lg border-2 border-dashed border-gray-200 bg-white py-12 text-center">
           <p className="font-medium text-gray-900">No new notifications</p>
           <p className="mt-1 text-sm text-gray-500">
@@ -436,9 +466,9 @@ export function NotificationCenter() {
         </div>
       )}
 
-      {!loading && items.length > 0 && (
+      {!loading && displayItems.length > 0 && (
         <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
-          {items.map((notification) => (
+          {displayItems.map((notification) => (
             <NotificationRow
               key={notification.id}
               notification={notification}

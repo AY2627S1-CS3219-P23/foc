@@ -121,6 +121,7 @@ removed; gaps in the numbering are intentional.
 | D27 | List paging & filter | **Hand-validated `page`/`size`** (defaults 0/20, cap 100, out-of-range → 400 — credit-service's anti-`Pageable` stance) plus an optional **`unread=true` filter**, bound as a primitive `boolean` — deliberately as lenient as Spring's standard conversion (`1`/`yes`/`on` and `0`/`no`/`off` alongside `true`/`false`), not hand-validated like `page`/`size` | Notif F3.1 |
 | D28 | REST filter authorities | **Empty authorities**: the JWT filter authenticates the subject only — this service's verifier exposes no role claim and no route is role-gated; the denylist is NOT re-checked on REST (gateway decision G4; D23 stays the STOMP-only exception) | least change |
 | D32 | Display names (supersedes D30/D31) | **Events and stored payloads carry party IDs only; the web resolves `courierId` → username at read time** (gateway `GET /api/user/users/{id}` with the caller's own JWT, SPA-side cache: 10 min positive / 30 s negative TTL, in-flight dedupe) — no service-to-service call remains, the internal-token machinery is gone, F1.1 holds unamended, renames show current names (D30's ingest snapshot went stale), and a failed lookup renders the actor-less copy — see [Display names](#display-names-d32) | Notif F3.1 UX |
+| D33 | Dropped-courier prune (issue #266) | **Ingesting `request.dropped` deletes the dropping courier's stored rows for that request**, in the same transaction as the dedupe insert — the drop removes them as a party (order-service nulls `courierId`), so every row they held (`request.accepted`, `request.collected`, dispute events) could only dead-end on the detail 404. Chosen (options Q&A) over a past-party read-access record in order-service and over web-only 404 softening — see [Dropped-courier prune](#dropped-courier-prune-d33) | Notif F3.1 UX; issue #266 |
 
 ## Components
 
@@ -269,6 +270,36 @@ programmatic). The web resolves names where they are displayed:
   Pre-D32 rows still carry stored `requesterName`/`courierName` keys;
   the web ignores them entirely (no migration — dead keys age out with
   the 30-day retention purge).
+
+## Dropped-courier prune (D33)
+
+A drop returns the request to the open feed and removes the courier as
+a party, so `RequestsQueryService.detail()` answers their old
+notifications' clicks with 404 and `/requests/mine?role=courier` no
+longer lists the request — no page can render it for them (issue
+#266). Rather than restore read access or soften the dead end, the
+ingest deletes the rows there would be nothing behind:
+
+- **Mechanism:** on `request.dropped`, one bulk `DELETE` scoped to
+  `recipient_id` = the event's `courierId` and a `LIKE` match on the
+  payload's `"requestId":"<id>"` (both quotes in the pattern, wildcards
+  escaped — request 12 never matches request 123). Textual on purpose:
+  the request reference lives inside the JSON payload column, and JPQL
+  `LIKE` runs on H2 and Postgres alike where `jsonb` would not.
+- **Transactionality:** same transaction as the event-ID dedupe insert,
+  and ordered **before** it — the bulk query's `clearAutomatically`
+  discards the dedupe row's still-unflushed insert if it runs after
+  (assigned PK, so the insert queues until flush, unlike the
+  notifications' immediate IDENTITY inserts). A redelivery therefore
+  replays both or neither; a duplicate prunes nothing.
+- **Scope:** only the dropping courier's rows for that request. The
+  requester's history is untouched and they still receive the
+  `request.dropped` row; a courier who re-accepts gains fresh rows.
+- **Accepted limitations:** a courier with the Center open keeps the
+  deleted rows in client state until the next fetch (no STOMP deletion
+  frame) — at worst one 404 click; and their Request History stays
+  empty for that request, which is this decision's intended meaning,
+  not a gap.
 
 ## REST API contract (D24–D28)
 

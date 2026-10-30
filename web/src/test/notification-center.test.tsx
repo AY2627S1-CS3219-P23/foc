@@ -41,6 +41,12 @@
 // request.dispute-resolved templates, and their copy without the
 // category or amounts.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-30, Claude Code (Fable 5), issue #266 (the #263 review's two
+// timing nits): a click during an in-flight mark-all still PATCHes the
+// pushed row (the `marking` gate is gone); a Back that outruns the
+// click's PATCH renders the row read (the provider's pendingReadIds
+// overlay); a failed PATCH resurfaces the row unread on the next
+// fetch. The stub gains a PATCH gate and a PATCH failure switch.
 
 import {
   act,
@@ -146,6 +152,9 @@ let serverUnread: NotificationDto[] | null = null
 let listGate: Deferred | null = null
 let countGate: Deferred | null = null
 let readAllGate: Deferred | null = null
+let patchGate: Deferred | null = null
+// fail the per-row PATCH, for the optimistic-read failure case (#266)
+let patchFailure = false
 
 interface Deferred {
   promise: Promise<void>
@@ -201,6 +210,8 @@ beforeEach(() => {
   listGate = null
   countGate = null
   readAllGate = null
+  patchGate = null
+  patchFailure = false
   fetchMock.mockReset()
   fetchMock.mockImplementation(async (rawUrl: string, init?: RequestInit) => {
     const url = String(rawUrl)
@@ -245,6 +256,12 @@ beforeEach(() => {
     }
     const patched = /\/notifications\/me\/(\d+)$/.exec(url)
     if (patched) {
+      const gate = patchGate
+      patchGate = null
+      await passGate(gate)
+      if (patchFailure) {
+        return jsonResponse(500, { status: 500, detail: 'mark-read is down' })
+      }
       if (serverUnread) {
         const id = Number(patched[1])
         serverUnread = serverUnread.filter((n) => n.id !== id)
@@ -1138,6 +1155,139 @@ describe('notification center page', () => {
         name: 'Request #1048 accepted by courier_maya — unread, select to open the request',
       }),
     ).toBeEnabled()
+  })
+
+  // ---- issue #266: the #263 review's two timing nits ----
+
+  test('a click during an in-flight "Mark all as read" still PATCHes the pushed row', async () => {
+    pages = [
+      pageOf(
+        [notification(1, 'request.created', { requestId: '1' }, false)],
+        0,
+        1,
+        1,
+      ),
+    ]
+    unreadCountOnServer = 1
+    await renderCenter()
+    const onMessage = connectPush()
+
+    // hold the bulk POST open; the server has already run its update
+    readAllGate = deferred()
+    const held = readAllGate
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Mark all as read' }))
+    })
+    // stored after that update, so the bulk call does not cover it
+    await act(async () => onMessage(pushFrame(acceptedBy(99))))
+
+    // clicking it mid-flight is the only chance to mark it: the old
+    // `marking` gate skipped this PATCH and the row stayed unread
+    // forever once the user navigated away (issue #266)
+    const row = await screen.findByRole('button', {
+      name: 'Request #1048 accepted by courier_maya — unread, select to open the request',
+    })
+    await act(async () => {
+      fireEvent.click(row)
+    })
+
+    const patch = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith('/notifications/me/99'),
+    )
+    expect(patch?.[1]).toMatchObject({ method: 'PATCH' })
+    // and the click still navigated to the request
+    await screen.findByRole('link', { name: '← Back to requests' })
+    await act(async () => {
+      held.release()
+    })
+  })
+
+  test('a Back that outruns the click PATCH still renders the row read', async () => {
+    pages = [
+      pageOf(
+        [notification(7, 'request.cancelled', { requestId: '1045' }, false)],
+        0,
+        1,
+        1,
+      ),
+    ]
+    unreadCountOnServer = 1
+    localStorage.setItem('user', JSON.stringify(session))
+    const router = createMemoryRouter(routes, {
+      initialEntries: ['/notifications'],
+    })
+    render(<RouterProvider router={router} />)
+    await act(async () => {})
+
+    // hold the PATCH open: the server still has the row unread when the
+    // remounted list fetches it
+    patchGate = deferred()
+    const held = patchGate
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'Request #1045 cancelled — unread, select to open the request',
+        }),
+      )
+    })
+    await screen.findByRole('link', { name: '← Back to requests' })
+
+    await act(async () => {
+      void router.navigate(-1)
+    })
+
+    // the fetched snapshot says unread, but the pending overlay wins —
+    // no unread flash while the PATCH is still in flight (issue #266)
+    await screen.findByRole('button', {
+      name: 'Request #1045 cancelled — select to open the request',
+    })
+    expect(
+      screen.queryByRole('button', {
+        name: 'Request #1045 cancelled — unread, select to open the request',
+      }),
+    ).toBeNull()
+    await act(async () => {
+      held.release()
+    })
+  })
+
+  test('a failed click PATCH resurfaces the row unread on the next fetch', async () => {
+    // the silent-swallow half of the nit: the miss must not be
+    // permanent — once the PATCH fails, the truth wins the next fetch
+    patchFailure = true
+    pages = [
+      pageOf(
+        [notification(7, 'request.cancelled', { requestId: '1045' }, false)],
+        0,
+        1,
+        1,
+      ),
+    ]
+    unreadCountOnServer = 1
+    localStorage.setItem('user', JSON.stringify(session))
+    const router = createMemoryRouter(routes, {
+      initialEntries: ['/notifications'],
+    })
+    render(<RouterProvider router={router} />)
+    await act(async () => {})
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'Request #1045 cancelled — unread, select to open the request',
+        }),
+      )
+    })
+    await screen.findByRole('link', { name: '← Back to requests' })
+
+    await act(async () => {
+      void router.navigate(-1)
+    })
+
+    // the failed id has left the overlay; the server's word stands
+    await screen.findByRole('button', {
+      name: 'Request #1045 cancelled — unread, select to open the request',
+    })
   })
 
   test('a failed load shows no "all caught up" empty state', async () => {

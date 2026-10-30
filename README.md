@@ -268,6 +268,9 @@
   rating API (issue #252), by Claude Code (Fable 5); extended again
   the same day for the PR #272 review fix.
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-30: AI Use Summary extended for the notification-service
+  dropped-courier prune and the Notification Center timing fixes
+  (issue #266) by Claude Code (Fable 5).
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1259,6 +1262,22 @@ write-up in the payload, D32). After review, the race handler answers
 and leaves every other integrity violation a 500, with the race test
 driving the database's real exception through the advice (reviewer
 suggestion). Recorded in `ai/usage-log.md`.
+
+Claude Code (Fable 5) implemented the notification-service prune for
+issue #266: ingesting `request.dropped` now deletes the dropping
+courier's stored rows for that request (they are no longer a party, so
+the rows could only dead-end on the detail 404), via a payload-pattern
+bulk delete in the same transaction as the event-ID dedupe — ordered
+before it, since the bulk query's context clear would discard the
+dedupe row's unflushed insert. The direction (prune, over past-party
+read access or web-only 404 softening — D33,
+`docs/notification-service.md`) and folding in the #263 review's two
+timing nits were the author's decisions via neutral-options Q&A. On the
+web, the click-to-navigate mark-read moved into the provider as an
+optimistic `pendingReadIds` overlay (a quick Back no longer flashes the
+row unread; a failed PATCH resurfaces as unread on the next fetch), and
+the `marking` gate left the per-row PATCH so a row pushed during an
+in-flight mark-all can still be marked. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
