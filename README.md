@@ -268,6 +268,9 @@
   rating API (issue #252), by Claude Code (Fable 5); extended again
   the same day for the PR #272 review fix.
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-30: AI Use Summary extended for rating-service's profile
+  read APIs (issue #253), by Claude Code (Fable 5).
+  Author review: Leong Wei Zhi, pending pull request review.
   2026-10-30: AI Use Summary extended for the notification on
   rating.submitted (issue #255), by Claude Code (Fable 5).
   Author review: Leong Wei Zhi, pending pull request review.
@@ -1262,6 +1265,18 @@ write-up in the payload, D32). After review, the race handler answers
 and leaves every other integrity violation a 500, with the race test
 driving the database's real exception through the advice (reviewer
 suggestion). Recorded in `ai/usage-log.md`.
+
+Claude Code (Fable 5) implemented rating-service's profile read APIs
+(issue #253, N1.3 under #44): `GET /users/{id}/ratings/summary` (the
+star-row aggregate via JPQL avg/count) and `GET /users/{id}/ratings`
+(the newest-first review history, paged with the platform's
+`PageResponse` shape and credit-service's page/size bounds), both open
+to any authenticated user, with Flyway V4 adding the
+`(ratee_id, created_at desc, id desc)` read index. The null average for
+a user with no ratings and the raw (unrounded) mean were the author's
+decisions via neutral-options Q&A; the list returns rater ids only
+(D32 — the web hydrates usernames at read time). Recorded in
+`ai/usage-log.md`.
 
 Claude Code (Fable 5) implemented the notification on `rating.submitted`
 (issue #255, N1 under #44): notification-service's second queue trio

@@ -12,6 +12,9 @@
   routes in the Endpoints table, and the walking-skeleton framing
   retired (#251's ingest and #252's API exist now).
   Author review: [pending]
+  2026-10-30, Claude Code (Fable 5), issue #253: the two profile read
+  routes in the Endpoints table.
+  Author review: [pending]
 -->
 
 # rating-service
@@ -19,12 +22,13 @@
 The FoC rating service (nice-to-have N1, issue #44): ratings for
 completed orders. It ingests `request.completed` into per-request
 eligibility rows (#251), takes each party's one immutable rating of the
-other (#252), and publishes `rating.submitted` to the `rating-events`
-exchange through a transactional outbox so the ratee can be notified
-(#255). Built on JWT security, a service-owned PostgreSQL (`rating-db`,
-schema owned by Flyway), the gateway route `/api/rating/**`, and
-compose wiring (#250). The remaining features land with the issues
-under #44 (#253–#258).
+other (#252), serves any user's rating summary and review history for
+the public profile (#253), and publishes `rating.submitted` to the
+`rating-events` exchange through a transactional outbox so the ratee
+can be notified (#255). Built on JWT security, a service-owned
+PostgreSQL (`rating-db`, schema owned by Flyway), the gateway route
+`/api/rating/**`, and compose wiring (#250). The remaining features
+land with the issues under #44 (#254–#258).
 
 ## Running
 
@@ -67,6 +71,8 @@ Flyway disabled (the migrations are PostgreSQL-flavored).
 | GET | `/actuator/health` | none — open through the gateway too (G5: anonymous requests pass through; a token is only verified if present) | compose healthcheck / probes |
 | POST | `/ratings` | bearer | `{requestId, stars (1–5), text? (≤1000 chars)}`; the caller rates the other party of a completed request, once. 201 with the stored rating; problem+json 400 invalid stars/text, 403 not a party, 404 unknown request, 409 already rated |
 | GET | `/ratings/mine?requestId=` | bearer | the caller's own rating of that request: 200 `{"rating": {...}}`, or `{"rating": null}` until they rate (same 400/403/404 refusals as POST) |
+| GET | `/users/{id}/ratings/summary` | bearer | the user's aggregate for the profile's star row: 200 `{average, count}`; `average` is the raw mean (the UI rounds) and null — not 0 — while `count` is 0 |
+| GET | `/users/{id}/ratings?page=&size=` | bearer | the user's review history, newest first: 200 paged `{content: [{raterId, stars, text, createdAt}], page, size, totalElements, totalPages}` (IDs only; the web hydrates usernames, D32). `page` ≥ 0 (default 0), 1 ≤ `size` ≤ 100 (default 20); problem+json 400 outside those bounds |
 
 Everything else is answered 401 by the service itself without a valid
 bearer token (the gateway does not require one, per G5) and 404 with
