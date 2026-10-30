@@ -41,6 +41,10 @@
 // request.dispute-resolved templates, and their copy without the
 // category or amounts.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-30, Claude Code (Fable 5), issue #255: the rating.submitted
+// template — the rater's name hydrates via actorIdOf (raterId) with the
+// usual degrade on a failed lookup. Author review: Leong Wei Zhi,
+// pending pull request review.
 
 import {
   act,
@@ -492,6 +496,64 @@ describe('notification center page', () => {
     await act(async () => {})
     screen.getByRole('button', {
       name: 'Request #1052 was dropped by its courier — unread, select to open the request',
+    })
+  })
+
+  test('a received review names the rater, and degrades without a name', async () => {
+    usernamesOnServer = { 'usr-req-1001': 'student_bob' }
+    pages = [
+      pageOf(
+        [
+          notification(
+            2,
+            'rating.submitted',
+            {
+              requestId: '1070',
+              ratingId: 'rat-1',
+              raterId: 'usr-req-1001',
+              rateeId: 'usr-cou-2002',
+              stars: 5,
+            },
+            false,
+          ),
+          // a rater lookup can fail (D32): the copy degrades, never breaks
+          notification(
+            1,
+            'rating.submitted',
+            {
+              requestId: '1071',
+              ratingId: 'rat-2',
+              raterId: 'usr-ghost',
+              rateeId: 'usr-cou-2002',
+              stars: 2,
+            },
+            false,
+          ),
+        ],
+        0,
+        1,
+        2,
+      ),
+    ]
+    unreadCountOnServer = 2
+    await renderCenter()
+
+    // the rater's name hydrates from raterId at read time (actorIdOf,
+    // D32) — awaited, the lookup is a round-trip behind the first paint
+    await screen.findByRole('button', {
+      name: 'student_bob left you a new review — unread, select to open the request',
+    })
+    // wait for the usr-ghost lookup itself to settle: the actor-less
+    // copy also renders before the 404 lands (PR #222 review)
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/users/usr-ghost'),
+        expect.anything(),
+      ),
+    )
+    await act(async () => {})
+    screen.getByRole('button', {
+      name: 'You received a new review — unread, select to open the request',
     })
   })
 

@@ -49,13 +49,17 @@
 // mark-read-only behavior).
 // 2026-10-27, same tool, PR #263 review (@claude): the payload's id is
 // URL-encoded before it is interpolated into the navigate path.
+// 2026-10-30, Claude Code (Fable 5), issue #255: the hydrated id list
+// goes through actorIdOf (raterId ?? courierId), so a rating.submitted
+// row names its rater the same way request rows name their courier
+// (D32). Author review: Leong Wei Zhi, pending pull request review.
 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { listNotifications, markAllRead, setNotificationRead } from './api'
 import {
-  courierIdOf,
+  actorIdOf,
   notificationMessage,
   relativeTime,
   requestIdOf,
@@ -328,16 +332,17 @@ export function NotificationCenter() {
   // mark, so it must not be gated on the badge alone (PR #199 review).
   const canMarkAll = unreadCount > 0 || items.some((n) => !n.read)
 
-  // Read-time hydration (D32): resolve the couriers named by the held
-  // rows — REST pages and pushed frames alike converge on `items`.
-  // Memoized over the rows so the hook's own memo on the array can hit;
-  // a fresh array every render (clock tick, filter toggle) would re-run
-  // its dedupe/sort/join for nothing (PR #222 review).
-  const courierIds = useMemo(
-    () => items.map((n) => courierIdOf(n.payload)),
+  // Read-time hydration (D32): resolve the actors (courier or rater)
+  // named by the held rows — REST pages and pushed frames alike converge
+  // on `items`. Memoized over the rows so the hook's own memo on the
+  // array can hit; a fresh array every render (clock tick, filter
+  // toggle) would re-run its dedupe/sort/join for nothing (PR #222
+  // review).
+  const actorIds = useMemo(
+    () => items.map((n) => actorIdOf(n.payload)),
     [items],
   )
-  const names = useUsernames(courierIds)
+  const names = useUsernames(actorIds)
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">

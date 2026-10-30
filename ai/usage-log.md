@@ -48,6 +48,38 @@ Entry template:
 ```
 
 ---
+## 2026-10-30 — Leong Wei Zhi (feat: notification on rating.submitted, issue #255)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate, docs
+- **Scope:** notification-service (`messaging/rabbitmq/RabbitMqTopology.java`:
+  rating trio `notification-service.rating-events` + `.retry`/`.dlq`
+  bound to `rating-events` on the registry's exact `rating.submitted`
+  key; `DomainEventsListener.java`: rating queue joins the listener and
+  `scheduleRetry` derives each delivery's retry queue from its consuming
+  queue — the hard-coded request retry queue would have parked a failed
+  rating event in the wrong trio; new
+  `RatingEventsRabbitMqIntegrationTest.java`). web
+  (`features/notifications/eventMessage.ts`: `rating.submitted`
+  template, `courierIdOf` generalized to `actorIdOf`;
+  `NotificationCenter.tsx`; `src/test/notification-center.test.tsx`).
+  `docs/notification-service.md` (rating domain in D16/D32, components,
+  event catalog, F1.3 row).
+- **Prompt(s):** Plan and implement issue #255 as written. Author
+  decisions via options Q&A: the retry queue is derived from the
+  consumer queue (one type-agnostic listener) rather than a second
+  listener method; the web template ships in this PR (minimal: ⭐
+  "{rater} left you a new review", rater name via D32 read-time
+  hydration) rather than deferring to #256/#257. Recipient scope
+  (ratee only) was already fixed by the contract's `parties` (#44) —
+  no per-type server code. Converter, processor, push listener and
+  `DomainEventContractTest` (covered since #249) unchanged.
+- **Author review:** notification-service `./mvnw test` (95 tests; both
+  broker integration suites green against a real RabbitMQ 4 container,
+  including x-death evidence that a poison rating event cycles through
+  the rating trio's own retry queue) and web
+  `vitest run src/test/notification-center.test.tsx`; to be reviewed
+  via pull request.
+
 ## 2026-10-29 — Ryan Ang (feat: report a problem and admin dispute queue, issue #241)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs
@@ -7124,3 +7156,14 @@ Entry template:
   follow @Sinnez1's inline review comments on PR #274.
 - **Author review:** `./mvnw test` green in rating-service (101 tests,
   0 skipped). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: PR #274 main merge 2, issue #254)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** merge conflict resolution
+- **Scope:** merged `origin/main` (PR #276, issue #255) into
+  `254-report-user`. Conflicts were docs-only: the README's AI Use
+  Summary comment and section kept both sides' entries (#254's and
+  #255's). `ai/usage-log.md` auto-merged with no entries lost; no code
+  conflicts — PR #276 touches notification-service and web only.
+- **Prompt(s):** "resolve conflict with origin/main".
+- **Author review:** Leong Wei Zhi reviews via pull request.
