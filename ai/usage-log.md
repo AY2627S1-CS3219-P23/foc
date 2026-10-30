@@ -7025,6 +7025,20 @@ Entry template:
   list returns rater ids only; no eligibility gate on the profile reads
   (the issue's "any authenticated user"); page/size bounds 0+/1–100
   with credit-service's wording.
-- **Author review:** `./mvnw test` green in rating-service (83 tests,
+- **Author review:** `./mvnw test` green in rating-service (85 tests,
   0 skipped; Flyway V4 ran on real Postgres). Leong Wei Zhi reviews via
   pull request.
+
+## 2026-10-30 — Leong Wei Zhi (fix: PR #273 review)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `rating-service` — `UserRatingsController` also bounds
+  `page` so the offset (`page * size`) fits in an int: past
+  `Integer.MAX_VALUE / size`, spring-data refuses the query deep inside
+  (`InvalidDataAccessApiUsageException`) as a 500 rather than the
+  contract's 400. `UserRatingsControllerTest` pins the overflow 400 and
+  that the last addressable page still answers.
+- **Prompt(s):** "address latest pr commetns". The change follows
+  @Sinnez1's inline review comment on PR #273.
+- **Author review:** `./mvnw test` green in rating-service (86 tests,
+  0 skipped). Leong Wei Zhi reviews via pull request.
