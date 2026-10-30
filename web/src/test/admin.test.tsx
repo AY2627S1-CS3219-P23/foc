@@ -1425,7 +1425,7 @@ async function openResolve(
 
 describe('Disputes section', () => {
   beforeEach(() => {
-    vi.spyOn(orderApi, 'getRequest').mockImplementation(async (id) => ({
+    vi.spyOn(orderAdminApi, 'getRequest').mockImplementation(async (id) => ({
       ...disputed(id),
       requesterId: 2,
       courierId: 4,
@@ -1502,6 +1502,20 @@ describe('Disputes section', () => {
       requesterAmount: 3,
       note: 'Item never arrived',
     })
+  })
+
+  test('says the parties could not be loaded when the detail read fails', async () => {
+    const user = userEvent.setup()
+    vi.mocked(orderAdminApi.listDisputes).mockResolvedValue(
+      pageOf([disputed(7)]),
+    )
+    vi.mocked(orderAdminApi.getRequest).mockRejectedValue(
+      new ApiError(503, { status: 503, detail: 'unavailable' }),
+    )
+    renderAdmin()
+
+    const dialog = await openResolve(user, 7)
+    expect(await dialog.findAllByText('Could not load')).toHaveLength(2)
   })
 
   test('a split always adds up to the reward', async () => {

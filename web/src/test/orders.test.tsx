@@ -737,6 +737,110 @@ describe('my requests', () => {
     )
   })
 
+  it('names the held reward in the singular for a 1-credit request', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(orderApi, 'listMyRequests').mockResolvedValue(
+      pageOf([{ ...arrived(40 * 60_000), creditAmount: 1 }]),
+    )
+    vi.spyOn(orderApi, 'getRequest').mockResolvedValue(
+      detail({ status: 'ARRIVED', courierId: 9 }),
+    )
+    renderAt('/my-requests')
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Report a problem' }),
+    )
+    expect(
+      within(screen.getByRole('dialog')).getByText(
+        /The reward of 1 credit stays held .* how it is divided\./i,
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('cancelling the report dialog without submitting does not refetch', async () => {
+    const user = userEvent.setup()
+    const mine = vi
+      .spyOn(orderApi, 'listMyRequests')
+      .mockResolvedValue(pageOf([arrived(40 * 60_000)]))
+    vi.spyOn(orderApi, 'getRequest').mockResolvedValue(
+      detail({ status: 'ARRIVED', courierId: 9 }),
+    )
+    renderAt('/my-requests')
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Report a problem' }),
+    )
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Cancel',
+      }),
+    )
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(mine).toHaveBeenCalledTimes(1)
+  })
+
+  it('refetches after closing the report dialog on a rejected submit', async () => {
+    const user = userEvent.setup()
+    const mine = vi
+      .spyOn(orderApi, 'listMyRequests')
+      .mockResolvedValue(pageOf([arrived(40 * 60_000)]))
+    vi.spyOn(orderApi, 'getRequest').mockResolvedValue(
+      detail({ status: 'ARRIVED', courierId: 9 }),
+    )
+    vi.spyOn(orderApi, 'dispute').mockRejectedValue(
+      new ApiError(409, { status: 409, detail: 'Request is not ARRIVED' }),
+    )
+    renderAt('/my-requests')
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Report a problem' }),
+    )
+    const dialog = within(screen.getByRole('dialog'))
+    await user.click(dialog.getByLabelText('Wrong item'))
+    await user.click(dialog.getByRole('button', { name: 'Report problem' }))
+    await dialog.findByRole('alert')
+    await user.click(dialog.getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(mine).toHaveBeenCalledTimes(2))
+  })
+
+  it('reads a fresh clock when the countdown starts', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const user = userEvent.setup({
+        advanceTimers: vi.advanceTimersByTime.bind(vi),
+      })
+      const mine = vi
+        .spyOn(orderApi, 'listMyRequests')
+        .mockResolvedValue(pageOf([]))
+      renderAt('/my-requests')
+      await waitFor(() => expect(mine).toHaveBeenCalledTimes(1))
+
+      // the page sits with nothing to count down; the window opens and
+      // closes meanwhile
+      await vi.advanceTimersByTimeAsync(10 * 60_000)
+      mine.mockResolvedValue(pageOf([arrived(-60_000)]))
+      vi.spyOn(orderApi, 'getRequest').mockResolvedValue(
+        detail({ status: 'ARRIVED', courierId: 9 }),
+      )
+      await user.click(
+        within(
+          screen.getByRole('group', { name: 'Filter by state' }),
+        ).getByRole('button', { name: 'Arrived' }),
+      )
+
+      expect(
+        await screen.findByText(/Completing automatically…/),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Report a problem' }),
+      ).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("drops the confirm dialog's report link once the window closes", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {

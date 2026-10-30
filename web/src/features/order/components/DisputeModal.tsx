@@ -12,7 +12,7 @@ import { type FormEvent, useState } from 'react'
 import { errorMessage } from '@/lib/api/http'
 import { Modal } from '@/shared/components/Modal'
 import { orderApi } from '../api'
-import { disputeCategoryLabels, MAX_DISPUTE_NOTE } from '../status'
+import { credits, disputeCategoryLabels, MAX_DISPUTE_NOTE } from '../status'
 import type { DisputeCategory, RequestSummary } from '../types'
 import { Banner } from './Banner'
 
@@ -20,7 +20,8 @@ const CATEGORIES = Object.keys(disputeCategoryLabels) as DisputeCategory[]
 
 interface DisputeModalProps {
   request: RequestSummary
-  onClose: () => void
+  // attempted: a /dispute call was made, so the request may have moved on
+  onClose: (attempted: boolean) => void
   // after order-service accepted the dispute
   onReported: () => void
 }
@@ -33,6 +34,7 @@ export function DisputeModal({
   const [category, setCategory] = useState<DisputeCategory | null>(null)
   const [note, setNote] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [attempted, setAttempted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -55,6 +57,7 @@ export function DisputeModal({
       (category === 'OTHER' && trimmed === '')
     )
       return
+    setAttempted(true)
     setBusy(true)
     setError(null)
     try {
@@ -71,12 +74,12 @@ export function DisputeModal({
   }
 
   return (
-    <Modal title="Report a problem" onClose={onClose}>
+    <Modal title="Report a problem" onClose={() => onClose(attempted)}>
       <form onSubmit={submit} noValidate className="space-y-4">
         <p className="text-sm text-gray-600">
-          Request #{request.id}: {request.item}. The{' '}
-          {request.creditAmount === 1 ? 'credit' : 'credits'} stay held until an
-          admin reviews the problem and decides how they are divided.
+          Request #{request.id}: {request.item}. The reward of{' '}
+          {credits(request.creditAmount)} stays held until an admin reviews the
+          problem and decides how it is divided.
         </p>
 
         {error && <Banner kind="error">{error}</Banner>}
@@ -148,7 +151,7 @@ export function DisputeModal({
         <div className="flex justify-end gap-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => onClose(attempted)}
             className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Cancel

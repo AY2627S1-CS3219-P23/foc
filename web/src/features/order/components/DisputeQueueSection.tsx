@@ -17,7 +17,6 @@ import { errorMessage } from '@/lib/api/http'
 import { Modal } from '@/shared/components/Modal'
 import { Pagination } from '@/shared/components/Pagination'
 import { orderAdminApi } from '../adminApi'
-import { orderApi } from '../api'
 import {
   credits,
   disputeCategoryLabels,
@@ -278,21 +277,27 @@ function ResolveModal({
   const [error, setError] = useState<string | null>(null)
   // the parties come from the detail; the list item carries no user ids
   const [detail, setDetail] = useState<RequestDetail | null>(null)
+  const [detailFailed, setDetailFailed] = useState(false)
   const requester = useUsername(detail?.requesterId ?? null)
   const courier = useUsername(detail?.courierId ?? null)
 
   useEffect(() => {
     let cancelled = false
-    orderApi.getRequest(request.id).then(
+    orderAdminApi.getRequest(request.id).then(
       (d) => {
         if (!cancelled) setDetail(d)
       },
-      () => {},
+      () => {
+        if (!cancelled) setDetailFailed(true)
+      },
     )
     return () => {
       cancelled = true
     }
   }, [request.id])
+
+  // shown until the detail names the parties
+  const party = detailFailed ? 'Could not load' : '…'
 
   const toCourier =
     outcome === null ? null : courierShare(outcome, split, reward)
@@ -336,11 +341,11 @@ function ResolveModal({
         <dl className="grid grid-cols-2 gap-2 text-sm">
           <div>
             <dt className="text-xs text-gray-500">Requester</dt>
-            <dd className="text-gray-900">{requester ?? '…'}</dd>
+            <dd className="text-gray-900">{requester ?? party}</dd>
           </div>
           <div>
             <dt className="text-xs text-gray-500">Courier</dt>
-            <dd className="text-gray-900">{courier ?? '…'}</dd>
+            <dd className="text-gray-900">{courier ?? party}</dd>
           </div>
           <div className="col-span-2">
             <dt className="text-xs text-gray-500">Reward held</dt>

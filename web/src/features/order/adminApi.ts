@@ -17,6 +17,7 @@ import { orderFetch, query } from './api'
 import type {
   ListAdminParams,
   MessageResponse,
+  RequestDetail,
   RequestStatus,
   RequestSummary,
   ResolveInput,
@@ -53,6 +54,12 @@ export const orderAdminApi = {
       method: 'POST',
       body: JSON.stringify({ ids }),
     })
+  },
+
+  // any request's detail (order-service admits admins), for the parties
+  // to a dispute
+  getRequest(id: number): Promise<RequestDetail> {
+    return orderFetch<RequestDetail>(`/requests/${id}`)
   },
 
   // divides a DISPUTED request's held reward; 409 if the admin is a party

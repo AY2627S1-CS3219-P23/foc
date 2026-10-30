@@ -40,7 +40,7 @@
 // requests stay listed (with a chip) until an admin resolves them.
 // Author review: Ryan Ang, pending pull request review.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 
 import { useRequestRefetch } from '@/features/notifications/useRequestRefetch'
@@ -104,9 +104,13 @@ const FILTERS: FilterOption[] = [
 // moves and a button disappears once its window closes.
 function useNow(enabled: boolean): number {
   const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!enabled) return
-    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS)
+    // re-read before the first paint, not at the first tick: the instant
+    // held since this last ran may be long stale
+    const tick = () => setNow(Date.now())
+    tick()
+    const timer = setInterval(tick, CLOCK_TICK_MS)
     return () => clearInterval(timer)
   }, [enabled])
   return now
@@ -394,17 +398,17 @@ export function MyRequests() {
       {reporting && (
         <DisputeModal
           request={reporting}
-          onClose={() => {
+          onClose={(attempted) => {
             setReporting(null)
-            // the dialog may have learned the request moved on (a 409)
-            reload(reporting)
+            // a rejected attempt may have learned the request moved on (a 409)
+            if (attempted) reload(reporting)
           }}
           onReported={() => {
             const request = reporting
             setReporting(null)
             setError(null)
             setNotice(
-              `Problem reported for request #${request.id}. An admin will review it; the ${credits(request.creditAmount)} stay held until then.`,
+              `Problem reported for request #${request.id}. An admin will review it; the reward of ${credits(request.creditAmount)} stays held until then.`,
             )
             reload(request)
           }}
