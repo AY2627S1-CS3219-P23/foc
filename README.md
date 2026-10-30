@@ -264,6 +264,10 @@
   request.completed ingest (issue #251), by Claude Code (Fable 5);
   extended again the same day for the PR #271 review fixes.
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-30: AI Use Summary extended for rating-service's submit
+  rating API (issue #252), by Claude Code (Fable 5); extended again
+  the same day for the PR #272 review fix.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1236,6 +1240,25 @@ changes a row's parties warns, duplicates log apart from applied
 events, the settled delivery's rethrow is wrapped non-fatal, and a
 schema-validation test pins the entities to the Flyway migrations
 (reviewer suggestions). Recorded in `ai/usage-log.md`.
+
+Claude Code (Fable 5) implemented rating-service's submit rating API
+(issue #252, N1.1/N1.2 under #44): `POST /ratings` (either party of a
+completed request rates the other once — stars 1–5 required, write-up
+optional and capped at 1000 characters, immutable after submit) and
+`GET /ratings/mine` for the UI's rate button, with problem+json
+refusals (400/403/404/409); Flyway V3 (`rating` with the one-per-
+direction unique key, stars check and FK to `rateable_request`, plus
+`outbox_event`); and a `rating.submitted` publish to the new
+`rating-events` exchange through a transactional outbox copied from
+order-service's (publisher off in tests). The response shapes
+(200-with-null `/mine`, 201 without a Location), the text cap, and
+keeping the FK were the author's decisions via neutral-options Q&A;
+the event shape is #249's contract (the ratee alone in `parties`, no
+write-up in the payload, D32). After review, the race handler answers
+409 only for the `rating_once_per_rater` constraint (matched by name)
+and leaves every other integrity violation a 500, with the race test
+driving the database's real exception through the advice (reviewer
+suggestion). Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

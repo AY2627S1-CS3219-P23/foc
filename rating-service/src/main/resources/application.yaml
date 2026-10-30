@@ -11,6 +11,9 @@
 # so the retry copy's confirm is awaited and #252's publisher needs no
 # mode switch) and the rating.rabbitmq retry knobs. Author review:
 # [pending]
+# 2026-10-30, Claude Code (Fable 5), issue #252: the rating.outbox
+# publisher knobs, order/credit-service's values unchanged. Author
+# review: [pending]
 
 spring:
   application:
@@ -55,6 +58,16 @@ rating:
       max-attempts: ${RATING_RETRY_MAX_ATTEMPTS:3}
       # how long the retry republish waits for the broker's confirm
       confirm-timeout-ms: ${RATING_RETRY_CONFIRM_TIMEOUT_MS:5000}
+  outbox:
+    publisher:
+      # a fixed delay between polls, counted from the end of one poll
+      poll-interval-ms: 1000
+      # events per poll, so a backlog drains over several polls
+      batch-size: 100
+      # how long one publish waits for the broker's confirm
+      confirm-timeout-ms: 5000
+      # when an unroutable (returned) event becomes due again
+      unroutable-retry-delay-ms: 30000
 
 management:
   endpoints:

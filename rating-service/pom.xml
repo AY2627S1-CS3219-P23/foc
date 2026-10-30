@@ -15,6 +15,9 @@
   for the request.completed consumer, and the Testcontainers test deps
   (spring-boot-testcontainers, junit-jupiter, postgresql, rabbitmq),
   all versionless like credit-service's. Author review: [pending]
+  2026-10-30, Claude Code (Fable 5), issue #252: the validation starter
+  for the submit DTO's rules (user/credit/supplier precedent). Author
+  review: [pending]
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -76,6 +79,10 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
 
 		<!-- Flyway owns the schema (db/migration), like credit-service -->

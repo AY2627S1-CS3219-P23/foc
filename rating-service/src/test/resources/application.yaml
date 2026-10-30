@@ -12,6 +12,10 @@
 # real local broker, rabbit health off so /actuator/health stays 200
 # in SecurityConfigTest — and a 500 ms retry TTL so the integration
 # test's park-and-return cycles complete fast. Author review: [pending]
+# 2026-10-30, Claude Code (Fable 5), issue #252: the rating.outbox
+# publisher knobs the #252 beans read, with the publisher off so no
+# test needs a broker (order-service's test yaml precedent). Author
+# review: [pending]
 
 # This file replaces the main application.yaml on the test classpath
 # (same name), so every rating.* setting the beans read is repeated here
@@ -54,6 +58,15 @@ rating:
       ttl-ms: 500
       max-attempts: 3
       confirm-timeout-ms: 2000
+  outbox:
+    publisher:
+      # no broker in tests; OutboxPublisherTests constructs the
+      # publisher directly
+      enabled: false
+      poll-interval-ms: 1000
+      batch-size: 100
+      confirm-timeout-ms: 2000
+      unroutable-retry-delay-ms: 30000
 
 management:
   health:
