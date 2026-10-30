@@ -6996,6 +6996,53 @@ Entry template:
 - **Author review:** `./mvnw test` green in rating-service (76 tests,
   0 skipped, both rounds). Leong Wei Zhi reviews via pull request.
 
+## 2026-10-30 — Leong Wei Zhi (rating-service: profile read APIs, issue #253)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `rating-service` — `controller/` (`UserRatingsController`:
+  `GET /users/{id}/ratings/summary`, `GET /users/{id}/ratings?page=&size=`,
+  page/size checked in the controller per credit-service's precedent;
+  `InvalidQueryParameterException` copied from credit-service; the two
+  query-parameter 400 handlers in `ProblemDetailAdvice`), `dto/`
+  (`RatingSummaryResponse`, `ReviewResponse` — the issue's narrow field
+  set, no rating/request/ratee id; `PageResponse` copied from
+  order-service), `service/` (`RatingService.summaryOf`/`reviewsOf`,
+  newest-first with the id tiebreak, order-service's precedent),
+  `repository/` (`findByRateeId` page; `summarize` JPQL avg/count),
+  Flyway `V4__rating_read_index.sql` (the `(ratee_id, created_at desc,
+  id desc)` index), and the tests (`UserRatingsControllerTest`; the V4
+  index case in `FlywayMigrationTests`); `rating-service/README.md` and
+  this README section. Under #44 (N1.3); stacked on PR #272's branch.
+- **Prompt(s):** "stack on top of pr #272, make a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/253". The tool read
+  the issue, PR #272's branch and the credit/notification/order read
+  patterns, then asked two options questions. The author chose: the
+  summary answers `{"average": null, "count": 0}` for a user with no
+  ratings (null says "no data"; 0 reads as a terrible score), and
+  `average` is the raw mean with display rounding left to the UI
+  (#257). The tool's recorded decisions: a second controller rather
+  than widening `RatingController`'s `/ratings` prefix; D32 kept — the
+  list returns rater ids only; no eligibility gate on the profile reads
+  (the issue's "any authenticated user"); page/size bounds 0+/1–100
+  with credit-service's wording.
+- **Author review:** `./mvnw test` green in rating-service (85 tests,
+  0 skipped; Flyway V4 ran on real Postgres). Leong Wei Zhi reviews via
+  pull request.
+
+## 2026-10-30 — Leong Wei Zhi (fix: PR #273 review)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `rating-service` — `UserRatingsController` also bounds
+  `page` so the offset (`page * size`) fits in an int: past
+  `Integer.MAX_VALUE / size`, spring-data refuses the query deep inside
+  (`InvalidDataAccessApiUsageException`) as a 500 rather than the
+  contract's 400. `UserRatingsControllerTest` pins the overflow 400 and
+  that the last addressable page still answers.
+- **Prompt(s):** "address latest pr commetns". The change follows
+  @Sinnez1's inline review comment on PR #273.
+- **Author review:** `./mvnw test` green in rating-service (86 tests,
+  0 skipped). Leong Wei Zhi reviews via pull request.
+
 ## 2026-10-30 — Leong Wei Zhi (fix: dropped-courier notifications dead-end, issue #266)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate, fix, docs

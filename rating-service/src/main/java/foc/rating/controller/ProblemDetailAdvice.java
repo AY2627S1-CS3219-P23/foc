@@ -16,6 +16,10 @@
  * ERROR — a handled exception never reaches Spring's default error
  * logging, so without this the bug would leave no trace.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), issue #253: the two query-parameter
+ * 400s the profile reads need (credit-service's ApiExceptionHandler
+ * precedent, trimmed to the int case).
+ * Author review: [pending]
  */
 package foc.rating.controller;
 
@@ -36,6 +40,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import foc.rating.service.AlreadyRatedException;
 import foc.rating.service.NotAPartyException;
@@ -119,6 +124,24 @@ class ProblemDetailAdvice {
     ProblemDetail handleMissingParameter(MissingServletRequestParameterException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
                 e.getParameterName() + " is required");
+    }
+
+    // a value the contract's own rules refuse: page before 0, size out
+    // of bounds
+    @ExceptionHandler(InvalidQueryParameterException.class)
+    ProblemDetail handleInvalidQueryParameter(InvalidQueryParameterException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+
+    // a value that is not of the parameter's type at all ("abc" or 1.5
+    // for page): problem+json, not the /error fallback
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        Class<?> required = e.getRequiredType();
+        String expected = Integer.class.equals(required) || int.class.equals(required)
+                ? "an integer"
+                : "a valid value";
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getName() + " must be " + expected);
     }
 
     // a body that isn't JSON (or has no Content-Type): Spring's own
