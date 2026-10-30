@@ -6934,3 +6934,43 @@ Entry template:
   the author's.
 - **Author review:** `./mvnw test` green in rating-service (51 tests,
   0 skipped). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: submit rating API, issue #252)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `rating-service` — `controller/` (`RatingController`:
+  `POST /ratings`, `GET /ratings/mine`; `ProblemDetailAdvice`, a
+  trimmed copy of user-service's), `dto/` (validated submit record,
+  response records), `service/` (`RatingService` with the 404/403/409
+  gates and the same-transaction outbox write; `RatingEvents` factory;
+  the three refusal exceptions; `EventOutbox`, `EventPublisher`,
+  `OutboxPublisher` copied from order-service), `entity/` +
+  `repository/` (`Rating`, `OutboxEvent` and their repositories),
+  `messaging/rabbitmq/` (`RabbitEventPublisher` copy sending to
+  `rating-events`; the exchange-only publish bean in
+  `RabbitMqTopology`), Flyway `V3__rating_and_outbox.sql`, pom
+  (validation starter), main/test application.yaml (outbox knobs,
+  publisher off in tests), `@EnableScheduling`, and the tests
+  (`RatingControllerTest`, `RatingServiceTests`,
+  `OutboxPublisherTests`, V3 constraints in `FlywayMigrationTests`,
+  the rating-events case in `RabbitMqTopologyTest`,
+  `SecurityConfigTest`'s 404 probe moved off `/ratings`); this README
+  section and `rating-service/README.md`. Under #44.
+- **Prompt(s):** "stacking on top of pr #271, create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/252" (PR #271
+  merged mid-planning, so the branch forks from main). The tool read
+  the issue, the #249 contract and the order/credit/user-service
+  patterns, then asked three options questions. The author chose:
+  `GET /ratings/mine` answers 200 with a null rating for a party who
+  has not rated (404/403 reserved for ineligibility, mirroring POST);
+  a 1000-character write-up cap (no wireframe number; the column stays
+  unbounded `text`); keep the FK from `rating` to `rateable_request`.
+  The tool's recorded decisions: a Hibernate-generated UUID id (no
+  Persistable workaround), 201 with the full body and no Location
+  header until #253 gives ratings a URL, blank write-ups stored null,
+  the unique-key race answered 409 by the advice, and the outbox
+  retention purge left as a follow-up. The event shape is #249's
+  contract (parties = the ratee alone, no write-up in the payload).
+- **Author review:** `./mvnw test` green in rating-service (75 tests,
+  0 skipped; Flyway V3 and schema validation ran on real Postgres).
+  Leong Wei Zhi reviews via pull request.

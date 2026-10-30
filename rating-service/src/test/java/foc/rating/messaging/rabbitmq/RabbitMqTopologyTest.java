@@ -7,6 +7,10 @@
  * other services declare request-events too and RabbitMQ refuses a
  * mismatch (PRECONDITION_FAILED).
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), issue #252: the publish-side
+ * rating-events bean — the exchange's every flag pinned the same way,
+ * and nothing else declared (the consumer's queues are #255's, D13).
+ * Author review: [pending]
  */
 package foc.rating.messaging.rabbitmq;
 
@@ -82,5 +86,22 @@ class RabbitMqTopologyTest {
 
         assertThat(dlq.isDurable()).isTrue();
         assertThat(dlq.getArguments()).doesNotContainKey("x-dead-letter-exchange");
+    }
+
+    @Test
+    void declaresTheRatingEventsExchangeAndNothingElse() {
+        Declarables publishSide = new RabbitMqTopology().ratingEventsTopology();
+
+        assertThat(publishSide.getDeclarablesByType(TopicExchange.class)).singleElement().satisfies(exchange -> {
+            assertThat(exchange.getName()).isEqualTo("rating-events");
+            assertThat(exchange.getType()).isEqualTo(ExchangeTypes.TOPIC);
+            assertThat(exchange.isDurable()).isTrue();
+            assertThat(exchange.isAutoDelete()).isFalse();
+            assertThat(exchange.isInternal()).isFalse();
+            assertThat(exchange.getArguments()).isEmpty();
+        });
+        // exchange only: the consumer owns its queues and bindings (D13)
+        assertThat(publishSide.getDeclarablesByType(Queue.class)).isEmpty();
+        assertThat(publishSide.getDeclarablesByType(Binding.class)).isEmpty();
     }
 }

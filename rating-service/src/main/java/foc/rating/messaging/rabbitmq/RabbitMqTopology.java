@@ -4,8 +4,11 @@
  * Scope: the Rating Service's consumer topology, a trimmed copy of
  * credit-service's RabbitMqTopology (its saga bean): the D13 queue
  * names, the same failure legs, one bound key (request.completed)
- * instead of five, no publish-side exchange yet (#252 adds
- * rating-events).
+ * instead of five.
+ * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), issue #252: the publish-side
+ * rating-events exchange, exchange only — the consumer's queues and
+ * bindings are its own (D13; notification-service's, #255).
  * Author review: [pending]
  */
 package foc.rating.messaging.rabbitmq;
@@ -90,6 +93,19 @@ public class RabbitMqTopology {
                     .with(EventTypeRegistry.routingKeyFor(event)));
         }
         return new Declarables(declarables);
+    }
+
+    /**
+     * The publish side (#252): the durable {@code rating-events} topic
+     * exchange {@code rating.submitted} goes out on, declared with the
+     * same flags as every other domain exchange. Exchange only: a
+     * consumer declares its own queues and bindings (D13), so an event
+     * published before any consumer exists is simply unroutable and the
+     * outbox retries it.
+     */
+    @Bean
+    Declarables ratingEventsTopology() {
+        return new Declarables(new TopicExchange(EventContracts.RATING_EVENTS_EXCHANGE, true, false));
     }
 
 }

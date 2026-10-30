@@ -5,9 +5,11 @@
  * notification-service's SecurityConfigTest: health is open, every
  * other route needs a valid platform JWT (401 problem+json with a
  * Bearer challenge otherwise), no request creates a session, and the
- * JWT filter is not a bean. No rating routes exist yet, so the
- * valid-token case asserts the request gets past security to a 404.
+ * JWT filter is not a bean.
  * Reviewed by: [pending]
+ * 2026-10-30, Claude Code (Fable 5), issue #252: /ratings routes exist
+ * now, so the valid-token case probes an unmapped path for its 404.
+ * Author review: [pending]
  */
 package foc.rating.config;
 
@@ -111,10 +113,10 @@ class SecurityConfigTest {
 	@Test
 	@DisplayName("A valid token gets past security, with no session")
 	void validTokenPassesSecurity() throws Exception {
-		// no rating routes exist yet, so past security means a plain 404
-		// (not the chain's 401/403)
+		// an unmapped path: past security means a plain 404 (not the
+		// chain's 401/403)
 		String valid = token(SECRET, Instant.now().plusSeconds(3600));
-		MvcResult result = mockMvc.perform(get("/ratings").header("Authorization", "Bearer " + valid))
+		MvcResult result = mockMvc.perform(get("/no-such-route").header("Authorization", "Bearer " + valid))
 				.andExpect(status().isNotFound())
 				.andReturn();
 		assertThat(result.getRequest().getSession(false)).isNull();
