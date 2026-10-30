@@ -6988,8 +6988,10 @@ Entry template:
   race case now feeds the advice the real exception the database
   raises (produced via a repository insert past the pre-check) rather
   than a hand-built one, plus a case pinning the 500 for other
-  violations.
-- **Prompt(s):** "address the latest pr comments". Both changes follow
-  claude[bot]'s inline review comment on PR #272.
+  violations. Second round, same day: the 500 branch logs the
+  violation at ERROR — a handled exception never reaches Spring's
+  default error logging, so the bug would otherwise leave no trace.
+- **Prompt(s):** "address the latest pr comments" (twice). All changes
+  follow claude[bot]'s inline review comments on PR #272.
 - **Author review:** `./mvnw test` green in rating-service (76 tests,
-  0 skipped). Leong Wei Zhi reviews via pull request.
+  0 skipped, both rounds). Leong Wei Zhi reviews via pull request.

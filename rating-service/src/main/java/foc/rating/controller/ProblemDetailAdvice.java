@@ -12,12 +12,18 @@
  * name through the cause chain); any other integrity violation is a
  * bug and stays a 500 problem.
  * Author review: [pending]
+ * Same day, same reviewer: the 500 branch logs the violation at
+ * ERROR — a handled exception never reaches Spring's default error
+ * logging, so without this the bug would leave no trace.
+ * Author review: [pending]
  */
 package foc.rating.controller;
 
 import java.util.Comparator;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -38,6 +44,8 @@ import foc.rating.service.UnknownRequestException;
 // the web client reads RFC 9457 problem+json error bodies
 @RestControllerAdvice
 class ProblemDetailAdvice {
+
+    private static final Logger log = LoggerFactory.getLogger(ProblemDetailAdvice.class);
 
     @ExceptionHandler(UnknownRequestException.class)
     ProblemDetail handleUnknownRequest(UnknownRequestException e) {
@@ -65,6 +73,9 @@ class ProblemDetailAdvice {
         if (isDuplicateRating(e)) {
             return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "You have already rated this request");
         }
+        // a handled exception never reaches Spring's default error
+        // logging, so the bug must be logged here or nowhere
+        log.error("Unexpected integrity violation", e);
         return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
                 "An unexpected error occurred");
     }
