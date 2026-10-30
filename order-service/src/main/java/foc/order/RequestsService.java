@@ -60,6 +60,13 @@
  * final state stamps closedAt, in transition() only (team decision: one
  * place, so a final state added later is covered too). Author review:
  * Ryan Ang, pending pull request review.
+ * 2026-10-29, Claude Code (Opus 5.5), issue #241: autoCompleteAt, the one
+ * place the auto-complete time is worked out; dispute() checks its window
+ * against it and the read responses return it (team decision). An
+ * ARRIVED request with no arrivedAt has no window to dispute within, so
+ * dispute() refuses it (409, team decision: no guessed timestamps, and
+ * the web hides the button for it too). Author review: Ryan Ang, pending
+ * pull request review.
  */
 package foc.order;
 
@@ -269,19 +276,31 @@ public class RequestsService {
         }
         Requests request = asRequester(requestId, callerId);
         Instant now = Instant.now();
-        if (request.getStatus() == OrderStates.ARRIVED) {
-            Instant windowEnd = request.getArrivedAt().plus(autoCompleteDelay);
-            if (!now.isBefore(windowEnd)) {
-                // to the second: the stored time has microseconds nobody needs
-                throw new IllegalStateException(
-                        "The dispute window closed at " + windowEnd.truncatedTo(ChronoUnit.SECONDS));
-            }
+        if (request.getStatus() == OrderStates.ARRIVED && request.getArrivedAt() == null) {
+            throw new IllegalStateException("No arrival time is recorded for this request");
+        }
+        Instant windowEnd = autoCompleteAt(request);
+        if (windowEnd != null && !now.isBefore(windowEnd)) {
+            // to the second: the stored time has microseconds nobody needs
+            throw new IllegalStateException(
+                    "The dispute window closed at " + windowEnd.truncatedTo(ChronoUnit.SECONDS));
         }
         if (request.getStatus() == OrderStates.COLLECTED && request.getDeadline().isAfter(now)) {
             throw new IllegalStateException("The request's deadline has not passed yet");
         }
         transition(request, OrderEvents.DISPUTE);
         return disputed(request, new RequestDispute(requestId, parsed, disputeNote, callerId, now, false));
+    }
+
+    // When an ARRIVED request completes by itself (F7.2), which also closes
+    // its dispute window; null in any other state, or if arrivedAt was
+    // never recorded. Worked out on each read, so it follows the current
+    // auto-complete setting.
+    public Instant autoCompleteAt(Requests request) {
+        if (request.getStatus() != OrderStates.ARRIVED || request.getArrivedAt() == null) {
+            return null;
+        }
+        return request.getArrivedAt().plus(autoCompleteDelay);
     }
 
     // ESCALATE (the expiry sweep, DSP-6): a request still COLLECTED a grace

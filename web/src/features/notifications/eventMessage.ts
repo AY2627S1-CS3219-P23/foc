@@ -23,7 +23,14 @@
 // 2026-10-27, Claude Code (Fable 5), issue #232: requestIdOf exported so
 // rows can navigate to the referenced request; requestLabel refactored
 // onto it (same copy).
+// 2026-10-29, Claude Code (Opus 5.5), issue #241: request.disputed and
+// request.dispute-resolved templates (cosmetic, DSP-9): the category, and
+// how the reward was divided. Both go to requester and courier alike, so
+// the copy names neither as "you".
+// Author review: Ryan Ang, pending pull request review.
 
+import { credits, disputeCategoryLabels } from '@/features/order/status'
+import type { DisputeCategory } from '@/features/order/types'
 import type { NotificationDto } from './types'
 
 export interface NotificationMessage {
@@ -35,6 +42,21 @@ export interface NotificationMessage {
 function text(payload: Record<string, unknown>, key: string): string | null {
   const value = payload[key]
   return typeof value === 'string' && value !== '' ? value : null
+}
+
+function count(payload: Record<string, unknown>, key: string): number | null {
+  const value = payload[key]
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+    ? value
+    : null
+}
+
+// a category this web build doesn't know (D18) shows no label
+function categoryLabel(payload: Record<string, unknown>): string | null {
+  const category = text(payload, 'category')
+  return category !== null && Object.hasOwn(disputeCategoryLabels, category)
+    ? disputeCategoryLabels[category as DisputeCategory]
+    : null
 }
 
 // Every cataloged request event carries requestId (a numeric string in
@@ -119,6 +141,26 @@ const templates: Record<
     icon: '⌛',
     title: `${requestLabel(p)} expired`,
   }),
+  'request.disputed': (p) => {
+    const category = categoryLabel(p)
+    return {
+      icon: '⚠️',
+      title: category
+        ? `Problem reported with ${requestLabel(p)}: ${category}`
+        : `Problem reported with ${requestLabel(p)}`,
+    }
+  },
+  'request.dispute-resolved': (p) => {
+    const toCourier = count(p, 'courierAmount')
+    const toRequester = count(p, 'requesterAmount')
+    return {
+      icon: '⚖️',
+      title:
+        toCourier !== null && toRequester !== null
+          ? `Dispute on ${requestLabel(p)} resolved: ${credits(toCourier)} to the courier, ${credits(toRequester)} refunded`
+          : `Dispute on ${requestLabel(p)} resolved`,
+    }
+  },
 }
 
 // names: courierId → username, resolved at read time by the caller

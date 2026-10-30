@@ -11,15 +11,19 @@
 // 2026-10-27, Claude Code (Opus 5.5), issue #242: labels for the two
 // dispute states and for each close reason (admin failed orders).
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-29, Claude Code (Opus 5.5), issue #241: the auto-complete time
+// is order-service's autoCompleteAt, so the 1-hour constant is gone (team
+// decision); DISPUTED is active, RESOLVED terminal and finished (team
+// decision: History lists it); dispute category labels; when "Report a
+// problem" is offered.
+// Author review: Ryan Ang, pending pull request review.
 
 import type {
   CloseReason,
-  RequestDetail,
+  DisputeCategory,
   RequestStatus,
   RequestSummary,
 } from './types'
-
-export const AUTO_COMPLETE_MS = 60 * 60 * 1000 // 1 hour after courier arrival
 
 export const statusLabels: Record<RequestStatus, string> = {
   PENDING: 'Reserving credits',
@@ -65,13 +69,25 @@ export const activeStatuses: RequestStatus[] = [
   'ACCEPTED',
   'COLLECTED',
   'ARRIVED',
+  'DISPUTED', // the reward stays held until an admin resolves it
 ]
+
+export const disputeCategoryLabels: Record<DisputeCategory, string> = {
+  NOT_DELIVERED: 'Not delivered',
+  WRONG_ITEM: 'Wrong item',
+  DAMAGED: 'Damaged item',
+  OTHER: 'Other',
+}
+
+// longest dispute or resolution note (DSP-7)
+export const MAX_DISPUTE_NOTE = 500
 
 export const finishedStatuses: RequestStatus[] = [
   'COMPLETED',
   'CANCELLED',
   'EXPIRED',
   'REJECTED',
+  'RESOLVED', // an admin divided the reward
 ]
 
 export const progressSteps = [
@@ -105,7 +121,8 @@ export function isTerminal(status: RequestStatus): boolean {
     status === 'COMPLETED' ||
     status === 'CANCELLED' ||
     status === 'EXPIRED' ||
-    status === 'REJECTED'
+    status === 'REJECTED' ||
+    status === 'RESOLVED'
   )
 }
 
@@ -156,8 +173,25 @@ export function deadlineLine(request: RequestSummary): string {
   }
 }
 
-// When an ARRIVED request completes by itself, or null if it isn't waiting.
-export function autoCompleteAt(request: RequestDetail): Date | null {
-  if (request.status !== 'ARRIVED' || !request.arrivedAt) return null
-  return new Date(new Date(request.arrivedAt).getTime() + AUTO_COMPLETE_MS)
+// When an ARRIVED request completes by itself, as order-service works it
+// out, or null if it isn't waiting.
+export function autoCompleteAt(request: RequestSummary): Date | null {
+  return request.autoCompleteAt ? new Date(request.autoCompleteAt) : null
+}
+
+// Whether the requester may report a problem now: an ARRIVED request
+// before it auto-completes, or a COLLECTED one past its deadline.
+// order-service checks the same rules and answers 409 otherwise.
+export function canReportProblem(
+  request: RequestSummary,
+  now = Date.now(),
+): boolean {
+  if (request.status === 'ARRIVED') {
+    const at = autoCompleteAt(request)
+    return at !== null && now < at.getTime()
+  }
+  if (request.status === 'COLLECTED') {
+    return now >= new Date(request.deadline).getTime()
+  }
+  return false
 }

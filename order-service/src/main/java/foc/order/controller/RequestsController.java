@@ -49,6 +49,9 @@
  * 2026-10-27, Claude Code (Opus 5.5), issue #242: GET /requests/admin
  * takes userId (team decision). Author review: Ryan Ang, pending pull
  * request review.
+ * 2026-10-29, Claude Code (Opus 5.5), issue #241: every list and the
+ * detail carry autoCompleteAt from RequestsService (team decision).
+ * Author review: Ryan Ang, pending pull request review.
  */
 package foc.order.controller;
 
@@ -146,7 +149,7 @@ public class RequestsController {
     @GetMapping("/requests/{id}")
     public RequestDetail detail(@PathVariable Long id, Authentication caller) {
         Requests request = queries.detail(id, callerId(caller), isAdmin(caller));
-        return RequestDetail.of(request, queries.disputeOf(request));
+        return RequestDetail.of(request, requestsService.autoCompleteAt(request), queries.disputeOf(request));
     }
 
     // Any user's requests, as requester or courier: ADMIN / OWNER only
@@ -318,11 +321,12 @@ public class RequestsController {
         return new MessageResponse("Request not found");
     }
 
-    // A page of requests as list items, each with its dispute; the
-    // disputes are loaded in one query for the whole page.
+    // A page of requests as list items, each with its auto-complete time
+    // and its dispute; the disputes are loaded in one query for the page.
     private PageResponse<RequestSummary> summaries(Page<Requests> page) {
         Map<Long, RequestDispute> disputes = queries.disputesOf(page.getContent());
-        return PageResponse.of(page, r -> RequestSummary.of(r, disputes.get(r.getId())));
+        return PageResponse.of(page,
+                r -> RequestSummary.of(r, requestsService.autoCompleteAt(r), disputes.get(r.getId())));
     }
 
     private static boolean isAdmin(Authentication caller) {

@@ -22,6 +22,9 @@
 // 2026-10-27, Claude Code (Opus 5.5), issue #242: orderFetch and query
 // exported for the admin calls in adminApi.ts.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-29, Claude Code (Opus 5.5), issue #241: POST /dispute, the
+// requester's "Report a problem" (DSP-5).
+// Author review: Ryan Ang, pending pull request review.
 
 import { creditApi } from '@/features/credit/api'
 import { listSuppliers } from '@/features/supplier/api'
@@ -29,6 +32,7 @@ import type { PagedResponse } from '@/features/supplier/types'
 import { ApiError, apiFetch, type ApiFetchInit } from '@/lib/api/http'
 import type {
   CreateRequestInput,
+  DisputeInput,
   ListMineParams,
   ListOpenParams,
   MessageResponse,
@@ -125,6 +129,13 @@ const httpOrderApi = {
   // requester steps
   cancel: (id: number) => step('/cancel', id),
   complete: (id: number) => step('/complete', id),
+  // ARRIVED before it auto-completes, or COLLECTED past its deadline
+  dispute(id: number, input: DisputeInput): Promise<MessageResponse> {
+    return orderFetch<MessageResponse>('/dispute', {
+      method: 'POST',
+      body: JSON.stringify({ requestId: id, ...input }),
+    })
+  },
 
   // the create form's affordability check; credit-service's own endpoint
   getBalance: () => creditApi.getBalance(),
@@ -179,6 +190,7 @@ const devMockOrderApi: typeof httpOrderApi = {
   drop: async (id) => (await loadMock()).drop(id),
   cancel: async (id) => (await loadMock()).cancel(id),
   complete: async (id) => (await loadMock()).complete(id),
+  dispute: async (id, input) => (await loadMock()).dispute(id, input),
   getBalance: async () => (await loadMock()).getBalance(),
   getUsername: async (id) => (await loadMock()).getUsername(id),
   listSupplierOptions: async () => (await loadMock()).listSupplierOptions(),

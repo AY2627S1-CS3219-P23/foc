@@ -29,6 +29,9 @@
  * the lists and the detail, and the closedFrom / closedTo filter (rows
  * with no closedAt never match; its 400). Author review: Ryan Ang,
  * pending pull request review.
+ * 2026-10-29, Claude Code (Opus 5.5), issue #241: autoCompleteAt on every
+ * list and the detail (arrivedAt + the delay while ARRIVED, null
+ * otherwise). Author review: Ryan Ang, pending pull request review.
  */
 package foc.order;
 
@@ -464,6 +467,41 @@ class RequestsReadEndpointsTests extends PostgresTestContainer {
 				all + "&userId=" + requester + "&state=REJECTED,CANCELLED,EXPIRED&closeReason=REQUESTER_CANCELLED",
 				courier, "OWNER")));
 		assertEquals(List.of(), ids(getJson(all + "&userId=" + courier, courier, "ADMIN")));
+	}
+
+	// --- auto_complete_at (issue #241)
+
+	@Test
+	void listsAndTheDetailShowWhenAnArrivedRequestAutoCompletes() throws Exception {
+		Long arrived = arrivedRequest();
+		Long accepted = createdRequest();
+		requestsService.accept(accepted, courier);
+		// after-ms in the test application.yaml
+		Instant expected = requestsRepository.findById(arrived).orElseThrow().getArrivedAt().plusMillis(3_600_000);
+
+		for (JsonNode page : List.of(
+				getJson("/requests/mine?role=requester", requester),
+				getJson("/requests/mine?role=courier", courier),
+				getJson("/users/" + requester + "/requests", stranger, "ADMIN"),
+				getJson("/requests/admin?size=100&userId=" + requester, stranger, "OWNER"))) {
+			assertEquals(expected, Instant.parse(item(page, arrived).get("autoCompleteAt").stringValue()));
+			assertTrue(item(page, accepted).get("autoCompleteAt").isNull(), "present, null unless ARRIVED");
+		}
+		assertEquals(expected,
+				Instant.parse(getJson("/requests/" + arrived, requester).get("autoCompleteAt").stringValue()));
+		assertTrue(getJson("/requests/" + accepted, requester).get("autoCompleteAt").isNull());
+		// the open list holds only CREATED requests
+		Long open = createdRequest();
+		assertTrue(item(getJson("/requests?size=100", stranger), open).get("autoCompleteAt").isNull());
+	}
+
+	@Test
+	void autoCompleteAtIsNullOnceTheRequestLeavesArrived() throws Exception {
+		Long completed = arrivedRequest();
+		requestsService.complete(completed, requester);
+
+		assertTrue(item(getJson("/requests/mine?role=requester", requester), completed).get("autoCompleteAt").isNull());
+		assertTrue(getJson("/requests/" + completed, requester).get("autoCompleteAt").isNull());
 	}
 
 	// --- closed_at (issue #242)

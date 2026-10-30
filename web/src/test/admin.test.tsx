@@ -36,6 +36,11 @@
 // unknown order are named and not counted as in progress; the user lookup
 // lists its matches to pick from, with a notice when there are more.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-29, Claude Code (Opus 5.5), issue #241: the Disputes section
+// against faked order admin calls — the queue and its count badge, the
+// three outcomes and their /resolve bodies, the split adding up to the
+// reward, and order-service's 409 for an admin who is a party.
+// Author review: Ryan Ang, pending pull request review.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -236,6 +241,11 @@ beforeEach(() => {
     message: 'queued',
   })
   vi.spyOn(orderAdminApi, 'listRequests').mockResolvedValue(pageOf([]))
+  // the Disputes section: an empty queue unless a case says otherwise
+  vi.spyOn(orderAdminApi, 'listDisputes').mockResolvedValue(pageOf([]))
+  vi.spyOn(orderAdminApi, 'resolve').mockResolvedValue({
+    message: 'resolved',
+  })
   vi.spyOn(orderApi, 'getUsername').mockImplementation(
     async (id) => `user_${id}`,
   )
@@ -836,6 +846,7 @@ describe('Admin Dashboard page', () => {
         .map((r) => r.getAttribute('aria-labelledby')),
     ).toEqual([
       'pool-heading',
+      'disputes-heading',
       'stuck-orders-heading',
       'failed-orders-heading',
       'users-heading',
@@ -952,6 +963,7 @@ function failed(
     creditAmount: 3,
     deadline: '2026-10-20T06:00:00Z',
     createdAt: '2026-10-20T02:00:00Z',
+    autoCompleteAt: null,
     ...change,
   }
 }
@@ -1360,5 +1372,204 @@ describe('Failed Orders section', () => {
       'The start date cannot be after the end date.',
     )
     expect(orderAdminApi.listRequests).toHaveBeenCalledTimes(calls)
+  })
+})
+
+// --- order domain: Disputes (issue #241)
+
+function disputed(
+  id: number,
+  change: Partial<NonNullable<RequestSummary['dispute']>> = {},
+): RequestSummary {
+  return {
+    id,
+    status: 'DISPUTED',
+    closeReason: null,
+    closedAt: null,
+    supplierName: 'The Deck',
+    dropoffLocation: 'COM3 Level 2',
+    item: `Item ${id}`,
+    creditAmount: 3,
+    deadline: '2026-10-29T06:00:00Z',
+    createdAt: '2026-10-29T02:00:00Z',
+    autoCompleteAt: null,
+    dispute: {
+      category: 'WRONG_ITEM',
+      disputeNote: 'Got a mocha',
+      raisedAt: '2026-10-29T05:00:00Z',
+      autoEscalated: false,
+      resolvedAt: null,
+      resolvedBy: null,
+      courierAmount: null,
+      requesterAmount: null,
+      resolutionNote: null,
+      ...change,
+    },
+  }
+}
+
+async function findDisputes() {
+  return within(await screen.findByRole('region', { name: /^Disputes/ }))
+}
+
+async function openResolve(
+  user: ReturnType<typeof userEvent.setup>,
+  id: number,
+) {
+  const region = await findDisputes()
+  await user.click(
+    await region.findByRole('button', { name: `Resolve request #${id}` }),
+  )
+  return within(screen.getByRole('dialog', { name: `Resolve request #${id}` }))
+}
+
+describe('Disputes section', () => {
+  beforeEach(() => {
+    vi.spyOn(orderAdminApi, 'getRequest').mockImplementation(async (id) => ({
+      ...disputed(id),
+      requesterId: 2,
+      courierId: 4,
+      supplierId: 1,
+      acceptedAt: null,
+      collectedAt: null,
+      arrivedAt: null,
+    }))
+  })
+
+  test('lists the DISPUTED requests with a count badge', async () => {
+    vi.mocked(orderAdminApi.listDisputes).mockResolvedValue(
+      pageOf([
+        disputed(7),
+        disputed(8, {
+          category: 'NOT_DELIVERED',
+          disputeNote: 'auto-escalated: not delivered by deadline',
+          autoEscalated: true,
+        }),
+      ]),
+    )
+    renderAdmin()
+
+    const region = await findDisputes()
+    expect(await region.findByLabelText('2 open')).toHaveTextContent('2')
+    expect(orderAdminApi.listDisputes).toHaveBeenCalledWith(0, 20)
+    expect(region.getByText('Wrong item')).toBeInTheDocument()
+    expect(region.getByText('Got a mocha')).toBeInTheDocument()
+    expect(region.getByText('Not delivered')).toBeInTheDocument()
+    expect(region.getByText('Auto-escalated')).toBeInTheDocument()
+  })
+
+  test('says so when there are none, with no badge', async () => {
+    renderAdmin()
+
+    const region = await findDisputes()
+    expect(await region.findByText('No open disputes.')).toBeInTheDocument()
+    expect(region.queryByLabelText(/open$/)).not.toBeInTheDocument()
+  })
+
+  test('pays the courier or refunds the requester in full', async () => {
+    const user = userEvent.setup()
+    vi.mocked(orderAdminApi.listDisputes).mockResolvedValue(
+      pageOf([disputed(7)]),
+    )
+    renderAdmin()
+
+    let dialog = await openResolve(user, 7)
+    // the parties come from the request's detail
+    expect(await dialog.findByText('user_2')).toBeInTheDocument()
+    expect(dialog.getByText('user_4')).toBeInTheDocument()
+    await user.click(dialog.getByLabelText('Pay the courier'))
+    await user.click(dialog.getByRole('button', { name: 'Resolve' }))
+    expect(orderAdminApi.resolve).toHaveBeenLastCalledWith(7, {
+      courierAmount: 3,
+      requesterAmount: 0,
+    })
+    expect(
+      await (
+        await findDisputes()
+      ).findByText(
+        'Request #7 resolved: 3 Credits to the courier, 0 Credits back to the requester.',
+      ),
+    ).toBeInTheDocument()
+    // the queue reloads
+    expect(orderAdminApi.listDisputes).toHaveBeenCalledTimes(2)
+
+    dialog = await openResolve(user, 7)
+    await user.click(dialog.getByLabelText('Refund the requester'))
+    await user.type(dialog.getByLabelText(/Note/), 'Item never arrived')
+    await user.click(dialog.getByRole('button', { name: 'Resolve' }))
+    expect(orderAdminApi.resolve).toHaveBeenLastCalledWith(7, {
+      courierAmount: 0,
+      requesterAmount: 3,
+      note: 'Item never arrived',
+    })
+  })
+
+  test('says the parties could not be loaded when the detail read fails', async () => {
+    const user = userEvent.setup()
+    vi.mocked(orderAdminApi.listDisputes).mockResolvedValue(
+      pageOf([disputed(7)]),
+    )
+    vi.mocked(orderAdminApi.getRequest).mockRejectedValue(
+      new ApiError(503, { status: 503, detail: 'unavailable' }),
+    )
+    renderAdmin()
+
+    const dialog = await openResolve(user, 7)
+    expect(await dialog.findAllByText('Could not load')).toHaveLength(2)
+  })
+
+  test('a split always adds up to the reward', async () => {
+    const user = userEvent.setup()
+    vi.mocked(orderAdminApi.listDisputes).mockResolvedValue(
+      pageOf([disputed(7)]),
+    )
+    renderAdmin()
+
+    const dialog = await openResolve(user, 7)
+    await user.click(dialog.getByRole('button', { name: 'Resolve' }))
+    expect(dialog.getByText('Choose how to resolve it.')).toBeInTheDocument()
+
+    await user.click(dialog.getByLabelText('Split the reward'))
+    const share = dialog.getByLabelText('Credits to the courier')
+    await user.type(share, '4')
+    expect(
+      dialog.getByText('Enter a whole number from 0 to 3.'),
+    ).toBeInTheDocument()
+    await user.click(dialog.getByRole('button', { name: 'Resolve' }))
+    expect(orderAdminApi.resolve).not.toHaveBeenCalled()
+
+    await user.clear(share)
+    await user.type(share, '1')
+    expect(
+      dialog.getByText('2 Credits back to the requester.'),
+    ).toBeInTheDocument()
+    await user.click(dialog.getByRole('button', { name: 'Resolve' }))
+    expect(orderAdminApi.resolve).toHaveBeenCalledWith(7, {
+      courierAmount: 1,
+      requesterAmount: 2,
+    })
+  })
+
+  test("shows order-service's 409 when the admin is a party", async () => {
+    const user = userEvent.setup()
+    vi.mocked(orderAdminApi.listDisputes).mockResolvedValue(
+      pageOf([disputed(7)]),
+    )
+    vi.mocked(orderAdminApi.resolve).mockRejectedValue(
+      new ApiError(409, {
+        status: 409,
+        detail: 'An admin cannot resolve a dispute on their own request',
+      }),
+    )
+    renderAdmin()
+
+    const dialog = await openResolve(user, 7)
+    await user.click(dialog.getByLabelText('Refund the requester'))
+    await user.click(dialog.getByRole('button', { name: 'Resolve' }))
+
+    expect(await dialog.findByRole('alert')).toHaveTextContent(
+      'An admin cannot resolve a dispute on their own request',
+    )
+    expect(orderAdminApi.listDisputes).toHaveBeenCalledTimes(1)
   })
 })

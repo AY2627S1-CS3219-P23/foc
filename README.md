@@ -257,6 +257,8 @@
   Author review: Leong Wei Zhi, pending pull request review.
   2026-10-28: AI Use Summary extended for the user events that open and
   close credit accounts (issue #267), by Claude Code (Opus 5.5).
+  2026-10-29: AI Use Summary extended for report a problem and the admin
+  dispute queue (issue #241), by Claude Code (Opus 5.5).
   Author review: Ryan Ang, pending pull request review.
 -->
 
@@ -1154,6 +1156,20 @@ presets were decided by the team and transcribed into
 `docs/disputes.md`. After review, Stuck Orders also names held credits
 for orders order-service has no record of, and the user lookup lists its
 matches for the admin to pick from (team decisions). Recorded in
+`ai/usage-log.md`.
+
+Claude Code (Opus 5.5) built the web side of N3 disputes (issue #241,
+DSP-3, DSP-5, DSP-7 to DSP-9): a "Report a problem" dialog on My
+Requests, a confirm dialog before "Confirm delivery", a countdown to
+auto-completion on arrived orders, the admin dashboard's Disputes
+section with its count badge and resolve dialog (pay the courier, refund
+the requester, or split), resolved orders in History with the courier's
+share, and notification copy for the two dispute events. For the countdown, order-service's lists and detail gained
+`autoCompleteAt`, worked out in the one method its dispute check also
+uses, and it refuses a dispute on an arrived order with no arrival time.
+Where the time comes from, when the button shows, the History amounts
+and that refusal were decided by the team and transcribed into
+`docs/disputes.md`. Recorded in
 `ai/usage-log.md`.
 
 Claude Code (Fable 5) made the order pages live-refresh when a pushed

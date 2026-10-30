@@ -17,6 +17,12 @@
 // for a listed id bumps a new refreshKey (useRequestRefetch). Rows here
 // are terminal, so matches are rare; a finished request *entering*
 // history is out of scope — only shown ids are matched.
+// 2026-10-29, Claude Code (Opus 5.5), issue #241 (team decisions): RESOLVED
+// requests are finished, on both sides; their credit effect is the
+// courier's share (requester −, courier +), as a completed request's is the
+// whole reward, with a label saying how the dispute was resolved so a 0
+// doesn't read as a cancellation.
+// Author review: Ryan Ang, pending pull request review.
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
@@ -60,11 +66,17 @@ const chip = (s: RequestStatus): FilterOption => ({
 const filters: Record<RequestRole, FilterOption[]> = {
   requester: [
     { key: 'ALL', label: 'All finished', states: finishedStatuses },
-    ...(['COMPLETED', 'CANCELLED', 'EXPIRED', 'REJECTED'] as const).map(chip),
+    ...(
+      ['COMPLETED', 'CANCELLED', 'EXPIRED', 'REJECTED', 'RESOLVED'] as const
+    ).map(chip),
   ],
   courier: [
-    { key: 'ALL', label: 'All finished', states: ['COMPLETED', 'EXPIRED'] },
-    ...(['COMPLETED', 'EXPIRED'] as const).map(chip),
+    {
+      key: 'ALL',
+      label: 'All finished',
+      states: ['COMPLETED', 'EXPIRED', 'RESOLVED'],
+    },
+    ...(['COMPLETED', 'EXPIRED', 'RESOLVED'] as const).map(chip),
   ],
 }
 
@@ -76,11 +88,39 @@ function dateLine(r: RequestSummary): string {
 }
 
 // What this request did to the viewer's balance, e.g. "+3" for a courier.
+// A resolved dispute paid the courier only their share.
 function creditEffect(r: RequestSummary, role: RequestRole): string {
-  if (r.status !== 'COMPLETED') return `${r.creditAmount} credits`
-  return role === 'courier'
-    ? `+${r.creditAmount} credits`
-    : `−${r.creditAmount} credits`
+  const paid =
+    r.status === 'COMPLETED'
+      ? r.creditAmount
+      : r.status === 'RESOLVED'
+        ? (r.dispute?.courierAmount ?? null)
+        : null
+  if (paid === null) return `${r.creditAmount} credits`
+  if (paid === 0) return '0 credits'
+  return role === 'courier' ? `+${paid} credits` : `−${paid} credits`
+}
+
+// How a resolved dispute divided the reward, shown beside its effect.
+function resolutionLabel(r: RequestSummary): string | null {
+  const paid = r.dispute?.courierAmount
+  if (r.status !== 'RESOLVED' || paid === null || paid === undefined)
+    return null
+  if (paid === 0) return 'Resolved: refunded'
+  if (paid === r.creditAmount) return 'Resolved: paid'
+  return 'Resolved: split'
+}
+
+function CreditEffect({ r, role }: { r: RequestSummary; role: RequestRole }) {
+  const label = resolutionLabel(r)
+  return (
+    <>
+      {creditEffect(r, role)}
+      {label && (
+        <span className="block text-xs font-normal text-gray-500">{label}</span>
+      )}
+    </>
+  )
 }
 
 export function RequestHistory() {
@@ -243,7 +283,7 @@ export function RequestHistory() {
                       {r.dropoffLocation}
                     </td>
                     <td className="px-4 py-3 font-semibold whitespace-nowrap text-gray-900">
-                      {creditEffect(r, role)}
+                      <CreditEffect r={r} role={role} />
                     </td>
                     <td className="px-4 py-3">
                       <StatusChip status={r.status} />
@@ -277,8 +317,8 @@ export function RequestHistory() {
                 </p>
                 <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-2 text-xs text-gray-400">
                   <span>{formatDateTime(r.createdAt)}</span>
-                  <span className="text-sm font-semibold text-gray-900">
-                    {creditEffect(r, role)}
+                  <span className="text-right text-sm font-semibold text-gray-900">
+                    <CreditEffect r={r} role={role} />
                   </span>
                 </div>
               </li>

@@ -37,6 +37,10 @@
 // 2026-10-27, same tool, PR #263 review round 2 (@claude): a case that
 // a request id carrying `/`, `?` or `#` lands as one encoded path
 // segment (regression cover for the round-1 encode fix).
+// 2026-10-29, Claude Code (Opus 5.5), issue #241: the request.disputed and
+// request.dispute-resolved templates, and their copy without the
+// category or amounts.
+// Author review: Ryan Ang, pending pull request review.
 
 import {
   act,
@@ -392,6 +396,58 @@ describe('notification center page', () => {
     })
     expect(readRow).toBeEnabled()
     expect(readRow).toHaveTextContent('3h ago')
+  })
+
+  test('a dispute names its category, and a resolution how the reward was divided', async () => {
+    pages = [
+      pageOf(
+        [
+          notification(
+            4,
+            'request.disputed',
+            { requestId: '1061', category: 'DAMAGED' },
+            false,
+          ),
+          notification(
+            3,
+            'request.dispute-resolved',
+            { requestId: '1062', courierAmount: 1, requesterAmount: 2 },
+            false,
+          ),
+          // a category this build doesn't know, and amounts missing
+          notification(
+            2,
+            'request.disputed',
+            { requestId: '1063', category: 'LATE' },
+            false,
+          ),
+          notification(
+            1,
+            'request.dispute-resolved',
+            { requestId: '1064' },
+            false,
+          ),
+        ],
+        0,
+        1,
+        4,
+      ),
+    ]
+    unreadCountOnServer = 4
+    await renderCenter()
+
+    await screen.findByRole('button', {
+      name: 'Problem reported with Request #1061: Damaged item — unread, select to open the request',
+    })
+    screen.getByRole('button', {
+      name: 'Dispute on Request #1062 resolved: 1 Credit to the courier, 2 Credits refunded — unread, select to open the request',
+    })
+    screen.getByRole('button', {
+      name: 'Problem reported with Request #1063 — unread, select to open the request',
+    })
+    screen.getByRole('button', {
+      name: 'Dispute on Request #1064 resolved — unread, select to open the request',
+    })
   })
 
   test('a dropped request names the courier, and degrades without a name', async () => {
