@@ -7,6 +7,11 @@
  * this service's three refusals and the unique-key race's 409.
  * Copied, not shared, by the author's decision.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), PR #272 review (claude[bot]): the
+ * 409 answers only the rating_once_per_rater constraint (matched by
+ * name through the cause chain); any other integrity violation is a
+ * bug and stays a 500 problem.
+ * Author review: [pending]
  */
 package foc.rating.controller;
 
@@ -51,11 +56,31 @@ class ProblemDetailAdvice {
 
     // two submits racing past the pre-check: the unique
     // (request_id, rater_id) key refuses the loser, same answer as the
-    // pre-check. The rating FK also surfaces this way, but the 404 gate
-    // fires before any insert can hit it.
+    // pre-check. Only that constraint means "duplicate rating" — any
+    // other violation (the outbox primary key, the stars check, the FK)
+    // is a bug this handler must not dress up as a 409, so it stays a
+    // 500 problem (PR #272 review).
     @ExceptionHandler(DataIntegrityViolationException.class)
-    ProblemDetail handleDuplicateRating(DataIntegrityViolationException e) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "You have already rated this request");
+    ProblemDetail handleIntegrityViolation(DataIntegrityViolationException e) {
+        if (isDuplicateRating(e)) {
+            return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "You have already rated this request");
+        }
+        return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+                "An unexpected error occurred");
+    }
+
+    // the constraint's name appears in the driver message on both
+    // PostgreSQL ("rating_once_per_rater") and H2 (the index it builds
+    // for the constraint keeps the name as a prefix), so the message
+    // walk works on the test and production databases alike
+    private static boolean isDuplicateRating(DataIntegrityViolationException e) {
+        for (Throwable cause = e; cause != null; cause = cause.getCause()) {
+            String message = cause.getMessage();
+            if (message != null && message.toLowerCase().contains("rating_once_per_rater")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // every broken rule, sorted by field so the message is stable

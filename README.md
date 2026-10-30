@@ -265,7 +265,8 @@
   extended again the same day for the PR #271 review fixes.
   Author review: Leong Wei Zhi, pending pull request review.
   2026-10-30: AI Use Summary extended for rating-service's submit
-  rating API (issue #252), by Claude Code (Fable 5).
+  rating API (issue #252), by Claude Code (Fable 5); extended again
+  the same day for the PR #272 review fix.
   Author review: Leong Wei Zhi, pending pull request review.
 -->
 
@@ -1253,7 +1254,11 @@ order-service's (publisher off in tests). The response shapes
 (200-with-null `/mine`, 201 without a Location), the text cap, and
 keeping the FK were the author's decisions via neutral-options Q&A;
 the event shape is #249's contract (the ratee alone in `parties`, no
-write-up in the payload, D32). Recorded in `ai/usage-log.md`.
+write-up in the payload, D32). After review, the race handler answers
+409 only for the `rating_once_per_rater` constraint (matched by name)
+and leaves every other integrity violation a 500, with the race test
+driving the database's real exception through the advice (reviewer
+suggestion). Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

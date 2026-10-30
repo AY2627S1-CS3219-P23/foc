@@ -6974,3 +6974,22 @@ Entry template:
 - **Author review:** `./mvnw test` green in rating-service (75 tests,
   0 skipped; Flyway V3 and schema validation ran on real Postgres).
   Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (fix: PR #272 review)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `rating-service` — `ProblemDetailAdvice`'s
+  `DataIntegrityViolationException` handler answers 409 only when the
+  violated constraint is `rating_once_per_rater` (matched by name
+  through the cause chain; the name appears in both the PostgreSQL and
+  H2 driver messages), and any other integrity violation — the outbox
+  primary key, the stars check, the FK — stays a 500 problem instead
+  of being dressed up as a duplicate rating; `RatingControllerTest`'s
+  race case now feeds the advice the real exception the database
+  raises (produced via a repository insert past the pre-check) rather
+  than a hand-built one, plus a case pinning the 500 for other
+  violations.
+- **Prompt(s):** "address the latest pr comments". Both changes follow
+  claude[bot]'s inline review comment on PR #272.
+- **Author review:** `./mvnw test` green in rating-service (76 tests,
+  0 skipped). Leong Wei Zhi reviews via pull request.

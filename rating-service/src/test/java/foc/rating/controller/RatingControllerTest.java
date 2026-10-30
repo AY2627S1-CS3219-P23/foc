@@ -8,6 +8,11 @@
  * null-until-rated wrapper, and the advice's 409 for the unique-key
  * race the pre-check loses.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), PR #272 review (claude[bot]): the
+ * race case now feeds the advice the real exception the database
+ * raises (not a hand-built one), and a second case pins that any
+ * other integrity violation stays a 500.
+ * Author review: [pending]
  */
 package foc.rating.controller;
 
@@ -21,7 +26,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import foc.rating.entity.RateableRequest;
+import foc.rating.entity.Rating;
 import foc.rating.repository.RateableRequestRepository;
+import foc.rating.repository.RatingRepository;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
@@ -32,6 +39,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.test.web.servlet.MockMvc;
@@ -53,6 +61,9 @@ class RatingControllerTest {
 
     @Autowired
     private RateableRequestRepository rateableRequests;
+
+    @Autowired
+    private RatingRepository ratings;
 
     private static String token(String userId) {
         return Jwts.builder()
@@ -261,15 +272,34 @@ class RatingControllerTest {
     }
 
     @Test
-    @DisplayName("The advice maps the unique-key race's exception to the same 409 as the pre-check")
+    @DisplayName("The advice maps the unique-key race's real exception to the same 409 as the pre-check")
     void uniqueKeyRaceMapsToConflict() {
-        // two submits racing past the pre-check end in a
-        // DataIntegrityViolationException (RatingServiceTests proves the
-        // constraint); the advice answers it like the pre-check's 409
-        ProblemDetail problem = new ProblemDetailAdvice().handleDuplicateRating(
-                new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
+        // two submits racing past the pre-check: produce the exact
+        // exception the database raises for the loser and feed it
+        // through the advice, so the constraint-name match is proven
+        // against the real driver message
+        String requestId = completedRequest("req-ctl-race");
+        ratings.saveAndFlush(new Rating(requestId, REQUESTER, COURIER, (short) 5, null, Instant.now()));
+        DataIntegrityViolationException race = org.junit.jupiter.api.Assertions.assertThrows(
+                DataIntegrityViolationException.class,
+                () -> ratings.saveAndFlush(
+                        new Rating(requestId, REQUESTER, COURIER, (short) 1, null, Instant.now())));
+
+        ProblemDetail problem = new ProblemDetailAdvice().handleIntegrityViolation(race);
 
         assertThat(problem.getStatus()).isEqualTo(409);
         assertThat(problem.getDetail()).isEqualTo("You have already rated this request");
+    }
+
+    @Test
+    @DisplayName("Any other integrity violation is a 500, never dressed up as a duplicate rating")
+    void otherIntegrityViolationsStayServerErrors() {
+        // e.g. the outbox primary key, the stars check, or the FK: real
+        // bugs the 409 wording would hide (PR #272 review)
+        ProblemDetail problem = new ProblemDetailAdvice().handleIntegrityViolation(
+                new DataIntegrityViolationException(
+                        "could not execute statement; constraint [rating_stars_range]"));
+
+        assertThat(problem.getStatus()).isEqualTo(500);
     }
 }
