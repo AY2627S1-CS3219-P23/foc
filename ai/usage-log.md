@@ -7074,3 +7074,96 @@ Entry template:
   @Sinnez1's inline review comment on PR #273.
 - **Author review:** `./mvnw test` green in rating-service (86 tests,
   0 skipped). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: report a user, issue #254)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `rating-service` — `controller/` (`ReportController`:
+  `POST /reports`, `GET /reports?page=&size=` with
+  `UserRatingsController`'s page/size checks; the self-report 400
+  handler in `ProblemDetailAdvice`), `dto/` (`SubmitReportRequest` —
+  reason required from the fixed list, details capped at 1000 like the
+  rating write-up, 255-char caps on the ids so an oversized value is a
+  400, not the varchar columns' 500; `ReportResponse`), `entity/`
+  (`UserReport`, `ReportReason`), `service/` (`ReportService`,
+  `SelfReportException`), `repository/` (`UserReportRepository`),
+  `config/SecurityConfig` (the GET's `hasAnyRole("ADMIN", "OWNER")`
+  gate), Flyway `V5__user_report.sql` (the `user_report` table and its
+  newest-first list index), and the tests (`ReportControllerTest`; the
+  V5 case in `FlywayMigrationTests`); `rating-service/README.md` and
+  this README section. Under #44 (N1.4); stacked on PR #273's branch.
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/254". The tool read
+  the issue, PR #273's branch and the repo's admin-gate and pagination
+  precedents, then asked four options questions. The author chose:
+  stack on PR #273 with the migration as V5 (V4 is #273's); the list
+  gate is ADMIN + OWNER (the repo-wide `hasAnyRole` pair over the
+  issue's literal "ADMIN only"); the list is paged with the platform's
+  `PageResponse` shape; and `requestId` is stored opaque with no FK to
+  `rateable_request` — that table holds completed requests only, and
+  reports about cancelled/dropped requests are the most report-worthy
+  (difference explained on request before deciding). The tool's
+  recorded decisions: no existence check on the reported user (the
+  service has no user table); blank details/requestId normalised to
+  null; an unknown reason answered by the existing unreadable-body 400;
+  no event published (a report is a moderation flag, not an N3
+  dispute).
+- **Author review:** `./mvnw test` green in rating-service (97 tests,
+  0 skipped; Flyway V5 ran on real Postgres). Leong Wei Zhi reviews via
+  pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: PR #274 review fixes, issue #254)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `rating-service` — `ReportService.file` trims
+  `reportedUserId` before the self-check and the save (`@NotBlank`
+  admits padding, so `" <my-id>"` dodged the self-report 400 and stored
+  an id matching no user); `ReportControllerTest` adds the padded
+  self-id case and asserts stored ids come back trimmed;
+  `rating-service/README.md` notes the reviewer's other point as a
+  known gap — no duplicate or rate limit on reports (N1 scope: store
+  and list only).
+- **Prompt(s):** "address the latest pr comments? should i fix?" Both
+  changes follow claude[bot]'s inline review comment on PR #274.
+- **Author review:** `./mvnw test` green in rating-service (98 tests,
+  0 skipped). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: PR #274 main merge, issue #254)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `rating-service` — merged main (PR #273 landed) and
+  resolved the usage-log append conflict keeping both sides' entries;
+  `ReportController.list` gains the page-offset overflow 400 PR #273's
+  review added to `UserRatingsController` (the identical list pattern),
+  with the case added to `ReportControllerTest`.
+- **Prompt(s):** "resolve merge conflict with origin/main". The overflow
+  guard carried over from @Sinnez1's PR #273 review finding.
+- **Author review:** `./mvnw test` green in rating-service (99 tests,
+  0 skipped). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: PR #274 review fixes round 2, issue #254)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `rating-service` — `SecurityConfig` adds a `HEAD` matcher on
+  `/reports` (`@GetMapping` also serves HEAD, which fell through to
+  `authenticated()`, letting any signed-in caller run the admin list
+  query); `SubmitReportRequest` adds `@Pattern` constraints refusing the
+  NUL character on `reportedUserId`, `details`, and `requestId`
+  (PostgreSQL rejects zero bytes in text parameters, which would surface
+  as a 500); `ReportControllerTest` adds the HEAD 403/200/401 cases and
+  the three NUL-character 400s.
+- **Prompt(s):** "resolve pr comments on <PR #274 URL>". Both changes
+  follow @Sinnez1's inline review comments on PR #274.
+- **Author review:** `./mvnw test` green in rating-service (101 tests,
+  0 skipped). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: PR #274 main merge 2, issue #254)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** merge conflict resolution
+- **Scope:** merged `origin/main` (PR #276, issue #255) into
+  `254-report-user`. Conflicts were docs-only: the README's AI Use
+  Summary comment and section kept both sides' entries (#254's and
+  #255's). `ai/usage-log.md` auto-merged with no entries lost; no code
+  conflicts — PR #276 touches notification-service and web only.
+- **Prompt(s):** "resolve conflict with origin/main".
+- **Author review:** Leong Wei Zhi reviews via pull request.
