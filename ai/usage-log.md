@@ -7108,3 +7108,19 @@ Entry template:
   guard carried over from @Sinnez1's PR #273 review finding.
 - **Author review:** `./mvnw test` green in rating-service (99 tests,
   0 skipped). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: PR #274 review fixes round 2, issue #254)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `rating-service` — `SecurityConfig` adds a `HEAD` matcher on
+  `/reports` (`@GetMapping` also serves HEAD, which fell through to
+  `authenticated()`, letting any signed-in caller run the admin list
+  query); `SubmitReportRequest` adds `@Pattern` constraints refusing the
+  NUL character on `reportedUserId`, `details`, and `requestId`
+  (PostgreSQL rejects zero bytes in text parameters, which would surface
+  as a 500); `ReportControllerTest` adds the HEAD 403/200/401 cases and
+  the three NUL-character 400s.
+- **Prompt(s):** "resolve pr comments on <PR #274 URL>". Both changes
+  follow @Sinnez1's inline review comments on PR #274.
+- **Author review:** `./mvnw test` green in rating-service (101 tests,
+  0 skipped). Leong Wei Zhi reviews via pull request.

@@ -15,11 +15,15 @@
  * 2026-10-30, Claude Code (Fable 5), main merge: the page-offset
  * overflow 400 (PR #273's review case, applied to this list).
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), PR #274 review (Sinnez1): the HEAD
+ * role-gate cases and the NUL-character 400s.
+ * Author review: [pending]
  */
 package foc.rating.controller;
 
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -183,6 +187,35 @@ class ReportControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"reportedUserId\": \"usr-bad-r5\", \"reason\": \"OTHER\"}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("HEAD /reports is gated like GET: 403 for a non-admin, 200 for an admin")
+    void headIsGatedLikeGet() throws Exception {
+        // @GetMapping serves HEAD too; without its own matcher it would
+        // fall through to authenticated() and run the query (PR #274 review)
+        mockMvc.perform(head("/reports")
+                .header("Authorization", "Bearer " + token("usr-req-1", "REQUESTER")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(head("/reports")
+                .header("Authorization", "Bearer " + token("usr-adm-1", "ADMIN")))
+                .andExpect(status().isOk());
+        mockMvc.perform(head("/reports")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("A NUL character in any string field is 400, not PostgreSQL's 500")
+    void nulCharactersRefused() throws Exception {
+        file(REPORTER, "{\"reportedUserId\": \"usr-\\u0000bad\", \"reason\": \"OTHER\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail")
+                        .value("reportedUserId must not contain the NUL character."));
+        file(REPORTER, "{\"reportedUserId\": \"usr-bad-r7\", \"reason\": \"OTHER\", \"details\": \"a\\u0000b\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("details must not contain the NUL character."));
+        file(REPORTER, "{\"reportedUserId\": \"usr-bad-r7\", \"reason\": \"OTHER\", \"requestId\": \"req-\\u0000\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("requestId must not contain the NUL character."));
     }
 
     @Test
