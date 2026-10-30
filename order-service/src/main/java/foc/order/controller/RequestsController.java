@@ -52,6 +52,9 @@
  * 2026-10-29, Claude Code (Opus 5.5), issue #241: every list and the
  * detail carry autoCompleteAt from RequestsService (team decision).
  * Author review: Ryan Ang, pending pull request review.
+ * 2026-10-31, Claude Code (Fable 5), issue #280: GET
+ * /requests/completed-count (any authenticated caller), for the public
+ * profile's deliveries-completed tile. Author review: pending.
  */
 package foc.order.controller;
 
@@ -113,6 +116,10 @@ public class RequestsController {
     public record MessageResponse(String message) {
     }
 
+    // GET /requests/completed-count (#280).
+    public record CompletedCountResponse(long count) {
+    }
+
     private final RequestsService requestsService;
     private final RequestsQueryService queries;
 
@@ -143,6 +150,16 @@ public class RequestsController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return summaries(queries.mine(callerId(caller), role, state, filter, page, size));
+    }
+
+    // How many deliveries a user has completed as courier (#280): any
+    // authenticated caller, like the open list — it backs another user's
+    // public profile. Matched before /requests/{id}, being literal.
+    // required = false so a missing courierId gets the service's 400
+    // message rather than Spring's default body.
+    @GetMapping("/requests/completed-count")
+    public CompletedCountResponse completedCount(@RequestParam(required = false) Long courierId) {
+        return new CompletedCountResponse(queries.completedCountForCourier(courierId));
     }
 
     // One request in full: its requester, its courier, or ADMIN / OWNER.

@@ -42,6 +42,9 @@
   2026-10-29, Claude Code (Opus 5.5), issue #241: autoCompleteAt in the
   reads (team decision). Author review: Ryan Ang, pending pull request
   review.
+  2026-10-31, Claude Code (Fable 5), issue #280: the Reads row for
+  GET /requests/completed-count (the public profile's
+  deliveries-completed tile). Author review: pending.
 -->
 
 # Order Service
@@ -277,6 +280,7 @@ A range whose lower bound is not below its upper (`minCredit` above
 | --- | --- | --- |
 | `GET /requests?state=CREATED&page=&size=` | open errands for couriers (F2.1): CREATED requests whose deadline is still ahead; `state` may only be `CREATED` (the default) | any logged-in user |
 | `GET /requests/{id}` | the request in full (every column, incl. `requesterId`, `courierId`, `closeReason`, `closedAt` and the step timestamps, plus `autoCompleteAt`) | its requester, its assigned courier, or ADMIN / OWNER; anyone else 404 |
+| `GET /requests/completed-count?courierId=` | `{"count": n}` — how many deliveries that user has completed as courier (COMPLETED only; an unknown user is `0`), for the public profile (#280); the shared filters don't apply | any logged-in user |
 | `GET /requests/mine?role=requester&state=` | the caller's requests as requester, optionally in one state | the caller |
 | `GET /requests/mine?role=courier&state=` | the caller's assigned deliveries | the caller |
 | `GET /users/{id}/requests?state=` | that user's requests as requester or courier (admin view) | ADMIN / OWNER; anyone else 403 |

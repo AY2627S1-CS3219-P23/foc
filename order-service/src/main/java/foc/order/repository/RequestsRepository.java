@@ -8,6 +8,8 @@
  * 2026-10-18: the expiry and auto-complete sweeps' queries; then the read
  * endpoints' paged queries, then replaced by Specifications for their
  * filters.
+ * 2026-10-31 (Claude Code, Fable 5), issue #280: the completed-deliveries
+ * count. Author review: pending.
  * Reviewed by: Ko-Khan (via pull request).
  */
 package foc.order.repository;
@@ -36,5 +38,8 @@ public interface RequestsRepository extends JpaRepository<Requests, Long>, JpaSp
     // Requests in a state since the courier arrived before the cutoff (the auto-complete sweep).
     List<Requests> findByStatusAndArrivedAtBefore(OrderStates status, Instant cutoff);
 
+    // How many requests a courier has in a state — COMPLETED for the
+    // public profile's deliveries-completed tile (#280).
+    long countByCourierIdAndStatus(Long courierId, OrderStates status);
 
 }

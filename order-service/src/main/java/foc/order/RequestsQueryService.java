@@ -29,6 +29,9 @@
  * (requester or courier, combinable with every other filter) and the
  * closedFrom / closedTo filter on every list (team decisions). Author
  * review: Ryan Ang, pending pull request review.
+ * 2026-10-31, Claude Code (Fable 5), issue #280: the completed-deliveries
+ * count for the public profile (COMPLETED only; any authenticated
+ * caller). Author review: pending.
  */
 package foc.order;
 
@@ -110,6 +113,16 @@ public class RequestsQueryService {
             throw new NoSuchElementException();
         }
         return request;
+    }
+
+    // How many deliveries a user has completed as courier, for the public
+    // profile's tile (#280). COMPLETED only — RESOLVED (an admin's split
+    // of a disputed reward) is not a completed delivery.
+    public long completedCountForCourier(Long courierId) {
+        if (courierId == null || courierId <= 0) {
+            throw new InvalidRequestException("courierId is required");
+        }
+        return requestsRepository.countByCourierIdAndStatus(courierId, OrderStates.COMPLETED);
     }
 
     // The caller's requests on one side, optionally in one state.
