@@ -6877,3 +6877,60 @@ Entry template:
   notification-service (15 fixtures bound); the fixture gate was proven
   by temporarily removing `rating-submitted.example.json` and confirming
   the test fails on it. Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: request.completed ingest)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `rating-service` — `messaging/rabbitmq/` (`RabbitMqTopology`
+  with the D13 queues bound to `request-events` on the registry's
+  `request.completed` key, `RabbitMqTopologyInitializer`,
+  `DomainEventMessageConverter` + config, `RetryingListener`,
+  `RequestEventsListener`), `service/` (`EventProcessor` port,
+  `RatingEligibilityProcessor`), `entity/` + `repository/`
+  (`ProcessedEvent`, `RateableRequest`), Flyway `V2__rating_eligibility.sql`,
+  pom (AMQP, foc-contracts, Testcontainers), main/test application.yaml,
+  and the tests (`RequestEventsRabbitMqIntegrationTest` through a real
+  broker, `FlywayMigrationTests` on real Postgres, plus the topology,
+  converter, listener and processor tests); `compose.yaml` and
+  `.env.example` RabbitMQ/retry wiring; a comment refresh in the
+  Dockerfile. Issue #251, under #44.
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/251". The tool read
+  the issue, the merged #250/#249 state and the notification-/credit-
+  service patterns, then asked two options questions. The author chose:
+  copy credit-service's hardened `RetryingListener` (correlated
+  confirms; PR #268, newer than the issue text's notification-service
+  pointer, and no confirm-mode switch when #252 adds publishing), and
+  add a Postgres Flyway migration test since the H2 test yaml never
+  runs V2. The upsert stance on a repeated completion under a fresh
+  eventId (last write wins, flagged in the PR) is the author's; the
+  messaging and idempotency designs are notification-service's team
+  decisions, transcribed.
+- **Author review:** `./mvnw test` green in rating-service (49 tests,
+  0 skipped — the broker integration test and the Flyway test ran
+  against real containers). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (PR #271 review fixes)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `rating-service` — `ProcessedEvent` implements
+  `Persistable` via the PostPersist/PostLoad callback pattern so the
+  dedupe insert persists instead of merging (the merge SELECT would
+  adopt a concurrently committed duplicate, so the documented PK
+  backstop never fired; also one SELECT fewer — a constant-true isNew
+  was tried and reverted, it breaks repository deletes); `EventProcessor`/`RatingEligibilityProcessor` return applied
+  vs duplicate and the listener logs `HANDLED` vs `DUPLICATE`; an
+  upsert that changes an existing row's parties is logged at WARN;
+  `RetryingListener`'s settled-then-rethrown exception is wrapped in a
+  non-fatal `EventFailedException` (a fatal classification in MANUAL
+  mode would reject the already-settled tag and close the channel);
+  new `SchemaValidationTest` boots the context on Postgres with Flyway
+  + `ddl-auto: validate` to pin the entities to V2 (production stays
+  `none` per precedent); the listener/processor tests updated for the
+  wrapper and the return value.
+- **Prompt(s):** "address pr comments". All five changes follow
+  Sinnez1's inline review comments on PR #271; the choice to keep
+  production `ddl-auto: none` and cover drift with a test instead is
+  the author's.
+- **Author review:** `./mvnw test` green in rating-service (51 tests,
+  0 skipped). Leong Wei Zhi reviews via pull request.

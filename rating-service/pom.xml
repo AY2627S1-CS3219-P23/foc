@@ -11,6 +11,10 @@
   from the start rather than ddl-auto grown. No AMQP or foc-contracts
   yet — the event wiring lands with the feature issues under #44.
   Reviewed by: [pending]
+  2026-10-30, Claude Code (Fable 5), issue #251: AMQP + foc-contracts
+  for the request.completed consumer, and the Testcontainers test deps
+  (spring-boot-testcontainers, junit-jupiter, postgresql, rabbitmq),
+  all versionless like credit-service's. Author review: [pending]
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -45,9 +49,21 @@
 		<jjwt.version>0.13.0</jjwt.version>
 	</properties>
 	<dependencies>
+		<!-- Shared event contracts and fixtures. Not in Maven Central: run
+		     `../foc-contracts/mvnw install` first (the Dockerfile builds it
+		     as its own stage). -->
+		<dependency>
+			<groupId>foc</groupId>
+			<artifactId>foc-contracts</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-amqp</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -122,6 +138,28 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Real-broker and real-Postgres tests, like credit/order-service -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-rabbitmq</artifactId>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>

@@ -6,6 +6,11 @@
 # actuator health endpoint. Flyway owns the schema (credit-service
 # precedent), so ddl-auto is none.
 # Reviewed by: [pending]
+# 2026-10-30, Claude Code (Fable 5), issue #251: the spring.rabbitmq
+# block (manual ack, correlated confirms + returns like credit-service,
+# so the retry copy's confirm is awaited and #252's publisher needs no
+# mode switch) and the rating.rabbitmq retry knobs. Author review:
+# [pending]
 
 spring:
   application:
@@ -19,6 +24,21 @@ spring:
       # Flyway (db/migration) owns the schema; Hibernate never changes it
       ddl-auto: none
     open-in-view: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:foc}
+    password: ${RABBITMQ_PASSWORD:}
+    listener:
+      simple:
+        # the listener acks only after the processor's commit
+        acknowledge-mode: manual
+    # the retry republish awaits a correlated confirm and a return
+    # (RetryingListener); mandatory makes an unroutable copy come back
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
 
 rating:
   web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
@@ -27,6 +47,14 @@ rating:
     # parseable; JwtVerifier turns a missing/short value into a clear
     # startup failure.
     secret: ${JWT_SECRET:}
+  rabbitmq:
+    retry:
+      # how long a failed event parks before returning to the work queue
+      ttl-ms: ${RATING_RETRY_TTL_MS:10000}
+      # deliveries per event before it dead-letters
+      max-attempts: ${RATING_RETRY_MAX_ATTEMPTS:3}
+      # how long the retry republish waits for the broker's confirm
+      confirm-timeout-ms: ${RATING_RETRY_CONFIRM_TIMEOUT_MS:5000}
 
 management:
   endpoints:
