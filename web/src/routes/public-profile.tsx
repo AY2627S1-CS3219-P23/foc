@@ -6,11 +6,15 @@
 // and the Report User dialog. The page gates on user-service's
 // public-profile route itself (not the usernames hook, which swallows
 // 404s): a 404 is "user not found", anything else is retryable. The
-// wireframe's joined date and deliveries-completed tile are omitted —
-// no API carries either (public profile is username-only per F8.1.1);
-// follow-up issue filed. The summary's average is a raw mean and null
-// until the first rating, so the page rounds and never renders "null".
+// summary's average is a raw mean and null until the first rating, so
+// the page rounds and never renders "null".
 // Author review: [pending]
+// 2026-10-31 (Claude Code, Fable 5), issue #280: the wireframe's two
+// remaining tiles — "Joined {month year}" (the profile's joinedAt) and
+// "{n} deliveries completed" (order-service's completed count, fetched
+// only once the gate succeeds; an em dash if it fails) — in a 3-tile
+// row that now also holds the Avg-rating tile, shown even before the
+// first review. Author review: pending.
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
@@ -41,9 +45,15 @@ export function PublicProfile() {
 
 type Gate =
   | { kind: 'loading' }
-  | { kind: 'ready'; username: string }
+  | { kind: 'ready'; username: string; joinedAt: string }
   | { kind: 'missing' }
   | { kind: 'error'; message: string }
+
+// "October 2026" — the wireframe's "Joined {month year}" precision
+const joinedFormat = new Intl.DateTimeFormat('en-SG', {
+  month: 'long',
+  year: 'numeric',
+})
 
 function PublicProfileView({ userId }: { userId: string }) {
   const currentUserId = useCurrentUserId()
@@ -53,12 +63,17 @@ function PublicProfileView({ userId }: { userId: string }) {
 
   useEffect(() => {
     let cancelled = false
-    apiFetch<{ username: string }>(
+    apiFetch<{ username: string; joinedAt: string }>(
       'user',
       `/users/${encodeURIComponent(userId)}`,
     )
       .then((profile) => {
-        if (!cancelled) setGate({ kind: 'ready', username: profile.username })
+        if (!cancelled)
+          setGate({
+            kind: 'ready',
+            username: profile.username,
+            joinedAt: profile.joinedAt,
+          })
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -105,7 +120,11 @@ function PublicProfileView({ userId }: { userId: string }) {
       {notice && <Banner kind="success">{notice}</Banner>}
 
       <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <SummarySection userId={userId} username={gate.username} />
+        <SummarySection
+          userId={userId}
+          username={gate.username}
+          joinedAt={gate.joinedAt}
+        />
         <ReviewsSection userId={userId} />
 
         {!isSelf && (
@@ -141,12 +160,18 @@ function PublicProfileView({ userId }: { userId: string }) {
 function SummarySection({
   userId,
   username,
+  joinedAt,
 }: {
   userId: string
   username: string
+  joinedAt: string
 }) {
   const [summary, setSummary] = useState<RatingSummaryResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // null while loading; an em dash if the count can't be fetched — a
+  // missing tile value must not take the rest of the profile with it
+  const [completed, setCompleted] = useState<number | null>(null)
+  const [completedFailed, setCompletedFailed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -160,6 +185,25 @@ function SummarySection({
       .catch((err: unknown) => {
         if (!cancelled)
           setError(errorMessage(err, 'Could not load the rating summary.'))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
+  // the section only renders once the gate succeeded, so a missing user
+  // never triggers this call (the 404 page stays fetch-free)
+  useEffect(() => {
+    let cancelled = false
+    apiFetch<{ count: number }>(
+      'order',
+      `/requests/completed-count?courierId=${encodeURIComponent(userId)}`,
+    )
+      .then((response) => {
+        if (!cancelled) setCompleted(response.count)
+      })
+      .catch(() => {
+        if (!cancelled) setCompletedFailed(true)
       })
     return () => {
       cancelled = true
@@ -193,22 +237,44 @@ function SummarySection({
           <span className="text-sm text-gray-500">No reviews yet</span>
         </div>
       ) : (
-        <>
-          <div className="mt-3 flex items-center gap-2">
-            <StarDisplay value={summary.average ?? 0} size="lg" />
-            <span className="font-semibold text-gray-900">{average}</span>
-            <span className="text-sm text-gray-500">
-              ({summary.count} {summary.count === 1 ? 'review' : 'reviews'})
-            </span>
-          </div>
-          <div className="mt-4 rounded-md border border-gray-200 px-8 py-3">
-            <p className="text-xl font-semibold text-gray-900">{average}</p>
-            <p className="text-xs tracking-wide text-gray-500 uppercase">
-              Avg rating received
-            </p>
-          </div>
-        </>
+        <div className="mt-3 flex items-center gap-2">
+          <StarDisplay value={summary.average ?? 0} size="lg" />
+          <span className="font-semibold text-gray-900">{average}</span>
+          <span className="text-sm text-gray-500">
+            ({summary.count} {summary.count === 1 ? 'review' : 'reviews'})
+          </span>
+        </div>
       )}
+
+      {/* the wireframe's three tiles (#280) — always shown, so a new
+          user's profile still answers when they joined; three across,
+          as the credit BalanceCards */}
+      <div className="mt-4 grid w-full grid-cols-3 gap-2 md:gap-4">
+        <ProfileTile
+          label="Avg rating received"
+          value={average !== null ? String(average) : '—'}
+        />
+        <ProfileTile
+          label="Joined"
+          value={joinedFormat.format(new Date(joinedAt))}
+        />
+        <ProfileTile
+          label="Deliveries completed"
+          value={
+            completed !== null ? String(completed) : completedFailed ? '—' : '…'
+          }
+        />
+      </div>
+    </div>
+  )
+}
+
+// One stat tile: value over label, as the #257 Avg-rating tile drew it.
+function ProfileTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-gray-200 px-2 py-3">
+      <p className="text-xl font-semibold text-gray-900">{value}</p>
+      <p className="text-xs tracking-wide text-gray-500 uppercase">{label}</p>
     </div>
   )
 }
