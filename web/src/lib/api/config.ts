@@ -5,6 +5,7 @@
 // API-gateway cutover (team decision) — the values now point at the
 // gateway with a per-service path prefix; the mechanism is unchanged.
 // Reviewed by: Leong Wei Zhi (via pull request).
+// 2026-10-30, Claude Code (Fable 5), issue #256: rating-service entry added.
 
 // Values are browser-visible URLs, inlined by Vite at build time from
 // VITE_* env vars. Since the gateway cutover (issue #151) each one is
@@ -17,6 +18,7 @@ export const serviceBaseUrls = {
   order: import.meta.env.VITE_ORDER_SERVICE_URL ?? '',
   credit: import.meta.env.VITE_CREDIT_SERVICE_URL ?? '',
   notification: import.meta.env.VITE_NOTIFICATION_SERVICE_URL ?? '',
+  rating: import.meta.env.VITE_RATING_SERVICE_URL ?? '',
 } as const
 
 export type ServiceName = keyof typeof serviceBaseUrls

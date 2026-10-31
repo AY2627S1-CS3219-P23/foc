@@ -9,6 +9,9 @@
 // the debounce window. orders.test.tsx keeps rendering these pages with
 // no provider at all — that suite passing unchanged is the regression
 // test for the hook's provider-less no-op.
+// 2026-10-31, PR #278 review (@Sinnez1): History's per-row rating
+// lookup rides the same refetch — a failed or pre-ingestion GET
+// /ratings/mine is retried when a push refreshes the page.
 // Author review: [pending]
 // 2026-10-30, Claude Code (Fable 5), issue #266: the stub context gains
 // the contract's new pendingReadIds/markReadPending fields (inert here —
@@ -26,6 +29,8 @@ import {
 } from '@/features/notifications/useNotifications'
 import { REQUEST_REFETCH_DEBOUNCE_MS } from '@/features/notifications/useRequestRefetch'
 import { orderApi } from '@/features/order/api'
+import { ratingApi } from '@/features/rating/api'
+import { clearMyRatingCache } from '@/features/rating/useMyRating'
 import { ApiError } from '@/lib/api/http'
 import type { RequestDetail, RequestSummary } from '@/features/order/types'
 import { ActiveDelivery } from '@/routes/active-delivery'
@@ -140,9 +145,11 @@ function renderAt(path: string) {
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true })
   session.userId = 3
+  clearMyRatingCache()
   vi.spyOn(orderApi, 'getUsername').mockImplementation(async (id) =>
     id === 3 ? 'carol' : 'dave',
   )
+  vi.spyOn(ratingApi, 'getMyRating').mockResolvedValue({ rating: null })
 })
 
 afterEach(() => {
@@ -267,6 +274,30 @@ describe('push-triggered refetch (issue #233)', () => {
     await elapseDebounce()
 
     await waitFor(() => expect(mine).toHaveBeenCalledTimes(2))
+  })
+
+  it('Request History retries a failed rating lookup on the push refetch (PR #278 review)', async () => {
+    const done = { ...summary, status: 'COMPLETED' as const }
+    vi.spyOn(orderApi, 'listMyRequests').mockResolvedValue(pageOf([done]))
+    // a gateway blip on the first GET /ratings/mine; the next ask works
+    const mine = vi
+      .spyOn(ratingApi, 'getMyRating')
+      .mockRejectedValueOnce(new ApiError(502, null))
+      .mockResolvedValue({ rating: null })
+    renderAt('/history')
+
+    await screen.findByText('#1')
+    await waitFor(() => expect(mine).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('button', { name: 'Rate' })).toBeNull()
+
+    push(frame('1', 'request.completed'))
+    await elapseDebounce()
+
+    // the failure was not cached, so the page refetch re-asks and the
+    // Rate control appears (table and mobile card)
+    expect(await screen.findAllByRole('button', { name: 'Rate' })).toHaveLength(
+      2,
+    )
   })
 
   it('a pending debounce dies with the page', async () => {

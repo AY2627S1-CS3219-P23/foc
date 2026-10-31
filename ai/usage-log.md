@@ -7251,3 +7251,25 @@ Entry template:
   (103 tests, 0 skipped); web `vitest` 366/366 (the four new cases
   fail on the unfixed component), `tsc` and `eslint` clean. Leong Wei
   Zhi reviews via pull request.
+
+## 2026-10-31 — Leong Wei Zhi (web: PR #278 review fixes, issue #256)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `web` — `RateExperienceModal` can no longer be closed while
+  the submit is in flight (Cancel disables; the X and backdrop no-op),
+  so a late result cannot act on another dialog, and a 409 locks the
+  form into a close-only state (inputs disabled, Submit replaced by
+  Close) since a rating is immutable. `useMyRating` caches only the 403
+  from failures: a 404 (a just-completed request rating-service has not
+  ingested yet) renders as not-rateable but is dropped from the cache,
+  as are gateway blips. `request-history` keys each row's lookup
+  `version` to `refreshKey` too, so the push-driven refetch retries
+  uncached lookups. `StarRating` gains a `disabled` mode. Tests:
+  mid-submit close blocked, 409 close-only, 404 retried on the next
+  mount, 403 cached for the session, and the push-refetch retry
+  (request-refetch.test.tsx).
+- **Prompt(s):** "address pr comments on <PR #278 URL> and post replies
+  to each comment individually". All four changes follow @Sinnez1's
+  inline review comments on PR #278.
+- **Author review:** `npx vitest run` green in web (376 tests), lint and
+  prettier clean. Leong Wei Zhi reviews via pull request.
