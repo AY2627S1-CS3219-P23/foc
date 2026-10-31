@@ -281,6 +281,9 @@
   2026-10-30: AI Use Summary extended for the notification-service
   dropped-courier prune and the Notification Center timing fixes
   (issue #266) by Claude Code (Fable 5).
+  2026-10-31: AI Use Summary extended for the PR #277 review fixes
+  (prune reorder bound/guard, Center pager bookkeeping, badge re-sync
+  on mount) by Claude Code (Fable 5).
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1331,6 +1334,17 @@ optimistic `pendingReadIds` overlay (a quick Back no longer flashes the
 row unread; a failed PATCH resurfaces as unread on the next fetch), and
 the `marking` gate left the per-row PATCH so a row pushed during an
 in-flight mark-all can still be marked. Recorded in `ai/usage-log.md`.
+
+Claude Code (Fable 5) applied the PR #277 review's fixes (issue #266):
+the prune is bounded to rows at or before the drop and the ingest
+skips a courier's row when a stored `request.dropped` already covers
+it, so retry-queue reordering neither deletes a re-accept's fresh rows
+nor re-creates the dead-end row; on the web, the Notification Center's
+rows and their total merged into one state, read-pending rows leave
+the Unread view through the same bookkeeping as an in-page click, and
+the badge re-syncs when the Center opens. The guard-vs-documented-
+limitation and badge-signal choices were the author's via
+neutral-options Q&A. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

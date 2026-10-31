@@ -51,6 +51,13 @@
 // click's PATCH renders the row read (the provider's pendingReadIds
 // overlay); a failed PATCH resurfaces the row unread on the next
 // fetch. The stub gains a PATCH gate and a PATCH failure switch.
+// 2026-10-31, Claude Code (Fable 5), PR #277 review (@Sinnez1): four
+// cases — opening the Center re-syncs a badge the server shrank with
+// no push (the D33 prune); the Unread pager measures against the rows
+// a pending read has left (not the fetched snapshot); an all-pending
+// page shows the pager alone, not a false "all caught up"; and a late
+// row PATCH no longer re-decrements a total mark-all's refill already
+// refreshed.
 
 import {
   act,
@@ -1350,6 +1357,227 @@ describe('notification center page', () => {
     await screen.findByRole('button', {
       name: 'Request #1045 cancelled — unread, select to open the request',
     })
+  })
+
+  // ---- PR #277 review (@Sinnez1) ----
+
+  test('opening the Center re-syncs a badge the server has quietly shrunk', async () => {
+    // the dropped-courier prune (D33) deletes rows without a push, so
+    // no existing trigger (login, reconnect, push, write) tells the
+    // bell — opening the Center must ask again, or it reads 2 over an
+    // empty list with Mark-all enabled
+    unreadCountOnServer = 2
+    localStorage.setItem('user', JSON.stringify(session))
+    const router = createMemoryRouter(routes, {
+      initialEntries: ['/deliveries/1'],
+    })
+    render(<RouterProvider router={router} />)
+    await act(async () => {})
+    await screen.findByRole('link', { name: 'Notifications (2 unread)' })
+
+    // the prune empties the server's set; nothing announces it
+    unreadCountOnServer = 0
+    await act(async () => {
+      void router.navigate('/notifications')
+    })
+
+    await screen.findByRole('link', { name: 'Notifications' })
+    expect(screen.queryByRole('link', { name: /unread/ })).toBeNull()
+    screen.getByText('No new notifications')
+    expect(
+      screen.getByRole('button', { name: 'Mark all as read' }),
+    ).toBeDisabled()
+  })
+
+  test('the Unread pager measures against the rows a pending read has left', async () => {
+    // 11 unread; the newest is a request row whose click navigates with
+    // the PATCH still in flight. The render-only overlay hid it but the
+    // pager still counted it, so "Load more" asked for page 1 of what
+    // had become a 10-row set and the row that moved up never loaded
+    // (PR #277 review).
+    serverUnread = [
+      notification(500, 'request.cancelled', { requestId: '1045' }, false),
+      ...Array.from({ length: 10 }, (_, i) =>
+        notification(490 - i, `sys.note-${i + 1}`, {}, false),
+      ),
+    ]
+    pages = [
+      pageOf(serverUnread.slice(0, 10), 0, 2, 11),
+      pageOf(serverUnread.slice(10), 1, 2, 11),
+    ]
+    unreadCountOnServer = 11
+    localStorage.setItem('user', JSON.stringify(session))
+    const router = createMemoryRouter(routes, {
+      initialEntries: ['/notifications'],
+    })
+    render(<RouterProvider router={router} />)
+    await act(async () => {})
+
+    // click the request row with its PATCH held open, and come back
+    patchGate = deferred()
+    const held = patchGate
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'Request #1045 cancelled — unread, select to open the request',
+        }),
+      )
+    })
+    await screen.findByRole('link', { name: '← Back to requests' })
+    await act(async () => {
+      void router.navigate(-1)
+    })
+
+    // switch to Unread while the PATCH is in flight: the snapshot still
+    // carries the pending row, which leaves through the bookkeeping —
+    // 9 rows held against a total of 10, not 10 against 11
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Unread' }))
+    })
+    await waitFor(() => expect(listRows()).toHaveLength(9))
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeEnabled()
+
+    // the PATCH commits: the server's unread set is now the 10 notes
+    await act(async () => {
+      held.release()
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    })
+
+    // the next page starts where the rows held end — sys.note-10 loads
+    await waitFor(() => expect(listRows()).toHaveLength(10))
+    screen.getByRole('button', {
+      name: 'Update: sys.note-10 — unread, select to mark read',
+    })
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
+  })
+
+  test('every held row read-pending leaves the pager, not a false "all caught up"', async () => {
+    // all ten rows of the Unread page are click-navigated away while
+    // their PATCHes are in flight; one more waits on the server. The
+    // old render-only overlay emptied the screen but kept the stale
+    // counts, rendering "all caught up" with "Load more" under it —
+    // the state the PR #199 fix removed (PR #277 review).
+    serverUnread = Array.from({ length: 11 }, (_, i) =>
+      notification(600 - i, 'request.cancelled', { requestId: `${700 + i}` }, false),
+    )
+    pages = [
+      pageOf(serverUnread.slice(0, 10), 0, 2, 11),
+      pageOf(serverUnread.slice(10), 1, 2, 11),
+    ]
+    unreadCountOnServer = 11
+    localStorage.setItem('user', JSON.stringify(session))
+    const router = createMemoryRouter(routes, {
+      initialEntries: ['/notifications'],
+    })
+    render(<RouterProvider router={router} />)
+    await act(async () => {})
+
+    const helds: Deferred[] = []
+    for (let i = 0; i < 10; i += 1) {
+      patchGate = deferred()
+      helds.push(patchGate)
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole('button', {
+            name: `Request #${700 + i} cancelled — unread, select to open the request`,
+          }),
+        )
+      })
+      await screen.findByRole('link', { name: '← Back to requests' })
+      await act(async () => {
+        void router.navigate(-1)
+      })
+    }
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Unread' }))
+    })
+    await act(async () => {})
+
+    // every held row is pending: a blank list with the pager standing
+    // alone — not an "all caught up" that contradicts it
+    expect(screen.queryByText('No new notifications')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeEnabled()
+
+    // the PATCHes commit; the pager still reaches the one row left
+    await act(async () => {
+      for (const h of helds) h.release()
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    })
+    await waitFor(() =>
+      screen.getByRole('button', {
+        name: 'Request #710 cancelled — unread, select to open the request',
+      }),
+    )
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
+  })
+
+  test('a late row PATCH does not re-decrement a total mark-all already refreshed', async () => {
+    const user = userEvent.setup()
+    // the reviewer's interleaving (PR #277): mark-all in flight, a
+    // covered row clicked, the bulk's refill lands a fresh total that
+    // already excludes the row — then the row's own PATCH answers. The
+    // old unconditional decrement took it off again, so the pager
+    // vanished with a row still unloaded.
+    serverUnread = Array.from({ length: 10 }, (_, i) =>
+      notification(800 - i, `sys.note-${i}`, {}, false),
+    )
+    unreadCountOnServer = 10
+    await renderCenter()
+    await user.click(screen.getByRole('button', { name: 'Unread' }))
+    await waitFor(() => expect(listRows()).toHaveLength(10))
+
+    // hold the bulk POST, then a covered row's PATCH, in that order
+    readAllGate = deferred()
+    const bulkHeld = readAllGate
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Mark all as read' }))
+    })
+    patchGate = deferred()
+    const patchHeld = patchGate
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'Update: sys.note-0 — unread, select to mark read',
+        }),
+      )
+    })
+
+    // the bulk finishes; its refill is held while 11 new unread rows
+    // land on the server, and answers with them
+    listGate = deferred()
+    const refillHeld = listGate
+    unreadCountOnServer = 11
+    await act(async () => {
+      bulkHeld.release()
+    })
+    serverUnread = Array.from({ length: 11 }, (_, i) =>
+      notification(900 - i, `sys.fresh-${i}`, {}, false),
+    )
+    await act(async () => {
+      refillHeld.release()
+    })
+    await waitFor(() => expect(listRows()).toHaveLength(10))
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeEnabled()
+
+    // the late PATCH answers for a row the refill no longer holds: the
+    // total must not come down again
+    await act(async () => {
+      patchHeld.release()
+    })
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeEnabled()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    })
+    await waitFor(() =>
+      screen.getByRole('button', {
+        name: 'Update: sys.fresh-10 — unread, select to mark read',
+      }),
+    )
   })
 
   test('a failed load shows no "all caught up" empty state', async () => {

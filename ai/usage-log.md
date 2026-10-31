@@ -7218,3 +7218,36 @@ Entry template:
   tests, 0 skipped, including #255's rating-events suite); web `vitest`
   362/362, `tsc` and `eslint` clean. Leong Wei Zhi reviews via pull
   request.
+
+## 2026-10-31 — Leong Wei Zhi (fix: PR #277 review round, issue #266)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix, tests, docs
+- **Scope:** notification-service (`NotificationRepository.java`: the
+  prune delete gains an `occurredAt <=` bound and a count query serves
+  the new ingest guard; `IdempotentEventProcessor.java`: a courier-party
+  event landing after the drop that covers it stores no courier row —
+  answered from the requester's stored dropped row, ties to the drop;
+  `IdempotentEventProcessorTest`: two reorder scenarios, redelivery
+  fixture's re-accept moved to a later occurredAt). web
+  (`NotificationCenter.tsx`: rows + total merged into one state so list
+  surgery and the decrement are atomic; under Unread, pendingReadIds
+  rows leave the held list through the in-page-click bookkeeping
+  instead of a render-only filter; the decrement applies only when the
+  row was still held; the empty state defers to the pager when the
+  server set is not exhausted; the badge count re-syncs on mount;
+  `notification-center.test.tsx`: four cases, each verified to fail
+  against the pre-fix component). `docs/notification-service.md` (D33
+  row + section: Reordering and Badge bullets, limitations updated).
+- **Prompt(s):** "address pr comments on <PR #277 URL>". The review's
+  two either/or design points were the author's decisions via
+  neutral-options Q&A: guard late courier events at ingest (over a D33
+  accepted-limitation entry), and re-sync the badge when the Center
+  mounts (over a live prune signal and over documenting it). The
+  tool's recorded decisions: one merged list state over presence refs
+  (the race needs atomicity, not ordering); no auto-refetch when every
+  held row is pending (a hung PATCH would loop it) — the empty state
+  is gated on the pager instead.
+- **Author review:** `./mvnw test` green in notification-service
+  (103 tests, 0 skipped); web `vitest` 366/366 (the four new cases
+  fail on the unfixed component), `tsc` and `eslint` clean. Leong Wei
+  Zhi reviews via pull request.

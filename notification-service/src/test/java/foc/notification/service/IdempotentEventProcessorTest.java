@@ -24,6 +24,13 @@
  * request.dropped prune (author decision D33 via options Q&A) — scope
  * (one recipient, one request), LIKE prefix safety, idempotent
  * redelivery, and the requester's own dropped row surviving it.
+ * 2026-10-31, Claude Code (Fable 5), PR #277 review (@Sinnez1):
+ * reorder scenarios — a retried drop spares a re-accept's newer rows
+ * (the prune's occurredAt bound), and a courier event landing after
+ * the drop that covers it stores no courier row (the ingest guard).
+ * The redelivery fixture's re-accept moved to a later occurredAt, as
+ * a real re-accept is: at the old shared timestamp the new guard
+ * (ties go to the drop, like the prune bound) would skip its row.
  */
 package foc.notification.service;
 
@@ -73,7 +80,12 @@ class IdempotentEventProcessorTest {
 	}
 
 	private static RequestAccepted accepted(String eventId, String requestId, List<String> parties) {
-		return new RequestAccepted(eventId, OCCURRED_AT, "order-service", "c-1", parties,
+		return accepted(eventId, requestId, OCCURRED_AT, parties);
+	}
+
+	private static RequestAccepted accepted(String eventId, String requestId, Instant occurredAt,
+			List<String> parties) {
+		return new RequestAccepted(eventId, occurredAt, "order-service", "c-1", parties,
 				requestId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "hi");
 	}
 
@@ -140,7 +152,12 @@ class IdempotentEventProcessorTest {
 
 	// request.dropped: requester-only parties, courierId = the dropper
 	private static RequestDropped dropped(String eventId, String requestId, String courierId) {
-		return new RequestDropped(eventId, OCCURRED_AT, "order-service", "c-1",
+		return dropped(eventId, requestId, courierId, OCCURRED_AT);
+	}
+
+	private static RequestDropped dropped(String eventId, String requestId, String courierId,
+			Instant occurredAt) {
+		return new RequestDropped(eventId, occurredAt, "order-service", "c-1",
 				List.of("usr-req-1001"), requestId, "usr-req-1001", courierId,
 				"Techno Edge", "COM3-01-19", "hi");
 	}
@@ -182,12 +199,14 @@ class IdempotentEventProcessorTest {
 
 	// A redelivered dropped event is discarded by the dedupe before the
 	// prune: a row the courier gained since (e.g. re-accepting the same
-	// request) survives the duplicate.
+	// request — necessarily after the drop, hence the later occurredAt)
+	// survives the duplicate.
 	@Test
 	void redeliveredDroppedEventDoesNotPruneAgain() {
 		RequestDropped event = dropped("e-1", "req-1", "usr-cou-2002");
 		eventProcessor.process(event);
-		eventProcessor.process(accepted("e-2", "req-1", List.of("usr-req-1001", "usr-cou-2002")));
+		eventProcessor.process(accepted("e-2", "req-1", OCCURRED_AT.plusSeconds(5),
+				List.of("usr-req-1001", "usr-cou-2002")));
 
 		eventProcessor.process(event);
 
@@ -195,5 +214,54 @@ class IdempotentEventProcessorTest {
 				.extracting(Notification::getEventId).containsExactly("e-2");
 		// and the duplicate stored no second requester row
 		assertThat(notifications.findAll()).filteredOn(n -> n.getEventId().equals("e-1")).hasSize(1);
+	}
+
+	// A transiently failed drop rolls its transaction back (the dedupe
+	// never saw it), so the retry-queue redelivery prunes for real — up
+	// to 10 s after the courier may have re-accepted. The occurredAt
+	// bound keeps the re-accept's newer rows out of its reach (PR #277
+	// review).
+	@Test
+	void retriedDropSparesAReacceptsNewerRows() {
+		eventProcessor.process(accepted("e-1", "req-1", OCCURRED_AT,
+				List.of("usr-req-1001", "usr-cou-2002")));
+		// the re-accept lands before the drop's redelivery does
+		eventProcessor.process(accepted("e-2", "req-1", OCCURRED_AT.plusSeconds(10),
+				List.of("usr-req-1001", "usr-cou-2002")));
+
+		// the drop sits between the two accepts; its first attempt
+		// committed nothing, so this processing runs the prune
+		eventProcessor.process(dropped("e-3", "req-1", "usr-cou-2002",
+				OCCURRED_AT.plusSeconds(5)));
+
+		assertThat(notifications.findAll()).filteredOn(n -> n.getRecipientId().equals("usr-cou-2002"))
+				.extracting(Notification::getEventId).containsExactly("e-2");
+	}
+
+	// The reverse reorder: a courier event delayed past the drop that
+	// covers it must not store the courier's row — it would re-create
+	// exactly the dead-end row the prune removed (PR #277 review). The
+	// requester's row stores normally, and a tie goes to the drop, like
+	// the prune's own bound.
+	@Test
+	void courierEventLandingAfterItsDropStoresNoCourierRow() {
+		eventProcessor.process(dropped("e-1", "req-1", "usr-cou-2002", OCCURRED_AT.plusSeconds(5)));
+
+		eventProcessor.process(accepted("e-2", "req-1", OCCURRED_AT,
+				List.of("usr-req-1001", "usr-cou-2002")));
+		eventProcessor.process(accepted("e-3", "req-1", OCCURRED_AT.plusSeconds(5),
+				List.of("usr-req-1001", "usr-cou-2002")));
+
+		assertThat(notifications.findAll()).filteredOn(n -> n.getRecipientId().equals("usr-cou-2002"))
+				.isEmpty();
+		assertThat(notifications.findAll()).filteredOn(n -> n.getRecipientId().equals("usr-req-1001"))
+				.extracting(Notification::getEventId)
+				.containsExactlyInAnyOrder("e-1", "e-2", "e-3");
+		// the guard is per request: the same courier's rows elsewhere
+		// store untouched
+		eventProcessor.process(accepted("e-4", "req-2", OCCURRED_AT,
+				List.of("usr-req-1001", "usr-cou-2002")));
+		assertThat(notifications.findAll()).filteredOn(n -> n.getRecipientId().equals("usr-cou-2002"))
+				.extracting(Notification::getEventId).containsExactly("e-4");
 	}
 }
