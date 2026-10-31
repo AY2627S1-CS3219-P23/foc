@@ -1460,7 +1460,12 @@ describe('notification center page', () => {
     // counts, rendering "all caught up" with "Load more" under it —
     // the state the PR #199 fix removed (PR #277 review).
     serverUnread = Array.from({ length: 11 }, (_, i) =>
-      notification(600 - i, 'request.cancelled', { requestId: `${700 + i}` }, false),
+      notification(
+        600 - i,
+        'request.cancelled',
+        { requestId: `${700 + i}` },
+        false,
+      ),
     )
     pages = [
       pageOf(serverUnread.slice(0, 10), 0, 2, 11),
