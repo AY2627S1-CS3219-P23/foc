@@ -65,6 +65,11 @@
   extended with the two N3 dispute events and the rejection's nullable
   reasonCode (team decisions DSP-12, D18); author review: Ryan Ang,
   pending pull request review.
+  2026-10-30, Claude Code (Fable 5), issue #255: the rating domain joins
+  the consumed catalog — rating-events exchange, this service's second
+  queue trio bound on the exact rating.submitted key, D16/D32/F1.3 notes
+  qualified from one-domain wording (recipient scope decided on #44).
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -107,7 +112,7 @@ removed; gaps in the numbering are intentional.
 | D12 | Topology provisioning | **App-declared at startup** via Spring AMQP beans (no broker definitions file) | topology lives beside its owner |
 | D13 | Naming convention | Exchange named after the producing domain (`request-events`); queues prefixed with the consuming service (`notification-service.request-events` + `.retry`/`.dlq`) | ownership visible in the management UI |
 | D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (framework-free Maven module) — the sole exception to the no-shared-code convention. Holds the typed event contracts and canonical fixtures; see [Event contracts](#event-contracts-d17d18) | drift caught at compile time / by contract tests |
-| D16 | Exchange type | **Topic exchange**, one per producing domain; canonical routing keys, this service binds `request.#` | Notif F1.1–F1.3; Extensibility |
+| D16 | Exchange type | **Topic exchange**, one per producing domain; canonical routing keys. This service binds `request.#` on `request-events` (it notifies on every request event). *2026-10-30 note (issue #255):* on `rating-events` it binds the exact `rating.submitted` key instead — the rating domain opts in event by event | Notif F1.1–F1.3; Extensibility |
 | D17 | Event contract shape | **Flat typed event records, no envelope** — one record per request-lifecycle fact; see [Event contracts](#event-contracts-d17d18) | schema per event |
 | D18 | Event identity & dispatch | **One canonical identity string per event** (e.g. `request.accepted`), registered once in `EventTypeRegistry`; consumers dispatch on the body `eventType`. A breaking contract change ships as a new event type | Notif F1.3; portability |
 | D19 | Idempotency scope | **Event-ID dedupe only** — the per-entity sequence stale-discard mechanism was removed and requirement F2.4 retired; out-of-order deliveries each notify | Notif F2.1 |
@@ -120,26 +125,28 @@ removed; gaps in the numbering are intentional.
 | D26 | Read-flag write mechanism | **One ownership-scoped bulk `UPDATE`, row count checked**: 0 rows → 404, so a foreign ID and a missing ID are indistinguishable (no existence oracle); counting matched rows makes repeats idempotent | Notif F3.2 |
 | D27 | List paging & filter | **Hand-validated `page`/`size`** (defaults 0/20, cap 100, out-of-range → 400 — credit-service's anti-`Pageable` stance) plus an optional **`unread=true` filter**, bound as a primitive `boolean` — deliberately as lenient as Spring's standard conversion (`1`/`yes`/`on` and `0`/`no`/`off` alongside `true`/`false`), not hand-validated like `page`/`size` | Notif F3.1 |
 | D28 | REST filter authorities | **Empty authorities**: the JWT filter authenticates the subject only — this service's verifier exposes no role claim and no route is role-gated; the denylist is NOT re-checked on REST (gateway decision G4; D23 stays the STOMP-only exception) | least change |
-| D32 | Display names (supersedes D30/D31) | **Events and stored payloads carry party IDs only; the web resolves `courierId` → username at read time** (gateway `GET /api/user/users/{id}` with the caller's own JWT, SPA-side cache: 10 min positive / 30 s negative TTL, in-flight dedupe) — no service-to-service call remains, the internal-token machinery is gone, F1.1 holds unamended, renames show current names (D30's ingest snapshot went stale), and a failed lookup renders the actor-less copy — see [Display names](#display-names-d32) | Notif F3.1 UX |
+| D32 | Display names (supersedes D30/D31) | **Events and stored payloads carry party IDs only; the web resolves the acting party's id (`courierId`; since issue #255 also `raterId`) → username at read time** (gateway `GET /api/user/users/{id}` with the caller's own JWT, SPA-side cache: 10 min positive / 30 s negative TTL, in-flight dedupe) — no service-to-service call remains, the internal-token machinery is gone, F1.1 holds unamended, renames show current names (D30's ingest snapshot went stale), and a failed lookup renders the actor-less copy — see [Display names](#display-names-d32) | Notif F3.1 UX |
+| D33 | Dropped-courier prune (issue #266) | **Ingesting `request.dropped` deletes the dropping courier's stored rows for that request**, in the same transaction as the dedupe insert — the drop removes them as a party (order-service nulls `courierId`), so every row they held (`request.accepted`, `request.collected`, dispute events) could only dead-end on the detail 404. Bounded to rows at or before the drop and guarded against retry-queue reordering, with the badge re-synced when the Center opens (PR #277 review). Chosen (options Q&A) over a past-party read-access record in order-service and over web-only 404 softening — see [Dropped-courier prune](#dropped-courier-prune-d33) | Notif F3.1 UX; issue #266 |
 
 ## Components
 
 > ℹ️ Ownership note — the first four rows are **broker infrastructure,
 > not part of the Notification Service process**. RabbitMQ is shared
-> platform infrastructure in its own container; the `request-events`
-> exchange is conceptually the *Order Service's* publishing surface,
-> while the work/retry/dead-letter queues are broker-hosted resources
-> dedicated to this service as their sole consumer. The service's
+> platform infrastructure in its own container; each `*-events`
+> exchange is conceptually its *producing service's* publishing surface
+> (`request-events` the Order Service's, `rating-events` the Rating
+> Service's), while the work/retry/dead-letter queues are broker-hosted
+> resources dedicated to this service as their sole consumer. The service's
 > durable state lives only in its PostgreSQL database — the broker holds
 > in-flight messages, not service state, so the database-per-service
 > rule is untouched.
 
 | Component | Responsibility |
 | --- | --- |
-| **request-events exchange** (RabbitMQ) | Durable **topic** exchange (D16) the Order Service publishes request events to under canonical routing keys; publishing is fire-and-forget (F1.4). |
-| **Work queue** (RabbitMQ) | Durable queue bound with `request.#`; holds undelivered events across restarts (NFR1.2), delivers at-least-once (NFR1.1). |
-| **Retry queue** (RabbitMQ) | Durable TTL queue; parks a failed event while attempts remain, returns it to the work queue on TTL expiry (F2.2). |
-| **Dead-letter queue** (RabbitMQ) | Durable queue for events that exhausted max attempts — or couldn't convert (D21); retained for inspection and manual re-publish (F2.3). |
+| **request-events / rating-events exchanges** (RabbitMQ) | Durable **topic** exchanges (D16), one per producing domain, published to under canonical routing keys; publishing is fire-and-forget (F1.4). |
+| **Work queues** (RabbitMQ) | One durable queue per consumed exchange (D13 trios): `…request-events` bound with `request.#`, `…rating-events` bound on the exact `rating.submitted` key (issue #255); they hold undelivered events across restarts (NFR1.2), deliver at-least-once (NFR1.1). |
+| **Retry queues** (RabbitMQ) | Durable TTL queue per trio; parks a failed event while attempts remain, returns it to its own work queue on TTL expiry (F2.2) — the listener derives the target from the consuming queue's name (`<work queue>.retry`). |
+| **Dead-letter queues** (RabbitMQ) | Durable queue per trio for events that exhausted max attempts — or couldn't convert (D21); retained for inspection and manual re-publish (F2.3). |
 | **AMQP listener** (Spring Boot) | Consumes with manual acknowledgement; acks only after the processor's DB transaction commits (NFR1.1). |
 | **Idempotent event processor** (Spring Boot) | Core logic: rejects already-seen event IDs (F2.1), creates one notification row per party (F1.2) from the typed event alone — never querying another service (F1.1). Works against the `DomainEvent` interface, so every cataloged event type flows through generically. |
 | **Notification REST API** (Spring Boot) | Lets the Web App list the caller's notifications (paged, newest first, optional unread filter), read the unread count, and mark rows read/unread (F3.1, F3.2) — JWT-authenticated, every route scoped to the token's user (D24–D28, issue #66). |
@@ -149,10 +156,11 @@ removed; gaps in the numbering are intentional.
 
 ## Event contracts (D17/D18)
 
-The Order and Credit Services publish **explicit, business-specific
-typed events** — one flat record per fact, no envelope wrapper. The contracts
-are code in `foc-contracts/`: the `DomainEvent` interface, the
-`RequestEvent`/`CreditEvent` domain markers, the eleven records, the `EventTypeRegistry`, and one
+The producing services (Order, Credit, Rating) publish **explicit,
+business-specific typed events** — one flat record per fact, no
+envelope wrapper. The contracts are code in `foc-contracts/`: the
+`DomainEvent` interface, one domain marker per producing domain
+(`RequestEvent`/`CreditEvent`/`RatingEvent`/…), the event records, the `EventTypeRegistry`, and one
 canonical fixture per event under
 [`foc-contracts/src/main/resources/contracts/`](../foc-contracts/src/main/resources/contracts/),
 which both producer and consumer contract-test against (D15). The full
@@ -210,10 +218,21 @@ party IDs as-is and the web resolves `courierId` to a username at read
 time — see [Display names](#display-names-d32). The credit domain's `credit.reserved` and
 `credit.reservation-rejected` carry `requestId`, `requesterId` and
 `amount` (plus `reason` and a nullable `reasonCode` on the rejection) and go to the separate
-`credit-events` exchange, which this service does not bind. Adding
-an event type is a contracts release (record + registry entry +
-fixture) plus a consumer jar bump — the `request.#` binding never
-changes (D16).
+`credit-events` exchange, which this service does not bind.
+
+The rating domain (N1, issue #255): `rating.submitted` carries
+`ratingId`, `requestId`, `raterId`, `rateeId` and `stars`, with
+`parties` = **the ratee only** — the rater knows what they did
+(decision on #44). It arrives on the `rating-events` exchange through
+this service's second queue trio, bound on the exact key rather than
+`rating.#`: future rating events opt in one binding at a time. The
+rater's name hydrates at read time from `raterId`, the same D32
+mechanism as `courierId`.
+
+Adding an event type is a contracts release (record + registry entry +
+fixture) plus a consumer jar bump — the `request.#` binding covers any
+new request event unchanged, while a new rating event additionally
+needs its binding declared (D16, issue #255).
 
 ## Failure handling (D6/D7, D20/D21)
 
@@ -252,8 +271,9 @@ programmatic). The web resolves names where they are displayed:
 - **Lookup:** the SPA calls `GET /api/user/users/{id}` through the
   gateway with the caller's own JWT (the route was already
   `authenticated()` — no new credential, no service-to-service trust).
-  One request per unique `courierId` on screen; in-flight dedupe
-  collapses concurrent rows naming the same courier.
+  One request per unique actor id on screen (`courierId` on request
+  rows, `raterId` on rating rows — issue #255); in-flight dedupe
+  collapses concurrent rows naming the same user.
 - **Cache:** SPA-side, per id — 10 min positive / 30 s negative TTL
   (the retired ingest adapter's numbers, for the same reasons: bound
   request volume, don't mute recovery). Fan-out is bounded by unique
@@ -269,6 +289,57 @@ programmatic). The web resolves names where they are displayed:
   Pre-D32 rows still carry stored `requesterName`/`courierName` keys;
   the web ignores them entirely (no migration — dead keys age out with
   the 30-day retention purge).
+
+## Dropped-courier prune (D33)
+
+A drop returns the request to the open feed and removes the courier as
+a party, so `RequestsQueryService.detail()` answers their old
+notifications' clicks with 404 and `/requests/mine?role=courier` no
+longer lists the request — no page can render it for them (issue
+#266). Rather than restore read access or soften the dead end, the
+ingest deletes the rows there would be nothing behind:
+
+- **Mechanism:** on `request.dropped`, one bulk `DELETE` scoped to
+  `recipient_id` = the event's `courierId`, a `LIKE` match on the
+  payload's `"requestId":"<id>"` (both quotes in the pattern, wildcards
+  escaped — request 12 never matches request 123), and
+  `occurred_at <=` the drop's own timestamp. Textual on purpose: the
+  request reference lives inside the JSON payload column, and JPQL
+  `LIKE` runs on H2 and Postgres alike where `jsonb` would not.
+- **Transactionality:** same transaction as the event-ID dedupe insert,
+  and ordered **before** it — the bulk query's `clearAutomatically`
+  discards the dedupe row's still-unflushed insert if it runs after
+  (assigned PK, so the insert queues until flush, unlike the
+  notifications' immediate IDENTITY inserts). A redelivery therefore
+  replays both or neither; a duplicate prunes nothing.
+- **Reordering** (PR #277 review): the retry queue (10 s TTL) can land
+  events out of delivery order, in both directions. A *retried drop*
+  (its first transaction rolled back, so the dedupe never recorded it)
+  prunes only rows at or before its `occurredAt` — a re-accept's fresh
+  rows survive it. A *courier-party event delayed past its drop*
+  stores no courier row: before saving a party row where the party is
+  the event's `courierId`, the ingest asks whether a `request.dropped`
+  row already exists for that `requestId` + `courierId` at or after
+  the event — answered from the requester's stored dropped row, whose
+  payload carries both ids (author decision via options Q&A, over
+  recording the gap as an accepted limitation). Ties go to the drop on
+  both sides.
+- **Scope:** only the dropping courier's rows for that request. The
+  requester's history is untouched and they still receive the
+  `request.dropped` row; a courier who re-accepts gains fresh rows.
+- **Badge** (PR #277 review): `request.dropped` has requester-only
+  parties, so no push tells the dropping courier's bell that rows
+  vanished, and no other trigger (login, reconnect, push, read write)
+  may come. The Center re-syncs the unread count on mount (author
+  decision via options Q&A, over a live prune signal and over an
+  accepted-limitation entry), so opening it can never show "No new
+  notifications" under a nonzero bell with Mark-all enabled.
+- **Accepted limitations:** a courier with the Center open keeps the
+  deleted rows in client state until the next fetch (no STOMP deletion
+  frame) — at worst one 404 click; the closed-Center bell stays stale
+  until the next sync trigger, now including opening the Center (see
+  Badge above); and their Request History stays empty for that
+  request, which is this decision's intended meaning, not a gap.
 
 ## REST API contract (D24–D28)
 
@@ -310,7 +381,7 @@ not drawn on the diagram — the traceability table below maps them.
 | --- | --- |
 | Notif F1.1 — notify on events without querying the producing service | each typed event carries all needed data; processor reads only the event + own DB |
 | Notif F1.2 — notify each party of an event | one notification per entry in the event's `parties`; push gateway targets each party's per-user destination |
-| Notif F1.3 — new event types without publisher changes | a new event type is a contracts release consumed via a jar bump (registry-driven converter, `DomainEvent`-generic processor, unchanged `request.#` binding). Unknown *fields* are tolerated; an unknown *type* dead-letters intact for replay after a consumer upgrade (D7/D21) |
+| Notif F1.3 — new event types without publisher changes | a new event type is a contracts release consumed via a jar bump (registry-driven converter, `DomainEvent`-generic processor; the `request.#` binding covers new request events unchanged, a new rating event declares its exact-key binding — D16, issue #255). Unknown *fields* are tolerated; an unknown *type* dead-letters intact for replay after a consumer upgrade (D7/D21) |
 | Notif F1.4 — delivery failure never affects the producing operation | fire-and-forget publish; all retry/failure handling stays on the consumer side of the broker |
 | Notif F2.1 — no duplicate notification on redelivery | unique event-ID constraint checked in the same DB transaction as the notification insert (D4) |
 | Notif F2.2 — retry failed deliveries | listener republish → TTL retry queue → redelivery with backoff, up to max attempts (D6/D20) |

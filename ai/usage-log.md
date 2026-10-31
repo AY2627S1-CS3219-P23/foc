@@ -48,6 +48,38 @@ Entry template:
 ```
 
 ---
+## 2026-10-30 — Leong Wei Zhi (feat: notification on rating.submitted, issue #255)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate, docs
+- **Scope:** notification-service (`messaging/rabbitmq/RabbitMqTopology.java`:
+  rating trio `notification-service.rating-events` + `.retry`/`.dlq`
+  bound to `rating-events` on the registry's exact `rating.submitted`
+  key; `DomainEventsListener.java`: rating queue joins the listener and
+  `scheduleRetry` derives each delivery's retry queue from its consuming
+  queue — the hard-coded request retry queue would have parked a failed
+  rating event in the wrong trio; new
+  `RatingEventsRabbitMqIntegrationTest.java`). web
+  (`features/notifications/eventMessage.ts`: `rating.submitted`
+  template, `courierIdOf` generalized to `actorIdOf`;
+  `NotificationCenter.tsx`; `src/test/notification-center.test.tsx`).
+  `docs/notification-service.md` (rating domain in D16/D32, components,
+  event catalog, F1.3 row).
+- **Prompt(s):** Plan and implement issue #255 as written. Author
+  decisions via options Q&A: the retry queue is derived from the
+  consumer queue (one type-agnostic listener) rather than a second
+  listener method; the web template ships in this PR (minimal: ⭐
+  "{rater} left you a new review", rater name via D32 read-time
+  hydration) rather than deferring to #256/#257. Recipient scope
+  (ratee only) was already fixed by the contract's `parties` (#44) —
+  no per-type server code. Converter, processor, push listener and
+  `DomainEventContractTest` (covered since #249) unchanged.
+- **Author review:** notification-service `./mvnw test` (95 tests; both
+  broker integration suites green against a real RabbitMQ 4 container,
+  including x-death evidence that a poison rating event cycles through
+  the rating trio's own retry queue) and web
+  `vitest run src/test/notification-center.test.tsx`; to be reviewed
+  via pull request.
+
 ## 2026-10-29 — Ryan Ang (feat: report a problem and admin dispute queue, issue #241)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs
@@ -7042,6 +7074,205 @@ Entry template:
   @Sinnez1's inline review comment on PR #273.
 - **Author review:** `./mvnw test` green in rating-service (86 tests,
   0 skipped). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: report a user, issue #254)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** `rating-service` — `controller/` (`ReportController`:
+  `POST /reports`, `GET /reports?page=&size=` with
+  `UserRatingsController`'s page/size checks; the self-report 400
+  handler in `ProblemDetailAdvice`), `dto/` (`SubmitReportRequest` —
+  reason required from the fixed list, details capped at 1000 like the
+  rating write-up, 255-char caps on the ids so an oversized value is a
+  400, not the varchar columns' 500; `ReportResponse`), `entity/`
+  (`UserReport`, `ReportReason`), `service/` (`ReportService`,
+  `SelfReportException`), `repository/` (`UserReportRepository`),
+  `config/SecurityConfig` (the GET's `hasAnyRole("ADMIN", "OWNER")`
+  gate), Flyway `V5__user_report.sql` (the `user_report` table and its
+  newest-first list index), and the tests (`ReportControllerTest`; the
+  V5 case in `FlywayMigrationTests`); `rating-service/README.md` and
+  this README section. Under #44 (N1.4); stacked on PR #273's branch.
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/254". The tool read
+  the issue, PR #273's branch and the repo's admin-gate and pagination
+  precedents, then asked four options questions. The author chose:
+  stack on PR #273 with the migration as V5 (V4 is #273's); the list
+  gate is ADMIN + OWNER (the repo-wide `hasAnyRole` pair over the
+  issue's literal "ADMIN only"); the list is paged with the platform's
+  `PageResponse` shape; and `requestId` is stored opaque with no FK to
+  `rateable_request` — that table holds completed requests only, and
+  reports about cancelled/dropped requests are the most report-worthy
+  (difference explained on request before deciding). The tool's
+  recorded decisions: no existence check on the reported user (the
+  service has no user table); blank details/requestId normalised to
+  null; an unknown reason answered by the existing unreadable-body 400;
+  no event published (a report is a moderation flag, not an N3
+  dispute).
+- **Author review:** `./mvnw test` green in rating-service (97 tests,
+  0 skipped; Flyway V5 ran on real Postgres). Leong Wei Zhi reviews via
+  pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: PR #274 review fixes, issue #254)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `rating-service` — `ReportService.file` trims
+  `reportedUserId` before the self-check and the save (`@NotBlank`
+  admits padding, so `" <my-id>"` dodged the self-report 400 and stored
+  an id matching no user); `ReportControllerTest` adds the padded
+  self-id case and asserts stored ids come back trimmed;
+  `rating-service/README.md` notes the reviewer's other point as a
+  known gap — no duplicate or rate limit on reports (N1 scope: store
+  and list only).
+- **Prompt(s):** "address the latest pr comments? should i fix?" Both
+  changes follow claude[bot]'s inline review comment on PR #274.
+- **Author review:** `./mvnw test` green in rating-service (98 tests,
+  0 skipped). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: PR #274 main merge, issue #254)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `rating-service` — merged main (PR #273 landed) and
+  resolved the usage-log append conflict keeping both sides' entries;
+  `ReportController.list` gains the page-offset overflow 400 PR #273's
+  review added to `UserRatingsController` (the identical list pattern),
+  with the case added to `ReportControllerTest`.
+- **Prompt(s):** "resolve merge conflict with origin/main". The overflow
+  guard carried over from @Sinnez1's PR #273 review finding.
+- **Author review:** `./mvnw test` green in rating-service (99 tests,
+  0 skipped). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: PR #274 review fixes round 2, issue #254)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `rating-service` — `SecurityConfig` adds a `HEAD` matcher on
+  `/reports` (`@GetMapping` also serves HEAD, which fell through to
+  `authenticated()`, letting any signed-in caller run the admin list
+  query); `SubmitReportRequest` adds `@Pattern` constraints refusing the
+  NUL character on `reportedUserId`, `details`, and `requestId`
+  (PostgreSQL rejects zero bytes in text parameters, which would surface
+  as a 500); `ReportControllerTest` adds the HEAD 403/200/401 cases and
+  the three NUL-character 400s.
+- **Prompt(s):** "resolve pr comments on <PR #274 URL>". Both changes
+  follow @Sinnez1's inline review comments on PR #274.
+- **Author review:** `./mvnw test` green in rating-service (101 tests,
+  0 skipped). Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (rating-service: PR #274 main merge 2, issue #254)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** merge conflict resolution
+- **Scope:** merged `origin/main` (PR #276, issue #255) into
+  `254-report-user`. Conflicts were docs-only: the README's AI Use
+  Summary comment and section kept both sides' entries (#254's and
+  #255's). `ai/usage-log.md` auto-merged with no entries lost; no code
+  conflicts — PR #276 touches notification-service and web only.
+- **Prompt(s):** "resolve conflict with origin/main".
+- **Author review:** Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (fix: dropped-courier notifications dead-end, issue #266)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate, fix, docs
+- **Scope:** notification-service (`NotificationRepository.java`:
+  payload-pattern bulk delete; `IdempotentEventProcessor.java`:
+  `request.dropped` prunes the dropping courier's rows for that
+  request, before the dedupe insert — `clearAutomatically` would
+  discard its unflushed assigned-PK insert otherwise;
+  `IdempotentEventProcessorTest`: prune scope, LIKE prefix safety,
+  idempotent redelivery, requester row survives).
+  web (`NotificationProvider.tsx` / `useNotifications.tsx`:
+  `pendingReadIds` + `markReadPending`, the optimistic mark-read lifted
+  out of the Center so it survives click-to-navigate unmounting;
+  `NotificationCenter.tsx`: rows render through the pending overlay and
+  the `marking` gate left the per-row PATCH; tests:
+  `notification-center.test.tsx` three new cases + a PATCH gate/failure
+  switch in the stub, `request-refetch.test.tsx` stub gains the two new
+  context fields). `docs/notification-service.md` (D33 row + section).
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/266", then "execute
+  the plan". The issue required a direction decision; the author chose,
+  via neutral options Q&A: prune the courier's notifications on drop
+  (over a past-party read-access record in order-service, and over
+  web-only 404 softening), and fold in both #263-review timing nits.
+  The tool's recorded decisions: JPQL `LIKE` on the payload column
+  (portable to the H2 tests) with both quotes in the pattern and
+  escaped wildcards; successful optimistic ids stay in the set, failed
+  ones leave so the next fetch shows the truth.
+- **Author review:** `./mvnw test` green in notification-service (94
+  tests, 0 skipped, including a first run that caught the
+  prune-after-dedupe ordering bug); web `vitest` 361/361, `tsc` and
+  `eslint` clean. Leong Wei Zhi reviews via pull request.
+
+## 2026-10-31 — Leong Wei Zhi (notification-service/web: PR #277 main merge, issue #266)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** merge conflict resolution
+- **Scope:** merged `origin/main` (PRs #274 and #276) into
+  `266-prune-on-drop`. Conflicts were docs/comment-only: the README's
+  AI Use Summary comment and section, `ai/usage-log.md`, the
+  `docs/notification-service.md` decision table (main's D32 `raterId`
+  wording kept alongside this branch's new D33 row), and the AI
+  disclosure headers of `NotificationCenter.tsx` and
+  `notification-center.test.tsx` — all resolved keeping both sides'
+  entries. The code bodies auto-merged (#255's `actorIdOf` hydration
+  alongside this branch's `pendingReadIds` overlay).
+- **Prompt(s):** "fix merge conflicts on <PR #277 URL>".
+- **Author review:** `./mvnw test` green in notification-service (101
+  tests, 0 skipped, including #255's rating-events suite); web `vitest`
+  362/362, `tsc` and `eslint` clean. Leong Wei Zhi reviews via pull
+  request.
+
+## 2026-10-31 — Leong Wei Zhi (fix: PR #277 review round, issue #266)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix, tests, docs
+- **Scope:** notification-service (`NotificationRepository.java`: the
+  prune delete gains an `occurredAt <=` bound and a count query serves
+  the new ingest guard; `IdempotentEventProcessor.java`: a courier-party
+  event landing after the drop that covers it stores no courier row —
+  answered from the requester's stored dropped row, ties to the drop;
+  `IdempotentEventProcessorTest`: two reorder scenarios, redelivery
+  fixture's re-accept moved to a later occurredAt). web
+  (`NotificationCenter.tsx`: rows + total merged into one state so list
+  surgery and the decrement are atomic; under Unread, pendingReadIds
+  rows leave the held list through the in-page-click bookkeeping
+  instead of a render-only filter; the decrement applies only when the
+  row was still held; the empty state defers to the pager when the
+  server set is not exhausted; the badge count re-syncs on mount;
+  `notification-center.test.tsx`: four cases, each verified to fail
+  against the pre-fix component). `docs/notification-service.md` (D33
+  row + section: Reordering and Badge bullets, limitations updated).
+- **Prompt(s):** "address pr comments on <PR #277 URL>". The review's
+  two either/or design points were the author's decisions via
+  neutral-options Q&A: guard late courier events at ingest (over a D33
+  accepted-limitation entry), and re-sync the badge when the Center
+  mounts (over a live prune signal and over documenting it). The
+  tool's recorded decisions: one merged list state over presence refs
+  (the race needs atomicity, not ordering); no auto-refetch when every
+  held row is pending (a hung PATCH would loop it) — the empty state
+  is gated on the pager instead.
+- **Author review:** `./mvnw test` green in notification-service
+  (103 tests, 0 skipped); web `vitest` 366/366 (the four new cases
+  fail on the unfixed component), `tsc` and `eslint` clean. Leong Wei
+  Zhi reviews via pull request.
+
+## 2026-10-31 — Leong Wei Zhi (web: PR #278 review fixes, issue #256)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix
+- **Scope:** `web` — `RateExperienceModal` can no longer be closed while
+  the submit is in flight (Cancel disables; the X and backdrop no-op),
+  so a late result cannot act on another dialog, and a 409 locks the
+  form into a close-only state (inputs disabled, Submit replaced by
+  Close) since a rating is immutable. `useMyRating` caches only the 403
+  from failures: a 404 (a just-completed request rating-service has not
+  ingested yet) renders as not-rateable but is dropped from the cache,
+  as are gateway blips. `request-history` keys each row's lookup
+  `version` to `refreshKey` too, so the push-driven refetch retries
+  uncached lookups. `StarRating` gains a `disabled` mode. Tests:
+  mid-submit close blocked, 409 close-only, 404 retried on the next
+  mount, 403 cached for the session, and the push-refetch retry
+  (request-refetch.test.tsx).
+- **Prompt(s):** "address pr comments on <PR #278 URL> and post replies
+  to each comment individually". All four changes follow @Sinnez1's
+  inline review comments on PR #278.
+- **Author review:** `npx vitest run` green in web (376 tests), lint and
+  prettier clean. Leong Wei Zhi reviews via pull request.
 
 ## 2026-10-30 — Leong Wei Zhi (web: public profile with reviews and report user, issue #257)
 - **Tool:** Claude Code (Fable 5)
