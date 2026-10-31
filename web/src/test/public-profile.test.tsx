@@ -8,6 +8,12 @@
 // the viewer's own profile, and paging. Rating calls are spied on the
 // api object (house style: rating.test.tsx).
 // Author review: [pending]
+// 2026-10-31 (Claude Code, Fable 5), issue #280: the Joined and
+// Deliveries-completed tiles — the stubbed fetch serves order-service's
+// completed count and a joinedAt; the expected month-year label is
+// recomputed with the same Intl formatter (house style:
+// credits.test.tsx); tiles survive zero reviews and a failed count.
+// Author review: pending.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -43,6 +49,14 @@ const usernamesById: Record<string, string> = {
   '3': 'user_abc',
   '4': 'user_def',
 }
+
+// every stubbed profile joined at the same instant (#280); the tile's
+// label is recomputed with the page's own format, never hardcoded
+const joinedAt = '2026-02-10T09:00:00Z'
+const joinedLabel = new Intl.DateTimeFormat('en-SG', {
+  month: 'long',
+  year: 'numeric',
+}).format(new Date(joinedAt))
 
 let fetchMock: ReturnType<typeof vi.fn>
 
@@ -97,9 +111,13 @@ beforeEach(() => {
   session.userId = 3
   clearUsernameCache()
   fetchMock = vi.fn(async (rawUrl: RequestInfo | URL) => {
-    const match = String(rawUrl).match(/\/api\/user\/users\/([^/?]+)$/)
+    const url = String(rawUrl)
+    if (/\/api\/order\/requests\/completed-count\?courierId=/.test(url)) {
+      return jsonResponse(200, { count: 7 })
+    }
+    const match = url.match(/\/api\/user\/users\/([^/?]+)$/)
     const username = match && usernamesById[match[1]]
-    if (username) return jsonResponse(200, { username })
+    if (username) return jsonResponse(200, { username, joinedAt })
     return jsonResponse(404, {
       type: 'about:blank',
       title: 'Not Found',
@@ -158,6 +176,41 @@ describe('the profile card', () => {
     expect(ratingApi.listReviews).toHaveBeenCalledWith('9', 0, 5)
   })
 
+  it('shows the Joined and Deliveries-completed tiles (#280)', async () => {
+    renderProfile()
+
+    expect(await screen.findByText(joinedLabel)).toBeInTheDocument()
+    expect(screen.getByText('Joined')).toBeInTheDocument()
+    expect(await screen.findByText('7')).toBeInTheDocument()
+    expect(screen.getByText('Deliveries completed')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://gw/api/order/requests/completed-count?courierId=9',
+      expect.anything(),
+    )
+  })
+
+  it('keeps the tiles when the completed count cannot be fetched', async () => {
+    fetchMock.mockImplementation(async (rawUrl: RequestInfo | URL) => {
+      const url = String(rawUrl)
+      if (url.includes('/api/order/')) {
+        return jsonResponse(500, {
+          type: 'about:blank',
+          title: 'Internal Server Error',
+          status: 500,
+          detail: 'order-service is down',
+        })
+      }
+      return jsonResponse(200, { username: 'courier_maya', joinedAt })
+    })
+    renderProfile()
+
+    // the tile degrades to an em dash; the profile stays up
+    expect(await screen.findByText(joinedLabel)).toBeInTheDocument()
+    expect(await screen.findByText('—')).toBeInTheDocument()
+    expect(screen.getByText('Deliveries completed')).toBeInTheDocument()
+    expect(await screen.findAllByText('4.2')).toHaveLength(2)
+  })
+
   it('shows the empty state for a user with no reviews', async () => {
     vi.mocked(ratingApi.getSummary).mockResolvedValue({
       average: null,
@@ -173,6 +226,12 @@ describe('the profile card', () => {
     expect(
       screen.queryByRole('navigation', { name: 'Pagination' }),
     ).not.toBeInTheDocument()
+
+    // the tiles still render (#280): the average shows an em dash, the
+    // joined date and deliveries count answer regardless of reviews
+    expect(await screen.findByText(joinedLabel)).toBeInTheDocument()
+    expect(await screen.findByText('7')).toBeInTheDocument()
+    expect(screen.getByText('—')).toBeInTheDocument()
   })
 
   it('shows "User not found" when user-service answers 404', async () => {
@@ -181,6 +240,12 @@ describe('the profile card', () => {
     expect(await screen.findByText('User not found.')).toBeInTheDocument()
     expect(screen.queryByText('Recent Reviews')).not.toBeInTheDocument()
     expect(ratingApi.getSummary).not.toHaveBeenCalled()
+    // the completed-count fetch is gated the same way (#280)
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes('completed-count'),
+      ),
+    ).toHaveLength(0)
   })
 
   it("surfaces the review list's problem detail and keeps the summary", async () => {

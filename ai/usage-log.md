@@ -7301,3 +7301,37 @@ Entry template:
   every submission — no duplicate check, its documented gap).
 - **Author review:** `npm test` green in web (387 tests, 20 files),
   eslint clean. Leong Wei Zhi reviews via pull request.
+
+## 2026-10-31 — Leong Wei Zhi (user/order/web: profile joined date and deliveries count, issue #280)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate
+- **Scope:** user-service (`PublicProfileResponse` + `ProfileService`:
+  the public profile carries `joinedAt`, the entity's `createdAt` — a
+  deliberate re-widening of the 2026-09-25 F8.1.1 narrowing that
+  dropped `createdAt` from this response in the PR #131 review; both
+  profile test classes, keeping the `$.createdAt` doesNotExist check
+  since the entity field name still must not leak; README), order-service
+  (`GET /requests/completed-count?courierId=` through
+  `countByCourierIdAndStatus` — COMPLETED only, so an admin's RESOLVED
+  dispute split never counts; any authenticated caller, no
+  SecurityConfig change; four cases in `RequestsReadEndpointsTests`;
+  the README Reads row), and web (`routes/public-profile.tsx`: the
+  Joined and Deliveries-completed tiles in a three-tile row with Avg
+  rating, rendered even with zero reviews; the count fetched only once
+  the profile gate succeeds and degrading to an em dash on failure;
+  `public-profile.test.tsx`; the `web/AGENTS.md` wireframe-deviation
+  note dropped and the root README's #257 paragraph updated).
+- **Prompt(s):** "make a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/280". The tool read
+  the issue and the three services, then asked three options questions.
+  The author chose: one PR stacked on PR #279's branch; `joinedAt` as
+  the full ISO instant (the web formats the month-year); the count in
+  order-service as `GET /requests/completed-count?courierId=` rather
+  than rating-service's `rateable_request` (no backfill for deliveries
+  completed before the #251 ingest shipped). The tool's recorded
+  decision: no `(courier_id, status)` index — the table is small and a
+  follow-up migration can add it if the count ever shows up in a
+  profile.
+- **Author review:** `./mvnw test` green in user-service and
+  order-service, `npm test` green in web (389 tests, 20 files), eslint
+  clean. Leong Wei Zhi reviews via pull request.

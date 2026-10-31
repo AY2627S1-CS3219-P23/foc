@@ -29,6 +29,10 @@ Author review: Ryan reviewed and ensured tests run successfully.
 2026-10-19 (Claude Code, Fable 5), issue #221: the four internal-token
        cases removed with the filter (D32 supersedes D30/D31) — the JWT
        cases for GET /users/{id} stay; it is now the web's hydration route.
+2026-10-31 (Claude Code, Fable 5), issue #280: public profile asserts an
+       exact joinedAt (fixed createdAt seeded via ReflectionTestUtils);
+       $.createdAt doesNotExist kept — the entity field name must not
+       leak. Author review: pending.
 */
 
 package foc.user.controller;
@@ -45,6 +49,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -68,13 +73,17 @@ class ProfileControllerTest extends PostgresTestContainer {
     @Autowired
     private UserRepository userRepository;
 
+    // fixed signup instant so the public-profile joinedAt assertion is exact
+    private static final Instant JOINED = Instant.parse("2026-01-15T08:30:00Z");
+
     private User alex;
 
     @BeforeEach
     void seedUsers() {
         userRepository.deleteAll();
-        alex = userRepository.save(
-            new User("e1234567@u.nus.edu", "student_alex", "hashed_password", Role.USER));
+        User fresh = new User("e1234567@u.nus.edu", "student_alex", "hashed_password", Role.USER);
+        ReflectionTestUtils.setField(fresh, "createdAt", JOINED);
+        alex = userRepository.save(fresh);
     }
 
     private User saveDeletedUser() {
@@ -224,11 +233,14 @@ class ProfileControllerTest extends PostgresTestContainer {
     // public profile
 
     @Test
-    @DisplayName("GET /users/{id} should return only the username")
+    @DisplayName("GET /users/{id} should return the username and joined date, nothing else")
     void getPublicProfile_success() throws Exception {
         mockMvc.perform(get("/users/{id}", alex.getId()).with(user("999")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.username").value("student_alex"))
+            .andExpect(jsonPath("$.joinedAt").value("2026-01-15T08:30:00Z"))
+            // the timestamp is exposed as joinedAt (#280); the entity field
+            // name and the private fields stay out of the response
             .andExpect(jsonPath("$.createdAt").doesNotExist())
             .andExpect(jsonPath("$.email").doesNotExist())
             .andExpect(jsonPath("$.role").doesNotExist())
