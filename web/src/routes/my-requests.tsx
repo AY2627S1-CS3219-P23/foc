@@ -39,6 +39,10 @@
 // passed says "Completing automatically…" until the sweep runs; DISPUTED
 // requests stay listed (with a chip) until an admin resolves them.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-30, Claude Code (Fable 5), issue #257: the assigned courier's
+// name links to their public profile (/users/:id) — the detail already
+// carries the id the link needs.
+// Author review: [pending]
 
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
@@ -493,10 +497,15 @@ function RequestCard({
         <Field label="Drop off to" value={request.dropoffLocation} />
       </dl>
 
-      {courier && (
+      {courier && detail?.courierId != null && (
         <p className="mt-4 text-sm text-gray-600">
           Assigned courier:{' '}
-          <span className="font-semibold text-gray-900">{courier}</span>
+          <Link
+            to={`/users/${detail.courierId}`}
+            className="font-semibold text-gray-900 underline decoration-gray-300 underline-offset-2 hover:decoration-gray-900"
+          >
+            {courier}
+          </Link>
         </p>
       )}
 

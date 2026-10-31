@@ -23,6 +23,10 @@
 // own failure branch, so a gateway 502 or a network blip arriving with
 // a push no longer replaces a perfectly good delivery with "Could not
 // load this request" — the view stays, and the next reload corrects it.
+// 2026-10-30, Claude Code (Fable 5), issue #257: the requester's name
+// links to their public profile (/users/:id) — the detail already
+// carries the id the link needs.
+// Author review: [pending]
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -212,7 +216,18 @@ function ActiveDeliveryView({ requestId }: { requestId: number }) {
           <dt className="text-xs font-medium tracking-wide text-gray-400 uppercase">
             Requester
           </dt>
-          <dd className="text-gray-900">{requester}</dd>
+          <dd className="text-gray-900">
+            {requester && request.requesterId != null ? (
+              <Link
+                to={`/users/${request.requesterId}`}
+                className="underline decoration-gray-300 underline-offset-2 hover:decoration-gray-900"
+              >
+                {requester}
+              </Link>
+            ) : (
+              requester
+            )}
+          </dd>
           <dt className="text-xs font-medium tracking-wide text-gray-400 uppercase">
             Pickup from
           </dt>

@@ -6,12 +6,21 @@
 // No mock variant: the real API was already merged (#252, #253) when
 // this feature was built.
 // Author review: [pending]
+// 2026-10-30, Claude Code (Fable 5), issue #257: the public-profile
+// calls — rating summary, received reviews (PagedResponse reused from
+// the supplier domain; it matches rating-service's envelope exactly),
+// and POST /reports.
+// Author review: [pending]
 
 import { apiFetch } from '@/lib/api/http'
+import type { PagedResponse } from '@/features/supplier/types'
 import type {
   MyRatingResponse,
   RatingResponse,
+  RatingSummaryResponse,
+  ReviewResponse,
   SubmitRatingInput,
+  SubmitReportInput,
 } from './types'
 
 export const ratingApi = {
@@ -30,5 +39,36 @@ export const ratingApi = {
       'rating',
       `/ratings/mine?requestId=${requestId}`,
     )
+  },
+
+  // a user's received-rating aggregate; never 404s — an unknown user
+  // answers {average: null, count: 0}
+  getSummary(userId: string): Promise<RatingSummaryResponse> {
+    return apiFetch<RatingSummaryResponse>(
+      'rating',
+      `/users/${encodeURIComponent(userId)}/ratings/summary`,
+    )
+  },
+
+  // reviews received, newest first; rater names are not in the payload —
+  // the browser hydrates them from raterId (D32)
+  listReviews(
+    userId: string,
+    page: number,
+    size: number,
+  ): Promise<PagedResponse<ReviewResponse>> {
+    return apiFetch<PagedResponse<ReviewResponse>>(
+      'rating',
+      `/users/${encodeURIComponent(userId)}/ratings?page=${page}&size=${size}`,
+    )
+  },
+
+  // files a report; 400 on self-report or bad fields. The service keeps
+  // every submission — no duplicate detection, so there is no 409 path.
+  async submitReport(input: SubmitReportInput): Promise<void> {
+    await apiFetch<unknown>('rating', '/reports', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
   },
 }
