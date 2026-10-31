@@ -6,9 +6,13 @@
 // row without a refetch, the already-rated and not-rateable states,
 // problem+json details in the dialog (409), the courier tab's subtitle,
 // and the control rendering in both the table and the mobile cards.
+// 2026-10-31, PR #278 review (@Sinnez1): the dialog cannot be closed
+// mid-submit, a 409 locks it into a close-only state, a 404 is not
+// cached (a later visit asks again) while a 403 is; the push-driven
+// retry lives in request-refetch.test.tsx.
 // Author review: [pending]
 
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -138,6 +142,47 @@ describe('the Rate entry point on Request History', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('does not cache a 404 — the next visit asks again (PR #278 review)', async () => {
+    // the GET beat rating-service's request.completed consumer
+    vi.mocked(ratingApi.getMyRating)
+      .mockRejectedValueOnce(
+        new ApiError(404, {
+          status: 404,
+          detail: 'No completed request with that id',
+        }),
+      )
+      .mockResolvedValue({ rating: null })
+    const { unmount } = renderHistory()
+
+    await screen.findByRole('table')
+    await waitFor(() => expect(ratingApi.getMyRating).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('button', { name: 'Rate' })).toBeNull()
+    unmount()
+
+    // ingestion has caught up by the next mount (a route change here)
+    renderHistory()
+    expect(await screen.findAllByRole('button', { name: 'Rate' })).toHaveLength(
+      2,
+    )
+    expect(ratingApi.getMyRating).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the 403 answer for the whole session', async () => {
+    vi.mocked(ratingApi.getMyRating).mockRejectedValue(
+      new ApiError(403, { status: 403, detail: 'Not a party' }),
+    )
+    const { unmount } = renderHistory()
+
+    await screen.findByRole('table')
+    await waitFor(() => expect(ratingApi.getMyRating).toHaveBeenCalledTimes(1))
+    unmount()
+
+    renderHistory()
+    await screen.findByRole('table')
+    expect(screen.queryByRole('button', { name: 'Rate' })).toBeNull()
+    expect(ratingApi.getMyRating).toHaveBeenCalledTimes(1)
+  })
+
   it('asks nothing for rows that did not complete', async () => {
     vi.mocked(orderApi.listMyRequests).mockResolvedValue(
       pageOf([{ ...completed, status: 'CANCELLED' }]),
@@ -228,7 +273,36 @@ describe('the Rate Your Experience dialog', () => {
     expect(ratingApi.getMyRating).toHaveBeenCalledTimes(1)
   })
 
-  it("shows a 409's detail in the dialog and refetches the true state", async () => {
+  it('cannot be closed while the submission is in flight (PR #278 review)', async () => {
+    const user = userEvent.setup()
+    let resolveSubmit!: (rating: RatingResponse) => void
+    vi.spyOn(ratingApi, 'submitRating').mockReturnValue(
+      new Promise((resolve) => {
+        resolveSubmit = resolve
+      }),
+    )
+    renderHistory()
+    const d = await openDialog(user)
+
+    await user.click(d.getByRole('radio', { name: '4 stars' }))
+    await user.click(d.getByRole('button', { name: 'Submit Review' }))
+
+    // Cancel is disabled, and the X (and backdrop) are no-ops: a late
+    // result must not act on some other dialog opened meanwhile
+    expect(d.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    await user.click(d.getByRole('button', { name: 'Close' }))
+    expect(dialog()).toBeInTheDocument()
+
+    await act(async () => resolveSubmit(myRating(4)))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Rate Your Experience' }),
+      ).toBeNull(),
+    )
+    expect(await screen.findAllByLabelText('Rated 4 stars')).toHaveLength(2)
+  })
+
+  it("shows a 409's detail, locks the form close-only and refetches the true state", async () => {
     const user = userEvent.setup()
     vi.spyOn(ratingApi, 'submitRating').mockRejectedValue(
       new ApiError(409, {
@@ -249,8 +323,21 @@ describe('the Rate Your Experience dialog', () => {
     expect(
       await d.findByText('You have already rated this request'),
     ).toBeInTheDocument()
+    // one submission per party (#256): no retry can succeed, so the
+    // form locks and only Close remains (PR #278 review)
+    expect(d.queryByRole('button', { name: 'Submit Review' })).toBeNull()
+    expect(d.queryByRole('button', { name: 'Cancel' })).toBeNull()
+    expect(d.getByRole('radio', { name: '2 stars' })).toBeDisabled()
+    expect(d.getByLabelText(/Write a review/)).toBeDisabled()
     await waitFor(() => expect(ratingApi.getMyRating).toHaveBeenCalledTimes(2))
     expect(await screen.findAllByLabelText('Rated 5 stars')).toHaveLength(2)
+
+    // the footer's Close (the X shares the name)
+    const closes = d.getAllByRole('button', { name: 'Close' })
+    await user.click(closes[closes.length - 1])
+    expect(
+      screen.queryByRole('dialog', { name: 'Rate Your Experience' }),
+    ).toBeNull()
   })
 
   it("names the courier on the requester tab's dialog", async () => {
