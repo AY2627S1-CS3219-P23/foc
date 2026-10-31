@@ -1,0 +1,72 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-10-31, N6 chat (docs/chat-service.md).
+# Scope: service configuration following rating-service's (datasource
+# bound to the service-owned chat-db, Flyway-owned schema, shared JWT
+# secret, CORS origin, health endpoint) plus notification-service's
+# Redis connection for the CONNECT denylist (C15), the internal token
+# (C12), the retention window and purge cron (C10) and the message
+# limits (C7). The values are Ko-Khan's.
+# Author review: Ko-Khan, pending pull request review.
+
+spring:
+  application:
+    name: chat-service
+  datasource:
+    url: jdbc:postgresql://${CHAT_DB_HOST:localhost}:${CHAT_DB_PORT:5432}/${CHAT_DB_NAME:chat}
+    username: ${CHAT_DB_USER:chat}
+    password: ${CHAT_DB_PASSWORD:}
+  jpa:
+    hibernate:
+      # Flyway (db/migration) owns the schema; Hibernate checks the
+      # entities against it at startup and never changes it
+      ddl-auto: validate
+    open-in-view: false
+  data:
+    redis:
+      # Platform Redis holding the token denylist, read once per STOMP
+      # CONNECT (C15). Short timeouts: the check fails open, so an
+      # unreachable Redis costs a CONNECT at most this long.
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 500ms
+      connect-timeout: 500ms
+      repositories:
+        # Only StringRedisTemplate is used; left on, Spring Data scans the
+        # JPA repositories for a Redis store too
+        enabled: false
+
+chat:
+  web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
+  websocket:
+    # origins allowed to open the STOMP socket
+    allowed-origins: ${CHAT_WS_ALLOWED_ORIGINS:http://localhost:*}
+  jwt:
+    # Shared platform secret (HS256). Empty default so the yaml stays
+    # parseable; JwtVerifier turns a missing/short value into a clear
+    # startup failure.
+    secret: ${JWT_SECRET:}
+  internal:
+    # Shared secret order-service sends on the /internal/** calls (C12).
+    # Empty default: InternalTokenCheck refuses every call while unset.
+    token: ${CHAT_INTERNAL_TOKEN:}
+  message:
+    # longest text (C7)
+    max-text-length: 500
+    # largest image, in bytes (C7: 2 MB)
+    max-image-bytes: 2097152
+  retention:
+    # messages older than this are purged (C10)
+    days: ${CHAT_RETENTION_DAYS:30}
+    # Spring's 6-field cron (sec min hour day month weekday): daily 03:00
+    purge-cron: "${CHAT_PURGE_CRON:0 0 3 * * *}"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  health:
+    redis:
+      # the denylist check fails open (C15): an unreachable Redis must not
+      # mark the whole service down (notification-service's stance)
+      enabled: false

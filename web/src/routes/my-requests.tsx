@@ -39,6 +39,9 @@
 // passed says "Completing automatically…" until the sweep runs; DISPUTED
 // requests stay listed (with a chip) until an admin resolves them.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-31, Claude Code (Opus 5.5), N6 chat (docs/chat-service.md): a Chat button
+// on a card while the request is ACCEPTED, COLLECTED or ARRIVED (C3, C14).
+// Author review: Ko-Khan, pending pull request review.
 
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
@@ -47,6 +50,8 @@ import { useRequestRefetch } from '@/features/notifications/useRequestRefetch'
 import { orderApi } from '@/features/order/api'
 import { Banner } from '@/features/order/components/Banner'
 import { DisputeModal } from '@/features/order/components/DisputeModal'
+import { ChatButton } from '@/features/chat/ChatButton'
+import { CHAT_OPEN_STATUSES } from '@/features/chat/types'
 import { OrderProgress } from '@/features/order/components/OrderProgress'
 import {
   StateFilter,
@@ -493,11 +498,16 @@ function RequestCard({
         <Field label="Drop off to" value={request.dropoffLocation} />
       </dl>
 
-      {courier && (
-        <p className="mt-4 text-sm text-gray-600">
-          Assigned courier:{' '}
-          <span className="font-semibold text-gray-900">{courier}</span>
-        </p>
+      {(courier || isChatOpen(request.status)) && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+          {courier && (
+            <p className="text-sm text-gray-600">
+              Assigned courier:{' '}
+              <span className="font-semibold text-gray-900">{courier}</span>
+            </p>
+          )}
+          {isChatOpen(request.status) && <ChatButton requestId={request.id} />}
+        </div>
       )}
 
       <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
@@ -607,6 +617,11 @@ function RequestCard({
 // The list items carry no courier, so an in-progress card reads its
 // request's detail — again whenever this request is touched
 // (a push naming it, an action on it), so the two can't drift apart.
+// the courier and requester can chat in these states (C3)
+function isChatOpen(status: RequestSummary['status']): boolean {
+  return (CHAT_OPEN_STATUSES as readonly string[]).includes(status)
+}
+
 function useDetail(
   requestId: number,
   enabled: boolean,

@@ -134,6 +134,14 @@
 # RabbitMQ connection, retry knobs and depends_on rabbitmq (a pure
 # consumer with no outbox, like notification-service), now that it
 # consumes request.completed. Author review: [pending]
+# 2026-10-31, Claude Code (Opus 5.5), N6 chat (docs/chat-service.md):
+# chat-service + chat-db wiring added, following the rating-service
+# pattern (repo-root build context, Redis for the CONNECT denylist like
+# notification-service; no RabbitMQ). chat-db on loopback host port 5439
+# with postgres:17 (decision C1). order-service gets CHAT_SERVICE_URL and
+# CHAT_INTERNAL_TOKEN for its open/close calls (C11, C12); the gateway
+# waits for chat-service's start like the others. Author review: Ko-Khan,
+# pending pull request review.
 
 name: foc
 
@@ -162,6 +170,7 @@ services:
         VITE_CREDIT_SERVICE_URL: ${VITE_CREDIT_SERVICE_URL:-http://localhost:${GATEWAY_PORT:-8090}/api/credit}
         VITE_NOTIFICATION_SERVICE_URL: ${VITE_NOTIFICATION_SERVICE_URL:-http://localhost:${GATEWAY_PORT:-8090}/api/notification}
         VITE_RATING_SERVICE_URL: ${VITE_RATING_SERVICE_URL:-http://localhost:${GATEWAY_PORT:-8090}/api/rating}
+        VITE_CHAT_SERVICE_URL: ${VITE_CHAT_SERVICE_URL:-http://localhost:${GATEWAY_PORT:-8090}/api/chat}
     ports:
       - "${WEB_PORT:-5173}:80"
     restart: unless-stopped
@@ -197,6 +206,8 @@ services:
       notification-service:
         condition: service_started
       rating-service:
+        condition: service_started
+      chat-service:
         condition: service_started
     restart: unless-stopped
 
@@ -526,6 +537,9 @@ services:
       ORDER_EXPIRY_SWEEP_INTERVAL_MS: ${ORDER_EXPIRY_SWEEP_INTERVAL_MS:-300000}
       ORDER_AUTO_COMPLETE_AFTER_MS: ${ORDER_AUTO_COMPLETE_AFTER_MS:-3600000}
       ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS: ${ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS:-300000}
+      # chat-service's open/close calls (N6, C11/C12)
+      CHAT_SERVICE_URL: http://chat-service:8080
+      CHAT_INTERNAL_TOKEN: ${CHAT_INTERNAL_TOKEN:?set in .env}
       # how long after its deadline a still-COLLECTED request is disputed
       # by the expiry sweep (DSP-6)
       ORDER_DISPUTE_ESCALATION_GRACE_MS: ${ORDER_DISPUTE_ESCALATION_GRACE_MS:-3600000}
@@ -618,6 +632,56 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # Chat service (N6, docs/chat-service.md): requester-courier chat with
+  # its own STOMP WebSocket, reached through the gateway at /api/chat/**.
+  # order-service opens and closes chats over /internal/** with the
+  # shared CHAT_INTERNAL_TOKEN. No depends_on redis: the CONNECT denylist
+  # check fails open (C15), as notification-service's does.
+  chat-service:
+    build:
+      context: .
+      dockerfile: chat-service/Dockerfile
+    environment:
+      CHAT_DB_HOST: chat-db
+      CHAT_DB_PORT: "5432"
+      CHAT_DB_NAME: ${CHAT_DB_NAME:-chat}
+      CHAT_DB_USER: ${CHAT_DB_USER:-chat}
+      CHAT_DB_PASSWORD: ${CHAT_DB_PASSWORD:?set in .env}
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
+      WEB_ALLOWED_ORIGIN: ${WEB_ALLOWED_ORIGIN:-http://localhost:5173}
+      CHAT_WS_ALLOWED_ORIGINS: ${CHAT_WS_ALLOWED_ORIGINS:-http://localhost:*}
+      CHAT_INTERNAL_TOKEN: ${CHAT_INTERNAL_TOKEN:?set in .env}
+      CHAT_RETENTION_DAYS: ${CHAT_RETENTION_DAYS:-30}
+      CHAT_PURGE_CRON: "${CHAT_PURGE_CRON:-0 0 3 * * *}"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      chat-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Chat DB: PostgreSQL owned exclusively by the chat service
+  # (database-per-service). Holds the messages and their images (C9).
+  chat-db:
+    image: postgres:17
+    # Published on the host so local tooling (psql, DB GUIs, the postgres
+    # MCP server) can reach the service-owned DB; bound to loopback so it
+    # is reachable from this machine only.
+    ports:
+      - "127.0.0.1:${CHAT_DB_HOST_PORT:-5439}:5432"
+    environment:
+      POSTGRES_DB: ${CHAT_DB_NAME:-chat}
+      POSTGRES_USER: ${CHAT_DB_USER:-chat}
+      POSTGRES_PASSWORD: ${CHAT_DB_PASSWORD:?set in .env}
+    volumes:
+      - chat-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CHAT_DB_USER:-chat} -d ${CHAT_DB_NAME:-chat}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   # Local mail catcher (issue #88): the default SMTP target for the user
   # service's OTP emails, so dev and demo need no real mail account.
   # Caught mail is browsable at http://localhost:8025; the store is
@@ -635,6 +699,7 @@ services:
 # Other services add their own entries in their own PRs.
 
 volumes:
+  chat-db-data:
   credit-db-data:
   notification-db-data:
   order-db-data:

@@ -22,6 +22,10 @@
 # 2026-10-26, Claude Code (Opus 5.5), issue #239:
 # order.expiry.dispute-escalation-grace-ms (team decision DSP-6, 1 h
 # default). Author review: Ryan Ang, pending pull request review.
+# 2026-10-31, Claude Code (Opus 5.5), N6 chat (docs/chat-service.md):
+# order.chat.* for the chat-service calls (C11: retried every 15 s, up
+# to 20 attempts; C12: the internal token) and a scheduler thread for
+# their dispatcher. Author review: Ko-Khan, pending pull request review.
 
 spring:
   application:
@@ -42,8 +46,8 @@ spring:
         # One thread per @Scheduled job (the default is a single thread
         # for all of them). The outbox poll can block on a confirm (up to
         # confirm-timeout-ms), and must not hold up the pending-timeout,
-        # expiry or auto-complete sweeps.
-        size: 4
+        # expiry, auto-complete or chat-call sweeps.
+        size: 5
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -115,6 +119,23 @@ order:
       # How long an event the broker returned as unroutable waits before
       # it is due again.
       unroutable-retry-delay-ms: 30000
+  chat:
+    # chat-service, on the compose network (C11)
+    base-url: ${CHAT_SERVICE_URL:http://localhost:8080}
+    # the shared secret chat-service's internal calls require (C12);
+    # empty: chat-service refuses every call, and they are retried
+    internal-token: ${CHAT_INTERNAL_TOKEN:}
+    dispatcher:
+      # Delay between the end of one poll of the owed calls and the next;
+      # a call's first attempt waits at most this long.
+      poll-interval-ms: 1000
+      # Most calls sent in one poll.
+      batch-size: 100
+    retry:
+      # A failed call is due again this long after (C11: 15 s) ...
+      delay-ms: ${ORDER_CHAT_RETRY_DELAY_MS:15000}
+      # ... and given up, logged at ERROR, after this many attempts (C11).
+      max-attempts: ${ORDER_CHAT_RETRY_MAX_ATTEMPTS:20}
 
 management:
   endpoints:

@@ -23,8 +23,12 @@
 // own failure branch, so a gateway 502 or a network blip arriving with
 // a push no longer replaces a perfectly good delivery with "Could not
 // load this request" — the view stays, and the next reload corrects it.
+// 2026-10-31, Claude Code (Opus 5.5), N6 chat (docs/chat-service.md): the courier's
+// Chat button while the request is ACCEPTED, COLLECTED or ARRIVED, and a
+// read-only View chat for admins (C3, C13, C14).
+// Author review: Ko-Khan, pending pull request review.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 
 import { useRequestRefetch } from '@/features/notifications/useRequestRefetch'
@@ -39,6 +43,9 @@ import {
 import type { RequestDetail } from '@/features/order/types'
 import { useCurrentUserId } from '@/features/order/useCurrentUserId'
 import { useUsername } from '@/features/order/useUsername'
+import { ChatButton } from '@/features/chat/ChatButton'
+import { CHAT_OPEN_STATUSES } from '@/features/chat/types'
+import { AuthContext, isAdmin } from '@/features/user/useAuth'
 import { ApiError, errorMessage } from '@/lib/api/http'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
 
@@ -64,6 +71,9 @@ function isDefinitive(err: unknown): boolean {
 function ActiveDeliveryView({ requestId }: { requestId: number }) {
   const navigate = useNavigate()
   const userId = useCurrentUserId()
+  // read null-safe, not through useAuth(): only the admin-only chat
+  // button needs it, and a missing provider just means "not an admin"
+  const me = useContext(AuthContext)?.me ?? null
   const [request, setRequest] = useState<RequestDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -163,6 +173,7 @@ function ActiveDeliveryView({ requestId }: { requestId: number }) {
   }
 
   const isCourier = userId !== null && request.courierId === userId
+  const admin = isAdmin(me)
   const autoAt = autoCompleteAt(request)
   const primary =
     'rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50'
@@ -195,7 +206,16 @@ function ActiveDeliveryView({ requestId }: { requestId: number }) {
       <section className="max-w-3xl rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <h2 className="font-semibold text-gray-900">Request details</h2>
-          <StatusChip status={request.status} />
+          <div className="flex items-center gap-2">
+            {isCourier &&
+              (CHAT_OPEN_STATUSES as readonly string[]).includes(
+                request.status,
+              ) && <ChatButton requestId={request.id} />}
+            {!isCourier && admin && (
+              <ChatButton requestId={request.id} readOnly />
+            )}
+            <StatusChip status={request.status} />
+          </div>
         </div>
 
         <dl className="mt-4 grid grid-cols-[6rem_1fr] gap-x-4 gap-y-3 text-sm">
