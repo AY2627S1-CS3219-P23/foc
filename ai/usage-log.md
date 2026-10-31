@@ -7167,3 +7167,87 @@ Entry template:
   conflicts — PR #276 touches notification-service and web only.
 - **Prompt(s):** "resolve conflict with origin/main".
 - **Author review:** Leong Wei Zhi reviews via pull request.
+
+## 2026-10-30 — Leong Wei Zhi (fix: dropped-courier notifications dead-end, issue #266)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** generate, fix, docs
+- **Scope:** notification-service (`NotificationRepository.java`:
+  payload-pattern bulk delete; `IdempotentEventProcessor.java`:
+  `request.dropped` prunes the dropping courier's rows for that
+  request, before the dedupe insert — `clearAutomatically` would
+  discard its unflushed assigned-PK insert otherwise;
+  `IdempotentEventProcessorTest`: prune scope, LIKE prefix safety,
+  idempotent redelivery, requester row survives).
+  web (`NotificationProvider.tsx` / `useNotifications.tsx`:
+  `pendingReadIds` + `markReadPending`, the optimistic mark-read lifted
+  out of the Center so it survives click-to-navigate unmounting;
+  `NotificationCenter.tsx`: rows render through the pending overlay and
+  the `marking` gate left the per-row PATCH; tests:
+  `notification-center.test.tsx` three new cases + a PATCH gate/failure
+  switch in the stub, `request-refetch.test.tsx` stub gains the two new
+  context fields). `docs/notification-service.md` (D33 row + section).
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/266", then "execute
+  the plan". The issue required a direction decision; the author chose,
+  via neutral options Q&A: prune the courier's notifications on drop
+  (over a past-party read-access record in order-service, and over
+  web-only 404 softening), and fold in both #263-review timing nits.
+  The tool's recorded decisions: JPQL `LIKE` on the payload column
+  (portable to the H2 tests) with both quotes in the pattern and
+  escaped wildcards; successful optimistic ids stay in the set, failed
+  ones leave so the next fetch shows the truth.
+- **Author review:** `./mvnw test` green in notification-service (94
+  tests, 0 skipped, including a first run that caught the
+  prune-after-dedupe ordering bug); web `vitest` 361/361, `tsc` and
+  `eslint` clean. Leong Wei Zhi reviews via pull request.
+
+## 2026-10-31 — Leong Wei Zhi (notification-service/web: PR #277 main merge, issue #266)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** merge conflict resolution
+- **Scope:** merged `origin/main` (PRs #274 and #276) into
+  `266-prune-on-drop`. Conflicts were docs/comment-only: the README's
+  AI Use Summary comment and section, `ai/usage-log.md`, the
+  `docs/notification-service.md` decision table (main's D32 `raterId`
+  wording kept alongside this branch's new D33 row), and the AI
+  disclosure headers of `NotificationCenter.tsx` and
+  `notification-center.test.tsx` — all resolved keeping both sides'
+  entries. The code bodies auto-merged (#255's `actorIdOf` hydration
+  alongside this branch's `pendingReadIds` overlay).
+- **Prompt(s):** "fix merge conflicts on <PR #277 URL>".
+- **Author review:** `./mvnw test` green in notification-service (101
+  tests, 0 skipped, including #255's rating-events suite); web `vitest`
+  362/362, `tsc` and `eslint` clean. Leong Wei Zhi reviews via pull
+  request.
+
+## 2026-10-31 — Leong Wei Zhi (fix: PR #277 review round, issue #266)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix, tests, docs
+- **Scope:** notification-service (`NotificationRepository.java`: the
+  prune delete gains an `occurredAt <=` bound and a count query serves
+  the new ingest guard; `IdempotentEventProcessor.java`: a courier-party
+  event landing after the drop that covers it stores no courier row —
+  answered from the requester's stored dropped row, ties to the drop;
+  `IdempotentEventProcessorTest`: two reorder scenarios, redelivery
+  fixture's re-accept moved to a later occurredAt). web
+  (`NotificationCenter.tsx`: rows + total merged into one state so list
+  surgery and the decrement are atomic; under Unread, pendingReadIds
+  rows leave the held list through the in-page-click bookkeeping
+  instead of a render-only filter; the decrement applies only when the
+  row was still held; the empty state defers to the pager when the
+  server set is not exhausted; the badge count re-syncs on mount;
+  `notification-center.test.tsx`: four cases, each verified to fail
+  against the pre-fix component). `docs/notification-service.md` (D33
+  row + section: Reordering and Badge bullets, limitations updated).
+- **Prompt(s):** "address pr comments on <PR #277 URL>". The review's
+  two either/or design points were the author's decisions via
+  neutral-options Q&A: guard late courier events at ingest (over a D33
+  accepted-limitation entry), and re-sync the badge when the Center
+  mounts (over a live prune signal and over documenting it). The
+  tool's recorded decisions: one merged list state over presence refs
+  (the race needs atomicity, not ordering); no auto-refetch when every
+  held row is pending (a hung PATCH would loop it) — the empty state
+  is gated on the pager instead.
+- **Author review:** `./mvnw test` green in notification-service
+  (103 tests, 0 skipped); web `vitest` 366/366 (the four new cases
+  fail on the unfixed component), `tsc` and `eslint` clean. Leong Wei
+  Zhi reviews via pull request.

@@ -278,6 +278,12 @@
   2026-10-30: AI Use Summary extended for the notification on
   rating.submitted (issue #255), by Claude Code (Fable 5).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-30: AI Use Summary extended for the notification-service
+  dropped-courier prune and the Notification Center timing fixes
+  (issue #266) by Claude Code (Fable 5).
+  2026-10-31: AI Use Summary extended for the PR #277 review fixes
+  (prune reorder bound/guard, Center pager bookkeeping, badge re-sync
+  on mount) by Claude Code (Fable 5).
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1312,6 +1318,33 @@ derivation and shipping the web template in the same PR were the
 author's decisions via neutral-options Q&A; the ratee-only recipient is
 #249's contract (`parties`, decided on #44). Recorded in
 `ai/usage-log.md`.
+
+Claude Code (Fable 5) implemented the notification-service prune for
+issue #266: ingesting `request.dropped` now deletes the dropping
+courier's stored rows for that request (they are no longer a party, so
+the rows could only dead-end on the detail 404), via a payload-pattern
+bulk delete in the same transaction as the event-ID dedupe — ordered
+before it, since the bulk query's context clear would discard the
+dedupe row's unflushed insert. The direction (prune, over past-party
+read access or web-only 404 softening — D33,
+`docs/notification-service.md`) and folding in the #263 review's two
+timing nits were the author's decisions via neutral-options Q&A. On the
+web, the click-to-navigate mark-read moved into the provider as an
+optimistic `pendingReadIds` overlay (a quick Back no longer flashes the
+row unread; a failed PATCH resurfaces as unread on the next fetch), and
+the `marking` gate left the per-row PATCH so a row pushed during an
+in-flight mark-all can still be marked. Recorded in `ai/usage-log.md`.
+
+Claude Code (Fable 5) applied the PR #277 review's fixes (issue #266):
+the prune is bounded to rows at or before the drop and the ingest
+skips a courier's row when a stored `request.dropped` already covers
+it, so retry-queue reordering neither deletes a re-accept's fresh rows
+nor re-creates the dead-end row; on the web, the Notification Center's
+rows and their total merged into one state, read-pending rows leave
+the Unread view through the same bookkeeping as an in-page click, and
+the badge re-syncs when the Center opens. The guard-vs-documented-
+limitation and badge-signal choices were the author's via
+neutral-options Q&A. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

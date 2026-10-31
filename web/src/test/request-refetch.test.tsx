@@ -10,6 +10,9 @@
 // no provider at all — that suite passing unchanged is the regression
 // test for the hook's provider-less no-op.
 // Author review: [pending]
+// 2026-10-30, Claude Code (Fable 5), issue #266: the stub context gains
+// the contract's new pendingReadIds/markReadPending fields (inert here —
+// only the Center reads them).
 
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -98,6 +101,8 @@ function PushProvider({ children }: { children: ReactNode }) {
     pushStopped: false,
     pushedNotifications: pushed,
     pushReconnects: reconnects,
+    pendingReadIds: new Set<number>(),
+    markReadPending: () => {},
     refreshUnreadCount: () => {},
     soundEnabled: false,
     setSoundEnabled: () => {},

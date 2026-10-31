@@ -53,6 +53,25 @@
 // goes through actorIdOf (raterId ?? courierId), so a rating.submitted
 // row names its rater the same way request rows name their courier
 // (D32). Author review: Leong Wei Zhi, pending pull request review.
+// 2026-10-30, Claude Code (Fable 5), issue #266 (the #263 review's two
+// timing nits): the click-to-navigate mark-read goes through the
+// provider's markReadPending, and fetched rows render through a
+// pendingReadIds overlay — a Back that outruns the PATCH no longer
+// flashes the row unread, and a failed PATCH resurfaces as truth on the
+// next fetch instead of vanishing. The `marking` gate left the per-row
+// PATCH: a row pushed while mark-all was in flight is not covered by
+// the bulk call, so skipping its PATCH left it unread forever after a
+// click-through; the PATCH is idempotent server-side, so double-marking
+// a covered row is harmless.
+// 2026-10-31, Claude Code (Fable 5), PR #277 review (@Sinnez1): the
+// rows held and their total merged into one state — the per-row
+// decrement racing mark-all's refill took the same row off the total
+// twice; under Unread, pendingReadIds rows now leave the held list
+// through the same bookkeeping as an in-page click instead of a
+// render-time filter, so the pager and empty state agree with the
+// screen; and the badge count re-syncs on mount (author decision via
+// options Q&A) — the dropped-courier prune deletes rows no push
+// announces, so the bell could disagree with an opened Center.
 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
@@ -87,6 +106,19 @@ interface ListRequest {
 
 const FIRST_PAGE: ListRequest = { page: 0, append: false, attempt: 0 }
 
+// The rows held and the total of the current filter's server set they
+// are measured against. One value on purpose: PR #199 round 3
+// established the two must move together, and PR #277's review showed
+// two separate states cannot keep them atomic — a late PATCH
+// completion racing mark-all's refill decremented a total that already
+// excluded the row.
+interface HeldList {
+  items: NotificationDto[]
+  total: number
+}
+
+const EMPTY_LIST: HeldList = { items: [], total: 0 }
+
 // re-read the current filter's first page, replacing what is held
 const refill = (r: ListRequest): ListRequest => ({
   page: 0,
@@ -98,6 +130,8 @@ export function NotificationCenter() {
   const {
     unreadCount,
     pushedNotifications,
+    pendingReadIds,
+    markReadPending,
     refreshUnreadCount,
     soundEnabled,
     setSoundEnabled,
@@ -105,7 +139,12 @@ export function NotificationCenter() {
 
   const navigate = useNavigate()
 
-  const [items, setItems] = useState<NotificationDto[]>([])
+  // the current filter's rows + total, atomically (see HeldList). The
+  // total is from the last answer — not `totalPages`: the unread set
+  // shrinks as rows are read, so a page count computed against an
+  // older, larger set is the thing that goes stale
+  const [list, setList] = useState<HeldList>(EMPTY_LIST)
+  const { items, total: totalElements } = list
   const [filter, setFilter] = useState<Filter>('all')
   // What the effect should fetch, as one value so a page number and the
   // merge it implies can never disagree. `append` false replaces the
@@ -116,10 +155,6 @@ export function NotificationCenter() {
   const [request, setRequest] = useState<ListRequest>(FIRST_PAGE)
   // true once a fetch has answered for the current filter
   const [loaded, setLoaded] = useState(false)
-  // of the current filter, from the last answer — not `totalPages`: the
-  // unread set shrinks as rows are read, so a page count computed
-  // against an older, larger set is the thing that goes stale
-  const [totalElements, setTotalElements] = useState(0)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [marking, setMarking] = useState(false)
@@ -135,10 +170,9 @@ export function NotificationCenter() {
   const switching = filter !== prevFilter
   if (switching) {
     setPrevFilter(filter)
-    setItems([])
+    setList(EMPTY_LIST)
     setRequest(FIRST_PAGE)
     setLoaded(false)
-    setTotalElements(0)
   }
 
   // the clock the relative labels read, ticking while the page is open
@@ -147,6 +181,18 @@ export function NotificationCenter() {
     const timer = setInterval(() => setNow(new Date()), CLOCK_TICK_MS)
     return () => clearInterval(timer)
   }, [])
+
+  // The badge has no trigger for rows that vanish server-side without a
+  // push: the dropped-courier prune (D33) deletes rows the dropping
+  // courier's bell still counts, and nothing else re-syncs until a
+  // login, reconnect, push or read write. Opening the Center is where
+  // the disagreement would show — "No new notifications" under a
+  // nonzero bell, with Mark-all enabled — so re-sync the count on mount
+  // (PR #277 review; author decision via options Q&A, over a live prune
+  // signal and over documenting it as a D33 limitation).
+  useEffect(() => {
+    refreshUnreadCount()
+  }, [refreshUnreadCount])
 
   // One effect owns every list fetch. Both merges dedupe by id — a
   // pushed row prepended below may already be in what the server
@@ -166,9 +212,8 @@ export function NotificationCenter() {
           unread: filter === 'unread',
         })
         if (cancelled) return
-        setTotalElements(result.totalElements)
         setLoaded(true)
-        setItems((prev) => {
+        setList((prev) => {
           if (!append) {
             // Rows pushed while this request was out are newer than the
             // server's snapshot, so they stay on top rather than being
@@ -176,11 +221,20 @@ export function NotificationCenter() {
             // the reset above empties the list before this runs, on a
             // filter switch as on the first load.
             const returned = new Set(result.content.map((n) => n.id))
-            const pushedSince = prev.filter((n) => !returned.has(n.id))
-            return [...pushedSince, ...result.content]
+            const pushedSince = prev.items.filter((n) => !returned.has(n.id))
+            return {
+              items: [...pushedSince, ...result.content],
+              total: result.totalElements,
+            }
           }
-          const seen = new Set(prev.map((n) => n.id))
-          return [...prev, ...result.content.filter((n) => !seen.has(n.id))]
+          const seen = new Set(prev.items.map((n) => n.id))
+          return {
+            items: [
+              ...prev.items,
+              ...result.content.filter((n) => !seen.has(n.id)),
+            ],
+            total: result.totalElements,
+          }
         })
       } catch (err) {
         if (cancelled) return
@@ -220,52 +274,85 @@ export function NotificationCenter() {
     // newest first, matching the list's order
     const add = fresh.filter((n) => !seen.has(n.id)).reverse()
     if (add.length > 0) {
-      setItems((prev) => [...add, ...prev])
-      // Each of these is a new member of the server's set, which the
+      // Each added row is a new member of the server's set, which the
       // last answer's total predates. Left alone, the rows held catch
       // up to a stale total and the pager disappears while older rows
       // are still unloaded (PR #199 review).
-      setTotalElements((t) => t + add.length)
+      setList((prev) => ({
+        items: [...add, ...prev.items],
+        total: prev.total + add.length,
+      }))
     }
+  }
+
+  // Under the Unread filter, a row whose read PATCH is pending — or
+  // committed after this snapshot was fetched — leaves the list through
+  // the same bookkeeping as an in-page click: out of the rows held,
+  // with the total coming down by what actually left. A render-time
+  // filter alone disagreed with the pager (PR #277 review): items and
+  // the total still counted the hidden rows, so `nextPage` could offer
+  // a page past the row that had moved up, and never load it. A failed
+  // PATCH takes its id back out of pendingReadIds, and the next fetch
+  // restores the row.
+  if (filter === 'unread' && items.some((n) => pendingReadIds.has(n.id))) {
+    setList((prev) => {
+      const kept = prev.items.filter((n) => !pendingReadIds.has(n.id))
+      return {
+        items: kept,
+        total: Math.max(0, prev.total - (prev.items.length - kept.length)),
+      }
+    })
   }
 
   async function handleRowClick(notification: NotificationDto) {
     const requestId = requestIdOf(notification.payload)
     if (requestId !== null) {
-      if (!notification.read && !marking) {
-        // Fire-and-forget: navigation unmounts this page, so no list
-        // surgery — a failure just leaves the row unread server-side.
-        // The provider outlives the route, so the badge refresh lands.
-        // During mark-all (`marking`) the bulk call covers this row, so
-        // the per-row PATCH is skipped but the click still navigates
-        // (PR #263 review).
-        setNotificationRead(notification.id, true)
-          .then(() => refreshUnreadCount())
-          .catch(() => {})
+      if (!notification.read) {
+        // Through the provider, which outlives the navigation that
+        // unmounts this page: the id joins pendingReadIds up front, so
+        // an immediate Back renders the row read while the PATCH is
+        // still in flight, and a failed PATCH resurfaces the row unread
+        // on the next fetch (issue #266). No `marking` gate: a row
+        // pushed while mark-all was in flight is not covered by the
+        // bulk call, and the PATCH is idempotent for rows that are.
+        markReadPending(notification.id)
       }
       // the id is an arbitrary payload string — encoded so a `/`, `?`
       // or `#` in it cannot route somewhere unintended (PR #263 review)
       navigate(`/deliveries/${encodeURIComponent(requestId)}`)
       return
     }
-    if (notification.read || marking) return
+    // No `marking` gate here either (issue #266): the bulk call missed
+    // any row pushed after it started, and both completions do their
+    // list surgery by id, so they compose in either order.
+    if (notification.read) return
     try {
       await setNotificationRead(notification.id, true)
-      setItems((prev) =>
+      setList((prev) => {
         // The Unread view must not show read rows, so there the row
         // leaves the list instead of graying in place (author decision
         // via options Q&A, PR #199 review).
-        filter === 'unread'
-          ? prev.filter((n) => n.id !== notification.id)
-          : prev.map((n) =>
+        if (filter !== 'unread') {
+          return {
+            ...prev,
+            items: prev.items.map((n) =>
               n.id === notification.id ? { ...n, read: true } : n,
             ),
-      )
-      // It left the unread set on the server as well, so the total
-      // comes down with it — otherwise the rows held fall one short of
-      // a total nothing will reach and the pager offers a page that is
-      // already on screen.
-      if (filter === 'unread') setTotalElements((t) => Math.max(0, t - 1))
+          }
+        }
+        // It left the unread set on the server as well, so the total
+        // comes down with it — otherwise the rows held fall one short
+        // of a total nothing will reach and the pager offers a page
+        // that is already on screen. But only when the row was still
+        // held: a mark-all that finished while this PATCH was in flight
+        // already removed it and refilled a total that excludes it, and
+        // a second decrement would undercount — `hasMore` going false
+        // with an older row still unloaded (PR #277 review).
+        const kept = prev.items.filter((n) => n.id !== notification.id)
+        return kept.length === prev.items.length
+          ? prev
+          : { items: kept, total: Math.max(0, prev.total - 1) }
+      })
       setError(null)
       // server-authoritative badge (options Q&A decision): re-fetch
       // rather than decrement locally
@@ -284,13 +371,15 @@ export function NotificationCenter() {
     const covered = new Set(items.map((n) => n.id))
     try {
       await markAllRead()
-      setItems((prev) =>
-        filter === 'unread'
-          ? prev.filter((n) => !covered.has(n.id))
-          : prev.map((n) =>
-              n.read || !covered.has(n.id) ? n : { ...n, read: true },
-            ),
-      )
+      setList((prev) => ({
+        ...prev,
+        items:
+          filter === 'unread'
+            ? prev.items.filter((n) => !covered.has(n.id))
+            : prev.items.map((n) =>
+                n.read || !covered.has(n.id) ? n : { ...n, read: true },
+              ),
+      }))
       if (filter === 'unread') {
         // Every row this covered has left the unread set, so the view's
         // page-0 slice is whatever is left: ask the server rather than
@@ -343,6 +432,20 @@ export function NotificationCenter() {
     [items],
   )
   const names = useUsernames(actorIds)
+
+  // The rows as the viewer should see them: a row whose read PATCH is
+  // still in flight — or committed after this page's snapshot was
+  // fetched — renders read, so a Back that outruns the PATCH never
+  // flashes it unread (issue #266). A gray-in-place overlay for the All
+  // view only: under Unread such rows leave `items` itself, through the
+  // bookkeeping block above, so the pager math stays consistent with
+  // what is on screen (PR #277 review).
+  const displayItems = useMemo(() => {
+    if (pendingReadIds.size === 0 || filter === 'unread') return items
+    return items.map((n) =>
+      !n.read && pendingReadIds.has(n.id) ? { ...n, read: true } : n,
+    )
+  }, [items, filter, pendingReadIds])
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -431,8 +534,11 @@ export function NotificationCenter() {
 
       {/* An empty list only means "all caught up" when the load worked;
           behind an error banner it would be a reassuring lie (PR #199
-          review). */}
-      {!loading && items.length === 0 && !error && (
+          review) — and only when the server's set is also exhausted:
+          with every held row read-pending but more on the server, the
+          pager below stands alone rather than contradicting a false
+          "all caught up" (PR #277 review). */}
+      {!loading && displayItems.length === 0 && !error && !hasMore && (
         <div className="rounded-lg border-2 border-dashed border-gray-200 bg-white py-12 text-center">
           <p className="font-medium text-gray-900">No new notifications</p>
           <p className="mt-1 text-sm text-gray-500">
@@ -441,9 +547,9 @@ export function NotificationCenter() {
         </div>
       )}
 
-      {!loading && items.length > 0 && (
+      {!loading && displayItems.length > 0 && (
         <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
-          {items.map((notification) => (
+          {displayItems.map((notification) => (
             <NotificationRow
               key={notification.id}
               notification={notification}
