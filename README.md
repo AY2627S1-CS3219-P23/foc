@@ -271,6 +271,13 @@
   2026-10-30: AI Use Summary extended for rating-service's profile
   read APIs (issue #253), by Claude Code (Fable 5).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-30: AI Use Summary extended for rating-service's report-a-user
+  API (issue #254), by Claude Code (Fable 5); extended again the same
+  day for the PR #274 review fix.
+  Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-30: AI Use Summary extended for the notification on
+  rating.submitted (issue #255), by Claude Code (Fable 5).
+  Author review: Leong Wei Zhi, pending pull request review.
   2026-10-30: AI Use Summary extended for the notification-service
   dropped-courier prune and the Notification Center timing fixes
   (issue #266) by Claude Code (Fable 5).
@@ -1276,6 +1283,37 @@ to any authenticated user, with Flyway V4 adding the
 a user with no ratings and the raw (unrounded) mean were the author's
 decisions via neutral-options Q&A; the list returns rater ids only
 (D32 — the web hydrates usernames at read time). Recorded in
+`ai/usage-log.md`.
+
+Claude Code (Fable 5) implemented rating-service's report-a-user API
+(issue #254, N1.4 under #44): `POST /reports` (reason from the issue's
+fixed list, optional details and request reference, self-reports
+refused with 400) and the ADMIN/OWNER-gated `GET /reports` (newest
+first, paged like the review history), with Flyway V5 adding the
+`user_report` table. The ADMIN+OWNER pair for the gate (the repo-wide
+precedent over the issue's literal "ADMIN only"), the paged list shape,
+and storing `requestId` as an opaque unverified reference (no FK —
+`rateable_request` holds completed requests only, and reports often
+concern requests that never completed) were the author's decisions via
+neutral-options Q&A. After review, `reportedUserId` is trimmed before
+the self-check and the save, so a padded self-id can neither dodge the
+400 nor store an id matching no user (reviewer finding). Recorded in
+`ai/usage-log.md`.
+
+Claude Code (Fable 5) implemented the notification on `rating.submitted`
+(issue #255, N1 under #44): notification-service's second queue trio
+(`notification-service.rating-events` + retry/dlq) bound to the
+`rating-events` exchange on the registry's exact key, the listener
+generalized to derive each delivery's retry queue from its consuming
+queue (the hard-coded request retry queue would have parked a failed
+rating event in the wrong trio), a broker integration test mirroring the
+request one (ratee-only row, redelivery dedupe, cross-exchange
+isolation, retry/DLQ evidence through the rating trio), and the web's ⭐
+review template with the rater's name hydrated at read time via the
+`actorIdOf` generalization of D32's courier lookup. The retry-queue
+derivation and shipping the web template in the same PR were the
+author's decisions via neutral-options Q&A; the ratee-only recipient is
+#249's contract (`parties`, decided on #44). Recorded in
 `ai/usage-log.md`.
 
 Claude Code (Fable 5) implemented the notification-service prune for

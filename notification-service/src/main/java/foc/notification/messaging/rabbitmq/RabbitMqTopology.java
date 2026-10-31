@@ -16,10 +16,17 @@
  * 2026-09-20: order→request event vocabulary rename applied (author
  * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-30, Claude Code (Fable 5), issue #255: rating-domain trio
+ * (notification-service.rating-events + .retry/.dlq) bound to the
+ * rating-events exchange on the exact rating.submitted key via the
+ * registry (D13/D16; recipient scope decided on #44). Author review:
+ * Leong Wei Zhi, pending pull request review.
  */
 package foc.notification.messaging.rabbitmq;
 
 import foc.contracts.events.core.EventContracts;
+import foc.contracts.events.core.EventTypeRegistry;
+import foc.contracts.events.rating.RatingSubmitted;
 
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
@@ -32,19 +39,29 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Request-domain topology (D12, D13, D16): the durable
- * {@code request-events} <strong>topic</strong> exchange the Order
- * Service publishes to with routing keys from the shared
- * {@code EventTypeRegistry} (D18), and this service's durable work
- * queue bound with {@value #REQUEST_EVENTS_BINDING_PATTERN} — this
+ * Request- and rating-domain topology (D12, D13, D16): one durable
+ * <strong>topic</strong> exchange per producing domain, published to
+ * with routing keys from the shared {@code EventTypeRegistry} (D18),
+ * and one consumer-private work-queue trio per exchange. The request
+ * work queue binds {@value #REQUEST_EVENTS_BINDING_PATTERN} — this
  * service notifies on <em>every</em> request event (F1.1, F1.2), and a
- * new event type ships via a contracts release anyway, so the binding
- * never changes.
+ * new request event ships via a contracts release anyway, so that
+ * binding never changes. The rating work queue binds the exact
+ * {@code rating.submitted} key instead (issue #255): the rating domain
+ * will grow events this service must not notify on, so it opts in
+ * key by key (rating-service's own consumer style, no hand-written
+ * strings).
  *
- * <p>Failure topology (D6/D7, F2.2/F2.3): the work queue dead-letters
- * to the durable DLQ, and the durable retry queue parks a failed
- * event for {@code notification.rabbitmq.retry.ttl-ms} before its own
- * dead-letter leg returns it to the work queue for another attempt.
+ * <p>Failure topology (D6/D7, F2.2/F2.3), identical per trio: the work
+ * queue dead-letters to the durable DLQ, and the durable retry queue
+ * parks a failed event for {@code notification.rabbitmq.retry.ttl-ms}
+ * before its own dead-letter leg returns it to the work queue for
+ * another attempt. {@link DomainEventsListener} routes each failed
+ * delivery via its explicit work→retry queue map over these constants
+ * (PR #276 review: a derived name could target an undeclared queue and
+ * be dropped-yet-confirmed), so a new trio needs a row there too; the
+ * {@code <work-queue>.retry} naming stays a convention, not a routing
+ * mechanism.
  * Both legs use the <em>default exchange</em> as their dead-letter
  * exchange (author decision, 2026-09-20): zero extra declarables, at
  * the cost that the routing key is rewritten to the target queue name
@@ -104,6 +121,19 @@ public class RabbitMqTopology {
 	static final String REQUEST_EVENTS_BINDING_PATTERN = "request.#";
 
 	/**
+	 * This service's work queue for the rating domain (issue #255);
+	 * consumer-prefixed and service-private like the request trio
+	 * (D13/D15).
+	 */
+	public static final String RATING_EVENTS_QUEUE = "notification-service.rating-events";
+
+	/** Rating-domain TTL/delay queue (D6, F2.2), same leg shape. */
+	public static final String RATING_EVENTS_RETRY_QUEUE = RATING_EVENTS_QUEUE + ".retry";
+
+	/** Rating-domain terminal queue (D7, F2.3). */
+	public static final String RATING_EVENTS_DEAD_LETTER_QUEUE = RATING_EVENTS_QUEUE + ".dlq";
+
+	/**
 	 * The broker's built-in default exchange: routes by queue name, so
 	 * a dead-letter leg needs no declared exchange or binding.
 	 */
@@ -125,6 +155,32 @@ public class RabbitMqTopology {
 		Queue deadLetterQueue = QueueBuilder.durable(REQUEST_EVENTS_DEAD_LETTER_QUEUE).build();
 		Binding binding = BindingBuilder.bind(workQueue).to(exchange)
 				.with(REQUEST_EVENTS_BINDING_PATTERN);
+		return new Declarables(exchange, workQueue, retryQueue, deadLetterQueue, binding);
+	}
+
+	/**
+	 * The exchange declaration must match rating-service's (durable
+	 * topic, non-auto-delete) — redeclaring with different arguments
+	 * fails {@code PRECONDITION_FAILED}; the producer declares the
+	 * exchange only and leaves queues and bindings to each consumer
+	 * (D13, rating-service's {@code ratingEventsTopology} javadoc).
+	 */
+	@Bean
+	Declarables ratingEventsTopology(
+			@Value("${notification.rabbitmq.retry.ttl-ms}") int retryTtlMs) {
+		TopicExchange exchange = new TopicExchange(EventContracts.RATING_EVENTS_EXCHANGE, true, false);
+		Queue workQueue = QueueBuilder.durable(RATING_EVENTS_QUEUE)
+				.deadLetterExchange(DEFAULT_EXCHANGE)
+				.deadLetterRoutingKey(RATING_EVENTS_DEAD_LETTER_QUEUE)
+				.build();
+		Queue retryQueue = QueueBuilder.durable(RATING_EVENTS_RETRY_QUEUE)
+				.ttl(retryTtlMs)
+				.deadLetterExchange(DEFAULT_EXCHANGE)
+				.deadLetterRoutingKey(RATING_EVENTS_QUEUE)
+				.build();
+		Queue deadLetterQueue = QueueBuilder.durable(RATING_EVENTS_DEAD_LETTER_QUEUE).build();
+		Binding binding = BindingBuilder.bind(workQueue).to(exchange)
+				.with(EventTypeRegistry.routingKeyFor(RatingSubmitted.class));
 		return new Declarables(exchange, workQueue, retryQueue, deadLetterQueue, binding);
 	}
 

@@ -14,6 +14,10 @@
  * on real Postgres — the H2 tests never run the migration, so this is
  * the only check it parses and lands.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), issue #254: V5's user_report table
+ * on real Postgres — the required columns, the optional ones, and the
+ * list index.
+ * Author review: [pending]
  */
 package foc.rating;
 
@@ -138,5 +142,47 @@ class FlywayMigrationTests extends PostgresTestContainer {
         assertEquals(1, jdbc.queryForObject(
                 "select count(*) from pg_indexes where schemaname = ? and indexname = ?",
                 Integer.class, SCHEMA, "idx_rating_ratee_created"));
+    }
+
+    @Test
+    void v5CreatesTheUserReportTableAndItsListIndex() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        Flyway.configure()
+                .dataSource(dataSource)
+                .schemas(SCHEMA)
+                .locations("classpath:db/migration")
+                .load()
+                .migrate();
+
+        OffsetDateTime now = OffsetDateTime.parse("2026-10-30T09:30:00Z");
+        // a full report, and a minimal one: request_id and details are optional
+        jdbc.update("insert into " + SCHEMA + ".user_report "
+                + "(id, reported_user_id, reporter_id, request_id, reason, details, created_at) "
+                + "values (?, ?, ?, ?, ?, ?, ?)",
+                UUID.randomUUID(), "usr-bad-3003", "usr-rep-1001", "req-5", "NO_SHOW",
+                "Never arrived", now);
+        jdbc.update("insert into " + SCHEMA + ".user_report "
+                + "(id, reported_user_id, reporter_id, request_id, reason, details, created_at) "
+                + "values (?, ?, ?, ?, ?, ?, ?)",
+                UUID.randomUUID(), "usr-bad-3003", "usr-rep-1002", null, "OTHER", null, now);
+
+        // the reported user and the reason are not optional
+        assertThrows(DataIntegrityViolationException.class, () ->
+                jdbc.update("insert into " + SCHEMA + ".user_report "
+                        + "(id, reported_user_id, reporter_id, request_id, reason, details, created_at) "
+                        + "values (?, ?, ?, ?, ?, ?, ?)",
+                        UUID.randomUUID(), null, "usr-rep-1001", null, "OTHER", null, now));
+        assertThrows(DataIntegrityViolationException.class, () ->
+                jdbc.update("insert into " + SCHEMA + ".user_report "
+                        + "(id, reported_user_id, reporter_id, request_id, reason, details, created_at) "
+                        + "values (?, ?, ?, ?, ?, ?, ?)",
+                        UUID.randomUUID(), "usr-bad-3003", "usr-rep-1001", null, null, null, now));
+
+        // the admin list's index (#254): newest first
+        assertEquals(1, jdbc.queryForObject(
+                "select count(*) from pg_indexes where schemaname = ? and indexname = ?",
+                Integer.class, SCHEMA, "idx_user_report_created"));
     }
 }
