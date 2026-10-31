@@ -20,6 +20,9 @@
  * 400s the profile reads need (credit-service's ApiExceptionHandler
  * precedent, trimmed to the int case).
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), issue #254: the self-report 400;
+ * an unknown reason already lands in the unreadable-body 400.
+ * Author review: [pending]
  */
 package foc.rating.controller;
 
@@ -44,6 +47,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import foc.rating.service.AlreadyRatedException;
 import foc.rating.service.NotAPartyException;
+import foc.rating.service.SelfReportException;
 import foc.rating.service.UnknownRequestException;
 
 // the web client reads RFC 9457 problem+json error bodies
@@ -65,6 +69,13 @@ class ProblemDetailAdvice {
     @ExceptionHandler(AlreadyRatedException.class)
     ProblemDetail handleAlreadyRated(AlreadyRatedException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+    }
+
+    // naming oneself as the reported user (#254): a contract refusal,
+    // not a permission one, so 400 rather than 403
+    @ExceptionHandler(SelfReportException.class)
+    ProblemDetail handleSelfReport(SelfReportException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
     }
 
     // two submits racing past the pre-check: the unique

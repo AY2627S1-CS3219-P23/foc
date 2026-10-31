@@ -8,9 +8,22 @@
 // 404s): a 404 is "user not found", anything else is retryable. The
 // summary's average is a raw mean and null until the first rating, so
 // the page rounds and never renders "null".
+// 2026-10-31, Claude Code (Fable 5), PR #279 review (@Sinnez1): a
+// non-canonical :id ('me', '09') is rejected before any fetch — the two
+// services would read it differently (user-service binds a Long and
+// owns /users/me; rating-service matches the exact string), letting a
+// report dodge the self-report check — and a 400 from the gate reads as
+// user-not-found, not retryable. The gate, summary and reviews each got
+// a Try again; the reviews keep the last good page up (dimmed, range
+// stamped from the answer itself, pager disabled while loading — the
+// PastDistributions pattern); rater names stay blank until the lookup
+// settles, and "Unknown user" is reserved for a confirmed 404; review
+// text keeps its line breaks and wraps long unbroken strings; a whole
+// average keeps its trailing zero (5.0).
 // Author review: [pending]
-// 2026-10-31 (Claude Code, Fable 5), issue #280: the wireframe's two
-// remaining tiles — "Joined {month year}" (the profile's joinedAt) and
+// 2026-10-31 (Claude Code, Fable 5), issue #280: the two wireframe
+// tiles #257 had left out for want of an API — "Joined {month year}"
+// (the profile's joinedAt, new on the public-profile route) and
 // "{n} deliveries completed" (order-service's completed count, fetched
 // only once the gate succeeds; an em dash if it fails) — in a 3-tile
 // row that now also holds the Avg-rating tile, shown even before the
@@ -29,12 +42,20 @@ import type {
   RatingSummaryResponse,
   ReviewResponse,
 } from '@/features/rating/types'
-import { useUsernames } from '@/features/user/usernames'
+import type { PagedResponse } from '@/features/supplier/types'
+import { useUsernameLookups } from '@/features/user/usernames'
 import { ApiError, apiFetch, errorMessage } from '@/lib/api/http'
 import { Pagination } from '@/shared/components/Pagination'
 
 // the wireframe's Recent Reviews list is short; the service allows 1..100
 const PAGE_SIZE = 5
+
+// User ids are positive longs, and only their canonical decimal spelling
+// may reach the services: user-service would canonicalize 'me' (its own
+// alias) or '09' (Long-parsed to 9) while rating-service stores the raw
+// string, so a non-canonical id renders another user's profile and files
+// reports past the self-report check (PR #279 review).
+const CANONICAL_USER_ID = /^[1-9]\d*$/
 
 export function PublicProfile() {
   const { id } = useParams()
@@ -57,11 +78,18 @@ const joinedFormat = new Intl.DateTimeFormat('en-SG', {
 
 function PublicProfileView({ userId }: { userId: string }) {
   const currentUserId = useCurrentUserId()
-  const [gate, setGate] = useState<Gate>({ kind: 'loading' })
+  // a non-canonical id is missing from the start, before any fetch; the
+  // initializer is enough because the view is remounted per id (key={id})
+  const [gate, setGate] = useState<Gate>(() =>
+    CANONICAL_USER_ID.test(userId) ? { kind: 'loading' } : { kind: 'missing' },
+  )
+  // bumped by Try again to re-run the gate fetch (PR #279 review)
+  const [attempt, setAttempt] = useState(0)
   const [reporting, setReporting] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!CANONICAL_USER_ID.test(userId)) return
     let cancelled = false
     apiFetch<{ username: string; joinedAt: string }>(
       'user',
@@ -77,24 +105,25 @@ function PublicProfileView({ userId }: { userId: string }) {
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        // 404 is the server's word that the user is gone (or never was);
-        // a bad id's 400 and transient failures read as retryable errors
-        if (err instanceof ApiError && err.status === 404) {
+        // 404 is the server's word that the user is gone (or never was),
+        // and a 400 that it can't name one — retrying helps neither;
+        // transient failures read as retryable errors
+        if (
+          err instanceof ApiError &&
+          (err.status === 404 || err.status === 400)
+        ) {
           setGate({ kind: 'missing' })
         } else {
           setGate({
             kind: 'error',
-            message: errorMessage(
-              err,
-              'Could not load this profile. Try again.',
-            ),
+            message: errorMessage(err, 'Could not load this profile.'),
           })
         }
       })
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [userId, attempt])
 
   if (gate.kind === 'loading') {
     return <p className="text-sm text-gray-500">Loading profile…</p>
@@ -110,7 +139,21 @@ function PublicProfileView({ userId }: { userId: string }) {
     )
   }
   if (gate.kind === 'error') {
-    return <Banner kind="error">{gate.message}</Banner>
+    return (
+      <p role="alert" className="text-sm text-red-700">
+        {gate.message}{' '}
+        <button
+          type="button"
+          onClick={() => {
+            setGate({ kind: 'loading' })
+            setAttempt((a) => a + 1)
+          }}
+          className="font-medium underline"
+        >
+          Try again
+        </button>
+      </p>
+    )
   }
 
   const isSelf = currentUserId !== null && String(currentUserId) === userId
@@ -172,6 +215,8 @@ function SummarySection({
   // missing tile value must not take the rest of the profile with it
   const [completed, setCompleted] = useState<number | null>(null)
   const [completedFailed, setCompletedFailed] = useState(false)
+  // bumped by Try again to re-run the fetch (PR #279 review)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -189,7 +234,7 @@ function SummarySection({
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [userId, attempt])
 
   // the section only renders once the gate succeeded, so a missing user
   // never triggers this call (the 404 page stays fetch-free)
@@ -210,9 +255,11 @@ function SummarySection({
     }
   }, [userId])
 
+  // toFixed keeps the trailing zero, so a whole average reads 5.0 — the
+  // same one-decimal shape as 4.2 (PR #279 review)
   const average =
     summary !== null && summary.average !== null
-      ? Number(summary.average.toFixed(1))
+      ? summary.average.toFixed(1)
       : null
 
   return (
@@ -225,10 +272,20 @@ function SummarySection({
       </div>
       <h1 className="mt-3 text-2xl font-semibold text-gray-900">{username}</h1>
 
-      {error ? (
-        <div className="mt-3 w-full">
-          <Banner kind="error">{error}</Banner>
-        </div>
+      {error !== null ? (
+        <p role="alert" className="mt-3 text-sm text-red-700">
+          {error}{' '}
+          <button
+            type="button"
+            onClick={() => {
+              setError(null)
+              setAttempt((a) => a + 1)
+            }}
+            className="font-medium underline"
+          >
+            Try again
+          </button>
+        </p>
       ) : summary === null ? (
         <p className="mt-3 text-sm text-gray-500">Loading rating…</p>
       ) : summary.count === 0 ? (
@@ -279,107 +336,165 @@ function ProfileTile({ label, value }: { label: string; value: string }) {
   )
 }
 
+// A result is stamped with the page and attempt it answers, so the last
+// good page (and with it the pager) stays up through a failed or pending
+// load — the PastDistributions pattern (PR #279 review).
+interface ReviewsResult {
+  page: number
+  // which load of `page` this answers; a retry is a new attempt
+  attempt: number
+  reviews?: PagedResponse<ReviewResponse>
+  error?: string
+}
+
 function ReviewsSection({ userId }: { userId: string }) {
   const [page, setPage] = useState(0)
-  const [reviews, setReviews] = useState<ReviewResponse[]>([])
-  const [total, setTotal] = useState(0)
-  const [totalPages, setTotalPages] = useState(1)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // bumped on every navigation/retry: after a failed load the pager
+  // still shows the last good page, so re-picking `page` must refetch
+  const [attempt, setAttempt] = useState(0)
+  const [result, setResult] = useState<ReviewsResult | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    ratingApi
-      .listReviews(userId, page, PAGE_SIZE)
-      .then((result) => {
+    ratingApi.listReviews(userId, page, PAGE_SIZE).then(
+      (reviews) => {
         if (cancelled) return
-        setReviews(result.content)
-        setTotal(result.totalElements)
-        setTotalPages(result.totalPages)
-        setError(null)
+        setResult({ page, attempt, reviews })
         // Defensive: if the page we asked for no longer exists, step back
         // to the last one that does (request-history.tsx).
-        if (page > 0 && page >= result.totalPages) {
-          setPage(Math.max(0, result.totalPages - 1))
+        if (page > 0 && page >= reviews.totalPages) {
+          setPage(Math.max(0, reviews.totalPages - 1))
         }
-      })
-      .catch((err: unknown) => {
+      },
+      (err: unknown) => {
         if (!cancelled)
-          setError(errorMessage(err, 'Could not load the reviews. Try again.'))
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
+          setResult((prev) => ({
+            page,
+            attempt,
+            reviews: prev?.reviews,
+            error: errorMessage(err, 'Could not load the reviews.'),
+          }))
+      },
+    )
     return () => {
       cancelled = true
     }
-  }, [userId, page])
+  }, [userId, page, attempt])
+
+  const goTo = (next: number) => {
+    setPage(next)
+    setAttempt((a) => a + 1)
+  }
+
+  // a retry of the page already shown is loading too, until it answers
+  const current =
+    result !== null && result.page === page && result.attempt === attempt
+  const loading = !current
+  // the last good page stays up while the next one loads or fails
+  const shown = result?.reviews
+  const error = current ? result.error : undefined
 
   // memoized so the hydration effect keys on the reviews, not on a fresh
   // array identity every render (NotificationCenter's pattern)
-  const raterIds = useMemo(() => reviews.map((r) => r.raterId), [reviews])
-  const names = useUsernames(raterIds)
+  const raterIds = useMemo(
+    () => (shown?.content ?? []).map((r) => r.raterId),
+    [shown],
+  )
+  const lookups = useUsernameLookups(raterIds)
 
-  const from = total === 0 ? 0 : page * PAGE_SIZE + 1
-  const to = page * PAGE_SIZE + reviews.length
+  // the range comes from the answer itself, never the requested page, so
+  // a click never captions the old rows with the new page's numbers
+  const from =
+    shown === undefined || shown.totalElements === 0
+      ? 0
+      : shown.page * PAGE_SIZE + 1
+  const to =
+    shown === undefined ? 0 : shown.page * PAGE_SIZE + shown.content.length
 
   return (
-    <section className="mt-8" aria-label="Recent reviews">
+    <section className="mt-8" aria-label="Recent reviews" aria-busy={loading}>
       <h2 className="text-lg font-semibold text-gray-900">Recent Reviews</h2>
 
-      {loading ? (
-        <p className="mt-3 text-sm text-gray-500">Loading reviews…</p>
-      ) : error ? (
-        <div className="mt-3">
-          <Banner kind="error">{error}</Banner>
-        </div>
-      ) : reviews.length === 0 ? (
-        <div className="mt-3 rounded-lg border border-gray-200 py-8 text-center">
-          <p className="font-medium text-gray-900">No reviews yet.</p>
-          <p className="mt-1 text-sm text-gray-500">
-            Reviews from completed requests will show up here.
-          </p>
-        </div>
-      ) : (
+      {error !== undefined && (
+        <p
+          role="alert"
+          className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
+          {error}{' '}
+          <button
+            type="button"
+            onClick={() => setAttempt((a) => a + 1)}
+            className="font-medium underline"
+          >
+            Try again
+          </button>
+        </p>
+      )}
+      {error === undefined &&
+        loading &&
+        (shown === undefined || shown.content.length === 0) && (
+          <p className="mt-3 text-sm text-gray-500">Loading reviews…</p>
+        )}
+      {error === undefined &&
+        !loading &&
+        shown !== undefined &&
+        shown.content.length === 0 && (
+          <div className="mt-3 rounded-lg border border-gray-200 py-8 text-center">
+            <p className="font-medium text-gray-900">No reviews yet.</p>
+            <p className="mt-1 text-sm text-gray-500">
+              Reviews from completed requests will show up here.
+            </p>
+          </div>
+        )}
+      {shown !== undefined && shown.content.length > 0 && (
         <>
-          <ul className="mt-3 space-y-3">
-            {reviews.map((r, i) => (
-              // the list endpoint carries no review id; createdAt+raterId
-              // with the index breaks any same-instant tie
-              <li
-                key={`${r.createdAt}-${r.raterId}-${i}`}
-                className="rounded-lg border border-gray-200 p-4"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <StarDisplay value={r.stars} />
-                  <span className="text-xs text-gray-400">
-                    {formatDateTime(r.createdAt)}
-                  </span>
-                </div>
-                {r.text !== null ? (
-                  <p className="mt-2 text-sm text-gray-700">{r.text}</p>
-                ) : (
-                  <p className="mt-2 text-sm text-gray-400 italic">
-                    No written review
+          <ul className={`mt-3 space-y-3 ${loading ? 'opacity-60' : ''}`}>
+            {shown.content.map((r, i) => {
+              const rater = lookups.get(r.raterId)
+              return (
+                // the list endpoint carries no review id; createdAt+raterId
+                // with the index breaks any same-instant tie
+                <li
+                  key={`${r.createdAt}-${r.raterId}-${i}`}
+                  className="rounded-lg border border-gray-200 p-4"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <StarDisplay value={r.stars} />
+                    <span className="text-xs text-gray-400">
+                      {formatDateTime(r.createdAt)}
+                    </span>
+                  </div>
+                  {r.text !== null ? (
+                    <p className="mt-2 text-sm break-words whitespace-pre-line text-gray-700">
+                      {r.text}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-sm text-gray-400 italic">
+                      No written review
+                    </p>
+                  )}
+                  {/* blank (space keeps the line) until the lookup settles;
+                      Unknown user only on a confirmed 404 — a transient
+                      lookup failure must not read as a deleted account */}
+                  <p className="mt-2 text-xs font-medium text-gray-500">
+                    {rater?.username ?? (rater?.missing ? 'Unknown user' : ' ')}
                   </p>
-                )}
-                <p className="mt-2 text-xs font-medium text-gray-500">
-                  {names.get(r.raterId) ?? 'Unknown user'}
-                </p>
-              </li>
-            ))}
+                </li>
+              )
+            })}
           </ul>
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
             <span>
-              Showing {from}-{to} of {total}{' '}
-              {total === 1 ? 'review' : 'reviews'}
+              Showing {from}-{to} of {shown.totalElements}{' '}
+              {shown.totalElements === 1 ? 'review' : 'reviews'}
             </span>
-            {totalPages > 1 && (
+            {shown.totalPages > 1 && (
               <Pagination
-                page={page + 1}
-                totalPages={totalPages}
-                onPageChange={(p) => setPage(p - 1)}
+                page={shown.page + 1}
+                totalPages={shown.totalPages}
+                onPageChange={(p) => goTo(p - 1)}
+                disabled={loading}
               />
             )}
           </div>

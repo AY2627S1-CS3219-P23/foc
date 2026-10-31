@@ -6,6 +6,8 @@
 // visually hidden, labelled "1 star" … "5 stars", so keyboard arrows and
 // screen readers work without bespoke key handling; the glyphs fill up
 // to the chosen value.
+// 2026-10-31, PR #278 review: a disabled mode for the dialog's locked
+// (already-rated) state.
 // Author review: [pending]
 
 const STARS = [1, 2, 3, 4, 5] as const
@@ -13,18 +15,24 @@ const STARS = [1, 2, 3, 4, 5] as const
 interface StarRatingProps {
   value: number | null
   onChange: (stars: number) => void
+  disabled?: boolean
 }
 
-export function StarRating({ value, onChange }: StarRatingProps) {
+export function StarRating({
+  value,
+  onChange,
+  disabled = false,
+}: StarRatingProps) {
   return (
     <div className="flex gap-1">
       {STARS.map((n) => (
-        <label key={n} className="cursor-pointer">
+        <label key={n} className={disabled ? undefined : 'cursor-pointer'}>
           <input
             type="radio"
             name="rating-stars"
             value={n}
             checked={value === n}
+            disabled={disabled}
             onChange={() => onChange(n)}
             aria-label={n === 1 ? '1 star' : `${n} stars`}
             className="peer sr-only"

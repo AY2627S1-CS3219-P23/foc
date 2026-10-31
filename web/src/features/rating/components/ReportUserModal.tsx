@@ -7,6 +7,11 @@
 // there is no requestId — the profile has no order context. The service
 // keeps every submission (no duplicate detection), so nothing here
 // pretends a repeat report conflicts.
+// 2026-10-31, Claude Code (Fable 5), PR #279 review (@Sinnez1): the
+// dialog cannot be closed while the POST is in flight (Cancel, the X
+// and the backdrop included) — closing mid-request still filed the
+// report, then confirmed or errored against a dialog already gone
+// (RateExperienceModal, PR #278 review).
 // Author review: [pending]
 
 import { type FormEvent, useState } from 'react'
@@ -52,6 +57,8 @@ export function ReportUserModal({
 
   async function submit(e: FormEvent) {
     e.preventDefault()
+    // the button is disabled, but Enter still submits a form
+    if (busy) return
     setSubmitted(true)
     if (reason === null || details.length > REPORT_DETAILS_MAX) return
     setBusy(true)
@@ -70,8 +77,14 @@ export function ReportUserModal({
     }
   }
 
+  // The X and the backdrop route through here too: closing mid-submit
+  // would file the report anyway and land its outcome on a closed dialog.
+  const requestClose = () => {
+    if (!busy) onClose()
+  }
+
   return (
-    <Modal title="Report User" onClose={onClose}>
+    <Modal title="Report User" onClose={requestClose}>
       <form onSubmit={submit} noValidate className="space-y-4">
         <p className="text-sm text-gray-600">
           Reporting{' '}
@@ -149,7 +162,8 @@ export function ReportUserModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            disabled={busy}
+            className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             Cancel
           </button>

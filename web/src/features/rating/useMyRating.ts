@@ -3,10 +3,13 @@
 // Scope: the viewer's rated/not-rated state for one completed request,
 // cached per (viewer, request) for the session — ratings are immutable,
 // so a cached answer never goes stale except through this tab's own
-// submit, which writes the cache directly (recordMyRating). 403/404 are
-// the service's "not rateable" answers and are cached too; other
-// failures are dropped from the cache so a later render retries
-// (the usernames-cache precedent in features/order/api.ts).
+// submit, which writes the cache directly (recordMyRating). Of the
+// failures only 403 (not a party) is cached: a 404 can be a
+// just-completed request rating-service has not ingested yet, so it
+// renders as not-rateable but is dropped from the cache, and other
+// failures (gateway blips) are dropped too. Retries ride the effect's
+// `version`, which the page ties to its push-driven refetch key, and
+// any remount (route change, tab switch) — PR #278 review (@Sinnez1).
 // Author review: [pending]
 
 import { useEffect, useState } from 'react'
@@ -21,8 +24,8 @@ export type MyRatingState =
   | { kind: 'not-rated' }
   // not a party (403), or the request is not completed/ingested (404).
   // A just-completed request can 404 until rating-service's event
-  // consumer catches up; the cached answer then lasts the session, and a
-  // reload recovers. Accepted as low-stakes (flagged in the PR).
+  // consumer catches up, so the 404 answer is never cached — the next
+  // effect run asks again (PR #278 review).
   | { kind: 'not-rateable' }
 
 const states = new Map<string, Promise<MyRatingState>>()
@@ -37,12 +40,11 @@ function fetchState(userId: number, requestId: number): Promise<MyRatingState> {
       ({ rating }): MyRatingState =>
         rating ? { kind: 'rated', rating } : { kind: 'not-rated' },
       (err) => {
-        if (
-          err instanceof ApiError &&
-          (err.status === 403 || err.status === 404)
-        )
+        if (err instanceof ApiError && err.status === 403)
           return { kind: 'not-rateable' } as MyRatingState
         states.delete(k)
+        if (err instanceof ApiError && err.status === 404)
+          return { kind: 'not-rateable' } as MyRatingState
         throw err
       },
     )

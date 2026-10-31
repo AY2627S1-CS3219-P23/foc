@@ -28,6 +28,10 @@
 // GET /ratings/mine says the viewer already rated it, then shows the
 // given stars. History, not My Requests, is the entry point: completed
 // requests only ever appear here (My Requests lists active states).
+// 2026-10-31, PR #278 review (@Sinnez1): each row's rating lookup is
+// keyed to refreshKey too, so the page's push-driven refetch also
+// retries lookups that 404'd before ingestion caught up or failed on a
+// gateway blip (useMyRating no longer caches either).
 // Author review: [pending]
 
 import { useEffect, useState } from 'react'
@@ -192,6 +196,11 @@ export function RequestHistory() {
   const bumpRating = (id: number) =>
     setRatingVersions((v) => ({ ...v, [id]: (v[id] ?? 0) + 1 }))
 
+  // Both inputs only ever grow, so the sum changes whenever either does:
+  // a page refetch re-runs every row's rating lookup (cached answers
+  // resolve instantly; 404s and failures, which are not cached, retry).
+  const ratingVersion = (id: number) => refreshKey + (ratingVersions[id] ?? 0)
+
   useEffect(() => {
     let cancelled = false
     orderApi
@@ -351,7 +360,7 @@ export function RequestHistory() {
                     <td className="px-4 py-3">
                       <RateCell
                         r={r}
-                        version={ratingVersions[r.id] ?? 0}
+                        version={ratingVersion(r.id)}
                         onRate={() => setRatingTarget(r)}
                       />
                     </td>
@@ -391,7 +400,7 @@ export function RequestHistory() {
                 <div className="mt-2 empty:hidden">
                   <RateCell
                     r={r}
-                    version={ratingVersions[r.id] ?? 0}
+                    version={ratingVersion(r.id)}
                     onRate={() => setRatingTarget(r)}
                   />
                 </div>

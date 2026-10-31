@@ -9,6 +9,11 @@
 // left as just "Request #id" until both answer. On the courier tab the
 // counterpart is the requester, so the label flips to "Requested by".
 // Structure follows DisputeModal.tsx (issue #241).
+// 2026-10-31, Claude Code (Fable 5), PR #278 review (@Sinnez1): the
+// dialog cannot be closed while a submit is in flight (a late result
+// would land on whatever dialog is open by then), and a 409 locks the
+// form into a close-only state — a rating is immutable, so this party
+// can never rate this request again.
 // Author review: [pending]
 
 import { type FormEvent, useEffect, useState } from 'react'
@@ -47,6 +52,9 @@ export function RateExperienceModal({
   const [text, setText] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [busy, setBusy] = useState(false)
+  // 409 received: the viewer rated this request before (another
+  // tab/session) — no retry can succeed, only Close remains
+  const [alreadyRated, setAlreadyRated] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [counterpartId, setCounterpartId] = useState<number | null>(null)
 
@@ -78,6 +86,8 @@ export function RateExperienceModal({
 
   async function submit(e: FormEvent) {
     e.preventDefault()
+    // the buttons are disabled/replaced, but Enter still submits a form
+    if (busy || alreadyRated) return
     setSubmitted(true)
     if (stars === null || text.length > MAX_RATING_TEXT) return
     setBusy(true)
@@ -91,14 +101,23 @@ export function RateExperienceModal({
       onRated(rating)
     } catch (err) {
       setError(errorMessage(err, 'Could not submit your rating. Try again.'))
-      if (err instanceof ApiError && err.status === 409) onAlreadyRated()
+      if (err instanceof ApiError && err.status === 409) {
+        setAlreadyRated(true)
+        onAlreadyRated()
+      }
     } finally {
       setBusy(false)
     }
   }
 
+  // The X and the backdrop route through here too: closing mid-submit
+  // would let the late result act on whatever dialog is open by then.
+  const requestClose = () => {
+    if (!busy) onClose()
+  }
+
   return (
-    <Modal title="Rate Your Experience" onClose={onClose}>
+    <Modal title="Rate Your Experience" onClose={requestClose}>
       <form onSubmit={submit} noValidate className="space-y-4">
         <p className="text-sm text-gray-600">
           Request #{request.id}
@@ -113,7 +132,11 @@ export function RateExperienceModal({
             Your rating
           </legend>
           <div className="mt-2">
-            <StarRating value={stars} onChange={setStars} />
+            <StarRating
+              value={stars}
+              onChange={setStars}
+              disabled={alreadyRated}
+            />
           </div>
           {starsError && (
             <p className="mt-1 text-xs text-red-600">{starsError}</p>
@@ -133,6 +156,7 @@ export function RateExperienceModal({
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={4}
+            disabled={alreadyRated}
             aria-invalid={textError !== null}
             aria-describedby="rating-text-count"
             className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none"
@@ -151,20 +175,33 @@ export function RateExperienceModal({
         </div>
 
         <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
-            {busy ? 'Submitting…' : 'Submit Review'}
-          </button>
+          {alreadyRated ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+            >
+              Close
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={busy}
+                className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={busy}
+                className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                {busy ? 'Submitting…' : 'Submit Review'}
+              </button>
+            </>
+          )}
         </div>
       </form>
     </Modal>

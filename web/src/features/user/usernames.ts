@@ -21,6 +21,11 @@
 // restarted the countdown on every push, muting recovery); expiry is
 // stamped from request issue and the tick runs at half the negative
 // TTL, so a retry lands within one TTL instead of slipping a period.
+// 2026-10-31, Claude Code (Fable 5), PR #279 review (@Sinnez1): added
+// useUsernameLookups, which also surfaces whether an id is confirmed
+// gone (404) as opposed to not resolved yet — callers labelling rows
+// ("Unknown user") need the distinction, where the notification
+// templates' actor-less copy never did. useUsernames derives from it.
 
 import { ApiError, apiFetch } from '@/lib/api/http'
 import { useEffect, useMemo, useState } from 'react'
@@ -112,19 +117,28 @@ export function resolveUsername(id: string): Promise<string | null> {
   return resolve(id).then((lookup) => lookup.value)
 }
 
+/** One settled lookup, as {@link useUsernameLookups} surfaces it. */
+export interface UsernameLookup {
+  /** The resolved name; null only when the user is confirmed missing. */
+  username: string | null
+  /** True when user-service definitively answered 404 (PR #279 review). */
+  missing: boolean
+}
+
 /**
- * Hydrates a list of user ids into id → username. Entries appear as
- * lookups settle (cache hits settle in a microtask); ids that can't
- * resolve render their callers' no-name copy, and a definite 404 for an
- * id that had resolved (user deleted mid-mount) drops its entry again.
- * While mounted the hook re-resolves every {@link TICK_MS}, so a failed
- * lookup is retried once its negative cache lapses and a rename shows
- * once the positive TTL does — inside a TTL the tick is a cache hit,
- * no network.
+ * Hydrates a list of user ids into id → settled lookup. An id has no
+ * entry until its lookup settles with an answer (cache hits settle in a
+ * microtask): a transient failure (network, 5xx) leaves the last known
+ * name — or, with none, no entry — so callers can tell "not resolved
+ * yet" from a definite 404, which records `missing` and clears any name
+ * the id had (user deleted mid-mount). While mounted the hook
+ * re-resolves every {@link TICK_MS}, so a failed lookup is retried once
+ * its negative cache lapses and a rename shows once the positive TTL
+ * does — inside a TTL the tick is a cache hit, no network.
  */
-export function useUsernames(
+export function useUsernameLookups(
   ids: ReadonlyArray<string | null>,
-): ReadonlyMap<string, string> {
+): ReadonlyMap<string, UsernameLookup> {
   // dedupe + sort so re-renders with the same ids in a different order
   // or multiplicity don't re-run the effect ('\0' can't appear in ids
   // on any realistic payload; a stray one only costs a spurious re-run)
@@ -133,7 +147,9 @@ export function useUsernames(
     return unique.sort().join('\u0000')
   }, [ids])
 
-  const [names, setNames] = useState<ReadonlyMap<string, string>>(new Map())
+  const [lookups, setLookups] = useState<ReadonlyMap<string, UsernameLookup>>(
+    new Map(),
+  )
   // bumped on an interval to re-run the resolve effect (PR #222 review:
   // keying on the id set alone muted recovery until the ids changed)
   const [attempt, setAttempt] = useState(0)
@@ -152,19 +168,21 @@ export function useUsernames(
     for (const id of key.split('\u0000')) {
       void resolve(id).then(({ value, missing }) => {
         if (cancelled) return
-        setNames((prev) => {
+        setLookups((prev) => {
           if (value === null) {
-            // only a definite 404 clears a surfaced name — a transient
-            // failure keeps the last known one rather than flickering
-            // the row back to actor-less copy (PR #222 review)
-            if (!missing || !prev.has(id)) return prev
+            // only a definite 404 records an answer — a transient
+            // failure keeps the last known name (or stays unsettled)
+            // rather than flickering to no-name copy (PR #222 review)
+            if (!missing) return prev
+            const cur = prev.get(id)
+            if (cur !== undefined && cur.missing) return prev
             const next = new Map(prev)
-            next.delete(id)
+            next.set(id, { username: null, missing: true })
             return next
           }
-          if (prev.get(id) === value) return prev
+          if (prev.get(id)?.username === value) return prev
           const next = new Map(prev)
-          next.set(id, value)
+          next.set(id, { username: value, missing: false })
           return next
         })
       })
@@ -174,5 +192,23 @@ export function useUsernames(
     }
   }, [key, attempt])
 
-  return names
+  return lookups
+}
+
+/**
+ * {@link useUsernameLookups} flattened to id → username: an id that has
+ * not resolved (yet) simply has no entry, rendering its caller's
+ * no-name copy.
+ */
+export function useUsernames(
+  ids: ReadonlyArray<string | null>,
+): ReadonlyMap<string, string> {
+  const lookups = useUsernameLookups(ids)
+  return useMemo(() => {
+    const names = new Map<string, string>()
+    for (const [id, { username }] of lookups) {
+      if (username !== null) names.set(id, username)
+    }
+    return names
+  }, [lookups])
 }
