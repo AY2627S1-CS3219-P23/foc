@@ -18,6 +18,8 @@ deletedAt (null for an active account).
 (restore inside the window, idempotent on active, gone past the window).
 The service is built by hand now — @InjectMocks passed 0 for the new
 retention-days knob, which made every deleted account "past window".
+2026-10-31 (Claude Code, Fable 5), issue #280: public-profile test now
+asserts the full record (username + joinedAt). Author review: pending.
 */
 
 package foc.user.service;
@@ -165,13 +167,15 @@ class ProfileServiceTest {
     // public profile
 
     @Test
-    @DisplayName("Should return only the username for public profile")
-    void getPublicProfile_returnsUsernameOnly() {
+    @DisplayName("Should return the username and joined date for public profile")
+    void getPublicProfile_returnsUsernameAndJoinedAt() {
+        Instant joined = Instant.parse("2026-01-15T08:30:00Z");
+        ReflectionTestUtils.setField(user, "createdAt", joined);
         when(userRepository.findByIdAndDeletedAtIsNull(2L)).thenReturn(Optional.of(user));
 
         PublicProfileResponse response = profileService.getPublicProfile(2L);
 
-        assertThat(response.username()).isEqualTo("student_alex");
+        assertThat(response).isEqualTo(new PublicProfileResponse("student_alex", joined));
     }
 
     @Test

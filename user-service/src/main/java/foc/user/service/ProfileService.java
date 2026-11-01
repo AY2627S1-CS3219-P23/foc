@@ -20,6 +20,9 @@ soft-deleted account.
 deleteOwnAccount's asymmetry with AdminService.removeUser (no
 demotion, no denylist stamp) recorded; owner chose option C (accept,
 document) via options Q&A.
+2026-10-31 (Claude Code, Fable 5), issue #280: public profile also
+returns joinedAt (the entity's createdAt) for the wireframe's
+"Joined {month year}" tile. Author review: pending.
 */
 
 package foc.user.service;
@@ -54,11 +57,11 @@ public class ProfileService {
         return UserResponse.from(userRepository.getActiveUser(userId));
     }
 
-    // another user's profile: username only
+    // another user's profile: username + joined date (#280)
     public PublicProfileResponse getPublicProfile(Long userId) {
         User user = userRepository.getActiveUser(userId);
 
-        return new PublicProfileResponse(user.getUsername());
+        return new PublicProfileResponse(user.getUsername(), user.getCreatedAt());
     }
 
     // self-deletion: stamps deleted_at, keeping the row (and its email/

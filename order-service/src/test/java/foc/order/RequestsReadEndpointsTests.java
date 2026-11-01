@@ -32,6 +32,10 @@
  * 2026-10-29, Claude Code (Opus 5.5), issue #241: autoCompleteAt on every
  * list and the detail (arrivedAt + the delay while ARRIVED, null
  * otherwise). Author review: Ryan Ang, pending pull request review.
+ * 2026-10-31, Claude Code (Fable 5), issue #280: the completed-deliveries
+ * count (COMPLETED only — in-flight, RESOLVED and other couriers'
+ * requests don't count; unknown user answers 0; its 400s and 401).
+ * Author review: pending.
  */
 package foc.order;
 
@@ -588,6 +592,54 @@ class RequestsReadEndpointsTests extends PostgresTestContainer {
 				.andExpect(jsonPath("$.message").value("Request " + open + " is not finished"));
 		sendRetry(999_999_999L, "ADMIN").andExpect(status().isNotFound());
 		sendRetry(cancelled, "USER").andExpect(status().isForbidden());
+	}
+
+	// --- completed-deliveries count (issue #280)
+
+	@Test
+	void completedCountCountsOnlyCompletedRequestsOfTheCourier() throws Exception {
+		// two the courier completed...
+		requestsService.complete(arrivedRequest(), requester);
+		requestsService.complete(arrivedRequest(), requester);
+		// ...one still in flight...
+		Long inFlight = createdRequest();
+		requestsService.accept(inFlight, courier);
+		// ...one resolved from a dispute (an admin's split, not a delivery)...
+		Long disputed = arrivedRequest();
+		requestsService.dispute(disputed, requester, "DAMAGED", null);
+		requestsService.resolve(disputed, stranger, 1, 2, "split");
+		// ...and one completed by another courier.
+		long otherCourier = NEXT_USER.incrementAndGet();
+		Long others = createdRequest();
+		requestsService.accept(others, otherCourier);
+		requestsService.collect(others, otherCourier);
+		requestsService.arrive(others, otherCourier);
+		requestsService.complete(others, requester);
+
+		// any authenticated user may ask: it backs another user's profile
+		assertEquals(2, getJson("/requests/completed-count?courierId=" + courier, stranger)
+				.get("count").longValue());
+		assertEquals(1, getJson("/requests/completed-count?courierId=" + otherCourier, stranger)
+				.get("count").longValue());
+	}
+
+	@Test
+	void completedCountIsZeroForAUserWithNoCompletedDeliveries() throws Exception {
+		// also an unknown user: a count, not a 404
+		assertEquals(0, getJson("/requests/completed-count?courierId=999999999", requester)
+				.get("count").longValue());
+	}
+
+	@Test
+	void completedCountRequiresACourierId() throws Exception {
+		expectBadRequest("/requests/completed-count", "courierId is required");
+		expectBadRequest("/requests/completed-count?courierId=0", "courierId is required");
+		send(get("/requests/completed-count?courierId=abc"), requester).andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void completedCountRequiresAuthentication() throws Exception {
+		mockMvc.perform(get("/requests/completed-count?courierId=1")).andExpect(status().isUnauthorized());
 	}
 
 	// --- helpers
