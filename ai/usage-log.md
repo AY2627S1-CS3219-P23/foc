@@ -7387,3 +7387,43 @@ Entry template:
   every submission — no duplicate check, its documented gap).
 - **Author review:** `npm test` green in web (387 tests, 20 files),
   eslint clean. Leong Wei Zhi reviews via pull request.
+
+## 2026-11-01 — Ko-Khan (gateway: block /api/chat/internal, N6 chat PR review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `gateway/nginx.conf` — a `^~ /api/chat/internal` location
+  answering 404 problem+json, copied from the `/api/supplier/purge`
+  block (issue #225); `docs/gateway.md` routing table gains the
+  `/api/chat/**` row; one-line notes in `docs/chat-service.md` and
+  `compose.yaml`.
+- **Prompt(s):** PR review finding 3: "/api/chat/internal/** is
+  reachable from the internet (should fix) … I would rather follow the
+  established pattern." The reviewer chose the fix; the tool applied
+  it. order-service calls `http://chat-service:8080` directly, so no
+  caller changes.
+- **Author review:** `openresty -t` passes; after rebuilding the
+  gateway, POSTs to `/api/chat/internal/chats/open` (plain, `%69`-encoded
+  and `x/../` spellings) answer 404 problem+json, `/api/chat/chats`
+  still proxies (401 without a token), and order-service still reaches
+  `chat-service:8080/internal/**` directly. Ko-Khan reviews via pull
+  request.
+
+## 2026-11-01 — Ko-Khan (web: repair the main → feat/chat merge, N6 chat PR CI)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug
+- **Scope:** `web/src/routes/my-requests.tsx` — the chat row and #257's
+  courier profile link had both survived the merge, leaving an unclosed
+  JSX block (lint/tsc/build failed); now one row with the linked name
+  and the Chat button. `web/src/routes/index.tsx` — the route tree had
+  duplicated routes and a `ProtectedRoute` node carrying a stray
+  `path`/`element` (96 web tests failed); now main's tree, including
+  `/users/:id`, inside `ChatNotificationsProvider`.
+- **Prompt(s):** "the pull request is currently failing some ci/cd
+  tests". `gh` is not installed locally, so the tool reran the CI legs
+  this PR triggers (java order-service, web, docker order-service/web/
+  gateway) by hand. No behaviour beyond restoring both sides of the
+  merge.
+- **Author review:** web lint, build and `npm test` green (417 tests,
+  twice); order-service `./mvnw verify` green in a Temurin 21 container
+  (188 tests, none skipped); the three Docker images build. Ko-Khan
+  reviews via pull request.

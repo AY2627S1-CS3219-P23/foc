@@ -52,6 +52,9 @@
 // 2026-10-31, Claude Code (Opus 5.5), N6 chat (docs/chat-service.md):
 // ChatNotificationsProvider layout route around the shell, so the chat
 // unread badges, toasts and the single chat pop-up reach every page.
+// 2026-11-01, merge with main fixed: the tree is main's (with #257's
+// /users/:id) inside that layout; the merge had duplicated routes and
+// broken the ProtectedRoute node.
 // Author review: Ko-Khan, pending pull request review.
 // 2026-10-30, Claude Code (Fable 5), issue #257: /users/:id (public
 // profile) inside ProtectedRoute — every API it reads wants a session.
@@ -141,24 +144,12 @@ export const routes: RouteObject[] = [
                             element: <ActiveDelivery />,
                           },
                           { path: 'history', element: <RequestHistory /> },
+                          { path: 'users/:id', element: <PublicProfile /> },
                           {
                             Component: AdminRoute,
                             children: [{ path: 'admin', element: <Admin /> }],
                           },
                         ],
-                        path: 'account-recovery',
-                        element: <AccountRecovery />,
-                      },
-                      { path: 'credits', element: <Credits /> },
-                      { path: 'my-requests', element: <MyRequests /> },
-                      { path: 'my-requests/new', element: <CreateRequest /> },
-                      { path: 'requests', element: <OpenRequests /> },
-                      { path: 'deliveries/:id', element: <ActiveDelivery /> },
-                      { path: 'history', element: <RequestHistory /> },
-                      { path: 'users/:id', element: <PublicProfile /> },
-                      {
-                        Component: AdminRoute,
-                        children: [{ path: 'admin', element: <Admin /> }],
                       },
                       // Renders inside the shell, so the nav stays visible on
                       // unknown paths (including nav destinations not built
