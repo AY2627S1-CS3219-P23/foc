@@ -13,6 +13,16 @@
 // useCreditBalance), with a link to the credits page; cross-domain
 // change flagged in the PR.
 // Author review: Leong Wei Zhi (via PR #149).
+// 2026-11-01, Claude Code (Opus 5), issue #284: a "View public profile"
+// link under the username, pointing at /users/<own id>. The public
+// profile (#257) had no entry point for its own owner — only a
+// counterpart's name on My Requests or Active Delivery links there, so
+// reaching your own meant typing the URL. The card already carries a
+// cross-page link in this exact shape (View credit transactions), and
+// `user` here is the session's own GET /users/me answer, so the id is
+// the canonical one the public profile's id gate requires. Placement was
+// the author's call via options Q&A; not drawn in profile.png.
+// Author review: [pending]
 
 import { Link } from 'react-router'
 
@@ -59,6 +69,14 @@ export function ProfileDetailsCard({
             Username
           </dt>
           <dd className="mt-0.5 text-sm text-gray-900">{user.username}</dd>
+          <dd className="mt-1 text-xs">
+            <Link
+              to={`/users/${user.id}`}
+              className="font-medium text-gray-900 underline"
+            >
+              View public profile
+            </Link>
+          </dd>
         </div>
         <div>
           <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">

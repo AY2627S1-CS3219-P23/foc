@@ -32,6 +32,12 @@
 // keyed to refreshKey too, so the page's push-driven refetch also
 // retries lookups that 404'd before ingestion caught up or failed on a
 // gateway blip (useMyRating no longer caches either).
+// 2026-11-01, Claude Code (Opus 5), issue #284: the Rated ★n chip is a
+// button now, opening the read-only Your Review dialog. Ratings are
+// immutable, so this was the one place the rater's own write-up could be
+// shown back to them — and GET /ratings/mine, which the row already
+// asks, carries the text. Nothing new is fetched: the row hands the
+// rating it holds to the dialog. Author decision via options Q&A.
 // Author review: [pending]
 
 import { useEffect, useState } from 'react'
@@ -56,7 +62,9 @@ import type {
   RequestSummary,
 } from '@/features/order/types'
 import { useCurrentUserId } from '@/features/order/useCurrentUserId'
+import { MyReviewModal } from '@/features/rating/components/MyReviewModal'
 import { RateExperienceModal } from '@/features/rating/components/RateExperienceModal'
+import type { RatingResponse } from '@/features/rating/types'
 import {
   clearMyRating,
   recordMyRating,
@@ -142,27 +150,35 @@ function CreditEffect({ r, role }: { r: RequestSummary; role: RequestRole }) {
 
 // The rate control for one row: nothing while loading or when the
 // request is not rateable (not COMPLETED, or rating-service answers
-// 403/404), a "Rate" button until the viewer rates it, then the stars.
+// 403/404), a "Rate" button until the viewer rates it, then the stars —
+// which open the viewer's own review, text and all (issue #284).
 function RateCell({
   r,
   version,
   onRate,
+  onView,
 }: {
   r: RequestSummary
   version: number
   onRate: () => void
+  // the row owns the lookup, so it hands the rating up to the page
+  onView: (rating: RatingResponse) => void
 }) {
   const state = useMyRating(r.id, r.status === 'COMPLETED', version)
   if (state === null || state.kind === 'not-rateable') return null
-  if (state.kind === 'rated')
+  if (state.kind === 'rated') {
+    const rated = state.rating
     return (
-      <span
-        aria-label={`Rated ${state.rating.stars} stars`}
-        className="text-sm whitespace-nowrap text-gray-500"
+      <button
+        type="button"
+        onClick={() => onView(rated)}
+        aria-label={`Rated ${rated.stars} stars`}
+        className="rounded-md px-1 text-sm whitespace-nowrap text-gray-500 underline hover:text-gray-900"
       >
-        Rated ★{state.rating.stars}
-      </span>
+        Rated ★{rated.stars}
+      </button>
     )
+  }
   return (
     <button
       type="button"
@@ -188,6 +204,11 @@ export function RequestHistory() {
   const [refreshKey, setRefreshKey] = useState(0)
   const userId = useCurrentUserId()
   const [ratingTarget, setRatingTarget] = useState<RequestSummary | null>(null)
+  // the rating being read back, with the request it was given for
+  const [viewing, setViewing] = useState<{
+    requestId: number
+    rating: RatingResponse
+  } | null>(null)
   const [ratingVersions, setRatingVersions] = useState<Record<number, number>>(
     {},
   )
@@ -239,8 +260,9 @@ export function RequestHistory() {
     if (next === role) return
     setLoading(true)
     setRole(next)
-    // the dialog belongs to a row of the tab it was opened from
+    // a dialog belongs to a row of the tab it was opened from
     setRatingTarget(null)
+    setViewing(null)
     // keep the chip if the other side offers it, else back to All finished
     if (!filters[next].some((f) => f.key === filterKey)) setFilterKey('ALL')
     setPage(0)
@@ -362,6 +384,9 @@ export function RequestHistory() {
                         r={r}
                         version={ratingVersion(r.id)}
                         onRate={() => setRatingTarget(r)}
+                        onView={(rating) =>
+                          setViewing({ requestId: r.id, rating })
+                        }
                       />
                     </td>
                   </tr>
@@ -402,6 +427,7 @@ export function RequestHistory() {
                     r={r}
                     version={ratingVersion(r.id)}
                     onRate={() => setRatingTarget(r)}
+                    onView={(rating) => setViewing({ requestId: r.id, rating })}
                   />
                 </div>
               </li>
@@ -441,6 +467,14 @@ export function RequestHistory() {
             if (userId !== null) clearMyRating(userId, ratingTarget.id)
             bumpRating(ratingTarget.id)
           }}
+        />
+      )}
+
+      {viewing && (
+        <MyReviewModal
+          requestId={viewing.requestId}
+          rating={viewing.rating}
+          onClose={() => setViewing(null)}
         />
       )}
     </div>

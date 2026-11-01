@@ -23,6 +23,8 @@
   AuthServiceTest matcher-misuse fix entry below.
   Author review: Kwey Xiu Xi to review via pull request.
   2026-10-28, Claude Code (Opus 5): appended the issue #249 entry below.
+  2026-11-01, Claude Code (Opus 5): prepended the issue #284 entry
+  below (newest first, as the surrounding entries sit).
   PR #269's main merge: this file merged cleanly (main appends at the
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
@@ -46,6 +48,42 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-01 — Leong Wei Zhi (feat: own-profile link and rater review readback, issue #284)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** generate, docs
+- **Scope:** web only, no API change.
+  `features/rating/components/MyReviewModal.tsx` (new: the read-only
+  "Your Review" dialog — shared `Modal`, `StarDisplay` from #257,
+  `formatDateTime`; no fetch, so no loading or error state);
+  `routes/request-history.tsx` (`RateCell`'s rated branch is a button
+  that hands its already-loaded rating up to the page, which holds the
+  one `viewing` dialog and drops it on a tab switch, as it already does
+  for the rate dialog); `features/user/components/ProfileDetailsCard.tsx`
+  (a "View public profile" link to `/users/<own id>` under the username).
+  Tests: `src/test/rating.test.tsx` (five readback cases; the `myRating`
+  fixture takes optional text and a fixed `createdAt`),
+  `src/test/profile.test.tsx` (the link's href). `web/AGENTS.md`
+  (profile.png, public-profile.png, rating-review.png and
+  order-history.png rows). `README.md` (AI Use Summary and header line).
+- **Prompt(s):** Create a plan to resolve issue #284, then implement it.
+  Author decisions via neutral-options Q&A: the rater reads their review
+  back from a dialog the `Rated ★n` chip opens, not a `title` tooltip
+  (unreachable by keyboard and on touch, and silent when the review has
+  no text) and not an inline expand (the Actions column is narrow); the
+  own-profile entry point is a link in the Profile Details card under
+  the username, not a heading-row link or a fifth card. Two findings
+  shaped the code: the card already holds `user` from the session's one
+  `GET /users/me`, so the link needs no hook and carries the canonical
+  numeric id the public profile's `CANONICAL_USER_ID` gate requires;
+  and `RateExperienceModal` was not reusable read-only (write-shaped
+  state, and `StarRating` is a radio group with a shared `name`), so the
+  dialog is its sibling and reuses #257's `StarDisplay` instead.
+- **Author review:** web `npm run test` (20 files, 417 tests, all
+  passing — 19 in `rating.test.tsx`, 34 in `profile.test.tsx`),
+  `npm run lint`, `npm run format:check` and `npm run build` (tsc -b +
+  vite build) all clean; to be reviewed via pull request.
 
 ---
 ## 2026-10-30 — Leong Wei Zhi (feat: notification on rating.submitted, issue #255)
