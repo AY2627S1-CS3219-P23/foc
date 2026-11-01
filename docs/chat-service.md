@@ -7,6 +7,8 @@
   rationale is drafted here; the decisions are the author's.
   2026-10-31: decisions C16-C21 (unread notifications and names) added
   from the same author's answers, with the interface they produced.
+  2026-11-01: PR review: the Interface note that the gateway 404s
+  /api/chat/internal (reviewer's request, the issue #225 pattern).
   Author review: Ko-Khan, pending pull request review.
 -->
 
@@ -44,7 +46,9 @@ decisions it was built from and the interface that resulted.
 ## Interface
 
 Through the gateway at `/api/chat/**` (the prefix is stripped, as for the
-other services).
+other services). The `/internal/**` calls below are not on the gateway:
+it answers `/api/chat/internal…` with 404, and order-service reaches
+chat-service directly over the compose network.
 
 ### REST (bearer token)
 

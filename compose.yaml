@@ -635,7 +635,8 @@ services:
   # Chat service (N6, docs/chat-service.md): requester-courier chat with
   # its own STOMP WebSocket, reached through the gateway at /api/chat/**.
   # order-service opens and closes chats over /internal/** with the
-  # shared CHAT_INTERNAL_TOKEN. No depends_on redis: the CONNECT denylist
+  # shared CHAT_INTERNAL_TOKEN, directly (the gateway 404s
+  # /api/chat/internal). No depends_on redis: the CONNECT denylist
   # check fails open (C15), as notification-service's does.
   chat-service:
     build:
