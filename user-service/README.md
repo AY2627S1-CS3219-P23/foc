@@ -88,6 +88,9 @@
   "no admin powers ride along" claim was true only of removal.
   Accepted as-is (option C) by Leong Wei Zhi via options Q&A.
   Author review: Leong Wei Zhi to review via pull request.
+  2026-10-31, Claude Code (Fable 5), issue #280: the status sentence for
+  GET /users/{id} notes the public profile's joinedAt. Author review:
+  pending.
 -->
 
 # User Service
@@ -103,7 +106,8 @@ Currently: actuator health endpoint, `POST /auth/signup` /
 `POST /auth/login` (#87/#89/#88, JWT issuance #90 — see below),
 `POST /auth/setup-owner` (creates an
 OWNER for any caller with the setup token, #97), `GET /users/me` /
-`GET /users/{id}` (own and public profile, #95), `DELETE /users/me`
+`GET /users/{id}` (own and public profile, #95; the public profile
+answers `username` and `joinedAt`, #280), `DELETE /users/me`
 (self-deletion, #93), the account-update flows `POST /users/me/otp` /
 `PATCH /users/me` / `POST /users/me/email/verify` /
 `POST /users/me/email/resend` / `POST /users/me/password` (#92 — see

@@ -27,6 +27,11 @@
 // its rules (category, note, the window, no window without an arrival
 // time, a COLLECTED request's deadline).
 // Author review: Ryan Ang, pending pull request review.
+// 2026-11-01, Claude Code (Opus 5), PR #282 review (@Sinnez1):
+// getCompletedCount, counting this mock's own COMPLETED requests as
+// order-service counts rows — so the public profile's deliveries tile
+// works under VITE_MOCK_ORDER_API too.
+// Author review: pending.
 
 import { adminUserApi } from '@/features/user/adminApi'
 import { ApiError } from '@/lib/api/http'
@@ -384,6 +389,17 @@ export const mockOrderApi = {
       resolutionNote: null,
     }
     return ok(r, 'disputed')
+  },
+
+  // COMPLETED only, as order-service counts: a DISPUTED request an admin
+  // split (RESOLVED) was never a completed delivery
+  async getCompletedCount(courierId: number): Promise<number> {
+    await enter()
+    if (!Number.isInteger(courierId) || courierId < 1)
+      fail(400, 'courierId must be a positive number')
+    return requests.filter(
+      (r) => r.courierId === courierId && r.status === 'COMPLETED',
+    ).length
   },
 
   async getUsername(userId: number): Promise<string> {
