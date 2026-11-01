@@ -27,6 +27,10 @@
 // provider's chime and both toggle surfaces (Center header, Profile
 // preferences — author decision via options Q&A) share one source of
 // truth.
+// 2026-10-30, Claude Code (Fable 5), issue #266: pendingReadIds +
+// markReadPending — the optimistic mark-read moved up from the Center
+// so it survives the navigation that unmounts the page (#263 review's
+// fire-and-forget nit).
 
 import { createContext, useContext } from 'react'
 import type { NotificationDto } from './types'
@@ -54,6 +58,17 @@ export interface NotificationsData {
   // missed while the socket was down. Pages use it to refetch what
   // they show (issue #233, PR #264 review).
   pushReconnects: number
+  // Rows optimistically marked read via markReadPending whose PATCH the
+  // server has not been seen to miss: the Center overlays these onto
+  // fetched rows, so a Back that outruns the PATCH does not flash the
+  // row unread (issue #266). Successful ids stay for the session;
+  // failed ones leave, so the truth wins the next fetch.
+  pendingReadIds: ReadonlySet<number>
+  // Mark one row read without waiting — for click-to-navigate, where
+  // the page unmounts before the PATCH answers. Adds the id to
+  // pendingReadIds up front and re-syncs the badge on success; kept
+  // here because the provider outlives the route (issue #266).
+  markReadPending: (id: number) => void
   // re-fetch the unread count from the REST API — the Center calls it
   // after a successful mark-read/read-all, keeping the server
   // authoritative over the badge

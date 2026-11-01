@@ -55,6 +55,14 @@
 // down left them stale until something else refreshed them. The first
 // connect of a session is not counted — a page's own mount fetch
 // already covers it.
+// 2026-10-30, Claude Code (Fable 5), issue #266: markReadPending +
+// pendingReadIds — the Center's click-to-navigate mark-read was
+// fire-and-forget inside the page, so a quick Back remounted the list
+// before the PATCH committed and the row flashed unread, and a failure
+// vanished silently (#263 review). The optimistic id set lives here
+// because the provider outlives the route; ids stay in the set on
+// success (a fetch that raced the commit still renders the row read)
+// and leave it on failure, so the next fetch shows the truth.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet } from 'react-router'
@@ -62,7 +70,7 @@ import { Client, ReconnectionTimeMode } from '@stomp/stompjs'
 import { serviceBaseUrls } from '@/lib/api/config'
 import { useAuth } from '@/features/user/useAuth'
 import { useLocalStorage } from '@/features/user/useLocalStorage'
-import { getUnreadCount } from './api'
+import { getUnreadCount, setNotificationRead } from './api'
 import { playChime, unlockChime } from './chime'
 import { NotificationsContext } from './useNotifications'
 import { brokerUrl } from './stompUrl'
@@ -85,6 +93,9 @@ const PUSH_BUFFER = 20
 // one frozen empty array, so a session with no pushes keeps a stable
 // reference and the Center's render-phase pickup does not re-run
 const NO_PUSHES: NotificationDto[] = []
+
+// same stable-reference rule for the optimistic read set
+const NO_PENDING: ReadonlySet<number> = new Set()
 
 // whether a live push plays the chime — a device preference (the same
 // browser profile regardless of account), unlike the per-account keys
@@ -213,6 +224,49 @@ export const NotificationProvider = () => {
   useEffect(() => {
     refreshUnreadCount()
   }, [refreshUnreadCount])
+
+  // Rows optimistically marked read, stamped like the count so a
+  // re-login never overlays another session's rows (notification ids
+  // are one global sequence, so id 42 here and id 42 there can be
+  // different users' rows). Issue #266.
+  const [pendingRead, setPendingRead] = useState<{
+    token: string
+    ids: ReadonlySet<number>
+  } | null>(null)
+  const pendingReadIds =
+    accessToken !== null && pendingRead?.token === accessToken
+      ? pendingRead.ids
+      : NO_PENDING
+
+  // Marks a row read without making the caller wait — the Center's
+  // click-to-navigate path, where navigation unmounts the page before
+  // the PATCH answers. The id joins pendingReadIds first, so any list
+  // mounted meanwhile renders the row read. On success it stays there
+  // (the PATCH is committed; a fetch that raced it still overlays
+  // correctly, and re-adding an already-read row is a no-op). On
+  // failure it leaves, so the next fetch honestly shows the row unread
+  // instead of swallowing the miss forever (issue #266, #263 review).
+  const markReadPending = useCallback(
+    (id: number) => {
+      if (!accessToken) return
+      setPendingRead((prev) => ({
+        token: accessToken,
+        ids: new Set(prev?.token === accessToken ? prev.ids : []).add(id),
+      }))
+      setNotificationRead(id, true)
+        .then(() => refreshUnreadCount())
+        .catch((err) => {
+          console.warn('mark-read failed; the row stays unread', err)
+          setPendingRead((prev) => {
+            if (prev?.token !== accessToken || !prev.ids.has(id)) return prev
+            const ids = new Set(prev.ids)
+            ids.delete(id)
+            return { token: accessToken, ids }
+          })
+        })
+    },
+    [accessToken, refreshUnreadCount],
+  )
 
   // the session whose push channel gave up, stamped by the same
   // derive-by-token rule: a re-login is a new session and starts live.
@@ -343,6 +397,8 @@ export const NotificationProvider = () => {
       pushStopped,
       pushedNotifications,
       pushReconnects,
+      pendingReadIds,
+      markReadPending,
       refreshUnreadCount,
       soundEnabled,
       setSoundEnabled: setStoredSound,
@@ -352,6 +408,8 @@ export const NotificationProvider = () => {
       pushStopped,
       pushedNotifications,
       pushReconnects,
+      pendingReadIds,
+      markReadPending,
       refreshUnreadCount,
       soundEnabled,
       setStoredSound,

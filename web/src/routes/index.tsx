@@ -53,6 +53,11 @@
 // ChatNotificationsProvider layout route around the shell, so the chat
 // unread badges, toasts and the single chat pop-up reach every page.
 // Author review: Ko-Khan, pending pull request review.
+// 2026-10-30, Claude Code (Fable 5), issue #257: /users/:id (public
+// profile) inside ProtectedRoute — every API it reads wants a session.
+// Reached by link (requests, deliveries), not from the nav, like
+// /credits.
+// Author review: [pending]
 
 import { createBrowserRouter, type RouteObject } from 'react-router'
 
@@ -67,6 +72,7 @@ import { Credits } from './credits'
 import { Home } from './home'
 import { Notifications } from './notifications'
 import { Profile } from './profile'
+import { PublicProfile } from './public-profile'
 import { RequestHistory } from './request-history'
 import { Suppliers } from './suppliers'
 import { AccountRecovery } from '../features/user/account-recovery'
@@ -140,6 +146,19 @@ export const routes: RouteObject[] = [
                             children: [{ path: 'admin', element: <Admin /> }],
                           },
                         ],
+                        path: 'account-recovery',
+                        element: <AccountRecovery />,
+                      },
+                      { path: 'credits', element: <Credits /> },
+                      { path: 'my-requests', element: <MyRequests /> },
+                      { path: 'my-requests/new', element: <CreateRequest /> },
+                      { path: 'requests', element: <OpenRequests /> },
+                      { path: 'deliveries/:id', element: <ActiveDelivery /> },
+                      { path: 'history', element: <RequestHistory /> },
+                      { path: 'users/:id', element: <PublicProfile /> },
+                      {
+                        Component: AdminRoute,
+                        children: [{ path: 'admin', element: <Admin /> }],
                       },
                       // Renders inside the shell, so the nav stays visible on
                       // unknown paths (including nav destinations not built

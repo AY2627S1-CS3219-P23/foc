@@ -28,6 +28,11 @@
 // how the reward was divided. Both go to requester and courier alike, so
 // the copy names neither as "you".
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-30, Claude Code (Fable 5), issue #255: rating.submitted
+// template (ratee-only copy, #44), and courierIdOf generalized to
+// actorIdOf (raterId ?? courierId) so D32's read-time hydration names
+// the rater too. Author review: Leong Wei Zhi, pending pull request
+// review.
 
 import { credits, disputeCategoryLabels } from '@/features/order/status'
 import type { DisputeCategory } from '@/features/order/types'
@@ -77,17 +82,18 @@ function requestLabel(payload: Record<string, unknown>): string {
   return /^\d+$/.test(id) ? `Request #${id}` : `Request ${id}`
 }
 
-// The courier party field — the only id the templates render today
-// (requesterId rides on every request event but no copy uses it).
-export function courierIdOf(payload: Record<string, unknown>): string | null {
-  return text(payload, 'courierId')
+// The acting party each template may name: the rater on a rating event,
+// the courier on a request event (requesterId rides on every request
+// event but no copy uses it). No payload carries both.
+export function actorIdOf(payload: Record<string, unknown>): string | null {
+  return text(payload, 'raterId') ?? text(payload, 'courierId')
 }
 
 const templates: Record<
   string,
   (
     payload: Record<string, unknown>,
-    courier: string | null,
+    actor: string | null,
   ) => NotificationMessage
 > = {
   'request.created': (p) => ({
@@ -161,9 +167,16 @@ const templates: Record<
           : `Dispute on ${requestLabel(p)} resolved`,
     }
   },
+  // stored for the ratee only (#44), so the copy may say "you"
+  'rating.submitted': (_p, rater) => ({
+    icon: '⭐',
+    title: rater
+      ? `${rater} left you a new review`
+      : 'You received a new review',
+  }),
 }
 
-// names: courierId → username, resolved at read time by the caller
+// names: actor id → username, resolved at read time by the caller
 // (D32). A missing entry — still loading, lookup failed, user deleted —
 // falls through to the actor-less copy, exactly like D30's absent key.
 export function notificationMessage(
@@ -172,9 +185,9 @@ export function notificationMessage(
 ): NotificationMessage {
   const template = templates[notification.eventType]
   if (template) {
-    const courierId = courierIdOf(notification.payload)
-    const courier = courierId === null ? null : (names.get(courierId) ?? null)
-    return template(notification.payload, courier)
+    const actorId = actorIdOf(notification.payload)
+    const actor = actorId === null ? null : (names.get(actorId) ?? null)
+    return template(notification.payload, actor)
   }
   // an unknown type still renders (D18: new types need no web release) —
   // name the type rather than invent a claim about it

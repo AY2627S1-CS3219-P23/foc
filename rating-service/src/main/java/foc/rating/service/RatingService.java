@@ -7,15 +7,23 @@
  * the /mine read behind the same eligibility gate. Blank write-ups
  * stored as null is the author's decision.
  * Author review: [pending]
+ * 2026-10-30, Claude Code (Fable 5), issue #253: the profile reads —
+ * summary and newest-first review page, no eligibility gate (any
+ * authenticated user, the issue's scope).
+ * Author review: [pending]
  */
 package foc.rating.service;
 
 import java.time.Instant;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import foc.rating.dto.RatingSummaryResponse;
 import foc.rating.entity.RateableRequest;
 import foc.rating.entity.Rating;
 import foc.rating.repository.RateableRequestRepository;
@@ -66,6 +74,24 @@ public class RatingService {
     public Optional<Rating> myRating(String callerId, String requestId) {
         rateeOf(requestId, callerId); // the same 404/403 gate as submit
         return ratings.findByRequestIdAndRaterId(requestId, callerId);
+    }
+
+    /** A user's rating aggregate for the profile's star row (N1.3). */
+    @Transactional(readOnly = true)
+    public RatingSummaryResponse summaryOf(String rateeId) {
+        return ratings.summarize(rateeId);
+    }
+
+    /**
+     * A page of the reviews a user has received, newest first (N1.3).
+     * Open to any authenticated caller — a profile read, not a party
+     * read, so none of submit's eligibility gates apply.
+     */
+    @Transactional(readOnly = true)
+    public Page<Rating> reviewsOf(String rateeId, int page, int size) {
+        // the id breaks ties so pages never overlap (order-service precedent)
+        return ratings.findByRateeId(rateeId,
+                PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))));
     }
 
     // the eligibility gate: 404 for a request not completed here, 403 for

@@ -7,6 +7,7 @@
 // Reviewed by: Leong Wei Zhi (via pull request).
 // 2026-10-31, Claude Code (Opus 5.5), N6 chat: the chat-service base URL.
 // Author review: Ko-Khan, pending pull request review.
+// 2026-10-30, Claude Code (Fable 5), issue #256: rating-service entry added.
 
 // Values are browser-visible URLs, inlined by Vite at build time from
 // VITE_* env vars. Since the gateway cutover (issue #151) each one is
@@ -20,6 +21,7 @@ export const serviceBaseUrls = {
   credit: import.meta.env.VITE_CREDIT_SERVICE_URL ?? '',
   notification: import.meta.env.VITE_NOTIFICATION_SERVICE_URL ?? '',
   chat: import.meta.env.VITE_CHAT_SERVICE_URL ?? '',
+  rating: import.meta.env.VITE_RATING_SERVICE_URL ?? '',
 } as const
 
 export type ServiceName = keyof typeof serviceBaseUrls

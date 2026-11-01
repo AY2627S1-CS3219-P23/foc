@@ -272,6 +272,22 @@
   Summary extended for requester-courier chat (N6), by Claude Code
   (Opus 5.5).
   Author review: Ko-Khan, pending pull request review.
+  2026-10-30: AI Use Summary extended for rating-service's profile
+  read APIs (issue #253), by Claude Code (Fable 5).
+  Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-30: AI Use Summary extended for rating-service's report-a-user
+  API (issue #254), by Claude Code (Fable 5); extended again the same
+  day for the PR #274 review fix.
+  Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-30: AI Use Summary extended for the notification on
+  rating.submitted (issue #255), by Claude Code (Fable 5).
+  Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-30: AI Use Summary extended for the notification-service
+  dropped-courier prune and the Notification Center timing fixes
+  (issue #266) by Claude Code (Fable 5).
+  2026-10-31: AI Use Summary extended for the PR #277 review fixes
+  (prune reorder bound/guard, Center pager bookkeeping, badge re-sync
+  on mount) by Claude Code (Fable 5).
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1289,6 +1305,88 @@ the web a badge on the Chat button, a toast and a background browser
 notification for the first unread message with the sender's name and a
 text preview, and usernames in place of "Requester"/"Courier" — each the
 author's decision via options Q&A (C16-C21).
+Claude Code (Fable 5) implemented rating-service's profile read APIs
+(issue #253, N1.3 under #44): `GET /users/{id}/ratings/summary` (the
+star-row aggregate via JPQL avg/count) and `GET /users/{id}/ratings`
+(the newest-first review history, paged with the platform's
+`PageResponse` shape and credit-service's page/size bounds), both open
+to any authenticated user, with Flyway V4 adding the
+`(ratee_id, created_at desc, id desc)` read index. The null average for
+a user with no ratings and the raw (unrounded) mean were the author's
+decisions via neutral-options Q&A; the list returns rater ids only
+(D32 — the web hydrates usernames at read time). Recorded in
+`ai/usage-log.md`.
+
+Claude Code (Fable 5) implemented rating-service's report-a-user API
+(issue #254, N1.4 under #44): `POST /reports` (reason from the issue's
+fixed list, optional details and request reference, self-reports
+refused with 400) and the ADMIN/OWNER-gated `GET /reports` (newest
+first, paged like the review history), with Flyway V5 adding the
+`user_report` table. The ADMIN+OWNER pair for the gate (the repo-wide
+precedent over the issue's literal "ADMIN only"), the paged list shape,
+and storing `requestId` as an opaque unverified reference (no FK —
+`rateable_request` holds completed requests only, and reports often
+concern requests that never completed) were the author's decisions via
+neutral-options Q&A. After review, `reportedUserId` is trimmed before
+the self-check and the save, so a padded self-id can neither dodge the
+400 nor store an id matching no user (reviewer finding). Recorded in
+`ai/usage-log.md`.
+
+Claude Code (Fable 5) implemented the notification on `rating.submitted`
+(issue #255, N1 under #44): notification-service's second queue trio
+(`notification-service.rating-events` + retry/dlq) bound to the
+`rating-events` exchange on the registry's exact key, the listener
+generalized to derive each delivery's retry queue from its consuming
+queue (the hard-coded request retry queue would have parked a failed
+rating event in the wrong trio), a broker integration test mirroring the
+request one (ratee-only row, redelivery dedupe, cross-exchange
+isolation, retry/DLQ evidence through the rating trio), and the web's ⭐
+review template with the rater's name hydrated at read time via the
+`actorIdOf` generalization of D32's courier lookup. The retry-queue
+derivation and shipping the web template in the same PR were the
+author's decisions via neutral-options Q&A; the ratee-only recipient is
+#249's contract (`parties`, decided on #44). Recorded in
+`ai/usage-log.md`.
+
+Claude Code (Fable 5) implemented the notification-service prune for
+issue #266: ingesting `request.dropped` now deletes the dropping
+courier's stored rows for that request (they are no longer a party, so
+the rows could only dead-end on the detail 404), via a payload-pattern
+bulk delete in the same transaction as the event-ID dedupe — ordered
+before it, since the bulk query's context clear would discard the
+dedupe row's unflushed insert. The direction (prune, over past-party
+read access or web-only 404 softening — D33,
+`docs/notification-service.md`) and folding in the #263 review's two
+timing nits were the author's decisions via neutral-options Q&A. On the
+web, the click-to-navigate mark-read moved into the provider as an
+optimistic `pendingReadIds` overlay (a quick Back no longer flashes the
+row unread; a failed PATCH resurfaces as unread on the next fetch), and
+the `marking` gate left the per-row PATCH so a row pushed during an
+in-flight mark-all can still be marked. Recorded in `ai/usage-log.md`.
+
+Claude Code (Fable 5) applied the PR #277 review's fixes (issue #266):
+the prune is bounded to rows at or before the drop and the ingest
+skips a courier's row when a stored `request.dropped` already covers
+it, so retry-queue reordering neither deletes a re-accept's fresh rows
+nor re-creates the dead-end row; on the web, the Notification Center's
+rows and their total merged into one state, read-pending rows leave
+the Unread view through the same bookkeeping as an in-page click, and
+the badge re-syncs when the Center opens. The guard-vs-documented-
+limitation and badge-signal choices were the author's via
+neutral-options Q&A. Recorded in `ai/usage-log.md`.
+
+Claude Code (Fable 5) built the public profile page (issue #257,
+N1.3/N1.4 under #44): `/users/:id` with the username from
+user-service's public profile (a 404 there reads "user not found"),
+the star row and Avg-rating tile from the rounded raw mean, paged
+Recent Reviews whose rater names hydrate at read time (D32), and the
+Report User dialog posting rating-service's fixed reason list, hidden
+on the viewer's own profile; the assigned courier's name on My
+Requests and the requester's name on Active Delivery link here.
+Stacking on PR #278's branch, omitting the wireframe's joined-date and
+deliveries-completed tiles (no API carries either; follow-up issue
+filed instead) and the choice of entry links were the author's
+decisions via neutral-options Q&A. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

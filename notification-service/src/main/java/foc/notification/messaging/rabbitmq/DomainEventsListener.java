@@ -21,6 +21,19 @@
  * 2026-09-20: order→request event vocabulary rename applied (author
  * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-10-30, Claude Code (Fable 5), issue #255: the rating work queue
+ * joins the queues list, and scheduleRetry derives each delivery's
+ * retry queue from its consuming queue (the <work>.retry naming
+ * invariant) instead of hard-coding the request retry queue — a failed
+ * rating event would otherwise park in the request trio. Author
+ * review: Leong Wei Zhi, pending pull request review.
+ * 2026-10-30, PR #276 review (@Sinnez1): the name-derivation replaced
+ * by an explicit work→retry queue map over the topology constants — a
+ * default-exchange publish to a nonexistent queue is dropped yet still
+ * confirmed, so the derived name could silently lose the event; and
+ * the missing-consumer-queue guard now nacks with requeue instead of
+ * throwing (in MANUAL mode an uncaught exception settles nothing and
+ * the delivery would pin a prefetch slot until restart).
  */
 package foc.notification.messaging.rabbitmq;
 
@@ -28,6 +41,7 @@ import com.rabbitmq.client.Channel;
 import foc.contracts.events.core.DomainEvent;
 import foc.notification.service.EventProcessor;
 import java.io.IOException;
+import java.util.Map;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -72,7 +86,12 @@ import org.springframework.stereotype.Component;
  * unacked for redelivery — the failed event can never vanish. A crash
  * between confirm and ack duplicates at most one retry — absorbed by
  * the processor's event-ID dedupe, the same at-least-once posture as
- * everywhere else.
+ * everywhere else. A confirm does <em>not</em> vouch for routing,
+ * though: the broker confirms a default-exchange publish to a
+ * nonexistent queue while dropping the message, which is why the retry
+ * target comes from {@link #RETRY_QUEUE_BY_WORK_QUEUE} — a closed map
+ * over the queues the topology declares at startup — rather than a
+ * name built at runtime (PR #276 review).
  *
  * <p>Messages the converter rejects (unknown eventType, malformed
  * body) never reach this method: the container rejects them without
@@ -80,15 +99,32 @@ import org.springframework.stereotype.Component;
  * retrying them could never succeed (author decision, 2026-09-20).
  *
  * <p>Event-type-agnostic by construction: any event the registry
- * catalogs flows through unchanged, so a future second domain queue
- * is one more entry in the {@code queues} list below — the class
- * never changes. Only the queue references are domain-specific.
+ * catalogs flows through unchanged, so a new domain queue is one more
+ * entry in the {@code queues} list below plus its row in
+ * {@link #RETRY_QUEUE_BY_WORK_QUEUE} (the rating queue arrived with
+ * issue #255). Nothing here is domain-specific: the retry target is
+ * looked up per delivery from its consuming queue; a delivery the map
+ * cannot place is nacked with requeue — settled, so it never pins a
+ * prefetch slot, and redelivered rather than guessed at.
  */
 @Component
 class DomainEventsListener {
 
 	/** Attempts already made, stamped on each republish (see class doc). */
 	static final String RETRY_ATTEMPTS_HEADER = "x-retry-attempts";
+
+	/**
+	 * Retry queue per work queue, closed over the topology's declared
+	 * constants: the publish target provably exists, where a runtime-built
+	 * {@code <queue>.retry} name could point at an undeclared queue — and
+	 * an unroutable default-exchange publish is dropped but still
+	 * confirmed, slipping past {@code waitForConfirmsOrDie} (PR #276
+	 * review). A queue added to the listener without a row here fails
+	 * loudly via the requeue path in {@code onDomainEvent}.
+	 */
+	static final Map<String, String> RETRY_QUEUE_BY_WORK_QUEUE = Map.of(
+			RabbitMqTopology.REQUEST_EVENTS_QUEUE, RabbitMqTopology.REQUEST_EVENTS_RETRY_QUEUE,
+			RabbitMqTopology.RATING_EVENTS_QUEUE, RabbitMqTopology.RATING_EVENTS_RETRY_QUEUE);
 
 	/**
 	 * Ceiling on waiting for the broker to confirm a retry republish;
@@ -109,7 +145,9 @@ class DomainEventsListener {
 		this.maxAttempts = maxAttempts;
 	}
 
-	@RabbitListener(queues = RabbitMqTopology.REQUEST_EVENTS_QUEUE)
+	@RabbitListener(queues = {
+			RabbitMqTopology.REQUEST_EVENTS_QUEUE,
+			RabbitMqTopology.RATING_EVENTS_QUEUE })
 	void onDomainEvent(@Payload DomainEvent event, Message amqpMessage, Channel channel,
 			@Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) throws IOException {
 		try {
@@ -117,12 +155,27 @@ class DomainEventsListener {
 		} catch (RuntimeException ex) {
 			long attempts = attemptsSoFar(amqpMessage);
 			log.warn("event {} failed on attempt {}/{}", event.eventId(), attempts, maxAttempts);
+			// Map.of rejects null keys, so the absent-header case is guarded
+			// explicitly and lands in the same requeue branch as an unmapped
+			// queue.
+			String consumerQueue = amqpMessage.getMessageProperties().getConsumerQueue();
+			String retryQueue =
+					consumerQueue == null ? null : RETRY_QUEUE_BY_WORK_QUEUE.get(consumerQueue);
 			if (attempts >= maxAttempts) {
 				// Exhausted: the work queue's dead-letter leg files it
 				// in the DLQ (F2.3).
 				channel.basicNack(deliveryTag, false, false);
+			} else if (retryQueue == null) {
+				// No consumer queue on the delivery, or a queue missing its
+				// RETRY_QUEUE_BY_WORK_QUEUE row: requeue instead of guessing
+				// a target — settled here because in MANUAL mode nothing
+				// else would, and the delivery would pin a prefetch slot
+				// until restart (PR #276 review).
+				log.error("event {} has no mapped retry queue (consumer queue {}), requeueing",
+						event.eventId(), consumerQueue);
+				channel.basicNack(deliveryTag, false, true);
 			} else {
-				scheduleRetry(amqpMessage, attempts);
+				scheduleRetry(amqpMessage, attempts, retryQueue);
 				channel.basicAck(deliveryTag, false);
 			}
 			// Rethrow feeds the container's failure logging only — it cannot
@@ -140,7 +193,8 @@ class DomainEventsListener {
 		return priorAttempts instanceof Number prior ? 1 + prior.longValue() : 1;
 	}
 
-	private void scheduleRetry(Message message, long attempts) {
+	/** Parks the failed delivery in its own trio's retry queue. */
+	private void scheduleRetry(Message message, long attempts, String retryQueue) {
 		message.getMessageProperties().setHeader(RETRY_ATTEMPTS_HEADER, attempts);
 		message.getMessageProperties().setDeliveryMode(MessageDeliveryMode.PERSISTENT);
 		// Confirmed publish (needs spring.rabbitmq.publisher-confirm-type:
@@ -148,7 +202,7 @@ class DomainEventsListener {
 		// so a publish the broker never accepted throws instead of
 		// silently losing the event.
 		rabbitTemplate.invoke(operations -> {
-			operations.send("", RabbitMqTopology.REQUEST_EVENTS_RETRY_QUEUE, message);
+			operations.send("", retryQueue, message);
 			operations.waitForConfirmsOrDie(RETRY_CONFIRM_TIMEOUT_MS);
 			return null;
 		});

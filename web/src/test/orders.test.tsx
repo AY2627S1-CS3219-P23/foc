@@ -23,6 +23,10 @@
 // confirm dialog's link closing with the window; History's RESOLVED rows
 // and their amounts.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-30, Claude Code (Fable 5), issue #256: History's rows now ask
+// rating-service for the viewer's rating, so these tests pin it to
+// "not rated" (rating.test.tsx owns the rating flows).
+// Author review: [pending]
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -31,6 +35,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { orderApi } from '@/features/order/api'
 import type { RequestDetail, RequestSummary } from '@/features/order/types'
+import { ratingApi } from '@/features/rating/api'
+import { clearMyRatingCache } from '@/features/rating/useMyRating'
 import { ApiError } from '@/lib/api/http'
 import { CreateRequest } from '@/routes/create-request'
 import { MyRequests } from '@/routes/my-requests'
@@ -91,6 +97,8 @@ const pageOf = (content: RequestSummary[], over = {}) => ({
 
 beforeEach(() => {
   session.userId = 3
+  clearMyRatingCache()
+  vi.spyOn(ratingApi, 'getMyRating').mockResolvedValue({ rating: null })
   vi.spyOn(orderApi, 'getBalance').mockResolvedValue({
     available: 10,
     reserved: 0,

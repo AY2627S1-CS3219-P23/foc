@@ -42,6 +42,10 @@
 // 2026-10-31, Claude Code (Opus 5.5), N6 chat (docs/chat-service.md): a Chat button
 // on a card while the request is ACCEPTED, COLLECTED or ARRIVED (C3, C14).
 // Author review: Ko-Khan, pending pull request review.
+// 2026-10-30, Claude Code (Fable 5), issue #257: the assigned courier's
+// name links to their public profile (/users/:id) — the detail already
+// carries the id the link needs.
+// Author review: [pending]
 
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
@@ -508,6 +512,16 @@ function RequestCard({
           )}
           {isChatOpen(request.status) && <ChatButton requestId={request.id} />}
         </div>
+      {courier && detail?.courierId != null && (
+        <p className="mt-4 text-sm text-gray-600">
+          Assigned courier:{' '}
+          <Link
+            to={`/users/${detail.courierId}`}
+            className="font-semibold text-gray-900 underline decoration-gray-300 underline-offset-2 hover:decoration-gray-900"
+          >
+            {courier}
+          </Link>
+        </p>
       )}
 
       <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">

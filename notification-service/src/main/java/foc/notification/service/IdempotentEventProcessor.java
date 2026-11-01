@@ -27,14 +27,30 @@
  * hydrates names at read time. Reverted to @Transactional: the
  * lookup-before-transaction ordering was the sole reason for the
  * programmatic TransactionTemplate.
+ * 2026-10-30, Claude Code (Fable 5), issue #266: request.dropped now
+ * prunes the dropping courier's rows for that request, per the
+ * author's D33 decision (options Q&A: prune chosen over past-party
+ * read access and over web-only 404 softening) — the drop removes
+ * them as a party, so their rows could only dead-end on the detail
+ * 404. Same transaction as the dedupe insert, so a redelivered event
+ * replays both or neither.
+ * 2026-10-31, Claude Code (Fable 5), PR #277 review (@Sinnez1): the
+ * prune is bounded to rows at or before the drop (a retried drop no
+ * longer deletes a re-accept's fresh rows), and the reverse reorder is
+ * guarded at ingest — a courier-party event landing after the drop
+ * that covers it stores no courier row (author decision via options
+ * Q&A, over a D33 accepted-limitation entry).
  */
 package foc.notification.service;
 
 import foc.contracts.events.core.DomainEvent;
+import foc.contracts.events.core.EventTypeRegistry;
+import foc.contracts.events.request.RequestDropped;
 import foc.notification.entity.Notification;
 import foc.notification.entity.ProcessedEvent;
 import foc.notification.repository.NotificationRepository;
 import foc.notification.repository.ProcessedEventRepository;
+import java.time.Instant;
 import java.util.Map;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -90,13 +106,53 @@ class IdempotentEventProcessor implements EventProcessor {
 		if (processedEvents.existsById(event.eventId())) {
 			return;
 		}
+		// A drop removes the courier as a party (order-service nulls
+		// courierId), so every row they hold for this request now
+		// dead-ends on the detail 404 — delete them (D33, issue #266).
+		// Bounded to rows at or before the drop: a retried drop (first
+		// attempt rolled back, so the dedupe never recorded it) must not
+		// take the fresh rows of a re-accept with it (PR #277 review).
+		// MUST run before the saves below: the bulk query's
+		// clearAutomatically empties the persistence context, and the
+		// dedupe row's insert (assigned PK, so queued until flush, unlike
+		// the notifications' immediate IDENTITY inserts) would be
+		// discarded with it — a redelivery would then prune again and
+		// store the requester's row twice.
+		if (event instanceof RequestDropped dropped) {
+			notifications.deleteByRecipientIdAndPayloadLike(dropped.courierId(),
+					fieldPattern("requestId", dropped.requestId()), dropped.occurredAt());
+		}
 		processedEvents.save(new ProcessedEvent(event.eventId()));
-		String payloadJson = objectMapper.writeValueAsString(businessFields(event));
+		Map<String, Object> fields = businessFields(event);
+		String payloadJson = objectMapper.writeValueAsString(fields);
 		for (String party : event.parties()) {
+			if (droppedSince(fields, party, event.occurredAt())) {
+				continue;
+			}
 			Notification saved = notifications.save(new Notification(party, event.eventId(),
 					event.eventType(), payloadJson, event.occurredAt()));
 			eventPublisher.publishEvent(new NotificationStoredEvent(saved));
 		}
+	}
+
+	// The prune's reverse reordering (PR #277 review): a courier-party
+	// event (request.accepted/.collected, a dispute) delayed by the
+	// retry queue can land after the drop that pruned the courier's
+	// rows — storing it would re-create exactly the dead-end row D33
+	// removes. "Was this request dropped by this courier at or after
+	// this event?" is asked of the requester's stored request.dropped
+	// row, whose payload carries both ids; ties go to the drop,
+	// mirroring the prune's <= bound. A re-accept is strictly newer
+	// than the drop it follows, so its rows store normally — as does
+	// every row of a party that is not the event's courier.
+	private boolean droppedSince(Map<String, Object> fields, String party, Instant occurredAt) {
+		if (!(fields.get("requestId") instanceof String requestId)
+				|| !party.equals(fields.get("courierId"))) {
+			return false;
+		}
+		return notifications.countByEventTypeSincePayloadMatchingBoth(
+				EventTypeRegistry.routingKeyFor(RequestDropped.class), occurredAt,
+				fieldPattern("requestId", requestId), fieldPattern("courierId", party)) > 0;
 	}
 
 	@SuppressWarnings("unchecked")
@@ -104,5 +160,18 @@ class IdempotentEventProcessor implements EventProcessor {
 		Map<String, Object> fields = objectMapper.convertValue(event, Map.class);
 		fields.keySet().removeAll(DomainEvent.METADATA_FIELDS);
 		return fields;
+	}
+
+	// Matches the payload's serialized "<field>":"<value>" — both quotes
+	// in the pattern, so request 12 can never match request 123's rows.
+	// LIKE wildcards in the value are escaped (the repository queries
+	// declare '\' as the escape character); real ids are numeric strings,
+	// but the contract type is String, so this must not trust that.
+	private static String fieldPattern(String field, String value) {
+		String escaped = value
+				.replace("\\", "\\\\")
+				.replace("%", "\\%")
+				.replace("_", "\\_");
+		return "%\"" + field + "\":\"" + escaped + "\"%";
 	}
 }
