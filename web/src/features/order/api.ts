@@ -25,6 +25,11 @@
 // 2026-10-29, Claude Code (Opus 5.5), issue #241: POST /dispute, the
 // requester's "Report a problem" (DSP-5).
 // Author review: Ryan Ang, pending pull request review.
+// 2026-11-01, Claude Code (Opus 5), PR #282 review (@Sinnez1):
+// getCompletedCount for the public profile's deliveries tile, so the
+// call goes through this object (and so VITE_MOCK_ORDER_API covers it)
+// rather than apiFetch directly.
+// Author review: pending.
 
 import { creditApi } from '@/features/credit/api'
 import { listSuppliers } from '@/features/supplier/api'
@@ -120,6 +125,16 @@ const httpOrderApi = {
     return orderFetch<RequestDetail>(`/requests/${id}`)
   },
 
+  // how many requests this courier carried to COMPLETED — the public
+  // profile's deliveries tile. Any authenticated caller may ask, since it
+  // backs another user's profile; an unknown user counts 0.
+  async getCompletedCount(courierId: number): Promise<number> {
+    const { count } = await orderFetch<{ count: number }>(
+      `/requests/completed-count${query({ courierId })}`,
+    )
+    return count
+  },
+
   // courier steps
   accept: (id: number) => step('/accept', id),
   collect: (id: number) => step('/collect', id),
@@ -184,6 +199,7 @@ const devMockOrderApi: typeof httpOrderApi = {
     (await loadMock()).listOpenRequests(params),
   listMyRequests: async (params) => (await loadMock()).listMyRequests(params),
   getRequest: async (id) => (await loadMock()).getRequest(id),
+  getCompletedCount: async (id) => (await loadMock()).getCompletedCount(id),
   accept: async (id) => (await loadMock()).accept(id),
   collect: async (id) => (await loadMock()).collect(id),
   arrive: async (id) => (await loadMock()).arrive(id),

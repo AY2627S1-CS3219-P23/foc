@@ -1372,8 +1372,13 @@ dropped `createdAt` in the PR #131 review — order-service answers
 so an admin's RESOLVED dispute split never counts; any authenticated
 caller), and `/users/:id` draws the Joined and deliveries-completed
 tiles in a three-tile row with Avg rating, shown even before the first
-review (a failed count degrades to an em dash, and the count is only
-fetched once the profile gate succeeds). The full-instant `joinedAt`
+review (the count is only fetched once the profile gate succeeds). The
+PR #282 review (@Sinnez1) took the Joined month to a short month in
+Singapore time — a long month crossed the tile border on a phone, and
+the viewer's zone could shift the month — with an em dash if the
+profile carries no usable `joinedAt`; the count goes through `orderApi`
+(so the order-service mock covers it) and degrades to its own Try
+again, since its tile can fail while the rest of the page loads. The full-instant `joinedAt`
 (the web formats the month-year), the endpoint's query-param shape in
 order-service (not rating-service's `rateable_request`, which has no
 backfill for completions before the #251 ingest shipped) and the
