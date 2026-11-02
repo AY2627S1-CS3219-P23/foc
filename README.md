@@ -6,6 +6,13 @@
   Scope: team allocation table and repository-structure notes
   transcribed from team decisions (2026-09-10); the AI Use Summary
   section is maintained as the policy's consolidated disclosure.
+  2026-11-02, Claude Code (Fable 5), issue #258: AI Use Summary
+  extended for the Rate Your Experience modal (issue #256 — a belated
+  paragraph; the work shipped in PR #278 with its usage-log entries but
+  no paragraph here) and for the N1 documentation pass itself (issue
+  #258, the new docs/rating-service.md + .mmd and the doc updates it
+  touches).
+  Author review: Leong Wei Zhi, pending pull request review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
   public profile's joined date and deliveries-completed count (issue
   #280), and the #257 paragraph's deviation sentence updated to point
@@ -1350,6 +1357,22 @@ the badge re-syncs when the Center opens. The guard-vs-documented-
 limitation and badge-signal choices were the author's via
 neutral-options Q&A. Recorded in `ai/usage-log.md`.
 
+Claude Code (Fable 5) built the Rate Your Experience modal (issue
+#256, N1.1/N1.2 under #44): an Actions column on Request History's
+COMPLETED rows — both tabs — opens the wireframe's dialog (required
+stars, "Write a review (optional)" with a 1000-char counter matching
+rating-service's cap), posting `POST /ratings` and flipping the entry
+point to "Rated ★n" once `GET /ratings/mine` answers; the subtitle
+names the other party and reads "Requested by {name}" on the courier
+tab. A session cache keyed by viewer and request holds the immutable
+answers (a 404 is never cached — a just-completed request can trail
+rating-service's ingest, so the lookup retries on the page's push
+refresh), a 409 locks the form into close-only, and the PR #278 review
+(@Sinnez1) made the modal unclosable while a submit is in flight. The
+Request History entry point (not My Requests, which lists only active
+states) and the cache policy were the author's decisions via
+neutral-options Q&A. Recorded in `ai/usage-log.md`.
+
 Claude Code (Fable 5) built the public profile page (issue #257,
 N1.3/N1.4 under #44): `/users/:id` with the username from
 user-service's public profile (a 404 there reads "user not found"),
@@ -1384,6 +1407,21 @@ order-service (not rating-service's `rateable_request`, which has no
 backfill for completions before the #251 ingest shipped) and the
 single PR stacked on PR #279's branch were the author's decisions via
 neutral-options Q&A. Recorded in `ai/usage-log.md`.
+
+Claude Code (Fable 5) wrote the N1 documentation pass (issue #258, the
+docs checklist under #44): `docs/rating-service.md` + `.mmd` — the
+service's decision record (D1–D17) transcribed from the merged code's
+disclosure headers, the issues and the PR reviews, with the decisions
+table attributing each to its issue — plus the Rating Service's entry
+into `docs/architecture.md`/`.mmd` (the first nice-to-have drawn in the
+runtime diagram), the rating-events trio in
+`docs/notification-service.mmd`, the rating-service README's
+Configuration/Events/Status sections, a filled
+`rating-service/AGENTS.md`, the web README/feature-README/AGENTS
+catch-ups (gateway wording, folder lists, the Rating service row in the
+screen mapping), and this summary. Every decision documented was made
+by Leong Wei Zhi on the cited issues and PRs; the tool transcribed and
+formatted. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

@@ -5,6 +5,16 @@
   Stack, tooling, scope, and port decisions were made by the author
   (Leong Wei Zhi) via neutral-options Q&A; see ai/usage-log.md.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-11-02, Claude Code (Fable 5), issue #258: the Structure tree
+  updated to the routes and feature folders actually on main, and the
+  Environment section's pre-gateway "calls each backend service
+  directly" line corrected — every call goes through the API gateway
+  since the issue #151 cutover. Transcription only.
+  Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-02, Claude Code (Fable 5), PR #285 review (@Sinnez1): the
+  shared/auth line corrected — the folder holds only a README; the
+  session/JWT code lives in features/user. Transcription only.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # web/ — FoC Frontend
@@ -43,16 +53,30 @@ Node 22+ (`.nvmrc` is set — `nvm use`).
 ```
 src/
 ├── routes/       # one file per page; index.tsx is the route table
-│   ├── index.tsx     # mounts the shared shell; 404 handling
-│   └── home.tsx      # "/" placeholder page
+│   ├── index.tsx           # mounts the shared shell; 404 handling
+│   ├── home.tsx            # "/" landing page
+│   ├── profile.tsx         # own profile + preferences
+│   ├── public-profile.tsx  # /users/:id — ratings block, report user
+│   ├── suppliers.tsx
+│   ├── create-request.tsx
+│   ├── my-requests.tsx
+│   ├── open-requests.tsx
+│   ├── active-delivery.tsx
+│   ├── request-history.tsx # incl. the Rate Your Experience entry
+│   ├── credits.tsx
+│   ├── notifications.tsx
+│   └── admin.tsx
 ├── shared/
 │   ├── shell/        # app shell: top bar, mobile tab bar, credits +
 │   │                 # notification slots, 404 view
 │   ├── components/   # common UI primitives (cross-domain)
-│   └── auth/         # session/JWT handling (not built yet)
-├── features/     # per-domain code — one folder per teammate/service
+│   └── auth/         # placeholder README only — session/JWT code
+│                     # lives in features/user/ (AuthProvider,
+│                     # ProtectedRoute, jwt.ts)
+├── features/     # per-domain code: user/, supplier/, order/, credit/,
+│                 # notifications/, rating/ — see src/features/README.md
 ├── lib/          # API base URLs + shared fetch wrapper
-└── test/         # Vitest setup + example shell/router tests
+└── test/         # Vitest setup + per-page/per-feature tests
 ```
 
 Adding a page: create a file under `src/routes/` and add one child
@@ -63,9 +87,10 @@ thin and import from `features/<domain>/`; REST calls go through
 
 ## Environment
 
-The SPA calls each backend service directly (no API gateway). Base URLs
-come from `VITE_*_SERVICE_URL` env vars — see the "Web frontend" section
-of the root `.env.example`. **Vite inlines them at build time**: for the
+The SPA reaches every backend through the API gateway (issue #151,
+`docs/gateway.md`): each `VITE_*_SERVICE_URL` points at the gateway's
+`/api/<service>` prefix — see the "Web frontend" section of the root
+`.env.example`. **Vite inlines them at build time**: for the
 container, compose passes them as build args, so changing one requires
 `docker compose build web`. For local dev, put overrides in
 `web/.env.local` (git-ignored).
