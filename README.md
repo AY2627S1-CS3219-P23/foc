@@ -295,6 +295,9 @@
   2026-10-31: AI Use Summary extended for the PR #277 review fixes
   (prune reorder bound/guard, Center pager bookkeeping, badge re-sync
   on mount) by Claude Code (Fable 5).
+  2026-11-01: AI Use Summary extended for the own-profile entry link and
+  the rater's review readback (issue #284) by Claude Code (Opus 5).
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1422,6 +1425,20 @@ catch-ups (gateway wording, folder lists, the Rating service row in the
 screen mapping), and this summary. Every decision documented was made
 by Leong Wei Zhi on the cited issues and PRs; the tool transcribed and
 formatted. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5) closed the two ends of the rating flow that had no
+way back to a rating once it was made (issue #284, follow-up to #256 and
+#257): `/profile`'s details card links to `/users/<own id>`, the
+account's own entry into the public profile (nothing pointed there
+before — the nav's Profile item is account settings — so a ratee had to
+type the URL to read the reviews they had received), and Request
+History's `Rated ★n` chip is a button opening a read-only Your Review
+dialog with the stars, the write-up and the date. Ratings are immutable,
+so no edit screen ever showed a rater their own text; the text was
+already in the `GET /ratings/mine` answer each row holds, so neither
+part adds an API call. Both placements, and the dialog over a `title`
+tooltip or an inline expand, were the author's decisions via
+neutral-options Q&A. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

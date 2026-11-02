@@ -41,6 +41,10 @@
 // issue #66, no issue yet): Preferences-card cases — the sound switch
 // defaults on (and writes the default back), flips and persists under
 // the same key the Notification Center's header toggle uses.
+// 2026-11-01, Claude Code (Opus 5), issue #284: the details card's link
+// to the account's own public profile, asserted on the href — the id has
+// to be the one GET /users/me names, since the public profile's gate
+// only accepts a canonical decimal id.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -196,6 +200,17 @@ describe('profile page', () => {
     expect(
       await screen.findByText('Available: 5 | Reserved: 2'),
     ).toBeInTheDocument()
+  })
+
+  it("links to the signed-in account's own public profile", async () => {
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+
+    expect(
+      card('Profile Details').getByRole('link', {
+        name: 'View public profile',
+      }),
+    ).toHaveAttribute('href', `/users/${me.id}`)
   })
 
   it('shows an error when the profile fails to load', async () => {
