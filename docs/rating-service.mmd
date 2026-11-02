@@ -1,0 +1,54 @@
+---
+title: "FoC Rating Service — Component-Level Architecture"
+---
+%% AI-assisted (CS3219 AI Usage Policy disclosure):
+%% Tool: Claude Code (Fable 5), 2026-11-02, issue #258.
+%% Scope: drew the team-decided design (decisions D1-D17, made by
+%% Leong Wei Zhi, recorded in docs/rating-service.md) from the merged
+%% implementation; the tool made no design decisions.
+%% Author review: Leong Wei Zhi, pending pull request review.
+%% Legend, decisions and traceability: see docs/rating-service.md
+flowchart TB
+    ORDER_SVC["<b>Order Service</b> (order-service/)<br/>publishes request.completed on its<br/>normal event stream — no N1 change"]
+    WEB["<b>Web App</b> (web/)<br/>Rate Your Experience modal (#256),<br/>public profile + Report User (#257);<br/>hydrates rater names at read time<br/>(notification-service D32)"]
+    NOTIF_SVC["<b>Notification Service</b> (notification-service/)<br/>consumes rating.submitted on its own<br/>queue trio; notifies the ratee (#255)"]
+
+    subgraph RABBIT ["RabbitMQ (shared broker — the work/retry/DLQ trio is dedicated to the Rating Service)"]
+        REQ_EXCH{{"<b>request-events</b><br/>topic exchange, durable"}}
+        WORKQ[["<b>work queue</b><br/>durable, bound on the exact<br/>request.completed key (D3)"]]
+        RETRYQ[["<b>retry queue</b><br/>durable, TTL backoff"]]
+        DLQ[["<b>dead-letter queue</b><br/>durable, kept for replay"]]
+        RATING_EXCH{{"<b>rating-events</b><br/>topic exchange, durable —<br/>this service's publishing surface (D7)"}}
+    end
+
+    subgraph RATING ["Rating Service (rating-service/) — Java + Spring Boot"]
+        LISTENER["<b>AMQP listener</b><br/>manual ack after DB commit;<br/>client-stamped retry attempts (D3)"]
+        PROCESSOR["<b>Eligibility processor</b><br/>dedupe by event ID (D4);<br/>upserts the rateable_request<br/>projection (D2/D5)"]
+        RATING_API["<b>Rating REST API</b><br/>POST /ratings (immutable, D9),<br/>GET /ratings/mine (D10) — JWT"]
+        READ_API["<b>Profile read API</b><br/>summary (null average, D11) +<br/>paged review history (D12/D13)"]
+        REPORT_API["<b>Report API</b><br/>POST /reports; admin-gated<br/>GET /reports (D14)"]
+        OUTBOX["<b>Outbox publisher</b><br/>fixed-delay poll, at-least-once (D7)"]
+    end
+
+    RATING_DB[("<b>Rating DB</b><br/>PostgreSQL (rating-db) — Flyway-owned (D16):<br/>rateable_request, rating, user_report,<br/>processed_events, outbox_event")]
+
+    ORDER_SVC ==>|"publish request.completed<br/>(fire-and-forget)"| REQ_EXCH
+    REQ_EXCH ==>|"route: request.completed"| WORKQ
+    WORKQ ==>|"deliver at-least-once"| LISTENER
+    LISTENER ==>|"republish on failure<br/>while attempts remain"| RETRYQ
+    RETRYQ ==>|"re-route after TTL"| WORKQ
+    WORKQ ==>|"after max attempts, or<br/>unconvertible on first rejection"| DLQ
+
+    LISTENER -->|"typed event"| PROCESSOR
+    PROCESSOR ---|"event ID + eligibility row<br/>in one transaction"| RATING_DB
+
+    WEB -->|"REST via gateway /api/rating/**:<br/>submit + mine (N1.1, N1.2)"| RATING_API
+    WEB -->|"REST: summary + review<br/>history for the profile (N1.3)"| READ_API
+    WEB -->|"REST: report a user (N1.4);<br/>admin report list"| REPORT_API
+
+    RATING_API ---|"rating + outbox row<br/>in one transaction (D7)"| RATING_DB
+    READ_API ---|"Spring Data JPA"| RATING_DB
+    REPORT_API ---|"Spring Data JPA"| RATING_DB
+    OUTBOX ---|"drain unsent rows"| RATING_DB
+    OUTBOX ==>|"publish rating.submitted —<br/>ids + stars, parties = ratee only (D8)"| RATING_EXCH
+    RATING_EXCH ==>|"route: rating.submitted<br/>to the consumer's own trio"| NOTIF_SVC

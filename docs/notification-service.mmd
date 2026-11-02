@@ -16,9 +16,16 @@ title: "FoC Notification Service — Component-Level Architecture"
 %% internal-token edge removed with the enrichment (author decision D32
 %% via options Q&A — the web hydrates names at read time through the
 %% gateway); the Web App node notes the lookup instead.
+%% 2026-11-02, Claude Code (Fable 5), issue #258: the rating-events
+%% exchange, its work queue and the Rating Service producer drawn —
+%% the second queue trio the .md has described since issue #255 (D16
+%% note; its retry/DLQ legs mirror the drawn trio and are noted, not
+%% drawn). Transcription only.
+%% Author review: Leong Wei Zhi, pending pull request review.
 %% Legend, decisions and traceability: see docs/notification-service.md
 flowchart TB
     ORDER_SVC["<b>Order Service</b> (order-service/)<br/>publishes a typed event on every<br/>request state transition"]
+    RATING_SVC["<b>Rating Service</b> (rating-service/)<br/>publishes rating.submitted through<br/>its outbox (issue #255)"]
     WEB["<b>Web App</b> (web/)<br/>in-app notification list + toasts;<br/>hydrates courier names at read time (D32)"]
     USER_SVC["<b>User Service</b> (user-service/)<br/>public profile: username"]
 
@@ -27,6 +34,8 @@ flowchart TB
         WORKQ[["<b>work queue</b><br/>durable, bound with request.#"]]
         RETRYQ[["<b>retry queue</b><br/>durable, TTL backoff"]]
         DLQ[["<b>dead-letter queue</b><br/>durable, kept for replay"]]
+        RATING_EXCH{{"<b>rating-events</b><br/>topic exchange, durable"}}
+        RATING_WORKQ[["<b>rating work queue</b><br/>durable, bound on the exact<br/>rating.submitted key (D16);<br/>own retry + DLQ legs, as above"]]
     end
 
     subgraph NOTIF ["Notification Service (notification-service/) — Java + Spring Boot"]
@@ -45,6 +54,9 @@ flowchart TB
     LISTENER ==>|"republish on failure<br/>while attempts remain"| RETRYQ
     RETRYQ ==>|"re-route after TTL"| WORKQ
     WORKQ ==>|"after max attempts, or<br/>unconvertible on first rejection"| DLQ
+    RATING_SVC ==>|"publish rating.submitted<br/>(fire-and-forget, at-least-once)"| RATING_EXCH
+    RATING_EXCH ==>|"route: rating.submitted"| RATING_WORKQ
+    RATING_WORKQ ==>|"deliver at-least-once"| LISTENER
 
     LISTENER -->|"typed event"| PROCESSOR
     PROCESSOR ---|"insert notification + event ID<br/>in one transaction"| NOTIF_DB

@@ -7335,3 +7335,39 @@ Entry template:
 - **Author review:** `./mvnw test` green in user-service and
   order-service, `npm test` green in web (389 tests, 20 files), eslint
   clean. Leong Wei Zhi reviews via pull request.
+
+## 2026-11-02 — Leong Wei Zhi (docs: N1 rating-service documentation checklist, issue #258)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs
+- **Scope:** `docs/rating-service.md` + `docs/rating-service.mmd` (new:
+  the service's design record, decisions D1-D17 transcribed from the
+  merged code's disclosure headers, the N1 issues and the PR reviews,
+  with the no-`user.purged`-listener decision from the author's comment
+  on #258 as D17), `docs/architecture.md` + `docs/architecture.mmd`
+  (scope paragraph, domain list, three dependency rows, Rating Service
+  + rating-db nodes and edges — the first nice-to-have drawn in the
+  runtime diagram), `docs/notification-service.mmd` (the rating-events
+  trio the .md has described since #255), `rating-service/README.md`
+  (Configuration/Events/Status sections, stale intro line),
+  `rating-service/AGENTS.md` (filled — it was an empty file),
+  `web/README.md` (structure tree, the pre-gateway "calls each backend
+  service directly" line), `web/src/features/README.md` (rating/ added,
+  notifications/ name fixed), `web/AGENTS.md` (Rating service row in
+  the screen mapping, belated #256 header entry), root `AGENTS.md`
+  (walking-skeleton row retired, gateway row's service list), root
+  `README.md` (AI Use Summary: belated #256 paragraph + this pass).
+  Verified as already done, no edit: `docs/gateway.md` `/api/rating/**`
+  row, the README repository tree, `.env.example`/`compose.yaml`/port
+  table entries (all landed with #250/#251).
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/258". The author's
+  decisions via neutral-options Q&A: document the merged state only
+  (#284 documents itself when it lands); the hybrid mid-size doc shape
+  (notification-service's skeleton + supplier-service's requirements
+  and entities tables); a dedicated wiki page + Home entry (owed after
+  this PR merges); and including the four adjacent stale-doc fixes.
+  Only team decisions already made on the cited issues/PRs were
+  transcribed; the tool made no design decisions.
+- **Author review:** all three `.mmd` files render through mermaid-cli;
+  prettier clean on the touched web markdown. Leong Wei Zhi reviews via
+  pull request.
