@@ -85,6 +85,16 @@
   dialog over a tooltip or an inline expand, were the author's calls via
   options Q&A; neither is drawn.
   Author review: Leong Wei Zhi to review via the PR.
+  2026-11-02, Claude Code (Fable 5), issue #258: a belated header entry
+  for issue #256 — the rating-review.png row's Rate Your Experience
+  text landed with PR #278 without one (the entry point, Rated-star
+  state and dialog deviations there were author decisions via options
+  Q&A). Also this pass: the Planned Frontend Workflow table gains a
+  Rating service row and Rating & Review leaves the Order service row —
+  the screen has been rating-service's since the N1 breakdown (#44);
+  Public Profile is listed under both owners (its ratings block is
+  rating-service's, the account fields user-service's).
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # web/ — Frontend Agent Guide
@@ -154,9 +164,10 @@ mapping of screens to domains:
 | --- | --- |
 | User service | Sign Up, Login, Forgot Password, Account Recovery, Profile, Public Profile, Admin Dashboard (user management) |
 | Supplier service | Suppliers, Add/Edit Supplier (admin) |
-| Order service | Create Request, My Requests, Open Requests, Active Delivery, Order History, Dispute Flow, Rating & Review |
+| Order service | Create Request, My Requests, Open Requests, Active Delivery, Order History, Dispute Flow |
 | Credit service | Credit History, credit balance widgets |
 | Notification service | Notification Center, in-app toasts/badges |
+| Rating service (N1) | Rating & Review (the Rate Your Experience dialog on Request History, issue #256), Public Profile's ratings block + Report User (issue #257) |
 
 **Overlaps are expected** — e.g. the Dashboard composes widgets from
 several domains, and the nav bar shows credits and notifications

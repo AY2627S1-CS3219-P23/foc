@@ -31,6 +31,14 @@
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
   2026-10-28 paragraphs were kept there.
+  PR #286's main merge (main at PR #285): README.md's AI Use Summary
+  and web/AGENTS.md's disclosure header were the only conflicts —
+  both sides had appended an entry at the same spot, so both were
+  kept, in the order each file appends: main's #258 paragraph then the
+  #284 one in README (which appends at the bottom), and date order in
+  web/AGENTS.md (#284's 2026-11-01 entry, then #258's 2026-11-02 one).
+  This log merged cleanly — main's #258 entries append at the bottom,
+  the #284 ones sit at the top. Nothing reworded or removed.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -7404,3 +7412,65 @@ Entry template:
 - **Author review:** `./mvnw test` green in user-service and
   order-service, `npm test` green in web (389 tests, 20 files), eslint
   clean. Leong Wei Zhi reviews via pull request.
+
+## 2026-11-02 — Leong Wei Zhi (docs: N1 rating-service documentation checklist, issue #258)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs
+- **Scope:** `docs/rating-service.md` + `docs/rating-service.mmd` (new:
+  the service's design record, decisions D1-D17 transcribed from the
+  merged code's disclosure headers, the N1 issues and the PR reviews,
+  with the no-`user.purged`-listener decision from the author's comment
+  on #258 as D17), `docs/architecture.md` + `docs/architecture.mmd`
+  (scope paragraph, domain list, three dependency rows, Rating Service
+  + rating-db nodes and edges — the first nice-to-have drawn in the
+  runtime diagram), `docs/notification-service.mmd` (the rating-events
+  trio the .md has described since #255), `rating-service/README.md`
+  (Configuration/Events/Status sections, stale intro line),
+  `rating-service/AGENTS.md` (filled — it was an empty file),
+  `web/README.md` (structure tree, the pre-gateway "calls each backend
+  service directly" line), `web/src/features/README.md` (rating/ added,
+  notifications/ name fixed), `web/AGENTS.md` (Rating service row in
+  the screen mapping, belated #256 header entry), root `AGENTS.md`
+  (walking-skeleton row retired, gateway row's service list), root
+  `README.md` (AI Use Summary: belated #256 paragraph + this pass).
+  Verified as already done, no edit: `docs/gateway.md` `/api/rating/**`
+  row, the README repository tree, `.env.example`/`compose.yaml`/port
+  table entries (all landed with #250/#251).
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/258". The author's
+  decisions via neutral-options Q&A: document the merged state only
+  (#284 documents itself when it lands); the hybrid mid-size doc shape
+  (notification-service's skeleton + supplier-service's requirements
+  and entities tables); a dedicated wiki page + Home entry (owed after
+  this PR merges); and including the four adjacent stale-doc fixes.
+  Only team decisions already made on the cited issues/PRs were
+  transcribed; the tool made no design decisions.
+- **Author review:** all three `.mmd` files render through mermaid-cli;
+  prettier clean on the touched web markdown. Leong Wei Zhi reviews via
+  pull request.
+
+## 2026-11-02 — Leong Wei Zhi (docs: PR #285 review round, issue #258)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs
+- **Scope:** `docs/rating-service.md` (D15 scoped to report
+  submissions, the rating routes' missing NUL/length guards recorded
+  as a known gap and a new Open item; the Rating entity's column named
+  `body`; the outbox failure legs split — only an unroutable publish
+  gets the 30 s delay, broker failures stop the poll; the legend
+  sentence matched to a diagram that does cite decision IDs inline),
+  `rating-service/AGENTS.md` (`RateableRequest` listed as the
+  deliberately updatable D5 projection, not with the immutable D9
+  entities; the D11 review order located in `RatingService.reviewsOf`;
+  the dto/ row's caps scoped to `SubmitReportRequest`), `web/README.md`
+  (shared/auth is a placeholder README — the session code lives in
+  `features/user`). All seven findings are @Sinnez1's inline comments
+  on PR #285 (two also raised by Copilot), each verified against the
+  merged code before editing; the docs were corrected to the merged
+  state rather than changing code, per this PR's docs-only scope — the
+  rating-input hardening is left as a recorded follow-up.
+- **Prompt(s):** "address pr comments".
+- **Author review:** every corrected claim re-checked against
+  `SubmitRatingRequest`/`SubmitReportRequest`, `Rating.java` +
+  `V3__rating_and_outbox.sql`, `RatingRepository`/`RatingService`,
+  `OutboxPublisher` and `RateableRequest`; prettier clean on the
+  touched web markdown. Leong Wei Zhi reviews via pull request.
