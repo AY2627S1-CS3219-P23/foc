@@ -11,6 +11,14 @@
   derived the traceability mapping, and formatted the result; it made
   no design decisions.
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-02, Claude Code (Fable 5), PR #285 review (@Sinnez1): five
+  doc-vs-code corrections — D15 scoped to report submissions with the
+  rating routes' missing guards recorded as a known gap and Open item;
+  the Rating entity's column named body (text is the DTO field and the
+  SQL type); only an unroutable publish gets the 30 s retry delay,
+  broker failures stop the poll; the legend sentence matched to this
+  diagram, which does cite decision IDs inline. Transcription only.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # FoC Rating Service — Architecture Design
@@ -77,7 +85,7 @@ count as the team's finalized design for this service.
 | D12 | Review projection | **`ReviewResponse` is deliberately narrower than the full rating**: `raterId`, `stars`, `text`, `createdAt` only — no rating id, request id or ratee id leaves this service's door; the web hydrates rater usernames at read time (notification-service D32) (issue #253) | N1.3; least exposure |
 | D13 | Paging | **Hand-validated `page`/`size` ints, not Spring `Pageable`** (credit-service stance): `Pageable` turns a negative page into 0, caps an oversized size silently and admits a sort parameter. Bounds: page ≥ 0, 1 ≤ size ≤ 100, defaults 0/20; a page past `Integer.MAX_VALUE / size` is a 400, because past that spring-data refuses the query deep inside as a 500, not the contract's 400 (issue #253 + PR #273 review) | N1.3 contract |
 | D14 | Reports | **A report is a moderation flag, not an N3 dispute**: stored and listed for admins (GET and HEAD both `ADMIN`/`OWNER`-gated — `@GetMapping` serves HEAD, which would otherwise fall through to `authenticated()`), with **no event published, no credit consequence, and no existence check** on `reportedUserId`/`requestId` (this service has no user table; ids are opaque). `user_report.request_id` has **no FK** to `rateable_request` — that table holds completed requests only, and reports about cancelled/dropped requests are the most report-worthy; `rating.request_id` keeps its FK as defense-in-depth (nothing deletes eligibility rows). Known gap, accepted for N1's store-and-list scope: no duplicate/rate limit on POST (issue #254 + PR #274 reviews) | N1.4 |
-| D15 | Input hardening | **Reject at the contract edge what the DB would 500 on**: NUL bytes in any string field are a 400 (PostgreSQL rejects zero bytes in text parameters), id fields are capped at the columns' 255 chars, and the write-up/details cap of **1000 chars lives in the DTO over an unbounded `text` column** — the wireframe gives no number, so the cap can change without a migration. Blank optional text normalizes to `null`. A padded `reportedUserId` is trimmed before the self-report check (`@NotBlank` admits padding) (issues #252/#254 + PR #274 review) | robustness |
+| D15 | Input hardening (reports) | **Reject at the contract edge what the DB would 500 on — on report submissions**: NUL bytes in any `SubmitReportRequest` string field are a 400 (PostgreSQL rejects zero bytes in text parameters) and its id fields are capped at the columns' 255 chars (PR #274 review). The write-up/details cap of **1000 chars lives in the DTOs over an unbounded `text` column** — the wireframe gives no number, so the cap can change without a migration; blank optional text normalizes to `null`; a padded `reportedUserId` is trimmed before the self-report check (`@NotBlank` admits padding). **Known gap:** the rating routes have none of the NUL/length guards — `SubmitRatingRequest` validates only `@NotBlank`/`@NotNull`/`@Size(1000)` and `GET /ratings/mine` takes its `requestId` raw — so a NUL there reaches PostgreSQL and surfaces as a 500; see Open items (issues #252/#254) | robustness |
 | D16 | Schema ownership | **Flyway migrations, `ddl-auto: none`** (`V1__baseline` … `V5__user_report`) — the first service to adopt it; tests run H2 from the entities with Flyway off (the migrations are PostgreSQL-flavored) plus a Testcontainers `SchemaValidationTest` proving entities match the real migrated schema (issue #250) | schema history |
 | D17 | Account purge (`user.purged`) | **No `user-events` listener — purged users' ratings and reports stay** (decided 2026-10-30, recorded on issue #258). The service stores opaque user ids only — no names, no FKs to users; the web already degrades to actor-less copy when a purged rater 404s (notification-service D32). The day-31 purge frees the email/username (User F3.1.3) and is not an erasure requirement — none exists — and user ids are never reused. Deleting a purged rater's rows would retroactively change active users' averages (D9: ratings are immutable). Precedent: notification- and order-service keep purged users' rows; credit-service listens only because redistribution had a real requirement. **Revisit trigger:** an erasure/privacy requirement would add a `user-events` listener plus a one-time backfill — the contract and a consumer precedent are on `main`, so nothing is lost by waiting | User F3.1.3 boundary |
 
@@ -98,7 +106,7 @@ count as the team's finalized design for this service.
 | Entity | Key fields | Grounded in |
 | --- | --- | --- |
 | `RateableRequest` | Table `rateable_request`: `request_id` (PK, opaque), `requester_id`, `courier_id`, `completed_at` — the D2 projection of `request.completed` | N1.1, D2/D5 |
-| `Rating` | Table `rating`: `id`, `request_id` (FK to `rateable_request`), `rater_id`, `ratee_id`, `stars` (1–5, DB CHECK), `text` (nullable, unbounded; 1000-char cap in the DTO, D15), `created_at`; unique `rating_once_per_rater (request_id, rater_id)`; all columns `updatable = false` (D9) | N1.1, N1.2 |
+| `Rating` | Table `rating`: `id`, `request_id` (FK to `rateable_request`), `rater_id`, `ratee_id`, `stars` (1–5, DB CHECK), `body` (nullable, unbounded `text` column — the DTO field is named `text`, capped at 1000 chars, D15), `created_at`; unique `rating_once_per_rater (request_id, rater_id)`; all columns `updatable = false` (D9) | N1.1, N1.2 |
 | `UserReport` | Table `user_report`: `id`, `reporter_id`, `reported_user_id`, `reason` (enum: `NO_SHOW`, `ABUSIVE_BEHAVIOUR`, `UNSAFE_HANDLING`, `OTHER`), `details` (nullable), `request_id` (nullable, **no FK**, D14), `created_at` | N1.4 |
 | `ProcessedEvent` | Table `processed_events`: consumed event ids + `processed_at` (indexed for a future retention purge) — the D4 inbox | N1.1 correctness |
 | `OutboxEvent` | Table `outbox_event`: PK = the event's own `eventId`, payload, `created_at`, `next_attempt_at`, `sent_at`; partial index on unsent rows so it stays small however many sent rows accumulate (D7) | Notif F1.4 |
@@ -128,7 +136,9 @@ Failure legs: a failed ingest parks in the retry queue
 (`RATING_RETRY_TTL_MS`, default 10 s) for up to
 `RATING_RETRY_MAX_ATTEMPTS` deliveries (default 3), then dead-letters
 intact (D3). An unroutable or failed publish stays in the outbox and is
-retried 30 s later; broker-unavailable stops the poll until the next
+retried 30 s later; a failed or unconfirmed publish (a nack, a confirm
+timeout or a confirm failure) reads as broker-unavailable and stops
+that poll — the rows wait, with no extra delay stamped, for the next
 tick. Both sides are at-least-once by construction — the inbox (D4) and
 the consumers' own dedupe absorb the duplicates.
 
@@ -149,8 +159,9 @@ chain itself, ahead of parameter parsing (D14).
 Same notation as [`architecture.md`](architecture.md#legend-notation):
 rectangles are components, cylinders service-owned databases, `-->`
 synchronous REST, `==>` asynchronous events, `---` JPA access.
-Requirement/decision IDs are not drawn on the diagram — the
-traceability table below maps them.
+Decision IDs are cited inline on the diagram's nodes and edges
+(supplier-service's convention); requirements are mapped by the
+traceability table below.
 
 ## Requirement traceability
 
@@ -194,6 +205,11 @@ traceability table below maps them.
 - **Report dedupe / rate limiting** — the accepted D14 gap: one user
   can file repeat reports against another. Revisit if report volume
   ever matters.
+- **Rating-input hardening** — D15's NUL-byte 400s and 255-char id
+  caps exist only on `SubmitReportRequest`; `POST /ratings` and
+  `GET /ratings/mine` take their strings unguarded, so a NUL there
+  surfaces as PostgreSQL's 500. Porting the report DTO's `@Pattern`
+  guards over is a small code follow-up (PR #285 review).
 - **Retention** — `processed_events` and sent outbox rows accumulate;
   `processed_at` is indexed for a future purge job
   (notification-service's issue #137 pattern), none is scheduled yet.

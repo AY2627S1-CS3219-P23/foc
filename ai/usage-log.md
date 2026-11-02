@@ -7371,3 +7371,29 @@ Entry template:
 - **Author review:** all three `.mmd` files render through mermaid-cli;
   prettier clean on the touched web markdown. Leong Wei Zhi reviews via
   pull request.
+
+## 2026-11-02 — Leong Wei Zhi (docs: PR #285 review round, issue #258)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs
+- **Scope:** `docs/rating-service.md` (D15 scoped to report
+  submissions, the rating routes' missing NUL/length guards recorded
+  as a known gap and a new Open item; the Rating entity's column named
+  `body`; the outbox failure legs split — only an unroutable publish
+  gets the 30 s delay, broker failures stop the poll; the legend
+  sentence matched to a diagram that does cite decision IDs inline),
+  `rating-service/AGENTS.md` (`RateableRequest` listed as the
+  deliberately updatable D5 projection, not with the immutable D9
+  entities; the D11 review order located in `RatingService.reviewsOf`;
+  the dto/ row's caps scoped to `SubmitReportRequest`), `web/README.md`
+  (shared/auth is a placeholder README — the session code lives in
+  `features/user`). All seven findings are @Sinnez1's inline comments
+  on PR #285 (two also raised by Copilot), each verified against the
+  merged code before editing; the docs were corrected to the merged
+  state rather than changing code, per this PR's docs-only scope — the
+  rating-input hardening is left as a recorded follow-up.
+- **Prompt(s):** "address pr comments".
+- **Author review:** every corrected claim re-checked against
+  `SubmitRatingRequest`/`SubmitReportRequest`, `Rating.java` +
+  `V3__rating_and_outbox.sql`, `RatingRepository`/`RatingService`,
+  `OutboxPublisher` and `RateableRequest`; prettier clean on the
+  touched web markdown. Leong Wei Zhi reviews via pull request.

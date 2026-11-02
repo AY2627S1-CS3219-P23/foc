@@ -11,6 +11,10 @@
   directly" line corrected — every call goes through the API gateway
   since the issue #151 cutover. Transcription only.
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-02, Claude Code (Fable 5), PR #285 review (@Sinnez1): the
+  shared/auth line corrected — the folder holds only a README; the
+  session/JWT code lives in features/user. Transcription only.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # web/ — FoC Frontend
@@ -66,7 +70,9 @@ src/
 │   ├── shell/        # app shell: top bar, mobile tab bar, credits +
 │   │                 # notification slots, 404 view
 │   ├── components/   # common UI primitives (cross-domain)
-│   └── auth/         # session/JWT handling
+│   └── auth/         # placeholder README only — session/JWT code
+│                     # lives in features/user/ (AuthProvider,
+│                     # ProtectedRoute, jwt.ts)
 ├── features/     # per-domain code: user/, supplier/, order/, credit/,
 │                 # notifications/, rating/ — see src/features/README.md
 ├── lib/          # API base URLs + shared fetch wrapper

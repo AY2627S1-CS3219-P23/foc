@@ -5,6 +5,12 @@
   and the design doc (docs/rating-service.md); it records team-made
   decisions and invariants, and makes no design decisions of its own.
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-02, Claude Code (Fable 5), PR #285 review (@Sinnez1):
+  RateableRequest listed as the deliberately updatable projection
+  rather than with the immutable D9 entities; the review order located
+  in RatingService.reviewsOf, not the repository; the dto/ row's
+  NUL/length caps scoped to SubmitReportRequest. Transcription only.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # rating-service/ — Agent Guide
@@ -22,12 +28,12 @@ the decision ID when touching related code.
 
 | Package | Contents |
 | --- | --- |
-| `entity/` | `Rating` + `RateableRequest` + `UserReport` (no setters, columns `updatable = false` — D9), `ReportReason`, `ProcessedEvent` (the dedupe inbox; `Persistable` with a lifecycle-flipped `isNew` so `save()` persists, never merges — D4), `OutboxEvent` (PK = the event's own id) |
-| `repository/` | Spring Data JPA repositories; `RatingRepository` holds the null-average summary JPQL and the `createdAt desc, id desc` review page (D11); `OutboxEventRepository` inserts natively — `save()` would merge a sent event back to unsent |
+| `entity/` | `Rating` + `UserReport` (no setters, columns `updatable = false` — D9); `RateableRequest` (the eligibility projection — no setters, but its columns deliberately stay updatable: the D5 upsert `save()`-merges a fresh instance over the stored row, and adding `updatable = false` would silently stop replayed completions from updating it); `ReportReason`; `ProcessedEvent` (the dedupe inbox; `Persistable` with a lifecycle-flipped `isNew` so `save()` persists, never merges — D4); `OutboxEvent` (PK = the event's own id) |
+| `repository/` | Spring Data JPA repositories; `RatingRepository` holds the null-average summary JPQL, but its `findByRateeId` is unsorted — D11's `createdAt desc, id desc` order is built into the `PageRequest` in `RatingService.reviewsOf`, so don't call the repository expecting it; `OutboxEventRepository` inserts natively — `save()` would merge a sent event back to unsent |
 | `service/` | `RatingService` (one eligibility gate shared by submit and `/mine` — D10), `ReportService` (trim-then-self-check, no existence checks — D14/D15), `RatingEligibilityProcessor` (inbox + upsert-with-WARN — D4/D5), `RatingEvents`, `EventOutbox` (`@Transactional(MANDATORY)` enqueue — D7), `OutboxPublisher` (1 s fixed delay), the `EventProcessor`/`EventPublisher` ports, and the contract exceptions (`AlreadyRatedException`, `NotAPartyException`, `UnknownRequestException`, `SelfReportException`) |
 | `messaging/rabbitmq/` | The only package allowed to touch broker types: `RabbitMqTopology` (work/retry/DLQ trio bound on the exact `request.completed` key; declares the `rating-events` exchange only — consumers bring their own queues, D3/D7) + `RabbitMqTopologyInitializer`, `RequestEventsListener` + `RetryingListener` (manual ack after commit, client-stamped attempt header), `RabbitEventPublisher`, `DomainEventMessageConverter`, `RabbitMqMessageConverterConfig` |
 | `controller/` | `RatingController` (D9/D10), `UserRatingsController` + `ReportController` (hand-validated `page`/`size`, int-offset-overflow 400 — D13), `ProblemDetailAdvice` (problem+json; 409 only for the `rating_once_per_rater` constraint, every other integrity violation an ERROR-logged 500 — D9), `InvalidQueryParameterException` |
-| `dto/` | Request/response records; validation is the contract edge: `stars` is `Integer` (missing ≠ 0), NUL-byte and length `@Pattern`/`@Size` caps (D15), `PageResponse` (a copy, not an import — D6) |
+| `dto/` | Request/response records; validation is the contract edge: `stars` is `Integer` (missing ≠ 0); the NUL-byte and 255-char `@Pattern` caps live on `SubmitReportRequest` only — the rating DTOs lack them, D15's recorded gap; `PageResponse` (a copy, not an import — D6) |
 | `security/` | `JwtVerifier` (HS256, jjwt; fails startup on missing/short secret), `JwtAuthenticationFilter` (built inline by `SecurityConfig`, not a bean — a Filter bean would also run outside the chain), `RestAuthEntryPoint`/`RestAccessDeniedHandler` (401/403 problem+json) |
 | `config/` | `SecurityConfig` — stateless chain: `/error` + `/actuator/health` open, `GET`/`HEAD /reports` role-gated in the chain itself (`@GetMapping` serves HEAD — D14), everything else bearer-authenticated; per-service CORS from `WEB_ALLOWED_ORIGIN`, `GET`/`POST`/`OPTIONS` only |
 | `db/migration/` (resources) | Flyway owns the schema (D16): `V1__baseline`, `V2__rating_eligibility`, `V3__rating_and_outbox`, `V4__rating_read_index`, `V5__user_report`. `ddl-auto: none` — schema changes are new migrations, never entity-driven |
