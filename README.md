@@ -6,6 +6,10 @@
   Scope: team allocation table and repository-structure notes
   transcribed from team decisions (2026-09-10); the AI Use Summary
   section is maintained as the policy's consolidated disclosure.
+  2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
+  public profile's joined date and deliveries-completed count (issue
+  #280), and the #257 paragraph's deviation sentence updated to point
+  there.
   2026-10-28, Claude Code (Opus 5): AI Use Summary extended for the
   rating-events exchange and the rating.submitted contract (issue
   #249). Same day, PR #269's main merge: the AI Use Summary was the
@@ -1358,9 +1362,31 @@ Report User dialog posting rating-service's fixed reason list, hidden
 on the viewer's own profile; the assigned courier's name on My
 Requests and the requester's name on Active Delivery link here.
 Stacking on PR #278's branch, omitting the wireframe's joined-date and
-deliveries-completed tiles (no API carries either; follow-up issue
-filed instead) and the choice of entry links were the author's
-decisions via neutral-options Q&A. Recorded in `ai/usage-log.md`.
+deliveries-completed tiles (no API carried either at the time; filed
+as issue #280 and built there) and the choice of entry links were the
+author's decisions via neutral-options Q&A. Recorded in
+`ai/usage-log.md`.
+
+Claude Code (Fable 5) closed that wireframe gap (issue #280, follow-up
+to #257): user-service's public profile now carries `joinedAt` — a
+deliberate re-widening of the F8.1.1 username-only response, which had
+dropped `createdAt` in the PR #131 review — order-service answers
+`GET /requests/completed-count?courierId=` (COMPLETED requests only,
+so an admin's RESOLVED dispute split never counts; any authenticated
+caller), and `/users/:id` draws the Joined and deliveries-completed
+tiles in a three-tile row with Avg rating, shown even before the first
+review (the count is only fetched once the profile gate succeeds). The
+PR #282 review (@Sinnez1) took the Joined month to a short month in
+Singapore time — a long month crossed the tile border on a phone, and
+the viewer's zone could shift the month — with an em dash if the
+profile carries no usable `joinedAt`; the count goes through `orderApi`
+(so the order-service mock covers it) and degrades to its own Try
+again, since its tile can fail while the rest of the page loads. The full-instant `joinedAt`
+(the web formats the month-year), the endpoint's query-param shape in
+order-service (not rating-service's `rateable_request`, which has no
+backfill for completions before the #251 ingest shipped) and the
+single PR stacked on PR #279's branch were the author's decisions via
+neutral-options Q&A. Recorded in `ai/usage-log.md`.
 
 Claude Code (Opus 5) closed the two ends of the rating flow that had no
 way back to a rating once it was made (issue #284, follow-up to #256 and

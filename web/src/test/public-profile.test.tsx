@@ -15,14 +15,33 @@
 // until the lookup settles (Unknown user only on a confirmed 404), and
 // the trailing zero on a whole average.
 // Author review: [pending]
+// 2026-10-31 (Claude Code, Fable 5), issue #280: the Joined and
+// Deliveries-completed tiles — the stubbed fetch serves order-service's
+// completed count and a joinedAt; the expected month-year label is
+// recomputed with the same Intl formatter (house style:
+// credits.test.tsx); tiles survive zero reviews and a failed count.
+// Author review: pending.
+// 2026-11-01 (Claude Code, Opus 5), PR #282 review (@Sinnez1): the
+// tile assertions are scoped to their own tile (a bare '—' was matching
+// the Avg tile's placeholder and passed even with the count's failure
+// handler removed), plus the count's own Try again, the summary's Try
+// again re-running the count, a missing/unparseable joinedAt, and the
+// Avg tile's loading ellipsis. The count is stubbed on orderApi's
+// method where the assertion is about the tile, and on fetch where it
+// is about the URL.
+// Author review: pending.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { orderApi } from '@/features/order/api'
 import { ratingApi } from '@/features/rating/api'
-import type { ReviewResponse } from '@/features/rating/types'
+import type {
+  RatingSummaryResponse,
+  ReviewResponse,
+} from '@/features/rating/types'
 import { clearUsernameCache } from '@/features/user/usernames'
 import { ApiError } from '@/lib/api/http'
 import { PublicProfile } from '@/routes/public-profile'
@@ -51,6 +70,17 @@ const usernamesById: Record<string, string> = {
   '4': 'user_def',
 }
 
+// every stubbed profile joined at the same instant (#280); the tile's
+// label is recomputed with the page's own format, never hardcoded —
+// short month, Singapore time (PR #282 review)
+const joinedAt = '2026-02-10T09:00:00Z'
+const joinedFormat = new Intl.DateTimeFormat('en-SG', {
+  timeZone: 'Asia/Singapore',
+  month: 'short',
+  year: 'numeric',
+})
+const joinedLabel = joinedFormat.format(new Date(joinedAt))
+
 let fetchMock: ReturnType<typeof vi.fn>
 
 function jsonResponse(status: number, body: unknown) {
@@ -70,13 +100,23 @@ const problem = (status: number, title: string, detail: string) => ({
   detail,
 })
 
-// the stubbed user-service: a username for known ids, 404 otherwise;
-// tests that need one id to behave differently wrap this default
+// the stubbed user-service: a username and joinedAt for known ids, 404
+// otherwise; tests that need one id to behave differently wrap this
 function userService(rawUrl: RequestInfo | URL): Response {
   const match = String(rawUrl).match(/\/api\/user\/users\/([^/?]+)$/)
   const username = match && usernamesById[match[1]]
-  if (username) return jsonResponse(200, { username })
+  if (username) return jsonResponse(200, { username, joinedAt })
   return jsonResponse(404, problem(404, 'Not Found', 'No such user'))
+}
+
+// order-service's completed-deliveries count (#280); null for any other
+// URL, so the default stub can fall through to user-service
+function completedCount(rawUrl: RequestInfo | URL): Response | null {
+  return /\/api\/order\/requests\/completed-count\?courierId=/.test(
+    String(rawUrl),
+  )
+    ? jsonResponse(200, { count: 7 })
+    : null
 }
 
 const review = (
@@ -119,7 +159,10 @@ function renderProfile(path = '/users/9') {
 beforeEach(() => {
   session.userId = 3
   clearUsernameCache()
-  fetchMock = vi.fn(async (rawUrl: RequestInfo | URL) => userService(rawUrl))
+  fetchMock = vi.fn(
+    async (rawUrl: RequestInfo | URL) =>
+      completedCount(rawUrl) ?? userService(rawUrl),
+  )
   vi.stubGlobal('fetch', fetchMock)
   vi.spyOn(ratingApi, 'getSummary').mockResolvedValue({
     average: 4.1666,
@@ -137,6 +180,14 @@ afterEach(() => {
 })
 
 const reportDialog = () => screen.getByRole('dialog', { name: 'Report User' })
+
+// one stat tile, by its label — the tiles share placeholders ('…', '—'),
+// so every tile assertion has to be scoped to its own (PR #282 review)
+async function tile(label: string) {
+  const labelled = (await screen.findByText(label)).parentElement
+  if (labelled === null) throw new Error(`no tile for ${label}`)
+  return within(labelled)
+}
 
 async function openReportDialog(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: /Report User/ }))
@@ -171,6 +222,141 @@ describe('the profile card', () => {
     expect(ratingApi.listReviews).toHaveBeenCalledWith('9', 0, 5)
   })
 
+  it('shows the Joined and Deliveries-completed tiles (#280)', async () => {
+    renderProfile()
+
+    expect((await tile('Joined')).getByText(joinedLabel)).toBeInTheDocument()
+    expect(
+      await (await tile('Deliveries completed')).findByText('7'),
+    ).toBeInTheDocument()
+    // through orderApi, so VITE_MOCK_ORDER_API covers it, at the gateway
+    // path the service answers on (PR #282 review)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://gw/api/order/requests/completed-count?courierId=9',
+      expect.anything(),
+    )
+  })
+
+  it('degrades the count tile and retries it on its own', async () => {
+    let answer!: (count: number) => void
+    const count = vi
+      .spyOn(orderApi, 'getCompletedCount')
+      .mockRejectedValueOnce(
+        new ApiError(
+          500,
+          problem(500, 'Internal Server Error', 'order-service is down'),
+        ),
+      )
+      .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+    renderProfile()
+
+    // only this tile degrades, and its own Try again is the page's only
+    // retry when nothing else failed (PR #282 review)
+    const deliveries = await tile('Deliveries completed')
+    const retry = await deliveries.findByRole('button', { name: 'Try again' })
+    expect(await screen.findAllByText('4.2')).toHaveLength(2)
+    expect((await tile('Joined')).getByText(joinedLabel)).toBeInTheDocument()
+
+    await userEvent.setup().click(retry)
+
+    // the retry clears the failure, so the tile loads rather than keeping
+    // a stale Try again up while the second call is in flight
+    expect(await deliveries.findByText('…')).toBeInTheDocument()
+
+    answer(7)
+
+    expect(await deliveries.findByText('7')).toBeInTheDocument()
+    expect(count).toHaveBeenCalledTimes(2)
+    expect(count).toHaveBeenLastCalledWith(9)
+  })
+
+  it("re-runs the count from the summary's Try again", async () => {
+    vi.mocked(ratingApi.getSummary).mockRejectedValueOnce(
+      new ApiError(502, problem(502, 'Bad Gateway', 'summary is down')),
+    )
+    vi.spyOn(orderApi, 'getCompletedCount')
+      .mockRejectedValueOnce(
+        new ApiError(502, problem(502, 'Bad Gateway', 'order-service is down')),
+      )
+      .mockResolvedValueOnce(7)
+    renderProfile()
+
+    // one transient failure usually hit both, so the summary's retry
+    // covers the count as well (PR #282 review)
+    expect(await screen.findByText('summary is down')).toBeInTheDocument()
+    await userEvent
+      .setup()
+      .click(within(screen.getByRole('alert')).getByRole('button'))
+
+    expect(await screen.findAllByText('4.2')).toHaveLength(2)
+    expect(
+      await (await tile('Deliveries completed')).findByText('7'),
+    ).toBeInTheDocument()
+  })
+
+  it.each([
+    ['no joinedAt', {}],
+    ['a null joinedAt', { joinedAt: null }],
+    ['an unparseable joinedAt', { joinedAt: 'nonsense' }],
+  ])('falls back to an em dash for %s', async (_what, profile) => {
+    fetchMock.mockImplementation(
+      async (rawUrl: RequestInfo | URL) =>
+        completedCount(rawUrl) ??
+        jsonResponse(200, { username: 'courier_maya', ...profile }),
+    )
+    renderProfile()
+
+    // the page renders instead of throwing RangeError out of render, and
+    // never dates the account to the epoch (PR #282 review)
+    expect(
+      await screen.findByRole('heading', { name: 'courier_maya' }),
+    ).toBeInTheDocument()
+    expect((await tile('Joined')).getByText('—')).toBeInTheDocument()
+    expect(screen.queryByText(/1970/)).not.toBeInTheDocument()
+    expect(
+      await (await tile('Deliveries completed')).findByText('7'),
+    ).toBeInTheDocument()
+  })
+
+  it('formats the Joined month in Singapore time (PR #282 review)', async () => {
+    // 31 Jan 20:00 UTC is already February in Singapore, so this instant
+    // reads differently by zone — the guard below keeps the test honest
+    const straddling = '2026-01-31T20:00:00Z'
+    expect(
+      new Intl.DateTimeFormat('en-SG', {
+        timeZone: 'UTC',
+        month: 'short',
+        year: 'numeric',
+      }).format(new Date(straddling)),
+    ).toBe('Jan 2026')
+    fetchMock.mockImplementation(
+      async (rawUrl: RequestInfo | URL) =>
+        completedCount(rawUrl) ??
+        jsonResponse(200, { username: 'courier_maya', joinedAt: straddling }),
+    )
+    renderProfile()
+
+    // one profile reads the same for every viewer (poolFormat's formatSgt)
+    expect((await tile('Joined')).getByText('Feb 2026')).toBeInTheDocument()
+  })
+
+  it('shows the Avg tile ellipsis until the summary answers', async () => {
+    let answer!: (summary: RatingSummaryResponse) => void
+    vi.mocked(ratingApi.getSummary).mockReturnValue(
+      new Promise((resolve) => (answer = resolve)),
+    )
+    renderProfile()
+
+    // an em dash is the answer "no rating", not "still loading" — the
+    // count tile next to it reads the same way (PR #282 review)
+    const avg = await tile('Avg rating received')
+    expect(avg.getByText('…')).toBeInTheDocument()
+
+    answer({ average: null, count: 0 })
+
+    expect(await avg.findByText('—')).toBeInTheDocument()
+  })
+
   it('shows the empty state for a user with no reviews', async () => {
     vi.mocked(ratingApi.getSummary).mockResolvedValue({
       average: null,
@@ -186,6 +372,16 @@ describe('the profile card', () => {
     expect(
       screen.queryByRole('navigation', { name: 'Pagination' }),
     ).not.toBeInTheDocument()
+
+    // the tiles still render (#280): the average shows an em dash, the
+    // joined date and deliveries count answer regardless of reviews
+    expect((await tile('Joined')).getByText(joinedLabel)).toBeInTheDocument()
+    expect(
+      await (await tile('Deliveries completed')).findByText('7'),
+    ).toBeInTheDocument()
+    expect(
+      (await tile('Avg rating received')).getByText('—'),
+    ).toBeInTheDocument()
   })
 
   it('shows "User not found" when user-service answers 404', async () => {
@@ -194,6 +390,12 @@ describe('the profile card', () => {
     expect(await screen.findByText('User not found.')).toBeInTheDocument()
     expect(screen.queryByText('Recent Reviews')).not.toBeInTheDocument()
     expect(ratingApi.getSummary).not.toHaveBeenCalled()
+    // the completed-count fetch is gated the same way (#280)
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes('completed-count'),
+      ),
+    ).toHaveLength(0)
   })
 
   // user-service would canonicalize these (`me` → the viewer, `09` → 9)
