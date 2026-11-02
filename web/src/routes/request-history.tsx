@@ -39,6 +39,13 @@
 // asks, carries the text. Nothing new is fetched: the row hands the
 // rating it holds to the dialog. Author decision via options Q&A.
 // Author review: [pending]
+// 2026-11-02, Claude Code (Fable 5), PR #286 review (@Sinnez1): the
+// chip's label says what it opens and which request ("View your review
+// of request #12 (rated 4 stars)") — on a button, the old "Rated 4
+// stars" read identically on every row; the page keeps the rating
+// itself as the viewing state (RatingResponse carries requestId, so a
+// separate wrapper id could only disagree with it).
+// Author review: [pending]
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
@@ -166,19 +173,17 @@ function RateCell({
 }) {
   const state = useMyRating(r.id, r.status === 'COMPLETED', version)
   if (state === null || state.kind === 'not-rateable') return null
-  if (state.kind === 'rated') {
-    const rated = state.rating
+  if (state.kind === 'rated')
     return (
       <button
         type="button"
-        onClick={() => onView(rated)}
-        aria-label={`Rated ${rated.stars} stars`}
+        onClick={() => onView(state.rating)}
+        aria-label={`View your review of request #${r.id} (rated ${state.rating.stars} ${state.rating.stars === 1 ? 'star' : 'stars'})`}
         className="rounded-md px-1 text-sm whitespace-nowrap text-gray-500 underline hover:text-gray-900"
       >
-        Rated ★{rated.stars}
+        Rated ★{state.rating.stars}
       </button>
     )
-  }
   return (
     <button
       type="button"
@@ -204,11 +209,8 @@ export function RequestHistory() {
   const [refreshKey, setRefreshKey] = useState(0)
   const userId = useCurrentUserId()
   const [ratingTarget, setRatingTarget] = useState<RequestSummary | null>(null)
-  // the rating being read back, with the request it was given for
-  const [viewing, setViewing] = useState<{
-    requestId: number
-    rating: RatingResponse
-  } | null>(null)
+  // the rating being read back (it names its own request)
+  const [viewing, setViewing] = useState<RatingResponse | null>(null)
   const [ratingVersions, setRatingVersions] = useState<Record<number, number>>(
     {},
   )
@@ -384,9 +386,7 @@ export function RequestHistory() {
                         r={r}
                         version={ratingVersion(r.id)}
                         onRate={() => setRatingTarget(r)}
-                        onView={(rating) =>
-                          setViewing({ requestId: r.id, rating })
-                        }
+                        onView={setViewing}
                       />
                     </td>
                   </tr>
@@ -427,7 +427,7 @@ export function RequestHistory() {
                     r={r}
                     version={ratingVersion(r.id)}
                     onRate={() => setRatingTarget(r)}
-                    onView={(rating) => setViewing({ requestId: r.id, rating })}
+                    onView={setViewing}
                   />
                 </div>
               </li>
@@ -471,11 +471,7 @@ export function RequestHistory() {
       )}
 
       {viewing && (
-        <MyReviewModal
-          requestId={viewing.requestId}
-          rating={viewing.rating}
-          onClose={() => setViewing(null)}
-        />
+        <MyReviewModal rating={viewing} onClose={() => setViewing(null)} />
       )}
     </div>
   )

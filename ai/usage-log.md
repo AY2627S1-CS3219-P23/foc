@@ -25,6 +25,8 @@
   2026-10-28, Claude Code (Opus 5): appended the issue #249 entry below.
   2026-11-01, Claude Code (Opus 5): prepended the issue #284 entry
   below (newest first, as the surrounding entries sit).
+  2026-11-02, Claude Code (Fable 5): prepended the PR #286 review-fixes
+  entry below.
   PR #269's main merge: this file merged cleanly (main appends at the
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
@@ -48,6 +50,35 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-02 — Leong Wei Zhi (web: PR #286 review fixes, issue #284)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix, refactor
+- **Scope:** `web` — the shared `Modal` caps at the viewport and
+  scrolls (`max-h-[calc(100dvh-2rem)] overflow-y-auto`): a review with
+  many line breaks grew the Your Review dialog past the screen with
+  both Close buttons unreachable (@Sinnez1 measured nine cases; Copilot
+  flagged it too). `Modal` also closes on Escape — through the same
+  `onClose` the backdrop uses, so dialogs that lock their close handler
+  (`RateExperienceModal` mid-submit) stay locked — and moves focus into
+  the dialog on open unless a child's `autoFocus` (the OTP inputs)
+  already took it. New `features/rating/components/ReviewBody.tsx`
+  holds the stars/date/text block the dialog had copied from the public
+  profile's review cards; both render it now, and an empty-string
+  review reads as "No written review" (the PR's bot-review nit).
+  `routes/request-history.tsx`: the Rated chip's label names the
+  request and what clicking opens ("View your review of request #1
+  (rated 4 stars)", singular star included); the `rated` alias and the
+  `{requestId, rating}` viewing wrapper are gone — `RatingResponse`
+  carries `requestId`, so `MyReviewModal` reads it off the rating.
+  Tests: chip assertions through a `chipLabel` helper; Escape and
+  empty-text cases added.
+- **Prompt(s):** Address PR comments. (All inline comments from
+  @Sinnez1 and Copilot on PR #286 applied as suggested.)
+- **Author review:** web `vitest` 427/427 (two new cases), `tsc -b` +
+  vite build, and `prettier` on the changed files all clean; to be
+  re-reviewed via the pull request.
 
 ---
 ## 2026-11-01 — Leong Wei Zhi (feat: own-profile link and rater review readback, issue #284)
