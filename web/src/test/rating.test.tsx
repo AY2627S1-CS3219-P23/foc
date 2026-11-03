@@ -10,6 +10,15 @@
 // mid-submit, a 409 locks it into a close-only state, a 404 is not
 // cached (a later visit asks again) while a 403 is; the push-driven
 // retry lives in request-refetch.test.tsx.
+// 2026-11-01, Claude Code (Opus 5), issue #284: the rater's own review
+// read back from the Rated ★n chip — the chip is a button now, the
+// dialog shows the stars, the text (or its absence) and the date, and a
+// rating this tab just submitted is readable without a refetch.
+// Author review: [pending]
+// 2026-11-02, Claude Code (Fable 5), PR #286 review (@Sinnez1): the
+// chip assertions use its new self-describing label (chipLabel), Escape
+// closes the dialog (the shared Modal handles it now), and an
+// empty-string review reads as no written review.
 // Author review: [pending]
 
 import { act, render, screen, waitFor, within } from '@testing-library/react'
@@ -18,6 +27,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { orderApi } from '@/features/order/api'
+import { formatDateTime } from '@/features/order/status'
 import type { RequestDetail, RequestSummary } from '@/features/order/types'
 import { ratingApi } from '@/features/rating/api'
 import type { RatingResponse } from '@/features/rating/types'
@@ -52,15 +62,28 @@ const detail: RequestDetail = {
   arrivedAt: null,
 }
 
-const myRating = (stars: number): RatingResponse => ({
+// `text` defaults to none, the shape most cases here only need stars for
+const myRating = (
+  stars: number,
+  text: string | null = null,
+): RatingResponse => ({
   id: 'rtg-1',
   requestId: '1',
   raterId: '3',
   rateeId: '9',
   stars,
-  text: null,
-  createdAt: new Date().toISOString(),
+  text,
+  createdAt: RATED_AT,
 })
+
+// fixed, so the dialog's date line can be asserted through the same
+// formatter the app uses rather than a locale-dependent literal
+const RATED_AT = '2026-10-30T08:12:00Z'
+
+// the Rated chip's accessible name (PR #286 review): on a button, the
+// label says which request and what clicking it opens
+const chipLabel = (stars: number) =>
+  `View your review of request #1 (rated ${stars} ${stars === 1 ? 'star' : 'stars'})`
 
 const pageOf = (content: RequestSummary[]) => ({
   content,
@@ -123,7 +146,7 @@ describe('the Rate entry point on Request History', () => {
     })
     renderHistory()
 
-    expect(await screen.findAllByLabelText('Rated 5 stars')).toHaveLength(2)
+    expect(await screen.findAllByLabelText(chipLabel(5))).toHaveLength(2)
     expect(screen.queryByRole('button', { name: 'Rate' })).toBeNull()
   })
 
@@ -265,7 +288,7 @@ describe('the Rate Your Experience dialog', () => {
     expect(
       screen.queryByRole('dialog', { name: 'Rate Your Experience' }),
     ).toBeNull()
-    expect(await screen.findAllByLabelText('Rated 4 stars')).toHaveLength(2)
+    expect(await screen.findAllByLabelText(chipLabel(4))).toHaveLength(2)
     expect(
       screen.getByText('Thanks — your rating of request #1 is in.'),
     ).toBeInTheDocument()
@@ -299,7 +322,7 @@ describe('the Rate Your Experience dialog', () => {
         screen.queryByRole('dialog', { name: 'Rate Your Experience' }),
       ).toBeNull(),
     )
-    expect(await screen.findAllByLabelText('Rated 4 stars')).toHaveLength(2)
+    expect(await screen.findAllByLabelText(chipLabel(4))).toHaveLength(2)
   })
 
   it("shows a 409's detail, locks the form close-only and refetches the true state", async () => {
@@ -330,7 +353,7 @@ describe('the Rate Your Experience dialog', () => {
     expect(d.getByRole('radio', { name: '2 stars' })).toBeDisabled()
     expect(d.getByLabelText(/Write a review/)).toBeDisabled()
     await waitFor(() => expect(ratingApi.getMyRating).toHaveBeenCalledTimes(2))
-    expect(await screen.findAllByLabelText('Rated 5 stars')).toHaveLength(2)
+    expect(await screen.findAllByLabelText(chipLabel(5))).toHaveLength(2)
 
     // the footer's Close (the X shares the name)
     const closes = d.getAllByRole('button', { name: 'Close' })
@@ -361,5 +384,130 @@ describe('the Rate Your Experience dialog', () => {
     expect(
       await d.findByText('Request #1 — Requested by carol'),
     ).toBeInTheDocument()
+  })
+})
+
+describe("reading back the rater's own review (issue #284)", () => {
+  const REVIEW = 'Latte arrived warm and on time.\nCourier messaged ahead.'
+
+  // the dialog keeps the review's line breaks (whitespace-pre-line), so
+  // the default whitespace-collapsing matcher would never find the text
+  // as written — the identity normalizer asserts the break survives
+  const reviewText = (d: ReturnType<typeof within>) =>
+    d.getByText(REVIEW, { normalizer: (t: string) => t })
+
+  // the chip, in the table and the mobile card
+  const chips = (stars: number) =>
+    screen.findAllByRole('button', { name: chipLabel(stars) })
+
+  async function openReview(
+    user: ReturnType<typeof userEvent.setup>,
+    stars: number,
+  ) {
+    const buttons = await chips(stars)
+    await user.click(buttons[0])
+    return within(screen.getByRole('dialog', { name: 'Your Review' }))
+  }
+
+  it('makes the Rated chip a button on a row the viewer has rated', async () => {
+    vi.mocked(ratingApi.getMyRating).mockResolvedValue({
+      rating: myRating(4, REVIEW),
+    })
+    renderHistory()
+
+    expect(await chips(4)).toHaveLength(2)
+    expect(screen.queryByRole('dialog', { name: 'Your Review' })).toBeNull()
+  })
+
+  it('shows the stars, the written review and the date', async () => {
+    const user = userEvent.setup()
+    vi.mocked(ratingApi.getMyRating).mockResolvedValue({
+      rating: myRating(4, REVIEW),
+    })
+    renderHistory()
+    const d = await openReview(user, 4)
+
+    expect(d.getByText('Request #1')).toBeInTheDocument()
+    expect(d.getByRole('img', { name: '4 out of 5 stars' })).toBeInTheDocument()
+    expect(reviewText(d)).toBeInTheDocument()
+    expect(d.getByText(formatDateTime(RATED_AT))).toBeInTheDocument()
+    // no refetch: the row already had the rating
+    expect(ratingApi.getMyRating).toHaveBeenCalledTimes(1)
+  })
+
+  it('says so when the rating carries no written review', async () => {
+    const user = userEvent.setup()
+    vi.mocked(ratingApi.getMyRating).mockResolvedValue({
+      rating: myRating(5),
+    })
+    renderHistory()
+    const d = await openReview(user, 5)
+
+    expect(d.getByText('No written review')).toBeInTheDocument()
+    expect(d.getByRole('img', { name: '5 out of 5 stars' })).toBeInTheDocument()
+  })
+
+  it('treats an empty-string review as no written review (PR #286 review)', async () => {
+    const user = userEvent.setup()
+    vi.mocked(ratingApi.getMyRating).mockResolvedValue({
+      rating: myRating(5, ''),
+    })
+    renderHistory()
+    const d = await openReview(user, 5)
+
+    expect(d.getByText('No written review')).toBeInTheDocument()
+  })
+
+  it('closes on Escape (PR #286 review)', async () => {
+    const user = userEvent.setup()
+    vi.mocked(ratingApi.getMyRating).mockResolvedValue({
+      rating: myRating(4, REVIEW),
+    })
+    renderHistory()
+    await openReview(user, 4)
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Your Review' })).toBeNull()
+  })
+
+  it('closes on Close and on a tab switch', async () => {
+    const user = userEvent.setup()
+    vi.mocked(ratingApi.getMyRating).mockResolvedValue({
+      rating: myRating(4, REVIEW),
+    })
+    renderHistory()
+    const d = await openReview(user, 4)
+
+    // the footer's Close (the X shares the name)
+    const closes = d.getAllByRole('button', { name: 'Close' })
+    await user.click(closes[closes.length - 1])
+    expect(screen.queryByRole('dialog', { name: 'Your Review' })).toBeNull()
+
+    // a dialog belongs to a row of the tab it was opened from
+    await openReview(user, 4)
+    await user.click(screen.getByRole('tab', { name: /As Courier/ }))
+    expect(screen.queryByRole('dialog', { name: 'Your Review' })).toBeNull()
+  })
+
+  it('reads back a rating this tab just submitted, without a refetch', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(ratingApi, 'submitRating').mockResolvedValue(myRating(3, REVIEW))
+    renderHistory()
+    const rate = await openDialog(user)
+
+    await user.click(rate.getByRole('radio', { name: '3 stars' }))
+    await user.type(rate.getByLabelText(/Write a review/), 'anything')
+    await user.click(rate.getByRole('button', { name: 'Submit Review' }))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Rate Your Experience' }),
+      ).toBeNull(),
+    )
+
+    // recordMyRating wrote the response straight into the cache, so the
+    // chip it replaced the Rate button with is readable immediately
+    const d = await openReview(user, 3)
+    expect(reviewText(d)).toBeInTheDocument()
+    expect(ratingApi.getMyRating).toHaveBeenCalledTimes(1)
   })
 })

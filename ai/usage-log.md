@@ -23,10 +23,22 @@
   AuthServiceTest matcher-misuse fix entry below.
   Author review: Kwey Xiu Xi to review via pull request.
   2026-10-28, Claude Code (Opus 5): appended the issue #249 entry below.
+  2026-11-01, Claude Code (Opus 5): prepended the issue #284 entry
+  below (newest first, as the surrounding entries sit).
+  2026-11-02, Claude Code (Fable 5): prepended the PR #286 review-fixes
+  entry below.
   PR #269's main merge: this file merged cleanly (main appends at the
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
   2026-10-28 paragraphs were kept there.
+  PR #286's main merge (main at PR #285): README.md's AI Use Summary
+  and web/AGENTS.md's disclosure header were the only conflicts —
+  both sides had appended an entry at the same spot, so both were
+  kept, in the order each file appends: main's #258 paragraph then the
+  #284 one in README (which appends at the bottom), and date order in
+  web/AGENTS.md (#284's 2026-11-01 entry, then #258's 2026-11-02 one).
+  This log merged cleanly — main's #258 entries append at the bottom,
+  the #284 ones sit at the top. Nothing reworded or removed.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -46,6 +58,71 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-02 — Leong Wei Zhi (web: PR #286 review fixes, issue #284)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix, refactor
+- **Scope:** `web` — the shared `Modal` caps at the viewport and
+  scrolls (`max-h-[calc(100dvh-2rem)] overflow-y-auto`): a review with
+  many line breaks grew the Your Review dialog past the screen with
+  both Close buttons unreachable (@Sinnez1 measured nine cases; Copilot
+  flagged it too). `Modal` also closes on Escape — through the same
+  `onClose` the backdrop uses, so dialogs that lock their close handler
+  (`RateExperienceModal` mid-submit) stay locked — and moves focus into
+  the dialog on open unless a child's `autoFocus` (the OTP inputs)
+  already took it. New `features/rating/components/ReviewBody.tsx`
+  holds the stars/date/text block the dialog had copied from the public
+  profile's review cards; both render it now, and an empty-string
+  review reads as "No written review" (the PR's bot-review nit).
+  `routes/request-history.tsx`: the Rated chip's label names the
+  request and what clicking opens ("View your review of request #1
+  (rated 4 stars)", singular star included); the `rated` alias and the
+  `{requestId, rating}` viewing wrapper are gone — `RatingResponse`
+  carries `requestId`, so `MyReviewModal` reads it off the rating.
+  Tests: chip assertions through a `chipLabel` helper; Escape and
+  empty-text cases added.
+- **Prompt(s):** Address PR comments. (All inline comments from
+  @Sinnez1 and Copilot on PR #286 applied as suggested.)
+- **Author review:** web `vitest` 427/427 (two new cases), `tsc -b` +
+  vite build, and `prettier` on the changed files all clean; to be
+  re-reviewed via the pull request.
+
+---
+## 2026-11-01 — Leong Wei Zhi (feat: own-profile link and rater review readback, issue #284)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** generate, docs
+- **Scope:** web only, no API change.
+  `features/rating/components/MyReviewModal.tsx` (new: the read-only
+  "Your Review" dialog — shared `Modal`, `StarDisplay` from #257,
+  `formatDateTime`; no fetch, so no loading or error state);
+  `routes/request-history.tsx` (`RateCell`'s rated branch is a button
+  that hands its already-loaded rating up to the page, which holds the
+  one `viewing` dialog and drops it on a tab switch, as it already does
+  for the rate dialog); `features/user/components/ProfileDetailsCard.tsx`
+  (a "View public profile" link to `/users/<own id>` under the username).
+  Tests: `src/test/rating.test.tsx` (five readback cases; the `myRating`
+  fixture takes optional text and a fixed `createdAt`),
+  `src/test/profile.test.tsx` (the link's href). `web/AGENTS.md`
+  (profile.png, public-profile.png, rating-review.png and
+  order-history.png rows). `README.md` (AI Use Summary and header line).
+- **Prompt(s):** Create a plan to resolve issue #284, then implement it.
+  Author decisions via neutral-options Q&A: the rater reads their review
+  back from a dialog the `Rated ★n` chip opens, not a `title` tooltip
+  (unreachable by keyboard and on touch, and silent when the review has
+  no text) and not an inline expand (the Actions column is narrow); the
+  own-profile entry point is a link in the Profile Details card under
+  the username, not a heading-row link or a fifth card. Two findings
+  shaped the code: the card already holds `user` from the session's one
+  `GET /users/me`, so the link needs no hook and carries the canonical
+  numeric id the public profile's `CANONICAL_USER_ID` gate requires;
+  and `RateExperienceModal` was not reusable read-only (write-shaped
+  state, and `StarRating` is a radio group with a shared `name`), so the
+  dialog is its sibling and reuses #257's `StarDisplay` instead.
+- **Author review:** web `npm run test` (20 files, 417 tests, all
+  passing — 19 in `rating.test.tsx`, 34 in `profile.test.tsx`),
+  `npm run lint`, `npm run format:check` and `npm run build` (tsc -b +
+  vite build) all clean; to be reviewed via pull request.
 
 ---
 ## 2026-10-30 — Leong Wei Zhi (feat: notification on rating.submitted, issue #255)
@@ -7460,3 +7537,65 @@ Entry template:
 - **Author review:** `./mvnw test` green in user-service and
   order-service, `npm test` green in web (389 tests, 20 files), eslint
   clean. Leong Wei Zhi reviews via pull request.
+
+## 2026-11-02 — Leong Wei Zhi (docs: N1 rating-service documentation checklist, issue #258)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs
+- **Scope:** `docs/rating-service.md` + `docs/rating-service.mmd` (new:
+  the service's design record, decisions D1-D17 transcribed from the
+  merged code's disclosure headers, the N1 issues and the PR reviews,
+  with the no-`user.purged`-listener decision from the author's comment
+  on #258 as D17), `docs/architecture.md` + `docs/architecture.mmd`
+  (scope paragraph, domain list, three dependency rows, Rating Service
+  + rating-db nodes and edges — the first nice-to-have drawn in the
+  runtime diagram), `docs/notification-service.mmd` (the rating-events
+  trio the .md has described since #255), `rating-service/README.md`
+  (Configuration/Events/Status sections, stale intro line),
+  `rating-service/AGENTS.md` (filled — it was an empty file),
+  `web/README.md` (structure tree, the pre-gateway "calls each backend
+  service directly" line), `web/src/features/README.md` (rating/ added,
+  notifications/ name fixed), `web/AGENTS.md` (Rating service row in
+  the screen mapping, belated #256 header entry), root `AGENTS.md`
+  (walking-skeleton row retired, gateway row's service list), root
+  `README.md` (AI Use Summary: belated #256 paragraph + this pass).
+  Verified as already done, no edit: `docs/gateway.md` `/api/rating/**`
+  row, the README repository tree, `.env.example`/`compose.yaml`/port
+  table entries (all landed with #250/#251).
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/258". The author's
+  decisions via neutral-options Q&A: document the merged state only
+  (#284 documents itself when it lands); the hybrid mid-size doc shape
+  (notification-service's skeleton + supplier-service's requirements
+  and entities tables); a dedicated wiki page + Home entry (owed after
+  this PR merges); and including the four adjacent stale-doc fixes.
+  Only team decisions already made on the cited issues/PRs were
+  transcribed; the tool made no design decisions.
+- **Author review:** all three `.mmd` files render through mermaid-cli;
+  prettier clean on the touched web markdown. Leong Wei Zhi reviews via
+  pull request.
+
+## 2026-11-02 — Leong Wei Zhi (docs: PR #285 review round, issue #258)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs
+- **Scope:** `docs/rating-service.md` (D15 scoped to report
+  submissions, the rating routes' missing NUL/length guards recorded
+  as a known gap and a new Open item; the Rating entity's column named
+  `body`; the outbox failure legs split — only an unroutable publish
+  gets the 30 s delay, broker failures stop the poll; the legend
+  sentence matched to a diagram that does cite decision IDs inline),
+  `rating-service/AGENTS.md` (`RateableRequest` listed as the
+  deliberately updatable D5 projection, not with the immutable D9
+  entities; the D11 review order located in `RatingService.reviewsOf`;
+  the dto/ row's caps scoped to `SubmitReportRequest`), `web/README.md`
+  (shared/auth is a placeholder README — the session code lives in
+  `features/user`). All seven findings are @Sinnez1's inline comments
+  on PR #285 (two also raised by Copilot), each verified against the
+  merged code before editing; the docs were corrected to the merged
+  state rather than changing code, per this PR's docs-only scope — the
+  rating-input hardening is left as a recorded follow-up.
+- **Prompt(s):** "address pr comments".
+- **Author review:** every corrected claim re-checked against
+  `SubmitRatingRequest`/`SubmitReportRequest`, `Rating.java` +
+  `V3__rating_and_outbox.sql`, `RatingRepository`/`RatingService`,
+  `OutboxPublisher` and `RateableRequest`; prettier clean on the
+  touched web markdown. Leong Wei Zhi reviews via pull request.

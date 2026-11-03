@@ -37,16 +37,20 @@
 // goes through orderApi (so VITE_MOCK_ORDER_API covers it), is one
 // tri-state value, and carries its own Try again — its tile could fail
 // alone, with no retry anywhere on the page. Author review: pending.
+// 2026-11-02, Claude Code (Fable 5), PR #286 review (@Sinnez1): each
+// review card's stars/date/text block is the shared ReviewBody — the
+// Your Review dialog (#284) had grown an identical copy of it.
+// Author review: [pending]
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router'
 
 import { orderApi } from '@/features/order/api'
 import { Banner } from '@/features/order/components/Banner'
-import { formatDateTime } from '@/features/order/status'
 import { useCurrentUserId } from '@/features/order/useCurrentUserId'
 import { ratingApi } from '@/features/rating/api'
 import { ReportUserModal } from '@/features/rating/components/ReportUserModal'
+import { ReviewBody } from '@/features/rating/components/ReviewBody'
 import { StarDisplay } from '@/features/rating/components/StarDisplay'
 import type {
   RatingSummaryResponse,
@@ -507,21 +511,11 @@ function ReviewsSection({ userId }: { userId: string }) {
                   key={`${r.createdAt}-${r.raterId}-${i}`}
                   className="rounded-lg border border-gray-200 p-4"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <StarDisplay value={r.stars} />
-                    <span className="text-xs text-gray-400">
-                      {formatDateTime(r.createdAt)}
-                    </span>
-                  </div>
-                  {r.text !== null ? (
-                    <p className="mt-2 text-sm break-words whitespace-pre-line text-gray-700">
-                      {r.text}
-                    </p>
-                  ) : (
-                    <p className="mt-2 text-sm text-gray-400 italic">
-                      No written review
-                    </p>
-                  )}
+                  <ReviewBody
+                    stars={r.stars}
+                    text={r.text}
+                    createdAt={r.createdAt}
+                  />
                   {/* blank (space keeps the line) until the lookup settles;
                       Unknown user only on a confirmed 404 — a transient
                       lookup failure must not read as a deleted account */}
