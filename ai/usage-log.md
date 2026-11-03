@@ -7105,6 +7105,92 @@ Entry template:
 - **Author review:** `./mvnw test` green in rating-service (76 tests,
   0 skipped, both rounds). Leong Wei Zhi reviews via pull request.
 
+## 2026-10-31 — Ko-Khan (requester–courier chat, nice-to-have N6)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** new `chat-service/` (pom, Dockerfile, Maven wrapper copied
+  from rating-service, `application.yaml`, Flyway `V1__chat.sql`,
+  entities, repositories, `ChatService` rules, retention purge, REST and
+  internal controllers, problem+json advice, security copied from
+  rating-/notification-service incl. the Redis denylist, STOMP config,
+  channel interceptor, send handler and publisher; tests: service rules,
+  MockMvc controllers, interceptor unit tests, a real-socket STOMP
+  integration test; README, AGENTS.md); order-service (`ChatCall`
+  entity, `ChatCallRepository`, `ChatCalls`, `ChatClient` /
+  `HttpChatClient`, `ChatCallDispatcher`, Flyway `V5__chat_calls.sql`,
+  `RequestsService` hooks, main/test `application.yaml`,
+  `DisputeWindowTests` constructor arg, new `ChatCallsTests`); gateway
+  `/api/chat/` location; `compose.yaml` (chat-service, chat-db, order
+  env); `.env.example`; web (`features/chat/*`, `lib/api/config.ts`,
+  `Dockerfile` build arg, Chat buttons in `my-requests.tsx`,
+  `active-delivery.tsx`, `DisputeQueueSection.tsx`, test
+  `chat-image.test.ts`); `docs/chat-service.md`; the root `AGENTS.md`
+  tables; this entry and the README. Branch `feat/chat`, no issue yet.
+- **Prompt(s):** "Can we create a second branch for an alternative n2h
+  to create a chat between a courier and a requester instead?" The tool
+  listed the open design decisions without recommending; the author
+  answered: chat-service as its own service (after clarifying "add it to
+  order service" vs "order service should call the chat service"), its
+  own WebSocket, chat open after acceptance until the terminal states,
+  text + images, 30-day configurable retention, order-service calls
+  chat-service to open/close, admins read-only, no reporting, a pop-up
+  on an order. Options Q&A then settled: images in Postgres, STOMP,
+  close on courier drop and on dispute, only admins read after close;
+  on chat-service being down the order proceeds and the call is retried
+  every 15 s up to 20 tries; a shared internal token; 500 characters /
+  2 MB JPEG-PNG-WebP; admins use the same pop-up; text and base64 image
+  in the STOMP frame; purge daily 03:00; chat-db port 5439; denylist
+  check at CONNECT like notification-service. Recorded as C1–C15 in
+  `docs/chat-service.md`. The tool's own implementation choices (1 s
+  first-attempt poll, in-order calls per request, UUID chat ids and a
+  partial unique index, live frames without image bytes, a 3 MB frame
+  cap, image signature check, the list-shaped `GET /chats`, the retry
+  env vars, button placement) are listed in that doc for review.
+- **Author review:** `./mvnw test` green in chat-service (31 tests) and
+  order-service (188 tests, incl. Flyway V5) — both run in a
+  `maven:3.9-eclipse-temurin-21` container against Testcontainers
+  Postgres, as no JDK is installed locally; web `tsc -b`, eslint,
+  prettier and `vitest run` green (361 tests); the gateway config passes
+  `openresty -t` and the chat-service image builds. Not yet run as a
+  full stack: `.env` needs `CHAT_DB_PASSWORD` and `CHAT_INTERNAL_TOKEN`.
+  Ko-Khan to try it end to end before the pull request is reviewed.
+
+## 2026-10-31 — Ko-Khan (chat: unread notifications and names, N6)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** chat-service (Flyway `V2__read_markers.sql`; `Chat` read
+  markers; unread count queries; `ChatView.unreadCount`; `UnreadFrame`;
+  `ChatService` unread count, `markRead` and the receiver push;
+  `ChatPublisher` / `StompChatPublisher` user-queue push; `POST
+  /chats/{chatId}/read`; CORS POST; the interceptor allowing
+  `/user/queue/chat`; tests in `ChatServiceTests`, `ChatControllerTest`,
+  `ChatChannelInterceptorTest`, `ChatStompIntegrationTest` (its connect
+  timeout raised to 15 s after a first-connect timeout on a busy
+  machine); README); web (`features/chat/ChatNotificationsProvider.tsx`,
+  `useChatNotifications.ts`, `ChatButton.tsx` badge, `ChatPopup.tsx`
+  usernames and mark-read, `api.ts`, `types.ts`; `routes/index.tsx`
+  layout route; test `chat-button.test.tsx`); `docs/chat-service.md`
+  (C16-C21 and the interface); this entry and the README.
+- **Prompt(s):** "The chat should notify receiver when a message is
+  sent, perhaps through notification service and a visual indicator that
+  there is an unread message. The names of courier and receiver should
+  also be displayed, instead of 'courier' and 'recerver'". The tool
+  noted that routing through notification-service would mean a new event
+  contract and a consumer in Leong Wei Zhi's service, and asked neutral
+  options questions. The author chose: chat-service only (no
+  notification-service), notify on the first unread message only, the
+  sender's name with a text preview, a badge on the Chat button, and an
+  in-app toast plus a browser notification when the tab is in the
+  background (C16-C20); usernames instead of the role words (C21, the
+  prompt). The tool's own choices (one app-wide chat socket for the
+  unread queue, the 8 s toast, asking notification permission on the
+  first chat open, no announcement for the chat already open, "(you)"
+  after the caller's own name) are listed in the doc.
+- **Author review:** `./mvnw test` green in chat-service (36 tests, run
+  in a `maven:3.9-eclipse-temurin-21` container against Testcontainers
+  Postgres, as no JDK is installed locally); web `tsc -b`, eslint,
+  prettier and `vitest run` green (364 tests). Ko-Khan to check the toast, badge and browser notification
+  in two browsers before the pull request is reviewed.
 ## 2026-10-30 — Leong Wei Zhi (rating-service: profile read APIs, issue #253)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate
@@ -7379,6 +7465,45 @@ Entry template:
 - **Author review:** `npm test` green in web (387 tests, 20 files),
   eslint clean. Leong Wei Zhi reviews via pull request.
 
+## 2026-11-01 — Ko-Khan (gateway: block /api/chat/internal, N6 chat PR review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `gateway/nginx.conf` — a `^~ /api/chat/internal` location
+  answering 404 problem+json, copied from the `/api/supplier/purge`
+  block (issue #225); `docs/gateway.md` routing table gains the
+  `/api/chat/**` row; one-line notes in `docs/chat-service.md` and
+  `compose.yaml`.
+- **Prompt(s):** PR review finding 3: "/api/chat/internal/** is
+  reachable from the internet (should fix) … I would rather follow the
+  established pattern." The reviewer chose the fix; the tool applied
+  it. order-service calls `http://chat-service:8080` directly, so no
+  caller changes.
+- **Author review:** `openresty -t` passes; after rebuilding the
+  gateway, POSTs to `/api/chat/internal/chats/open` (plain, `%69`-encoded
+  and `x/../` spellings) answer 404 problem+json, `/api/chat/chats`
+  still proxies (401 without a token), and order-service still reaches
+  `chat-service:8080/internal/**` directly. Ko-Khan reviews via pull
+  request.
+
+## 2026-11-01 — Ko-Khan (web: repair the main → feat/chat merge, N6 chat PR CI)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug
+- **Scope:** `web/src/routes/my-requests.tsx` — the chat row and #257's
+  courier profile link had both survived the merge, leaving an unclosed
+  JSX block (lint/tsc/build failed); now one row with the linked name
+  and the Chat button. `web/src/routes/index.tsx` — the route tree had
+  duplicated routes and a `ProtectedRoute` node carrying a stray
+  `path`/`element` (96 web tests failed); now main's tree, including
+  `/users/:id`, inside `ChatNotificationsProvider`.
+- **Prompt(s):** "the pull request is currently failing some ci/cd
+  tests". `gh` is not installed locally, so the tool reran the CI legs
+  this PR triggers (java order-service, web, docker order-service/web/
+  gateway) by hand. No behaviour beyond restoring both sides of the
+  merge.
+- **Author review:** web lint, build and `npm test` green (417 tests,
+  twice); order-service `./mvnw verify` green in a Temurin 21 container
+  (188 tests, none skipped); the three Docker images build. Ko-Khan
+  reviews via pull request.
 ## 2026-10-31 — Leong Wei Zhi (user/order/web: profile joined date and deliveries count, issue #280)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** generate

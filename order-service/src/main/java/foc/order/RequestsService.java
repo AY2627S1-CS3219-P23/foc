@@ -67,6 +67,12 @@
  * dispute() refuses it (409, team decision: no guessed timestamps, and
  * the web hides the button for it too). Author review: Ryan Ang, pending
  * pull request review.
+ * 2026-10-31, Claude Code (Opus 5.5), N6 chat (docs/chat-service.md): an
+ * accept owes chat-service an open call and every transition out of
+ * ACCEPTED/COLLECTED/ARRIVED a close (decisions C3-C5, C11), both written
+ * through ChatCalls in the transition's own transaction; transition() is
+ * an instance method so it can. Author review: Ko-Khan, pending pull
+ * request review.
  */
 package foc.order;
 
@@ -112,17 +118,19 @@ public class RequestsService {
     private final EventOutbox outbox;
     private final OutboxEventRepository outboxEvents;
     private final RequestDisputeRepository disputes;
+    private final ChatCalls chatCalls;
     // how long an ARRIVED request may wait for the requester (F7.2); also
     // how long they have to dispute it
     private final Duration autoCompleteDelay;
 
     public RequestsService(RequestsRepository requestsRepository, EventOutbox outbox,
-            OutboxEventRepository outboxEvents, RequestDisputeRepository disputes,
+            OutboxEventRepository outboxEvents, RequestDisputeRepository disputes, ChatCalls chatCalls,
             @Value("${order.auto-complete.after-ms}") long autoCompleteDelayMs) {
         this.requestsRepository = requestsRepository;
         this.outbox = outbox;
         this.outboxEvents = outboxEvents;
         this.disputes = disputes;
+        this.chatCalls = chatCalls;
         this.autoCompleteDelay = Duration.ofMillis(autoCompleteDelayMs);
     }
 
@@ -185,6 +193,9 @@ public class RequestsService {
         request.setCourierId(courierId);
         request.setAcceptedAt(Instant.now());
         outbox.enqueue(RequestEvents.accepted(request), request.getId());
+        // the courier is set only now, so the open call is written here,
+        // not in transition()
+        chatCalls.accepted(request);
         return request;
     }
 
@@ -423,10 +434,13 @@ public class RequestsService {
     // IllegalStateException if the event is not allowed from its current
     // state. The change is written when the transaction commits, guarded
     // by the entity's @Version column. Reaching a final state stamps
-    // closedAt; this is the only place that sets it.
-    private static Requests transition(Requests request, OrderEvents event) {
-        OrderStates next = OrderStateMachine.next(request.getStatus(), event);
+    // closedAt; this is the only place that sets it. Leaving the states a
+    // chat is open in owes chat-service a close (ChatCalls), also here only.
+    private Requests transition(Requests request, OrderEvents event) {
+        OrderStates previous = request.getStatus();
+        OrderStates next = OrderStateMachine.next(previous, event);
         request.setStatus(next);
+        chatCalls.transitioned(request, previous, next);
         if (OrderStateMachine.isTerminal(next)) {
             request.setClosedAt(Instant.now());
         }

@@ -18,6 +18,9 @@
 # 2026-10-26, Claude Code (Opus 5.5), issue #239: the dispute escalation
 # grace, repeated from the main yaml. Author review: Ryan Ang, pending
 # pull request review.
+# 2026-10-31, Claude Code (Opus 5.5), N6 chat: order.chat.*, with the
+# dispatcher off (ChatCallDispatcherTests drives it). Author review:
+# Ko-Khan, pending pull request review.
 
 spring:
   # The datasource comes from PostgresTestContainer's @ServiceConnection.
@@ -45,6 +48,17 @@ order:
     retry:
       ttl-ms: 2000
       max-attempts: 5
+  chat:
+    base-url: http://chat.invalid
+    internal-token: test-internal-token
+    dispatcher:
+      # no chat-service in the tests: ChatCallDispatcherTests calls dispatch()
+      enabled: false
+      poll-interval-ms: 1000
+      batch-size: 100
+    retry:
+      delay-ms: 15000
+      max-attempts: 20
   outbox:
     publisher:
       # no broker in the tests: the publisher does not poll

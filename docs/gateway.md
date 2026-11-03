@@ -46,6 +46,11 @@
   added to the routing table and G3's count amended — rating-service
   joins the cutover with no published host port, as G3's pattern
   anticipated for new services.
+  2026-11-01, Claude Code (Opus 5.5), N6 chat PR review: /api/chat/**
+  row added; `/api/chat/internal` answered 404 by its own location
+  block, following the issue #225 supplier-purge pattern (reviewer's
+  request). No new gateway decision number. Author review: Ko-Khan,
+  pending pull request review.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -152,6 +157,7 @@ fresh ones its logins keep minting for 30 days — stay valid.
 | `/api/notification/**` | `notification-service:8080` | prefix stripped; WebSocket upgrade + SockJS streaming enabled for `/ws/**` |
 | `/api/order/**` | `order-service:8080` | prefix stripped (replaced the reserved 503 stub once order-service existed, as G3 anticipated) |
 | `/api/rating/**` | `rating-service:8080` | prefix stripped |
+| `/api/chat/**` | `chat-service:8080` | prefix stripped; WebSocket upgrade + SockJS streaming enabled for `/ws/**`; except `/api/chat/internal…`, which a dedicated location block answers 404 — order-service's chat open/close calls reach chat-service over the compose network, never through the gateway (same pattern as the supplier purge row; C12 in docs/chat-service.md) |
 | anything else | — | 404 problem+json |
 
 Every gateway-origin response — the Lua 401s, the 404,

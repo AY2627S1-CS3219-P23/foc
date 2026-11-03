@@ -12,6 +12,9 @@
  * delay while ARRIVED, null in any other state or with no arrivedAt;
  * an ARRIVED request with no arrivedAt cannot be disputed (409, team
  * decision). Author review: Ryan Ang, pending pull request review.
+ * 2026-10-31, Claude Code (Opus 5.5), N6 chat: the service's new ChatCalls
+ * argument passed as a mock. Author review: Ko-Khan, pending pull request
+ * review.
  */
 package foc.order;
 
@@ -47,7 +50,8 @@ class DisputeWindowTests {
 	private final RequestsRepository requestsRepository = mock(RequestsRepository.class);
 	private final EventOutbox outbox = mock(EventOutbox.class);
 	private final RequestsService requestsService = new RequestsService(requestsRepository, outbox,
-			mock(OutboxEventRepository.class), mock(RequestDisputeRepository.class), AUTO_COMPLETE_DELAY.toMillis());
+			mock(OutboxEventRepository.class), mock(RequestDisputeRepository.class), mock(ChatCalls.class),
+			AUTO_COMPLETE_DELAY.toMillis());
 
 	@Test
 	void anArrivedRequestCanBeDisputedPastAnHourWhileTheLongerWindowIsOpen() {

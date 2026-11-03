@@ -30,6 +30,10 @@
   folder table and rating-db to the port table (host port 5438, next
   free) while scaffolding the N1 rating service (walking skeleton,
   decisions recorded on #44/#250).
+  2026-10-31, N6 chat (Opus 5.5): chat-service row added to the folder
+  table and chat-db to the port table (host port 5439, Ko-Khan via
+  options Q&A; docs/chat-service.md). Author review: Ko-Khan, pending
+  pull request review.
   2026-11-02, issue #258 (Fable 5): the rating-service folder row's
   "walking skeleton for now" retired (the N1 issues are merged; design
   record docs/rating-service.md) and the gateway port-table row's
@@ -71,6 +75,8 @@ an independent Spring Boot application:
 | `order-service/` | Request creation, listing, acceptance, courier updates, completion, expiry |
 | `credit-service/` | Credit balances, reservation, atomic transfer, transaction history |
 | `notification-service/` | Order event updates, delivery retries, idempotent event processing |
+| `rating-service/` | Ratings for completed orders (nice-to-have N1, issue #44) — walking skeleton for now |
+| `chat-service/` | Requester–courier chat for accepted orders, admins read-only (nice-to-have N6, `docs/chat-service.md`) |
 | `rating-service/` | Ratings for completed orders (nice-to-have N1, issue #44): immutable per-direction ratings, profile rating summaries/history, user reports — design record `docs/rating-service.md` |
 
 Any nice-to-have feature that warrants its own service gets an additional
@@ -156,6 +162,7 @@ alone is only a gate inside the server.
 | `order-db` | `${ORDER_DB_HOST_PORT:-5437}` (loopback only) | available |
 | `credit-db` | `${CREDIT_DB_HOST_PORT:-5436}` (loopback only) | available |
 | `rating-db` | `${RATING_DB_HOST_PORT:-5438}` (loopback only) | available |
+| `chat-db` | `${CHAT_DB_HOST_PORT:-5439}` (loopback only) | available |
 | `web` | — | no database (frontend itself published on `${WEB_PORT:-5173}`) |
 | `mailpit` | — | mail catcher, not a DB: SMTP `${MAILPIT_SMTP_PORT:-1025}`, web inbox `${MAILPIT_UI_PORT:-8025}` (both loopback only) |
 | `redis` | `${REDIS_HOST_PORT:-6379}` (loopback only) | logout token denylist (issue #151), not a DB profile — inspect with `redis-cli` |

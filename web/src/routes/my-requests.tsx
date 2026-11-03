@@ -39,6 +39,11 @@
 // passed says "Completing automatically…" until the sweep runs; DISPUTED
 // requests stay listed (with a chip) until an admin resolves them.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-31, Claude Code (Opus 5.5), N6 chat (docs/chat-service.md): a Chat button
+// on a card while the request is ACCEPTED, COLLECTED or ARRIVED (C3, C14).
+// 2026-11-01, merge with main fixed: #257's courier profile link now sits
+// in the chat row (the merge had left both rows and an unclosed block).
+// Author review: Ko-Khan, pending pull request review.
 // 2026-10-30, Claude Code (Fable 5), issue #257: the assigned courier's
 // name links to their public profile (/users/:id) — the detail already
 // carries the id the link needs.
@@ -51,6 +56,8 @@ import { useRequestRefetch } from '@/features/notifications/useRequestRefetch'
 import { orderApi } from '@/features/order/api'
 import { Banner } from '@/features/order/components/Banner'
 import { DisputeModal } from '@/features/order/components/DisputeModal'
+import { ChatButton } from '@/features/chat/ChatButton'
+import { CHAT_OPEN_STATUSES } from '@/features/chat/types'
 import { OrderProgress } from '@/features/order/components/OrderProgress'
 import {
   StateFilter,
@@ -497,16 +504,21 @@ function RequestCard({
         <Field label="Drop off to" value={request.dropoffLocation} />
       </dl>
 
-      {courier && detail?.courierId != null && (
-        <p className="mt-4 text-sm text-gray-600">
-          Assigned courier:{' '}
-          <Link
-            to={`/users/${detail.courierId}`}
-            className="font-semibold text-gray-900 underline decoration-gray-300 underline-offset-2 hover:decoration-gray-900"
-          >
-            {courier}
-          </Link>
-        </p>
+      {(courier || isChatOpen(request.status)) && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+          {courier && detail?.courierId != null && (
+            <p className="text-sm text-gray-600">
+              Assigned courier:{' '}
+              <Link
+                to={`/users/${detail.courierId}`}
+                className="font-semibold text-gray-900 underline decoration-gray-300 underline-offset-2 hover:decoration-gray-900"
+              >
+                {courier}
+              </Link>
+            </p>
+          )}
+          {isChatOpen(request.status) && <ChatButton requestId={request.id} />}
+        </div>
       )}
 
       <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
@@ -616,6 +628,11 @@ function RequestCard({
 // The list items carry no courier, so an in-progress card reads its
 // request's detail — again whenever this request is touched
 // (a push naming it, an action on it), so the two can't drift apart.
+// the courier and requester can chat in these states (C3)
+function isChatOpen(status: RequestSummary['status']): boolean {
+  return (CHAT_OPEN_STATUSES as readonly string[]).includes(status)
+}
+
 function useDetail(
   requestId: number,
   enabled: boolean,

@@ -9,8 +9,12 @@
 // (the admin is a party to the order, or it is no longer DISPUTED) is
 // shown in the dialog as it words it.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-10-31, Claude Code (Opus 5.5), N6 chat (docs/chat-service.md): a read-only View
+// chat on each disputed request (C13, C14).
+// Author review: Ko-Khan, pending pull request review.
 
 import { type FormEvent, useEffect, useState } from 'react'
+import { ChatButton } from '@/features/chat/ChatButton'
 
 import type { PagedResponse } from '@/features/supplier/types'
 import { errorMessage } from '@/lib/api/http'
@@ -224,7 +228,8 @@ function DisputeCard({
         </p>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <ChatButton requestId={request.id} readOnly />
         <button
           type="button"
           onClick={onResolve}

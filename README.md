@@ -279,6 +279,10 @@
   rating API (issue #252), by Claude Code (Fable 5); extended again
   the same day for the PR #272 review fix.
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-10-31: chat-service added to Repository Structure and the AI Use
+  Summary extended for requester-courier chat (N6), by Claude Code
+  (Opus 5.5).
+  Author review: Ko-Khan, pending pull request review.
   2026-10-30: AI Use Summary extended for rating-service's profile
   read APIs (issue #253), by Claude Code (Fable 5).
   Author review: Leong Wei Zhi, pending pull request review.
@@ -328,8 +332,8 @@ withdrawn, or exchanged for money, and only circulate within the platform.
 
 This repository follows a **one-service-per-folder** structure: each
 microservice (`user-service/`, `supplier-service/`, `order-service/`,
-`credit-service/`, `notification-service/`, `rating-service/`) lives in
-its own top-level folder. The frontend lives in `web/`.
+`credit-service/`, `notification-service/`, `rating-service/`,
+`chat-service/`) lives in its own top-level folder. The frontend lives in `web/`.
 
 ```text
 .
@@ -340,6 +344,7 @@ its own top-level folder. The frontend lives in `web/`.
 ├── credit-service/
 ├── notification-service/
 ├── rating-service/
+├── chat-service/
 ├── foc-contracts/
 └── README.md
 ```
@@ -1290,6 +1295,30 @@ and leaves every other integrity violation a 500, with the race test
 driving the database's real exception through the advice (reviewer
 suggestion). Recorded in `ai/usage-log.md`.
 
+Claude Code (Opus 5.5) built requester–courier chat (nice-to-have N6,
+`docs/chat-service.md`): a new `chat-service` (its own `chat-db`, REST
+history and image reads, its own STOMP WebSocket with CONNECT-frame JWT
+and denylist checks, text and base64 images up to 2 MB in the frame,
+read-only admin access, a configurable 30-day retention purge, and
+Testcontainers tests including a real-socket 2 MB image test);
+order-service's `chat_call` table and dispatcher, which open the chat on
+accept and close it when the request leaves ACCEPTED/COLLECTED/ARRIVED,
+retrying every 15 s up to 20 times with a shared internal token; the
+gateway route, compose and `.env.example` wiring; and the web chat
+pop-up on the requester's, courier's and admins' order views. Every
+design decision (a separate service, its own socket, the open states,
+closing on drop and dispute, text+image limits, images in Postgres and
+in the frame, retention, the call/retry/token scheme, admin read-only,
+the denylist check, the pop-up) was the author's, via the chat prompt
+and neutral-options Q&A, recorded as C1–C15; the tool's own
+implementation choices are listed separately in the doc. Recorded in
+`ai/usage-log.md`. The same day it added unread notifications through
+chat-service alone: per-party read markers (Flyway V2), unread counts and
+a mark-read endpoint, a push to the receiver's own STOMP queue, and in
+the web a badge on the Chat button, a toast and a background browser
+notification for the first unread message with the sender's name and a
+text preview, and usernames in place of "Requester"/"Courier" — each the
+author's decision via options Q&A (C16-C21).
 Claude Code (Fable 5) implemented rating-service's profile read APIs
 (issue #253, N1.3 under #44): `GET /users/{id}/ratings/summary` (the
 star-row aggregate via JPQL avg/count) and `GET /users/{id}/ratings`

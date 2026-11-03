@@ -49,6 +49,13 @@
 // stays inside ProtectedRoute, now under the CreditBalanceProvider
 // layout #195 added; the public four keep their place in the shell.
 // Author review: Leong Wei Zhi to review via the PR.
+// 2026-10-31, Claude Code (Opus 5.5), N6 chat (docs/chat-service.md):
+// ChatNotificationsProvider layout route around the shell, so the chat
+// unread badges, toasts and the single chat pop-up reach every page.
+// 2026-11-01, merge with main fixed: the tree is main's (with #257's
+// /users/:id) inside that layout; the merge had duplicated routes and
+// broken the ProtectedRoute node.
+// Author review: Ko-Khan, pending pull request review.
 // 2026-10-30, Claude Code (Fable 5), issue #257: /users/:id (public
 // profile) inside ProtectedRoute — every API it reads wants a session.
 // Reached by link (requests, deliveries), not from the nav, like
@@ -81,6 +88,7 @@ import { RegisterOwner } from '../features/user/registerOwner'
 import { AuthProvider } from '../features/user/AuthProvider'
 import { NotificationProvider } from '../features/notifications/NotificationProvider'
 import { CreditBalanceProvider } from '../features/credit/CreditBalanceProvider'
+import { ChatNotificationsProvider } from '../features/chat/ChatNotificationsProvider'
 
 // RouteObject.handle for the session-gated branch, read via useMatches
 // (AuthProvider). ProtectedRoute is what enforces it; this only lets
@@ -103,41 +111,52 @@ export const routes: RouteObject[] = [
             Component: CreditBalanceProvider,
             children: [
               {
-                element: <AppShell />,
+                Component: ChatNotificationsProvider,
                 children: [
-                  { index: true, element: <Home /> },
-                  { path: 'login', element: <Login /> },
-                  { path: 'register', element: <Register /> },
-                  { path: 'register-owner', element: <RegisterOwner /> },
-                  { path: 'forgot-password', element: <ForgotPassword /> },
                   {
-                    Component: ProtectedRoute,
-                    handle: { requiresSession: true } satisfies RouteHandle,
+                    element: <AppShell />,
                     children: [
-                      { path: 'suppliers', element: <Suppliers /> },
-                      { path: 'notifications', element: <Notifications /> },
-                      { path: 'profile', element: <Profile /> },
+                      { index: true, element: <Home /> },
+                      { path: 'login', element: <Login /> },
+                      { path: 'register', element: <Register /> },
+                      { path: 'register-owner', element: <RegisterOwner /> },
+                      { path: 'forgot-password', element: <ForgotPassword /> },
                       {
-                        path: 'account-recovery',
-                        element: <AccountRecovery />,
+                        Component: ProtectedRoute,
+                        handle: { requiresSession: true } satisfies RouteHandle,
+                        children: [
+                          { path: 'suppliers', element: <Suppliers /> },
+                          { path: 'notifications', element: <Notifications /> },
+                          { path: 'profile', element: <Profile /> },
+                          {
+                            path: 'account-recovery',
+                            element: <AccountRecovery />,
+                          },
+                          { path: 'credits', element: <Credits /> },
+                          { path: 'my-requests', element: <MyRequests /> },
+                          {
+                            path: 'my-requests/new',
+                            element: <CreateRequest />,
+                          },
+                          { path: 'requests', element: <OpenRequests /> },
+                          {
+                            path: 'deliveries/:id',
+                            element: <ActiveDelivery />,
+                          },
+                          { path: 'history', element: <RequestHistory /> },
+                          { path: 'users/:id', element: <PublicProfile /> },
+                          {
+                            Component: AdminRoute,
+                            children: [{ path: 'admin', element: <Admin /> }],
+                          },
+                        ],
                       },
-                      { path: 'credits', element: <Credits /> },
-                      { path: 'my-requests', element: <MyRequests /> },
-                      { path: 'my-requests/new', element: <CreateRequest /> },
-                      { path: 'requests', element: <OpenRequests /> },
-                      { path: 'deliveries/:id', element: <ActiveDelivery /> },
-                      { path: 'history', element: <RequestHistory /> },
-                      { path: 'users/:id', element: <PublicProfile /> },
-                      {
-                        Component: AdminRoute,
-                        children: [{ path: 'admin', element: <Admin /> }],
-                      },
+                      // Renders inside the shell, so the nav stays visible on
+                      // unknown paths (including nav destinations not built
+                      // yet). Outside ProtectedRoute: a 404 needs no login.
+                      { path: '*', element: <NotFound /> },
                     ],
                   },
-                  // Renders inside the shell, so the nav stays visible on
-                  // unknown paths (including nav destinations not built
-                  // yet). Outside ProtectedRoute: a 404 needs no login.
-                  { path: '*', element: <NotFound /> },
                 ],
               },
             ],
