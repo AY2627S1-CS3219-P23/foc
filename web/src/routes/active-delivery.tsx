@@ -26,6 +26,9 @@
 // 2026-10-31, Claude Code (Opus 5.5), N6 chat (docs/chat-service.md): the courier's
 // Chat button while the request is ACCEPTED, COLLECTED or ARRIVED, and a
 // read-only View chat for admins (C3, C13, C14).
+// 2026-11-04: the request is also reloaded every 5 s while it is not
+// terminal and the tab is visible (usePollWhileActive, the author's
+// decision).
 // Author review: Ko-Khan, pending pull request review.
 // 2026-10-30, Claude Code (Fable 5), issue #257: the requester's name
 // links to their public profile (/users/:id) — the detail already
@@ -43,8 +46,10 @@ import {
   autoCompleteAt,
   credits,
   formatDateTime,
+  isTerminal,
 } from '@/features/order/status'
 import type { RequestDetail } from '@/features/order/types'
+import { usePollWhileActive } from '@/features/order/usePollWhileActive'
 import { useCurrentUserId } from '@/features/order/useCurrentUserId'
 import { useUsername } from '@/features/order/useUsername'
 import { ChatButton } from '@/features/chat/ChatButton'
@@ -131,6 +136,12 @@ function ActiveDeliveryView({ requestId }: { requestId: number }) {
   }, [requestId, reload])
 
   useRequestRefetch(Number.isInteger(requestId) ? [requestId] : [], () => {
+    void reload(true)
+  })
+
+  // and every few seconds while it is still in progress, in case a push
+  // never arrives; a background reload, so a blip keeps the view
+  usePollWhileActive(request !== null && !isTerminal(request.status), () => {
     void reload(true)
   })
 

@@ -7476,3 +7476,27 @@ Entry template:
 - **Author review:** `./mvnw verify` green in chat-service (37 tests, none
   skipped, in a Temurin 21 container); the run logs `chats=1` for the
   new case. Ko-Khan reviews via pull request.
+
+## 2026-11-04 — Ko-Khan (web: timed refetch on the order pages)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `web` — `features/order/usePollWhileActive.ts` (new): calls
+  a page's refetch every 5 s while active and the tab is visible,
+  pausing while hidden and catching up at once when shown again. My
+  Requests polls while a listed request is not terminal, and re-reads a
+  card's detail only when its status moved between list responses;
+  Active Delivery polls while its request is not terminal, as a
+  background reload (a failed one keeps the view). Tests in
+  `test/order-polling.test.tsx` (new).
+- **Prompt(s):** "For order service, when there is an order in progress,
+  can we refresh the page every few seconds to ensure page is always up
+  to date without user needing to manually refresh". The tool asked two
+  options questions; the author chose a 5 s interval, and My Requests +
+  Active Delivery only, paused while the tab is hidden. The tool's
+  choices: "in progress" = not terminal (isTerminal), the per-card
+  detail re-read on a status change (keeping PR #264's one-GET-per-
+  touched-card rule), and an interval rather than response-timed
+  ticks.
+- **Author review:** web lint, build and `npm test` green (431 tests);
+  the new tests fail (5 of 6) with the hook disabled. Ko-Khan reviews
+  via pull request.
