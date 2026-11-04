@@ -28,7 +28,7 @@
   2026-11-02, Claude Code (Fable 5): prepended the PR #286 review-fixes
   entry below.
   2026-11-04, Claude Code (Fable 5.1): prepended the notification D34
-  (parties removal) entry below.
+  (parties removal) entry below, then the PR #287 review-round entry.
   PR #269's main merge: this file merged cleanly (main appends at the
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
@@ -60,6 +60,30 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-04 — Leong Wei Zhi (notification-service: PR #287 review round, D34)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** fix, docs
+- **Scope:** `RecipientResolver` — the two-party arms go through a
+  null-safe helper, so a missing courier tells the requester alone and
+  nothing throws after the dedupe insert; `RecipientResolverTest` — a
+  null-courier case and a pre-D34 accepted-expiry body case pinning the
+  accepted rollout limitation; `docs/notification-service.md` D34
+  section — rollout note (in-flight pre-D34 expiries lose the courier's
+  notice; drain the outbox and queues before deploying); the PR
+  description's Deploy section likewise.
+- **Prompt(s):** "address the latest pr comments" — the @claude bot's two
+  notes (`List.of` NPE on a null `courierId`; the pre-D34 expiry rollout
+  caveat) and Copilot's (normalize legacy expiry bodies at the
+  converter). The NPE note applied as the helper plus test. The rollout
+  caveat documented as the accepted limitation the approved D34 plan
+  already recorded; Copilot's converter shim, which would read the
+  removed field back into this service, not adopted on that basis —
+  replies posted on the PR, the owner can reopen it.
+- **Author review:** notification-service suite with
+  `SPRING_RABBITMQ_HOST=broker.invalid` (result in the PR); Leong Wei Zhi
+  reviews via pull request.
 
 ---
 ## 2026-11-04 — Leong Wei Zhi (refactor: `parties` removed from the event contracts, notification D34)

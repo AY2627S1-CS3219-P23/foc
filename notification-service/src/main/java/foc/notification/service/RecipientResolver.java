@@ -8,6 +8,9 @@
  * into the removed parties field (order-service RequestEvents,
  * rating-service RatingEvents).
  * Author review: Leong Wei Zhi, pending pull request review.
+ * PR #287 review (@claude bot): the two-party arms go through a
+ * null-safe helper — a missing courier tells the requester alone
+ * instead of List.of throwing inside process().
  */
 package foc.notification.service;
 
@@ -42,6 +45,11 @@ import org.slf4j.LoggerFactory;
  * courier who had accepted when there was one. Rating submitted: the
  * ratee alone (#44).
  *
+ * <p>A null courier on a two-party event means the requester alone is
+ * told: the converter already dead-letters a body that omits a required
+ * courier (D21), so this only covers the open-request expiry and callers
+ * on the port — nothing throws here.
+ *
  * <p>A type with no rule stores nothing and logs at WARN (the repo's
  * logging-default rule for switches). Credit and user events land there
  * by design — this service binds neither exchange. A new request or
@@ -63,14 +71,12 @@ final class RecipientResolver {
 			case RequestCancelled e -> List.of(e.requesterId());
 			case CourierArrived e -> List.of(e.requesterId());
 			case RequestDropped e -> List.of(e.requesterId());
-			case RequestAccepted e -> List.of(e.requesterId(), e.courierId());
-			case RequestCollected e -> List.of(e.requesterId(), e.courierId());
-			case RequestCompleted e -> List.of(e.requesterId(), e.courierId());
-			case RequestDisputed e -> List.of(e.requesterId(), e.courierId());
-			case RequestDisputeResolved e -> List.of(e.requesterId(), e.courierId());
-			case RequestExpired e -> e.courierId() == null
-					? List.of(e.requesterId())
-					: List.of(e.requesterId(), e.courierId());
+			case RequestAccepted e -> requesterAnd(e.requesterId(), e.courierId());
+			case RequestCollected e -> requesterAnd(e.requesterId(), e.courierId());
+			case RequestCompleted e -> requesterAnd(e.requesterId(), e.courierId());
+			case RequestDisputed e -> requesterAnd(e.requesterId(), e.courierId());
+			case RequestDisputeResolved e -> requesterAnd(e.requesterId(), e.courierId());
+			case RequestExpired e -> requesterAnd(e.requesterId(), e.courierId());
 			case RatingSubmitted e -> List.of(e.rateeId());
 			default -> {
 				log.warn("no recipient rule for {} (eventId {}); storing nothing",
@@ -78,5 +84,12 @@ final class RecipientResolver {
 				yield List.of();
 			}
 		};
+	}
+
+	// The requester, plus the courier when the event names one. List.of
+	// rejects nulls, and a throw here would land after the dedupe insert
+	// (PR #287 review) — so a null courier simply means nobody else to tell.
+	private static List<String> requesterAnd(String requesterId, String courierId) {
+		return courierId == null ? List.of(requesterId) : List.of(requesterId, courierId);
 	}
 }

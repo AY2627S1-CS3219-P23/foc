@@ -6,6 +6,8 @@
  * request/rating event (the check DomainEventContractTest used to make
  * on the removed parties field). Author review: Leong Wei Zhi, pending
  * pull request review.
+ * PR #287 review (@claude bot, Copilot): a null-courier case and a
+ * pre-D34 accepted-expiry body pinning the accepted rollout limitation.
  */
 package foc.notification.service;
 
@@ -15,6 +17,7 @@ import foc.contracts.events.core.DomainEvent;
 import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.credit.CreditEvent;
 import foc.contracts.events.rating.RatingSubmitted;
+import foc.contracts.events.request.RequestAccepted;
 import foc.contracts.events.request.RequestDropped;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.user.UserEvent;
@@ -83,6 +86,36 @@ class RecipientResolverTest {
 				"order-service", "c-1", "req-1", REQUESTER, COURIER, "Techno Edge", "COM3-01-19", null);
 
 		assertThat(RecipientResolver.recipientsOf(expired)).containsExactly(REQUESTER, COURIER);
+	}
+
+	// The converter dead-letters a body that omits a required courier
+	// before process() runs (D21); a caller on the port must not blow up
+	// on one either — the requester is still told (PR #287 review).
+	@Test
+	void missingCourierOnATwoPartyEventTellsTheRequesterAlone() {
+		RequestAccepted accepted = new RequestAccepted("e-acc", Instant.parse("2026-09-19T08:30:00Z"),
+				"order-service", "c-1", "req-1", REQUESTER, null, "Techno Edge", "COM3-01-19", null);
+
+		assertThat(RecipientResolver.recipientsOf(accepted)).containsExactly(REQUESTER);
+	}
+
+	// Accepted rollout limitation (D34): an expiry published before D34 for
+	// an accepted request named its courier only in parties, which this
+	// service no longer reads. It binds with courierId null and tells the
+	// requester alone — hence "drain the queues before deploying".
+	@Test
+	void legacyAcceptedExpiryBodyTellsTheRequesterAlone() throws IOException {
+		String legacy = """
+				{"eventType": "request.expired", "eventId": "e-legacy",
+				 "occurredAt": "2026-09-19T09:00:00Z", "producer": "order-service",
+				 "correlationId": "c-1", "parties": ["usr-req-1001", "usr-cou-2002"],
+				 "requestId": "req-1", "requesterId": "usr-req-1001",
+				 "pickupLocation": "Techno Edge", "dropoffLocation": "COM3-01-19", "note": null}
+				""";
+		RequestExpired expired = objectMapper.readValue(legacy, RequestExpired.class);
+
+		assertThat(expired.courierId()).isNull();
+		assertThat(RecipientResolver.recipientsOf(expired)).containsExactly(REQUESTER);
 	}
 
 	// the rater knows what they did (#44)

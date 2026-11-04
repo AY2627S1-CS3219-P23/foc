@@ -78,6 +78,9 @@
   removed from the event-contract notes, D18's one-time-break note,
   and the F1.2/F1.3 traceability rows. Author review: Leong Wei Zhi,
   pending pull request review.
+  PR #287 review (@claude bot, Copilot): the D34 section records the
+  pre-D34 accepted-expiry rollout limitation and the drain-before-deploy
+  step, as the approved plan accepted it.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -411,6 +414,18 @@ request and rating fixture resolves to someone. A type without a rule
 logs at WARN and stores nothing. Messages published before D34 still
 carry `parties`; consumers ignore it as an unknown field
 (`DomainEventContractTest.ignoresUnknownFields`).
+
+Rollout (accepted limitation): a `request.expired` published before
+D34 for an accepted request named its courier only in `parties`, which
+this service no longer reads. Such a message still binds, with
+`courierId` null, and tells the requester alone; the courier's expiry
+notice is lost, and the event is recorded as processed, so a replay
+cannot restore it (`RecipientResolverTest.legacyAcceptedExpiryBodyTellsTheRequesterAlone`).
+Deploy with the queues drained: order-service's `outbox_event` rows
+with `sent_at is null` at zero, and both notification queue trios empty
+in the management UI. The approved D34 plan records this as accepted
+rather than adding a converter shim that reads `parties` back out of
+legacy bodies (PR #287 review).
 
 ## REST API contract (D24–D28)
 
