@@ -6,6 +6,9 @@
  * message limits (C7), the pushes, and the retention purge (C10).
  * 2026-10-31: unread counts, mark-read and the receiver's push
  * (C16-C19).
+ * 2026-11-01, PR review: a second purge case, a chat closed before the
+ * cutoff whose only messages are older, which deleteEmptyClosedBefore
+ * must remove (the first case never hit it).
  * Author review: Ko-Khan, pending pull request review.
  */
 package foc.chat.service;
@@ -24,6 +27,7 @@ import foc.chat.dto.ChatView;
 import foc.chat.dto.MessageView;
 import foc.chat.dto.SendMessage;
 import foc.chat.dto.UnreadFrame;
+import foc.chat.entity.Chat;
 import foc.chat.entity.ChatMessage;
 import foc.chat.entity.ChatStatus;
 import foc.chat.repository.ChatMessageRepository;
@@ -334,5 +338,23 @@ class ChatServiceTests extends PostgresTestContainer {
                 .extracting(MessageView::id).containsExactly(recent.id());
         // still holds a recent message, so it stays
         assertThat(chats.findById(chat.id())).isPresent();
+    }
+
+    @Test
+    void thePurgeDeletesAChatClosedBeforeTheCutoffOnceItsMessagesAreGone() {
+        Instant old = Instant.now().minus(31, ChronoUnit.DAYS);
+        Chat stale = new Chat(newRequest(), REQUESTER, COURIER, old.minus(1, ChronoUnit.DAYS));
+        stale.close(old);
+        stale = chats.save(stale);
+        messages.save(new ChatMessage(stale.getId(), REQUESTER, "old", null, null, old));
+        // closed after the cutoff and already empty: kept until it ages out
+        Chat recentlyClosed = new Chat(newRequest(), REQUESTER, COURIER, old);
+        recentlyClosed.close(Instant.now().minus(1, ChronoUnit.DAYS));
+        recentlyClosed = chats.save(recentlyClosed);
+
+        purge.purge();
+
+        assertThat(chats.findById(stale.getId())).isEmpty();
+        assertThat(chats.findById(recentlyClosed.getId())).isPresent();
     }
 }

@@ -7460,3 +7460,19 @@ Entry template:
 - **Author review:** `./mvnw test` green in user-service and
   order-service, `npm test` green in web (389 tests, 20 files), eslint
   clean. Leong Wei Zhi reviews via pull request.
+
+## 2026-11-01 — Ko-Khan (chat-service: purge test for deleteEmptyClosedBefore, N6 chat PR review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `chat-service` — `ChatServiceTests` gains
+  `thePurgeDeletesAChatClosedBeforeTheCutoffOnceItsMessagesAreGone`: a
+  chat closed 31 days ago whose only message is older than the cutoff
+  is gone after `purge()`, while an empty chat closed yesterday stays
+  (the `closedAt < :cutoff` half of the query). Test only.
+- **Prompt(s):** PR review: the existing purge test only asserts the
+  chat stays, and the CI log shows `chats=0`, so the hand-written JPQL
+  `delete … not exists (…)` never removed a row; asked for this second
+  case.
+- **Author review:** `./mvnw verify` green in chat-service (37 tests, none
+  skipped, in a Temurin 21 container); the run logs `chats=1` for the
+  new case. Ko-Khan reviews via pull request.
