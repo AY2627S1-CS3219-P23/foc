@@ -7,6 +7,9 @@
  * held, Order F5.2); event name and requester-only parties are the
  * author's decisions (via options Q&A).
  * Reviewed by: pending pull request review.
+ * 2026-11-04, Claude Code (Fable 5.1), D34 (author decision): parties
+ * removed; the requester-only rule lives in the Notification Service.
+ * Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.contracts.events.request;
 
@@ -14,7 +17,6 @@ import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.core.Nullable;
 
 import java.time.Instant;
-import java.util.List;
 
 /**
  * The courier withdrew after accepting, and the request returned to
@@ -24,14 +26,14 @@ import java.util.List;
  * <p>Not a {@code request.cancelled}: the reward stays reserved for
  * the next courier (Order F5.2), so the Credit Service must never
  * consume this event. {@code courierId} is the courier who dropped —
- * always present, a drop can only happen after an accept.
+ * always present, a drop can only happen after an accept. The
+ * Notification Service tells the requester only (D34).
  */
 public record RequestDropped(
 		String eventId,
 		Instant occurredAt,
 		String producer,
 		String correlationId,
-		List<String> parties,
 		String requestId,
 		String requesterId,
 		String courierId,

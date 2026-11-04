@@ -144,15 +144,15 @@ The team's design is in [`docs/credit-service.md`](../docs/credit-service.md)
 - Besides these four transitions, ARRIVE publishes
   `request.courier-arrived` (tells the requester the courier is at the
   drop-off) and COMPLETE publishes `request.completed`, on which the
-  Credit Service transfers the held reward to the courier (`parties` =
-  requester and courier). COMPLETE is only allowed from ARRIVED.
+  Credit Service transfers the held reward to the courier. COMPLETE is
+  only allowed from ARRIVED.
   CANCEL publishes `request.cancelled` and EXPIRE `request.expired`,
   on which the Credit Service releases the held reward to the requester
-  (`parties` = requester, plus the courier on an expiry after
-  acceptance). ACCEPT and COLLECT publish `request.accepted` and
-  `request.collected` (`parties` = requester and courier). DROP publishes
-  `request.dropped` (`parties` = requester), so the requester is told;
-  the reward stays held for the next courier.
+  (`request.expired` names the courier who had accepted, when there was
+  one). ACCEPT and COLLECT publish `request.accepted` and
+  `request.collected`. DROP publishes `request.dropped`; the reward stays
+  held for the next courier. Who each event notifies is the Notification
+  Service's rule (notification D34), not a field on the event.
 - **Timers** (every `ORDER_EXPIRY_SWEEP_INTERVAL_MS` /
   `ORDER_AUTO_COMPLETE_SWEEP_INTERVAL_MS`, default 5 min): a CREATED or
   ACCEPTED request past its deadline is EXPIRED (F6.1); a request
@@ -167,7 +167,7 @@ The team's design is in [`docs/credit-service.md`](../docs/credit-service.md)
 - **Disputes:** DISPUTE (ARRIVED or COLLECTED → DISPUTED) and ESCALATE
   publish `request.disputed`; RESOLVE (DISPUTED → RESOLVED) publishes
   `request.dispute-resolved`, on which the Credit Service divides the
-  held reward. Both have `parties` = requester and courier (DSP-9).
+  held reward. Both name the requester and the courier (DSP-9).
 - **Publishing:** a transactional outbox (`outbox_event` table), sent to
   the `request-events` exchange by a poller with publisher confirms —
   a copy of credit-service's (D10).
@@ -177,8 +177,7 @@ The team's design is in [`docs/credit-service.md`](../docs/credit-service.md)
   reply naming no known request goes straight to the DLQ.
 - Event fields: `pickupLocation` = supplier name, `note` = item,
   `reward` = credit amount, ids as decimal strings, `correlationId` =
-  the request id, `parties` = the requester (plus the courier where
-  noted above).
+  the request id. Events carry no recipient list (notification D34).
 
 Without the Credit Service running, a new request stays PENDING and
 is cancelled after 30 s. To move one on by hand, use

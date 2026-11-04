@@ -106,8 +106,8 @@ other request event reaches the queue), idempotently via a
 `processed_events` inbox, into the `rateable_request` eligibility
 projection — no synchronous call to order-service.
 
-Publishes **`rating.submitted`** (ids + stars, `parties` = the ratee
-only) to the `rating-events` topic exchange through a transactional
+Publishes **`rating.submitted`** (ids + stars; the Notification Service
+tells the ratee only, notification D34) to the `rating-events` topic exchange through a transactional
 outbox: the rating row and its event commit together, a fixed-delay
 poller delivers at-least-once, and consumers dedupe on `eventId`. The
 notification-service consumes it to notify the ratee (#255). Details

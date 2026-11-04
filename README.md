@@ -1469,5 +1469,17 @@ part adds an API call. Both placements, and the dialog over a `title`
 tooltip or an inline expand, were the author's decisions via
 neutral-options Q&A. Recorded in `ai/usage-log.md`.
 
+Claude Code (Fable 5.1) implemented notification decision D34
+(2026-11-04): the `parties` recipient list left every foc-contracts
+event, `request.expired` gained a nullable `courierId`, and the
+Notification Service now derives who is told per event type
+(`RecipientResolver`), with the four publishing services, their tests,
+and the docs updated in one coordinated release. Asked which option was
+better, the tool declined under the AI policy and laid the options out
+as factual property comparisons; Leong Wei Zhi chose the model, the
+expiry field and the one-release rollout, and supplied the reasoning
+recorded in `docs/notification-service.md`. Recorded in
+`ai/usage-log.md`.
+
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

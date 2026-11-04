@@ -18,7 +18,6 @@ import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.core.Nullable;
 
 import java.time.Instant;
-import java.util.List;
 
 /**
  * The request was cancelled. Identity {@code request.cancelled}
@@ -32,7 +31,6 @@ public record RequestCancelled(
 		Instant occurredAt,
 		String producer,
 		String correlationId,
-		List<String> parties,
 		String requestId,
 		String requesterId,
 		@Nullable String courierId,

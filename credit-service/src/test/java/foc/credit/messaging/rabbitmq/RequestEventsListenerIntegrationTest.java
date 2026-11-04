@@ -17,6 +17,11 @@
  * 2026-10-18, issue #165 (reviewer's suggestion): a duplicate delivery
  * changes no balance but enqueues its reply again.
  * Author review: Ryan Ang, pending pull request review.
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
 
@@ -215,10 +220,10 @@ class RequestEventsListenerIntegrationTest extends PostgresTestContainer {
 		publishRaw("""
 				{"eventType": "request.submitted", "eventId": "%s",
 				 "occurredAt": "2026-10-14T08:00:00Z", "producer": "order-service",
-				 "correlationId": "c-it", "parties": ["%s"], "requestId": "%s",
+				 "correlationId": "c-it", "requestId": "%s",
 				 "requesterId": "%s", "pickupLocation": "Techno Edge",
 				 "dropoffLocation": "COM3-01-19", "note": null, "reward": 1.7}
-				""".formatted(UUID.randomUUID(), "u-frac", request, "u-frac"), "request.submitted");
+				""".formatted(UUID.randomUUID(), request, "u-frac"), "request.submitted");
 
 		await().atMost(TIMEOUT).until(() -> deadLettered() == 1);
 		GetResponse deadLetter = takeDeadLetter();
@@ -234,7 +239,7 @@ class RequestEventsListenerIntegrationTest extends PostgresTestContainer {
 		publishRaw("""
 				{"eventType": "request.submitted", "eventId": "%s",
 				 "occurredAt": "2026-10-14T08:00:00Z", "producer": "order-service",
-				 "correlationId": "c-it", "parties": [], "requestId": "%s",
+				 "correlationId": "c-it", "requestId": "%s",
 				 "pickupLocation": "Techno Edge", "dropoffLocation": "COM3-01-19",
 				 "note": null, "reward": 2}
 				""".formatted(UUID.randomUUID(), request), "request.submitted");
@@ -306,16 +311,16 @@ class RequestEventsListenerIntegrationTest extends PostgresTestContainer {
 
 	private static RequestSubmitted submitted(String request, String requester, int reward) {
 		return new RequestSubmitted(UUID.randomUUID().toString(), Instant.now(), "order-service", "c-it",
-				List.of(requester), request, requester, "Techno Edge", "COM3-01-19", null, reward);
+				request, requester, "Techno Edge", "COM3-01-19", null, reward);
 	}
 
 	private static RequestCompleted completed(String request, String requester, String courier) {
 		return new RequestCompleted(UUID.randomUUID().toString(), Instant.now(), "order-service", "c-it",
-				List.of(requester, courier), request, requester, courier, "Techno Edge", "COM3-01-19", null);
+				request, requester, courier, "Techno Edge", "COM3-01-19", null);
 	}
 
 	private static RequestCancelled cancelled(String request, String requester) {
 		return new RequestCancelled(UUID.randomUUID().toString(), Instant.now(), "order-service", "c-it",
-				List.of(requester), request, requester, null, "Techno Edge", "COM3-01-19", null);
+				request, requester, null, "Techno Edge", "COM3-01-19", null);
 	}
 }

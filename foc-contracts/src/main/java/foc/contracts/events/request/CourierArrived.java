@@ -17,7 +17,6 @@ import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.core.Nullable;
 
 import java.time.Instant;
-import java.util.List;
 
 /**
  * The courier arrived at the drop-off location (Order F4.1.1-F4.1.2).
@@ -29,7 +28,6 @@ public record CourierArrived(
 		Instant occurredAt,
 		String producer,
 		String correlationId,
-		List<String> parties,
 		String requestId,
 		String requesterId,
 		String courierId,

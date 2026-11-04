@@ -8,6 +8,11 @@
  * injects eventType outbound.
  * PR #168 review (Leong Wei Zhi): a missing fixture fails by name.
  * Author review: Ryan Ang, pending pull request review.
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
 
@@ -17,7 +22,6 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
-import java.util.List;
 import java.util.function.Consumer;
 
 import org.junit.jupiter.api.Test;
@@ -91,7 +95,7 @@ class DomainEventMessageConverterTest extends PostgresTestContainer {
 	@Test
 	void injectsTheEventTypeOutbound() {
 		CreditReserved reply = new CreditReserved("evt-1", Instant.parse("2026-10-10T08:00:00Z"),
-				"credit-service", "corr-1", List.of(), "r-1", "u-req", 3);
+				"credit-service", "corr-1", "r-1", "u-req", 3);
 
 		Message message = converter.toMessage(reply, new MessageProperties());
 

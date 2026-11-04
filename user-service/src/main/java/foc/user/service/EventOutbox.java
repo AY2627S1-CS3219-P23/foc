@@ -3,18 +3,21 @@ AI Assistance Disclosure:
 Tool: Claude Code (Opus 5.5), date: 2026-10-28
 Scope: issue #267 (team decision USR-2): a copy of order-service's
        EventOutbox without the request id, plus the two user events it
-       is used for (USR-1: envelope and userId only, no parties).
+       is used for (USR-1: envelope and userId only).
        Copied, not shared.
        Same day, PR review (team decision): correlationId is the user's
        id, so a user's events can be traced together across services.
        Then USR-8 revised: userCreated is called by UserCreation only.
 Author review: Ryan Ang, pending pull request review.
+2026-11-04, Claude Code (Fable 5.1), notification D34 (author decision
+via options Q&A): the parties argument/assertions removed — events carry
+no recipient list; RequestExpired gains a nullable courierId. Author
+review: Leong Wei Zhi, pending pull request review.
 */
 
 package foc.user.service;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -61,14 +64,14 @@ public class EventOutbox {
     @Transactional(propagation = Propagation.MANDATORY)
     public void userCreated(long userId) {
         String user = Long.toString(userId);
-        enqueue(new UserCreated(UUID.randomUUID().toString(), Instant.now(), PRODUCER, user, List.of(), user));
+        enqueue(new UserCreated(UUID.randomUUID().toString(), Instant.now(), PRODUCER, user, user));
     }
 
     /** user.purged, for an account the day-31 purge is deleting. */
     @Transactional(propagation = Propagation.MANDATORY)
     public void userPurged(long userId) {
         String user = Long.toString(userId);
-        enqueue(new UserPurged(UUID.randomUUID().toString(), Instant.now(), PRODUCER, user, List.of(), user));
+        enqueue(new UserPurged(UUID.randomUUID().toString(), Instant.now(), PRODUCER, user, user));
     }
 
     // MANDATORY: a call outside a transaction fails instead of committing

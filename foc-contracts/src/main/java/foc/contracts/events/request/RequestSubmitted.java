@@ -18,7 +18,6 @@ import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.core.Nullable;
 
 import java.time.Instant;
-import java.util.List;
 
 /**
  * A requester submitted a request and it is waiting for its reward to
@@ -31,7 +30,6 @@ public record RequestSubmitted(
 		Instant occurredAt,
 		String producer,
 		String correlationId,
-		List<String> parties,
 		String requestId,
 		String requesterId,
 		String pickupLocation,

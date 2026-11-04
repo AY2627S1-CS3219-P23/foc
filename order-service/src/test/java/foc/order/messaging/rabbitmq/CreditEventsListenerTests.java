@@ -7,6 +7,11 @@
  * and dead-letters it once they run out, and never acks a reply whose
  * retry copy the broker did not confirm.
  * Reviewed by: Ko-Khan (via pull request).
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.order.messaging.rabbitmq;
 
@@ -23,7 +28,6 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -40,7 +44,7 @@ class CreditEventsListenerTests {
 	private final CreditEventsListener listener = new CreditEventsListener(handler, rabbitTemplate, MAX_ATTEMPTS);
 
 	private final CreditReserved reply = new CreditReserved("e1", Instant.now(), "credit-service", "5",
-			List.of(), "5", "1", 3);
+			"5", "1", 3);
 
 	@Test
 	void handledReplyIsAcked() throws Exception {
@@ -101,8 +105,7 @@ class CreditEventsListenerTests {
 
 	@Test
 	void nonCreditEventIsAckedWithoutAction() throws Exception {
-		RequestSubmitted stray = new RequestSubmitted("e2", Instant.now(), "order-service", "5", List.of("1"),
-				"5", "1", "The Deck", "COM3 Level 2", null, 3);
+		RequestSubmitted stray = new RequestSubmitted("e2", Instant.now(), "order-service", "5", "5", "1", "The Deck", "COM3 Level 2", null, 3);
 
 		listener.onCreditEvent(stray, message(null), channel, TAG);
 

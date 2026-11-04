@@ -53,6 +53,10 @@
 // goes through actorIdOf (raterId ?? courierId), so a rating.submitted
 // row names its rater the same way request rows name their courier
 // (D32). Author review: Leong Wei Zhi, pending pull request review.
+// 2026-11-04, Claude Code (Fable 5.1), PR #287 review (@Sinnez1): actorIdOf
+// takes the row's eventType, so actor-less templates (expired among
+// them since notification D34) hydrate no name. Author review: Leong
+// Wei Zhi, pending pull request review.
 // 2026-10-30, Claude Code (Fable 5), issue #266 (the #263 review's two
 // timing nits): the click-to-navigate mark-read goes through the
 // provider's markReadPending, and fetched rows render through a
@@ -428,7 +432,7 @@ export function NotificationCenter() {
   // toggle) would re-run its dedupe/sort/join for nothing (PR #222
   // review).
   const actorIds = useMemo(
-    () => items.map((n) => actorIdOf(n.payload)),
+    () => items.map((n) => actorIdOf(n.eventType, n.payload)),
     [items],
   )
   const names = useUsernames(actorIds)

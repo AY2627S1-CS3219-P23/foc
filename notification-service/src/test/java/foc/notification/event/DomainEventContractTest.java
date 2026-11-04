@@ -45,6 +45,11 @@
  * the fixture test knows their producer and checks their userId where a
  * request or credit event's requestId is checked. Author review: Ryan
  * Ang, pending pull request review.
+ * 2026-11-04, Claude Code (Fable 5.1), D34 (author decision via options
+ * Q&A): the parties checks left with the field — recipients are this
+ * service's rule, pinned in RecipientResolverTest; the unknown-fields
+ * case keeps parties as proof that pre-D34 messages still bind. Author
+ * review: Leong Wei Zhi, pending pull request review.
  */
 package foc.notification.event;
 
@@ -113,12 +118,6 @@ class DomainEventContractTest {
 			assertThat(event.occurredAt()).isNotNull();
 			assertThat(event.producer()).isEqualTo(expectedProducer(event));
 			assertThat(event.correlationId()).isNotBlank();
-			// credit and user events notify no one; every other event names someone
-			if (event instanceof CreditEvent || event instanceof UserEvent) {
-				assertThat(event.parties()).isNotNull();
-			} else {
-				assertThat(event.parties()).isNotEmpty();
-			}
 			// a user event is about a user, not a request
 			if (event instanceof UserEvent userEvent) {
 				assertThat(userEvent.userId()).isEqualTo("42");
@@ -160,16 +159,13 @@ class DomainEventContractTest {
 	/**
 	 * Issue #237: the generic test above proves the dispute fixtures bind;
 	 * this pins the fields they add, so a rename in either record fails
-	 * here, and both parties are named — the requester and the courier
-	 * each get a notification.
+	 * here (who is told is RecipientResolverTest's concern, D34).
 	 */
 	@Test
-	void disputeFixturesBindTheirOwnFieldsAndNameBothParties() throws IOException {
+	void disputeFixturesBindTheirOwnFields() throws IOException {
 		RequestDisputed disputed = readFixture("request.disputed", RequestDisputed.class);
 		assertThat(disputed.category()).isEqualTo(RequestDisputed.WRONG_ITEM);
 		assertThat(disputed.disputeNote()).isEqualTo("Got duck rice instead of chicken rice");
-		assertThat(disputed.parties()).containsExactlyInAnyOrder(
-				disputed.requesterId(), disputed.courierId());
 
 		RequestDisputeResolved resolved =
 				readFixture("request.dispute-resolved", RequestDisputeResolved.class);
@@ -182,8 +178,6 @@ class DomainEventContractTest {
 		assertThat(resolved.courierAmount() + resolved.requesterAmount())
 				.as("DSP-8: the split adds up to the reward")
 				.isEqualTo(reward);
-		assertThat(resolved.parties()).containsExactlyInAnyOrder(
-				resolved.requesterId(), resolved.courierId());
 	}
 
 	// the one copy of the fixture-path rule in this class (EventTypeRegistry's javadoc)
@@ -235,6 +229,9 @@ class DomainEventContractTest {
 		throw new AssertionError(event.eventType() + " implements no domain marker interface");
 	}
 
+	// "parties" is deliberate: it was the wire field until D34, so a body
+	// carrying it is what outbox rows and queued messages published before
+	// the release look like — binding it proves the backlog still flows.
 	@Test
 	void ignoresUnknownFields() {
 		String json = """
@@ -260,6 +257,6 @@ class DomainEventContractTest {
 
 		assertThat(event.eventId()).isEqualTo("e-1");
 		assertThat(event.requestId()).isEqualTo("req-1");
-		assertThat(event.parties()).containsExactly("usr-req-1001", "usr-cou-2002");
+		assertThat(event.courierId()).isEqualTo("usr-cou-2002");
 	}
 }

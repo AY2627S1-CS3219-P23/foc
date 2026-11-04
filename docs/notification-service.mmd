@@ -7,6 +7,9 @@ title: "FoC Notification Service — Component-Level Architecture"
 %% Leong Wei Zhi, recorded in docs/notification-service.md); the tool
 %% made no design decisions.
 %% Reviewed by: Leong Wei Zhi (via pull request).
+%% 2026-11-04, Claude Code (Fable 5.1), D34: the processor node and push
+%% edge say "recipient" — recipients are derived here, not carried in
+%% the event. Author review: Leong Wei Zhi, pending pull request review.
 %% 2026-10-17, Claude Code (Fable 5), issue #66: the REST API node is
 %% built — dashed "planned" styling removed, label updated.
 %% 2026-10-17, Claude Code (Fable 5), issue #66: user directory node +
@@ -40,7 +43,7 @@ flowchart TB
 
     subgraph NOTIF ["Notification Service (notification-service/) — Java + Spring Boot"]
         LISTENER["<b>AMQP listener</b><br/>dispatch on body eventType;<br/>manual ack after DB commit"]
-        PROCESSOR["<b>Idempotent event processor</b><br/>dedupe by event ID;<br/>one notification per party;<br/>payloads keep party IDs (D32)"]
+        PROCESSOR["<b>Idempotent event processor</b><br/>dedupe by event ID;<br/>one notification per recipient,<br/>derived per event type (D34);<br/>payloads keep party IDs (D32)"]
         API["<b>Notification REST API</b><br/>list + unread count + mark<br/>read/unread (JWT, /notifications/me)"]
         PUSH["<b>STOMP push gateway</b><br/>per-user destinations"]
         PURGE["<b>Retention purge scheduler</b>"]
@@ -61,7 +64,7 @@ flowchart TB
     LISTENER -->|"typed event"| PROCESSOR
     PROCESSOR ---|"insert notification + event ID<br/>in one transaction"| NOTIF_DB
     PROCESSOR -->|"stored notification"| PUSH
-    PUSH ==>|"STOMP push to each<br/>party's /user destination"| WEB
+    PUSH ==>|"STOMP push to each<br/>recipient's /user destination"| WEB
     WEB -->|"REST: list, mark read/unread"| API
     WEB -.->|"GET /users/{id} via gateway,<br/>caller's JWT + SPA cache (D32)"| USER_SVC
     API ---|"read/update rows"| NOTIF_DB

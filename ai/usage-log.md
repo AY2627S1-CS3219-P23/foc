@@ -27,6 +27,8 @@
   below (newest first, as the surrounding entries sit).
   2026-11-02, Claude Code (Fable 5): prepended the PR #286 review-fixes
   entry below.
+  2026-11-04, Claude Code (Fable 5.1): prepended the notification D34
+  (parties removal) entry below, then the PR #287 review-round entries.
   PR #269's main merge: this file merged cleanly (main appends at the
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
@@ -58,6 +60,107 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-04 — Leong Wei Zhi (notification-service + web: PR #287 review round 2, D34)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** fix, docs
+- **Scope:** `IdempotentEventProcessor` resolves recipients before its
+  first write; `RecipientResolver` fails loudly on a missing required
+  courier (the five two-party events) and on a registered type with no
+  rule, so the message dead-letters and stays replayable, while credit
+  and user events are recorded and ignored explicitly;
+  `RecipientResolverTest` and `IdempotentEventProcessorTest` cover the
+  refusals and the no-write guarantee; the D34 section states the runtime
+  rule. Web: `actorIdOf` takes the event type and answers null for
+  templates that never name the actor (derived from the templates'
+  arity), so an expired row's new `courierId` costs the Notification
+  Center no username lookup; `event-message.test.ts` pins it.
+- **Prompt(s):** "address the latest pr comments" — @Sinnez1's four
+  non-blocking notes on the approval: the swallowed-default and
+  null-courier concerns and the dedupe-before-resolve ordering (applied
+  together as "resolve first, fail loudly"), and the wasted username
+  lookup on expired rows (applied by narrowing `actorIdOf`). The rollout
+  note the review also asked for was already in the D34 section from
+  round 1.
+- **Author review:** notification-service 115/115 with
+  `SPRING_RABBITMQ_HOST=broker.invalid`; web `vitest` 437/437 (4 new),
+  `tsc -b`, `eslint` and `prettier` clean on the changed files. Leong Wei
+  Zhi reviews via pull request.
+
+---
+## 2026-11-04 — Leong Wei Zhi (notification-service: PR #287 review round, D34)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** fix, docs
+- **Scope:** `RecipientResolver` — the two-party arms go through a
+  null-safe helper, so a missing courier tells the requester alone and
+  nothing throws after the dedupe insert; `RecipientResolverTest` — a
+  null-courier case and a pre-D34 accepted-expiry body case pinning the
+  accepted rollout limitation; `docs/notification-service.md` D34
+  section — rollout note (in-flight pre-D34 expiries lose the courier's
+  notice; drain the outbox and queues before deploying); the PR
+  description's Deploy section likewise.
+- **Prompt(s):** "address the latest pr comments" — the @claude bot's two
+  notes (`List.of` NPE on a null `courierId`; the pre-D34 expiry rollout
+  caveat) and Copilot's (normalize legacy expiry bodies at the
+  converter). The NPE note applied as the helper plus test. The rollout
+  caveat documented as the accepted limitation the approved D34 plan
+  already recorded; Copilot's converter shim, which would read the
+  removed field back into this service, not adopted on that basis —
+  replies posted on the PR, the owner can reopen it.
+- **Author review:** notification-service suite with
+  `SPRING_RABBITMQ_HOST=broker.invalid` (result in the PR); Leong Wei Zhi
+  reviews via pull request.
+
+---
+## 2026-11-04 — Leong Wei Zhi (refactor: `parties` removed from the event contracts, notification D34)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** refactor, docs
+- **Scope:** `foc-contracts` — `parties` removed from `DomainEvent`
+  (`METADATA_FIELDS` and the accessor), all 17 records and fixtures;
+  `RequestExpired` gains a nullable `courierId`; README/AGENTS record
+  the one-time break of the additive rule. `order-service`,
+  `credit-service`, `user-service`, `rating-service` — the publishers
+  drop the recipient list (order-service's `expired()` stamps the courier
+  who had accepted instead); positional constructor calls and the
+  `parties` assertions in their tests follow. `notification-service` —
+  new `RecipientResolver` (one rule per event type, the same lists the
+  publishers used to send), `IdempotentEventProcessor` fans out over it,
+  `RecipientResolverTest` (fixture- and registry-driven), the STOMP and
+  broker tests rewritten around `requesterId`/`courierId`, the contract
+  test's unknown-fields case kept as the pre-D34-backlog proof. Docs:
+  `docs/notification-service.md` D34 row, D18 note, catalog and
+  traceability wording, the "Recipient resolution (D34)" section
+  (factual comparison matrix, the author's reasoning, rule table,
+  ingest diagram); `.mmd` labels and the `parties` mentions in the
+  architecture, rating, disputes and credit docs.
+- **Prompt(s):** "Create a plan to remove parties from events defined in
+  foc contracts and its dependencies. [pasted note: a core event carries
+  business data only; who and how to notify belongs in the notification
+  service] Note this design change in the docs. Weigh the pros and cons
+  of having just events and notification service design who should send
+  to whom vs other services sending an async message to notification
+  service to deliver the message." Then "which one is better?" — the tool
+  declined under the AI policy (no recommendation, no trade-off
+  weighing) and presented the options as factual property comparisons;
+  the author reasoned about ordering and coupling in their own words and
+  decided each point: notification-service derives recipients (over a
+  publisher-sent notification command and over the status quo), a
+  nullable `courierId` on `request.expired`, one coordinated breaking
+  release, and their own reasoning recorded as the rationale. The plan
+  was then approved for implementation.
+- **Author review:** foc-contracts 15/15; order-service 192/192;
+  rating-service 101/101; notification-service 111/111 (eight new
+  resolver cases). Two suites reach the compose stack's RabbitMQ on host
+  port 5672 and fail its login as a fatal listener error — run them with
+  `SPRING_RABBITMQ_HOST=broker.invalid` or the stack stopped.
+  credit-service 359/360: `commonPoolStartsAsOneEmptyRow` fails
+  identically on `main` with main's own jar (a shared-container balance
+  leak), unrelated. user-service 398/399: the full run exhausts the
+  Testcontainers Postgres connection limit across its 34 contexts, also
+  identically on `main`; the touched class passes alone. Compose smoke
+  against the running stack recorded in the PR description. Leong Wei
+  Zhi reviews via pull request.
 
 ---
 ## 2026-11-02 — Leong Wei Zhi (web: PR #286 review fixes, issue #284)

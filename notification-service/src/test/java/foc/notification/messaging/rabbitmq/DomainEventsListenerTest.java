@@ -25,7 +25,6 @@ import com.rabbitmq.client.Channel;
 import foc.contracts.events.rating.RatingSubmitted;
 import foc.notification.service.EventProcessor;
 import java.time.Instant;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
@@ -100,7 +99,7 @@ class DomainEventsListenerTest {
 
 	private static RatingSubmitted rating() {
 		return new RatingSubmitted("e-rat-unit-1", Instant.parse("2026-09-19T09:30:00Z"),
-				"rating-service", "c-unit", List.of("usr-cou-2002"), "rat-20260919-0001",
+				"rating-service", "c-unit", "rat-20260919-0001",
 				"req-20260919-0042", "usr-req-1001", "usr-cou-2002", 4);
 	}
 }

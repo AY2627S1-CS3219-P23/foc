@@ -10,6 +10,10 @@ Scope: issue #267 review: the outbox publisher against a real broker,
        exchange is replayed against the one user-service made, which the
        broker refuses if the two differ.
 Author review: Ryan Ang, pending pull request review.
+2026-11-04, Claude Code (Fable 5.1), notification D34 (author decision
+via options Q&A): the parties argument/assertions removed — events carry
+no recipient list; RequestExpired gains a nullable courierId. Author
+review: Leong Wei Zhi, pending pull request review.
 */
 
 package foc.user.messaging.rabbitmq;
@@ -129,6 +133,7 @@ class OutboxPublisherIntegrationTest extends PostgresTestContainer {
         // a user's events share the user's id as their correlationId
         assertThat(body.path("correlationId").stringValue()).isEqualTo("42");
         assertThat(body.path("producer").stringValue()).isEqualTo("user-service");
-        assertThat(body.path("parties").isEmpty()).isTrue();
+        // no recipient list on the wire (notification D34)
+        assertThat(body.has("parties")).isFalse();
     }
 }

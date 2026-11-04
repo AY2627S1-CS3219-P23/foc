@@ -6,6 +6,11 @@
  * adapted to this service's one consumed type: the fixture is
  * request-completed, and the nullable case is its optional note.
  * Author review: [pending]
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.rating.messaging.rabbitmq;
 
@@ -18,7 +23,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
@@ -98,7 +102,7 @@ class DomainEventMessageConverterTest {
         String json = """
                 {"eventType": "request.completed", "eventId": "e-1",
                  "occurredAt": "2026-09-19T09:05:00Z", "producer": "order-service",
-                 "correlationId": "c-1", "parties": ["usr-req-1001"],
+                 "correlationId": "c-1",
                  "requestId": "req-1", "requesterId": "usr-req-1001",
                  "courierId": "usr-cou-2002", "pickupLocation": "Techno Edge",
                  "dropoffLocation": "COM3-01-19"}
@@ -127,8 +131,7 @@ class DomainEventMessageConverterTest {
     @Test
     void toMessageInjectsEventTypeAndRoundTrips() {
         RequestCompleted event = new RequestCompleted("e-1", Instant.parse("2026-09-19T09:05:00Z"),
-                "order-service", "c-1", List.of("usr-req-1001", "usr-cou-2002"),
-                "req-1", "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "hi");
+                "order-service", "c-1", "req-1", "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "hi");
 
         Message message = converter.toMessage(event, new MessageProperties());
 

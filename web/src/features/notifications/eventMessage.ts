@@ -33,6 +33,12 @@
 // actorIdOf (raterId ?? courierId) so D32's read-time hydration names
 // the rater too. Author review: Leong Wei Zhi, pending pull request
 // review.
+// 2026-11-04, Claude Code (Fable 5.1), PR #287 review (@Sinnez1): actorIdOf
+// takes the event type and answers null for templates that never name
+// the actor, so rows that merely carry a courierId (completed,
+// courier-arrived, disputes, and since notification D34 expired) cost
+// no username lookup. Author review: Leong Wei Zhi, pending pull request
+// review.
 
 import { credits, disputeCategoryLabels } from '@/features/order/status'
 import type { DisputeCategory } from '@/features/order/types'
@@ -82,10 +88,17 @@ function requestLabel(payload: Record<string, unknown>): string {
   return /^\d+$/.test(id) ? `Request #${id}` : `Request ${id}`
 }
 
-// The acting party each template may name: the rater on a rating event,
-// the courier on a request event (requesterId rides on every request
-// event but no copy uses it). No payload carries both.
-export function actorIdOf(payload: Record<string, unknown>): string | null {
+// The acting party the row's template names: the rater on a rating
+// event, the courier on a request event (requesterId rides on every
+// request event but no copy uses it). No payload carries both. Null
+// when the template takes no actor, so a row that merely carries a
+// courierId (completed, courier-arrived, the disputes, expired since
+// notification D34) costs the Center no username lookup (PR #287 review).
+export function actorIdOf(
+  eventType: string,
+  payload: Record<string, unknown>,
+): string | null {
+  if (!ACTOR_NAMING_TYPES.has(eventType)) return null
   return text(payload, 'raterId') ?? text(payload, 'courierId')
 }
 
@@ -179,13 +192,22 @@ const templates: Record<
 // names: actor id → username, resolved at read time by the caller
 // (D32). A missing entry — still loading, lookup failed, user deleted —
 // falls through to the actor-less copy, exactly like D30's absent key.
+// The templates whose copy names the actor: the ones declaring a second
+// parameter. Read off the table itself so a template that starts naming
+// its actor is hydrated without a second list to keep in step.
+const ACTOR_NAMING_TYPES: ReadonlySet<string> = new Set(
+  Object.entries(templates)
+    .filter(([, template]) => template.length >= 2)
+    .map(([type]) => type),
+)
+
 export function notificationMessage(
   notification: NotificationDto,
   names: ReadonlyMap<string, string> = new Map(),
 ): NotificationMessage {
   const template = templates[notification.eventType]
   if (template) {
-    const actorId = actorIdOf(notification.payload)
+    const actorId = actorIdOf(notification.eventType, notification.payload)
     const actor = actorId === null ? null : (names.get(actorId) ?? null)
     return template(notification.payload, actor)
   }
