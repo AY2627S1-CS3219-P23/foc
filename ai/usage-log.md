@@ -62,6 +62,24 @@ Entry template:
 ```
 
 ---
+## 2026-11-04 — Leong Wei Zhi (notification-service: resolver drops the credit/user arms, follow-up to PR #287)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** refactor, docs
+- **Scope:** `RecipientResolver` — the explicit `CreditEvent`/`UserEvent`
+  arms, their `ignored()` helper and the logger removed; those events
+  now hit the throwing default like any type without a rule.
+  `RecipientResolverTest` expects the refusal; the D34 rule table and
+  runtime paragraph say so.
+- **Prompt(s):** "why map credit and user event here" — the tool's answer:
+  no strong reason, they were added in review round 2 to preserve the
+  old "tell nobody" behaviour when the default started throwing, and
+  silently recording a message that should not be there is the same
+  swallow the review objected to; then "remove them and make new pr".
+- **Author review:** notification-service suite with
+  `SPRING_RABBITMQ_HOST=broker.invalid` (result in the PR); Leong Wei Zhi
+  reviews via pull request.
+
+---
 ## 2026-11-04 — Leong Wei Zhi (notification-service + web: PR #287 review round 2, D34)
 - **Tool:** Claude Code (Fable 5.1)
 - **Mode:** fix, docs

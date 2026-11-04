@@ -84,6 +84,9 @@
   PR #287 review (@Sinnez1): the D34 section's runtime rule — resolve
   before the first write, fail loudly on a missing rule or required
   courier so the message dead-letters for replay.
+  2026-11-04, follow-up to PR #287 (author's call): the resolver no
+  longer special-cases credit and user events; the rule table and the
+  runtime paragraph say they take the unmapped-type path.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -398,7 +401,7 @@ every recipient is a field on the event once `request.expired` carries
 | `request.accepted`, `collected`, `completed`, `disputed`, `dispute-resolved` | requester and courier |
 | `request.expired` | requester, plus the courier who had accepted when `courierId` is set |
 | `rating.submitted` | ratee only (#44) |
-| `credit.*`, `user.*` | nobody; this service binds neither exchange |
+| `credit.*`, `user.*` | never bound here (D16); one that arrives anyway is refused like any type without a rule and dead-letters |
 
 ```mermaid
 flowchart LR
@@ -418,8 +421,8 @@ processor resolves recipients before its first write, and a type
 without a rule, or a required courier that is missing, throws: nothing
 is recorded, the listener retries and dead-letters the message, and a
 DLQ replay delivers it once the rule or the producer is fixed (PR #287
-review). Credit and user events, which this service never binds, are
-recorded and ignored with a WARN. Messages published before D34 still
+review); credit and user events, which this service never binds, take
+the same path if one ever arrives. Messages published before D34 still
 carry `parties`; consumers ignore it as an unknown field
 (`DomainEventContractTest.ignoresUnknownFields`).
 
