@@ -119,6 +119,10 @@ order:
       # How long an event the broker returned as unroutable waits before
       # it is due again.
       unroutable-retry-delay-ms: 30000
+  supplier:
+    # supplier-service, on the compose network: accept reads pickup
+    # coordinates from its GET /suppliers for the F8.1 check
+    base-url: ${SUPPLIER_SERVICE_URL:http://localhost:8080}
   chat:
     # chat-service, on the compose network (C11)
     base-url: ${CHAT_SERVICE_URL:http://localhost:8080}

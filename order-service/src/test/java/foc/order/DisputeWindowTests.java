@@ -51,7 +51,7 @@ class DisputeWindowTests {
 	private final EventOutbox outbox = mock(EventOutbox.class);
 	private final RequestsService requestsService = new RequestsService(requestsRepository, outbox,
 			mock(OutboxEventRepository.class), mock(RequestDisputeRepository.class), mock(ChatCalls.class),
-			AUTO_COMPLETE_DELAY.toMillis());
+			mock(SupplierLocations.class), AUTO_COMPLETE_DELAY.toMillis());
 
 	@Test
 	void anArrivedRequestCanBeDisputedPastAnHourWhileTheLongerWindowIsOpen() {

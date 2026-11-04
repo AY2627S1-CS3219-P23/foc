@@ -23,6 +23,9 @@
 // item, worked out by order-service (team decision); the dispute object
 // (DSP-5) and its categories (DSP-7); the /dispute and /resolve bodies.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-11-04, Claude Code (Opus 5.5), Order F8.1: supplierId on a list
+// item, for Open Requests' too-far marking. Author review: Ko-Khan,
+// pending pull request review.
 
 // order-service's OrderStates, by name
 export type RequestStatus =
@@ -69,6 +72,8 @@ export interface Dispute {
 export interface RequestSummary {
   id: number
   status: RequestStatus
+  // order-service always sends it; older fixtures leave it out
+  supplierId?: number | null
   supplierName: string
   dropoffLocation: string
   item: string

@@ -7500,3 +7500,35 @@ Entry template:
 - **Author review:** web lint, build and `npm test` green (431 tests);
   the new tests fail (5 of 6) with the hook disabled. Ko-Khan reviews
   via pull request.
+
+## 2026-11-04 — Ko-Khan (order-service + web: Order F8.1 pickup proximity on accept)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `order-service` — accept refuses (409) a request whose
+  pickup is more than 1 km (straight-line, Haversine) from the pickup of
+  any request the courier holds (ACCEPTED, COLLECTED, ARRIVED); a
+  courier holding nothing is not checked. Coordinates come from
+  supplier-service's public `GET /suppliers`, paged, with the courier's
+  own bearer token (`SupplierLocations` / `HttpSupplierLocations`,
+  `SUPPLIER_SERVICE_URL`); if they can't be read, accept fails closed
+  with 503. List items gain `supplierId`. Tests: `AcceptProximityTests`,
+  `HttpSupplierLocationsTests`, `ProximityTests`, two controller cases,
+  and `FakeSupplierLocations` standing in for supplier-service. `web` —
+  Open Requests shows the wireframe's disabled "Too far (>1 km)" button
+  for such requests (`usePickupProximity`, advisory; the server
+  decides), tested in `open-requests-proximity.test.tsx`. compose and
+  `.env.example` comments updated.
+- **Prompt(s):** "Can we implement location check for orders as
+  described in frs". The tool found Order F8.1 ("A courier cannot hold
+  two requests whose suppliers are more than 1 km (straight-line)
+  apart") and asked four options questions. The author chose: the
+  existing public supplier API rather than a new internal endpoint;
+  held = ACCEPTED, COLLECTED, ARRIVED; fail closed; and marking far
+  requests in the web app too. The tool's choices: exactly 1 km is
+  allowed (F8.1 refuses only "more than"), the check runs inside the
+  accept transaction after the existing checks, 2 s / 3 s timeouts,
+  100 suppliers per page, and the web leaves unknown pickups unmarked.
+- **Author review:** order-service `./mvnw verify` green (211 tests,
+  none skipped, Temurin 21 container); web lint, build and `npm test`
+  green (435 tests); the web marking test fails with marking disabled.
+  Ko-Khan reviews via pull request.

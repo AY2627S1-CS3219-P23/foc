@@ -20,6 +20,10 @@
  * unless ARRIVED (team decision: the requester's cards show the time left
  * and hide "Report a problem" after it). Author review: Ryan Ang, pending
  * pull request review.
+ * 2026-11-04, Claude Code (Opus 5.5), Order F8.1: supplierId, so Open
+ * Requests can mark requests whose pickup is too far from the courier's
+ * held ones (author's decision). Author review: Ko-Khan, pending pull
+ * request review.
  */
 package foc.order.dto;
 
@@ -30,14 +34,14 @@ import foc.order.model.Requests;
 
 import java.time.Instant;
 
-public record RequestSummary(Long id, OrderStates status, CloseReason closeReason, String supplierName,
+public record RequestSummary(Long id, OrderStates status, CloseReason closeReason, Long supplierId, String supplierName,
         String dropoffLocation, String item, Integer creditAmount, Instant deadline, Instant createdAt,
         Instant closedAt, Instant autoCompleteAt, Dispute dispute) {
 
     // autoCompleteAt: RequestsService.autoCompleteAt(r); dispute: the
     // request's stored dispute, null if it has none
     public static RequestSummary of(Requests r, Instant autoCompleteAt, RequestDispute dispute) {
-        return new RequestSummary(r.getId(), r.getStatus(), r.getCloseReason(), r.getSupplierName(),
+        return new RequestSummary(r.getId(), r.getStatus(), r.getCloseReason(), r.getSupplierId(), r.getSupplierName(),
                 r.getDropoffLocation(), r.getItem(), r.getCreditAmount(), r.getDeadline(), r.getCreatedAt(),
                 r.getClosedAt(), autoCompleteAt, Dispute.of(dispute));
     }

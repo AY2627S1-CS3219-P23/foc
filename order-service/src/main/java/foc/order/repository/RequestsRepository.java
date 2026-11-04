@@ -38,6 +38,9 @@ public interface RequestsRepository extends JpaRepository<Requests, Long>, JpaSp
     // Requests in a state since the courier arrived before the cutoff (the auto-complete sweep).
     List<Requests> findByStatusAndArrivedAtBefore(OrderStates status, Instant cutoff);
 
+    // a courier's requests in the given states (accept's F8.1 check)
+    List<Requests> findByCourierIdAndStatusIn(Long courierId, List<OrderStates> statuses);
+
     // How many requests a courier has in a state — COMPLETED for the
     // public profile's deliveries-completed tile (#280).
     long countByCourierIdAndStatus(Long courierId, OrderStates status);

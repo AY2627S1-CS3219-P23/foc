@@ -142,6 +142,9 @@
 # CHAT_INTERNAL_TOKEN for its open/close calls (C11, C12); the gateway
 # waits for chat-service's start like the others. Author review: Ko-Khan,
 # pending pull request review.
+# 2026-11-04, Claude Code (Opus 5.5), Order F8.1: order-service gets
+# SUPPLIER_SERVICE_URL for accept's pickup-distance check. Author review:
+# Ko-Khan, pending pull request review.
 
 name: foc
 
@@ -540,6 +543,8 @@ services:
       # chat-service's open/close calls (N6, C11/C12)
       CHAT_SERVICE_URL: http://chat-service:8080
       CHAT_INTERNAL_TOKEN: ${CHAT_INTERNAL_TOKEN:?set in .env}
+      # supplier-service, for accept's 1 km pickup check (Order F8.1)
+      SUPPLIER_SERVICE_URL: ${SUPPLIER_SERVICE_URL:-http://supplier-service:8080}
       # how long after its deadline a still-COLLECTED request is disputed
       # by the expiry sweep (DSP-6)
       ORDER_DISPUTE_ESCALATION_GRACE_MS: ${ORDER_DISPUTE_ESCALATION_GRACE_MS:-3600000}

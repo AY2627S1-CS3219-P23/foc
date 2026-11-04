@@ -185,6 +185,7 @@ function summary(r: RequestDetail): RequestSummary {
   const {
     id,
     status,
+    supplierId,
     supplierName,
     dropoffLocation,
     item,
@@ -196,6 +197,7 @@ function summary(r: RequestDetail): RequestSummary {
   return {
     id,
     status,
+    supplierId,
     supplierName,
     dropoffLocation,
     item,
