@@ -32,7 +32,7 @@ follows are in this module's
 [`README.md` § Event conventions](README.md#event-conventions), and the
 design authority is
 [`docs/notification-service.md`](../docs/notification-service.md)
-(decisions D15–D22).
+(decisions D15–D22, D34).
 
 ## Module map (`src/main/java/foc/contracts/`)
 
@@ -42,7 +42,7 @@ design authority is
 | `events/request/` | `RequestEvent` (domain marker) + the twelve records: `RequestCreated`, `RequestAccepted`, `RequestCollected`, `RequestCompleted`, `RequestCancelled`, `RequestDropped`, `RequestExpired`, `CourierArrived`, `RequestSubmitted`, `RequestRejected`, `RequestDisputed`, `RequestDisputeResolved` |
 | `events/credit/` | `CreditEvent` (domain marker) + the two records: `CreditReserved`, `CreditReservationRejected` |
 | `events/rating/` | `RatingEvent` (domain marker) + the one record: `RatingSubmitted` |
-| `events/user/` | `UserEvent` (domain marker, `userId()`) + the two records: `UserCreated`, `UserPurged` (envelope and `userId` only; `parties` always empty) |
+| `events/user/` | `UserEvent` (domain marker, `userId()`) + the two records: `UserCreated`, `UserPurged` (envelope and `userId` only) |
 | `src/main/resources/contracts/` | One canonical fixture per event, `<identity dots→hyphens>.example.json` (e.g. `request-courier-arrived.example.json`) — shipped on the jar's classpath |
 | `src/test/java/` | `EventTypeRegistryTest`, `RequestEventRecordsTest` — registry-driven over all four domains: a new registry entry without a fixture (or vice versa) fails loudly |
 
@@ -58,7 +58,9 @@ design authority is
   until every producer stamps them; never rename or repurpose a field.
   A breaking change ships as a **new event type** with its own
   identity string (`request.accepted.v2`), record, and fixture — the
-  old type keeps flowing until every producer migrated.
+  old type keeps flowing until every producer migrated. One exception
+  on record: D34 (2026-11-04) removed `parties` from every event in a
+  single coordinated release (README § Event conventions, item 4).
 - **`EventTypeRegistry` is the single class↔identity source**: the
   identity string is both the body `eventType` and the routing key;
   `eventType` is never a record component.
@@ -67,7 +69,8 @@ design authority is
   internal config belong to their service, not here.
 - Currently the `@Nullable` components are
   `RequestCancelled.courierId` (a pre-acceptance cancel has no
-  courier), every request record's `note` (a request may have
+  courier), `RequestExpired.courierId` (null when the request expired
+  while still open, D34), every request record's `note` (a request may have
   none, issue #165; `RequestEventRecordsTest` holds it),
   `RequestDisputed.disputeNote` and `RequestDisputeResolved.resolutionNote`
   (optional texts), and `CreditReservationRejected.reasonCode` (added

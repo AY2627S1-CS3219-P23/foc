@@ -10,6 +10,11 @@
  * before reasonCode existed still binds, with a null code (D18), and one
  * carrying the code binds it; author review: Ryan Ang, pending pull
  * request review.
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.order.messaging.rabbitmq;
 
@@ -25,7 +30,6 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -37,8 +41,7 @@ class DomainEventMessageConverterTests {
 	@Test
 	void outgoingEventCarriesItsEventType() {
 		RequestSubmitted event = new RequestSubmitted("9b2f6b3c-1e9d-4d55-8f6a-0c2f4a7d9e28",
-				Instant.parse("2026-10-15T08:00:00Z"), "order-service", "5", List.of("1"),
-				"5", "1", "The Deck", "COM3 Level 2", "Chicken rice", 3);
+				Instant.parse("2026-10-15T08:00:00Z"), "order-service", "5", "5", "1", "The Deck", "COM3 Level 2", "Chicken rice", 3);
 
 		Message message = converter.toMessage(event, new MessageProperties());
 
@@ -52,7 +55,7 @@ class DomainEventMessageConverterTests {
 		Object event = converter.fromMessage(message("""
 				{"eventType": "credit.reservation-rejected", "eventId": "e1",
 				 "occurredAt": "2026-10-15T08:00:01Z", "producer": "credit-service",
-				 "correlationId": "5", "parties": [], "requestId": "5", "requesterId": "1",
+				 "correlationId": "5", "requestId": "5", "requesterId": "1",
 				 "amount": 3, "reason": "insufficient available credits"}"""));
 
 		CreditReservationRejected rejected = assertInstanceOf(CreditReservationRejected.class, event);
@@ -67,7 +70,7 @@ class DomainEventMessageConverterTests {
 		Object event = converter.fromMessage(message("""
 				{"eventType": "credit.reservation-rejected", "eventId": "e4",
 				 "occurredAt": "2026-10-15T08:00:01Z", "producer": "credit-service",
-				 "correlationId": "5", "parties": [], "requestId": "5", "requesterId": "1",
+				 "correlationId": "5", "requestId": "5", "requesterId": "1",
 				 "amount": 3, "reason": "insufficient available credits",
 				 "reasonCode": "INSUFFICIENT_CREDITS"}"""));
 
@@ -80,7 +83,7 @@ class DomainEventMessageConverterTests {
 		assertThrows(MessageConversionException.class, () -> converter.fromMessage(message("""
 				{"eventType": "credit.reserved", "eventId": "e2",
 				 "occurredAt": "2026-10-15T08:00:01Z", "producer": "credit-service",
-				 "correlationId": "5", "parties": [], "requesterId": "1", "amount": 3}""")));
+				 "correlationId": "5", "requesterId": "1", "amount": 3}""")));
 	}
 
 	@Test
@@ -92,7 +95,7 @@ class DomainEventMessageConverterTests {
 	@Test
 	void reservedReplyRoundTrips() {
 		CreditReserved reserved = new CreditReserved("e3", Instant.parse("2026-10-15T08:00:01Z"),
-				"credit-service", "5", List.of(), "5", "1", 3);
+				"credit-service", "5", "5", "1", 3);
 
 		assertEquals(reserved, converter.fromMessage(converter.toMessage(reserved, new MessageProperties())));
 	}

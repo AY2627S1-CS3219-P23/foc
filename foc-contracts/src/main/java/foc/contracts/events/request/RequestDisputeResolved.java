@@ -13,7 +13,6 @@ import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.core.Nullable;
 
 import java.time.Instant;
-import java.util.List;
 
 /**
  * An admin resolved a disputed request by dividing its held reward:
@@ -30,7 +29,6 @@ public record RequestDisputeResolved(
 		Instant occurredAt,
 		String producer,
 		String correlationId,
-		List<String> parties,
 		String requestId,
 		String requesterId,
 		String courierId,

@@ -38,6 +38,10 @@ Reviewed by: Leong Wei Zhi (via pull request).
        one user.purged per purged account (and none for the accounts kept),
        and none when the bookmark cleanup fails.
        Author review: Ryan Ang, pending pull request review.
+2026-11-04, Claude Code (Fable 5.1), notification D34 (author decision
+via options Q&A): the parties argument/assertions removed — events carry
+no recipient list; RequestExpired gains a nullable courierId. Author
+review: Leong Wei Zhi, pending pull request review.
 */
 
 package foc.user.service;
@@ -381,8 +385,7 @@ class AccountPurgeSchedulerTest extends PostgresTestContainer {
             .hasSize(2)
             .allSatisfy(payload -> assertThat(payload)
                 .contains("\"eventType\":\"user.purged\"")
-                .contains("\"producer\":\"user-service\"")
-                .contains("\"parties\":[]"));
+                .contains("\"producer\":\"user-service\""));
     }
 
     private User saveUser(String email, String username, Instant deletedAt) {

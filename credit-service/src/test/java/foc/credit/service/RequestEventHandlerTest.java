@@ -19,6 +19,11 @@
  * 2026-10-25, issue #235: a dispute resolution calls resolve with the
  * event's split, and with no record throws (team decision, DSP-13).
  * Author review: Ryan Ang, pending pull request review.
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.credit.service;
 
@@ -30,7 +35,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
-import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -67,8 +71,7 @@ class RequestEventHandlerTest {
     private RequestEventHandler handler;
 
     private static RequestSubmitted submitted(int reward) {
-        return new RequestSubmitted("evt-1", SENT_AT, "order-service", "corr-1", List.of("u-req"),
-            "r-1", "u-req", "UTown", "PGP", null, reward);
+        return new RequestSubmitted("evt-1", SENT_AT, "order-service", "corr-1", "r-1", "u-req", "UTown", "PGP", null, reward);
     }
 
     private DomainEvent enqueuedReply() {
@@ -91,7 +94,6 @@ class RequestEventHandlerTest {
             assertThat(reply.amount()).isEqualTo(3);
             assertThat(reply.producer()).isEqualTo("credit-service");
             assertThat(reply.correlationId()).isEqualTo("corr-1");
-            assertThat(reply.parties()).isEmpty();
             // its own identity and time, not the request event's
             assertThat(reply.eventId()).isNotBlank().isNotEqualTo("evt-1");
             assertThat(reply.occurredAt()).isBetween(before, after);
@@ -109,7 +111,6 @@ class RequestEventHandlerTest {
             assertThat(reply.requesterId()).isEqualTo("u-req");
             assertThat(reply.amount()).isEqualTo(9);
             assertThat(reply.correlationId()).isEqualTo("corr-1");
-            assertThat(reply.parties()).isEmpty();
             assertThat(reply.reason()).isEqualTo(RequestEventHandler.INSUFFICIENT_CREDITS_TEXT);
             assertThat(reply.reasonCode()).isEqualTo(CreditReservationRejected.INSUFFICIENT_CREDITS);
         });
@@ -189,7 +190,7 @@ class RequestEventHandlerTest {
         when(operations.transfer("r-1", "u-cou")).thenReturn(result);
 
         RequestCompleted completed = new RequestCompleted("evt-2", SENT_AT, "order-service", "corr-1",
-            List.of("u-req", "u-cou"), "r-1", "u-req", "u-cou", "UTown", "PGP", null);
+            "r-1", "u-req", "u-cou", "UTown", "PGP", null);
 
         assertThat(handler.handle(completed)).isEqualTo(expected);
         verifyNoInteractions(outbox);
@@ -200,7 +201,7 @@ class RequestEventHandlerTest {
         when(operations.transfer("r-1", "u-cou")).thenReturn(SettleResult.NO_RESERVATION);
 
         RequestCompleted completed = new RequestCompleted("evt-2", SENT_AT, "order-service", "corr-1",
-            List.of("u-req", "u-cou"), "r-1", "u-req", "u-cou", "UTown", "PGP", null);
+            "r-1", "u-req", "u-cou", "UTown", "PGP", null);
 
         assertThatThrownBy(() -> handler.handle(completed))
             .isInstanceOf(ReservationNotFoundException.class).hasMessageContaining("r-1");
@@ -213,7 +214,7 @@ class RequestEventHandlerTest {
         when(operations.release("r-1", "u-req")).thenReturn(result);
 
         RequestCancelled cancelled = new RequestCancelled("evt-3", SENT_AT, "order-service", "corr-1",
-            List.of("u-req"), "r-1", "u-req", null, "UTown", "PGP", null);
+            "r-1", "u-req", null, "UTown", "PGP", null);
 
         assertThat(handler.handle(cancelled)).isEqualTo(expected);
         verifyNoInteractions(outbox);
@@ -225,7 +226,7 @@ class RequestEventHandlerTest {
         when(operations.release("r-1", "u-req")).thenReturn(result);
 
         RequestExpired expired = new RequestExpired("evt-4", SENT_AT, "order-service", "corr-1",
-            List.of("u-req"), "r-1", "u-req", "UTown", "PGP", null);
+            "r-1", "u-req", null, "UTown", "PGP", null);
 
         assertThat(handler.handle(expired)).isEqualTo(expected);
         verifyNoInteractions(outbox);
@@ -251,7 +252,7 @@ class RequestEventHandlerTest {
 
     private static RequestDisputeResolved disputeResolved() {
         return new RequestDisputeResolved("evt-5", SENT_AT, "order-service", "corr-1",
-            List.of("u-req", "u-cou"), "r-1", "u-req", "u-cou", "UTown", "PGP", null, 1, 2, "late delivery");
+            "r-1", "u-req", "u-cou", "UTown", "PGP", null, 1, 2, "late delivery");
     }
 
     @Test

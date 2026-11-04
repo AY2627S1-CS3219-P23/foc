@@ -17,7 +17,6 @@ import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.core.Nullable;
 
 import java.time.Instant;
-import java.util.List;
 
 /**
  * The courier collected the food at the pickup location. Identity
@@ -28,7 +27,6 @@ public record RequestCollected(
 		Instant occurredAt,
 		String producer,
 		String correlationId,
-		List<String> parties,
 		String requestId,
 		String requesterId,
 		String courierId,

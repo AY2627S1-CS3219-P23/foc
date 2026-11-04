@@ -10,6 +10,11 @@
  * 2026-10-30, Claude Code (Fable 5), PR #271 review (Sinnez1): the
  * applied vs duplicate return value is pinned.
  * Author review: [pending]
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.rating.service;
 
@@ -53,7 +58,7 @@ class RatingEligibilityProcessorTest {
 
     private static RequestCompleted completed(String eventId, String requestId, Instant occurredAt) {
         return new RequestCompleted(eventId, occurredAt, "order-service", "c-1",
-                List.of("usr-req-1001"), requestId, "usr-req-1001", "usr-cou-2002",
+                requestId, "usr-req-1001", "usr-cou-2002",
                 "Techno Edge", "COM3-01-19", null);
     }
 

@@ -53,6 +53,11 @@
  * every transition into a final state, left null by the steps that keep a
  * request active, and untouched by a final step that loses a race.
  * Author review: Ryan Ang, pending pull request review.
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.order;
 
@@ -220,7 +225,6 @@ class RequestsServiceTests extends PostgresTestContainer {
 		assertEquals("request.submitted", e.get("eventType").stringValue());
 		assertEquals("order-service", e.get("producer").stringValue());
 		assertEquals(id.toString(), e.get("correlationId").stringValue());
-		assertEquals("1", e.get("parties").get(0).stringValue());
 		assertEquals("1", e.get("requesterId").stringValue());
 		assertEquals("The Deck", e.get("pickupLocation").stringValue());
 		assertEquals("COM3 Level 2", e.get("dropoffLocation").stringValue());
@@ -307,9 +311,6 @@ class RequestsServiceTests extends PostgresTestContainer {
 		// the Credit Service pays this courier
 		assertEquals(COURIER_ID.toString(), completed.get("courierId").stringValue());
 		assertEquals("1", completed.get("requesterId").stringValue());
-		assertEquals(2, completed.get("parties").size());
-		assertEquals("1", completed.get("parties").get(0).stringValue());
-		assertEquals(COURIER_ID.toString(), completed.get("parties").get(1).stringValue());
 		assertEquals("The Deck", completed.get("pickupLocation").stringValue());
 		assertEquals("COM3 Level 2", completed.get("dropoffLocation").stringValue());
 		assertEquals("Chicken rice", completed.get("note").stringValue());
@@ -363,7 +364,6 @@ class RequestsServiceTests extends PostgresTestContainer {
 			assertEquals(id.toString(), e.get("requestId").stringValue(), type);
 			assertEquals("1", e.get("requesterId").stringValue(), type);
 			assertEquals(COURIER_ID.toString(), e.get("courierId").stringValue(), type);
-			assertEquals(List.of("1", COURIER_ID.toString()), parties(e), type);
 			assertEquals("The Deck", e.get("pickupLocation").stringValue(), type);
 			assertEquals("Chicken rice", e.get("note").stringValue(), type);
 		}
@@ -424,8 +424,6 @@ class RequestsServiceTests extends PostgresTestContainer {
 
 		JsonNode arrived = event(id, "request.courier-arrived");
 		assertEquals("request.courier-arrived", arrived.get("eventType").stringValue());
-		assertEquals(1, arrived.get("parties").size());
-		assertEquals("1", arrived.get("parties").get(0).stringValue());
 		assertEquals("1", arrived.get("requesterId").stringValue());
 		assertEquals(COURIER_ID.toString(), arrived.get("courierId").stringValue());
 		assertEquals("The Deck", arrived.get("pickupLocation").stringValue());
@@ -470,9 +468,9 @@ class RequestsServiceTests extends PostgresTestContainer {
 		assertEquals("1", dropped.get("requesterId").stringValue());
 		// the courier who dropped, captured before the entity's courier
 		// fields were cleared
+		// the reward stays held (F5.2); the Notification Service tells the
+		// requester only (D34) — the courier is named, not notified
 		assertEquals(COURIER_ID.toString(), dropped.get("courierId").stringValue());
-		// the reward stays held (F5.2), so only the requester is told
-		assertEquals(List.of("1"), parties(dropped));
 	}
 
 	@Test
@@ -496,7 +494,6 @@ class RequestsServiceTests extends PostgresTestContainer {
 		// the Credit Service releases the reward to this requester
 		assertEquals("1", cancelled.get("requesterId").stringValue());
 		assertTrue(cancelled.get("courierId").isNull());
-		assertEquals(List.of("1"), parties(cancelled));
 	}
 
 	@Test
@@ -522,11 +519,12 @@ class RequestsServiceTests extends PostgresTestContainer {
 		assertEquals("request.expired", expired.get("eventType").stringValue());
 		assertEquals(id.toString(), expired.get("requestId").stringValue());
 		assertEquals("1", expired.get("requesterId").stringValue());
-		assertEquals(List.of("1"), parties(expired));
+		// still open when it expired: no courier to tell (D34)
+		assertTrue(expired.get("courierId").isNull());
 	}
 
 	@Test
-	void expireFromAcceptedAlsoTellsTheCourier() {
+	void expireFromAcceptedNamesTheCourier() {
 		Long id = newCreatedRequest();
 		requestsService.accept(id, COURIER_ID);
 
@@ -535,7 +533,8 @@ class RequestsServiceTests extends PostgresTestContainer {
 		JsonNode expired = event(id, "request.expired");
 		assertEquals("request.expired", expired.get("eventType").stringValue());
 		assertEquals("1", expired.get("requesterId").stringValue());
-		assertEquals(List.of("1", COURIER_ID.toString()), parties(expired));
+		// the courier who had accepted, so the Notification Service can tell them too (D34)
+		assertEquals(COURIER_ID.toString(), expired.get("courierId").stringValue());
 	}
 
 	@Test
@@ -801,7 +800,6 @@ class RequestsServiceTests extends PostgresTestContainer {
 		JsonNode disputed = event(id, "request.disputed");
 		assertEquals(id.toString(), disputed.get("requestId").stringValue());
 		assertEquals(id.toString(), disputed.get("correlationId").stringValue());
-		assertEquals(List.of(REQUESTER_ID.toString(), COURIER_ID.toString()), parties(disputed));
 		assertEquals(REQUESTER_ID.toString(), disputed.get("requesterId").stringValue());
 		assertEquals(COURIER_ID.toString(), disputed.get("courierId").stringValue());
 		assertEquals("The Deck", disputed.get("pickupLocation").stringValue());
@@ -922,7 +920,8 @@ class RequestsServiceTests extends PostgresTestContainer {
 		JsonNode disputed = event(id, "request.disputed");
 		assertEquals("NOT_DELIVERED", disputed.get("category").stringValue());
 		assertEquals("auto-escalated: not delivered by deadline", disputed.get("disputeNote").stringValue());
-		assertEquals(List.of(REQUESTER_ID.toString(), COURIER_ID.toString()), parties(disputed));
+		assertEquals(REQUESTER_ID.toString(), disputed.get("requesterId").stringValue());
+		assertEquals(COURIER_ID.toString(), disputed.get("courierId").stringValue());
 	}
 
 	@Test
@@ -953,7 +952,7 @@ class RequestsServiceTests extends PostgresTestContainer {
 		// the dispute itself is kept as raised
 		assertEquals(DisputeCategory.WRONG_ITEM, dispute.getCategory());
 		JsonNode resolved = event(id, "request.dispute-resolved");
-		assertEquals(List.of(REQUESTER_ID.toString(), COURIER_ID.toString()), parties(resolved));
+		assertEquals(REQUESTER_ID.toString(), resolved.get("requesterId").stringValue());
 		assertEquals(COURIER_ID.toString(), resolved.get("courierId").stringValue());
 		assertEquals("Chicken rice", resolved.get("note").stringValue());
 		assertEquals(1, resolved.get("courierAmount").intValue());
@@ -1307,12 +1306,6 @@ class RequestsServiceTests extends PostgresTestContainer {
 				.map(e -> jsonMapper.readTree(e.getPayload()))
 				.filter(e -> id.toString().equals(e.get("requestId").stringValue()))
 				.toList();
-	}
-
-	private static List<String> parties(JsonNode event) {
-		List<String> parties = new ArrayList<>();
-		event.get("parties").forEach(p -> parties.add(p.stringValue()));
-		return parties;
 	}
 
 	// The one event of this type for the request.

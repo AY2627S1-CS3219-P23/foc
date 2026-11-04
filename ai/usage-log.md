@@ -27,6 +27,8 @@
   below (newest first, as the surrounding entries sit).
   2026-11-02, Claude Code (Fable 5): prepended the PR #286 review-fixes
   entry below.
+  2026-11-04, Claude Code (Fable 5.1): prepended the notification D34
+  (parties removal) entry below.
   PR #269's main merge: this file merged cleanly (main appends at the
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
@@ -58,6 +60,56 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-04 — Leong Wei Zhi (refactor: `parties` removed from the event contracts, notification D34)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** refactor, docs
+- **Scope:** `foc-contracts` — `parties` removed from `DomainEvent`
+  (`METADATA_FIELDS` and the accessor), all 17 records and fixtures;
+  `RequestExpired` gains a nullable `courierId`; README/AGENTS record
+  the one-time break of the additive rule. `order-service`,
+  `credit-service`, `user-service`, `rating-service` — the publishers
+  drop the recipient list (order-service's `expired()` stamps the courier
+  who had accepted instead); positional constructor calls and the
+  `parties` assertions in their tests follow. `notification-service` —
+  new `RecipientResolver` (one rule per event type, the same lists the
+  publishers used to send), `IdempotentEventProcessor` fans out over it,
+  `RecipientResolverTest` (fixture- and registry-driven), the STOMP and
+  broker tests rewritten around `requesterId`/`courierId`, the contract
+  test's unknown-fields case kept as the pre-D34-backlog proof. Docs:
+  `docs/notification-service.md` D34 row, D18 note, catalog and
+  traceability wording, the "Recipient resolution (D34)" section
+  (factual comparison matrix, the author's reasoning, rule table,
+  ingest diagram); `.mmd` labels and the `parties` mentions in the
+  architecture, rating, disputes and credit docs.
+- **Prompt(s):** "Create a plan to remove parties from events defined in
+  foc contracts and its dependencies. [pasted note: a core event carries
+  business data only; who and how to notify belongs in the notification
+  service] Note this design change in the docs. Weigh the pros and cons
+  of having just events and notification service design who should send
+  to whom vs other services sending an async message to notification
+  service to deliver the message." Then "which one is better?" — the tool
+  declined under the AI policy (no recommendation, no trade-off
+  weighing) and presented the options as factual property comparisons;
+  the author reasoned about ordering and coupling in their own words and
+  decided each point: notification-service derives recipients (over a
+  publisher-sent notification command and over the status quo), a
+  nullable `courierId` on `request.expired`, one coordinated breaking
+  release, and their own reasoning recorded as the rationale. The plan
+  was then approved for implementation.
+- **Author review:** foc-contracts 15/15; order-service 192/192;
+  rating-service 101/101; notification-service 111/111 (eight new
+  resolver cases). Two suites reach the compose stack's RabbitMQ on host
+  port 5672 and fail its login as a fatal listener error — run them with
+  `SPRING_RABBITMQ_HOST=broker.invalid` or the stack stopped.
+  credit-service 359/360: `commonPoolStartsAsOneEmptyRow` fails
+  identically on `main` with main's own jar (a shared-container balance
+  leak), unrelated. user-service 398/399: the full run exhausts the
+  Testcontainers Postgres connection limit across its 34 contexts, also
+  identically on `main`; the touched class passes alone. Compose smoke
+  against the running stack recorded in the PR description. Leong Wei
+  Zhi reviews via pull request.
 
 ---
 ## 2026-11-02 — Leong Wei Zhi (web: PR #286 review fixes, issue #284)

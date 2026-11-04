@@ -55,6 +55,9 @@
   dependency rows; the first nice-to-have drawn in the runtime diagram.
   Transcription only; no decisions made by the tool.
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-04, Claude Code (Fable 5.1), notification D34: the legend's
+  user-id note and the rating row no longer name the removed `parties`
+  field. Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # Favours on Campus (FoC) — High-Level Service Architecture
@@ -128,8 +131,9 @@ F6.1.5). Token-validation mechanics (shared `JWT_SECRET` per
 drawn for it.
 Provisional convention (decided under Notification issue #67, before
 the User Service exists): the JWT's `sub` claim carries the platform
-user ID — the same ID used in event `parties[]` and notification
-recipients — and the User Service must mint tokens accordingly.
+user ID — the same ID the request events carry as `requesterId`/
+`courierId` and the Notification Service stores as recipient
+(notification D34) — and the User Service must mint tokens accordingly.
 
 **Abbreviations:** REST = HTTP/JSON web APIs · JWT = JSON Web Token ·
 OTP = one-time password · JPA = Java Persistence API (Spring Data JPA) ·
@@ -155,7 +159,7 @@ TBD = to be decided.
 | User Service → Broker (RabbitMQ) → Credit Service | **async events** | `user.created` when a verified sign-up inserts the user row opens the credit account (get-or-create stays the fallback); `user.purged` for each account the day-31 purge deletes closes it, moving its balance to the common pool so redistribution skips it (see [`credit-service.md`](credit-service.md), D14) | Credit F1.1, F6.1.1; User F3.1.3 |
 | Order Service → Broker (RabbitMQ) → Notification Service | **async events** | event on every request state transition (submitted/created/accepted/collected/completed/cancelled/expired/rejected); at-least-once, persisted across restarts; consumer deduplicates, retries, dead-letters exhausted retries; delivery failure never affects the producing operation; new event types need no publisher changes | Order F0.2; Notif F1.1, F1.3, F1.4, F2.1–F2.3, NFR1.1–1.2; **M6** |
 | Order Service → Broker (RabbitMQ) → Rating Service | **async events** | `request.completed` (the producer's existing stream, no N1 change) builds the rating-eligibility projection, so eligibility checks need no call to the Order Service; idempotent via the consumer's own inbox (see [`rating-service.md`](rating-service.md), D2–D5) | N1.1; **M6** |
-| Rating Service → Broker (RabbitMQ) → Notification Service | **async events** | `rating.submitted` (ids + stars, parties = the ratee only) through a transactional outbox notifies the ratee in-app; consumed on the Notification Service's own queue trio bound to the `rating-events` exchange (see [`rating-service.md`](rating-service.md) D7/D8, [`notification-service.md`](notification-service.md) D16 note) | N1 (#44 decision); Notif F1.1–F1.4 |
+| Rating Service → Broker (RabbitMQ) → Notification Service | **async events** | `rating.submitted` (ids + stars; the Notification Service tells the ratee only, D34) through a transactional outbox notifies the ratee in-app; consumed on the Notification Service's own queue trio bound to the `rating-events` exchange (see [`rating-service.md`](rating-service.md) D7/D8, [`notification-service.md`](notification-service.md) D16 note) | N1 (#44 decision); Notif F1.1–F1.4 |
 
 Timer-driven behaviors stay **inside** the owning service (no arrow):
 request expiry from the created or accepted state at the deadline, with

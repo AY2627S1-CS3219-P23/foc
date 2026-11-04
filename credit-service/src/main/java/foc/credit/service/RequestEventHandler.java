@@ -27,11 +27,15 @@
  * 2026-10-25, issue #235: request.dispute-resolved settles through
  * resolve, with the outcomes of a completion (team decision, DSP-13).
  * Author review: Ryan Ang, pending pull request review.
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.credit.service;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -113,8 +117,7 @@ public class RequestEventHandler {
         // no default: a new ReserveResult does not compile until it is given a reply
         DomainEvent reply = switch (operations.reserve(e.requestId(), e.requesterId(), e.reward())) {
             case RESERVED, ALREADY_RESERVED -> new CreditReserved(
-                newEventId(), Instant.now(), PRODUCER, e.correlationId(), List.of(),
-                e.requestId(), e.requesterId(), e.reward());
+                newEventId(), Instant.now(), PRODUCER, e.correlationId(), e.requestId(), e.requesterId(), e.reward());
             case REJECTED_INSUFFICIENT_CREDITS, ALREADY_REJECTED_INSUFFICIENT_CREDITS ->
                 rejected(e, INSUFFICIENT_CREDITS_TEXT, CreditReservationRejected.INSUFFICIENT_CREDITS);
             case REJECTED_INVALID_AMOUNT, ALREADY_REJECTED_INVALID_AMOUNT ->
@@ -130,8 +133,7 @@ public class RequestEventHandler {
 
     private static CreditReservationRejected rejected(RequestSubmitted e, String reason, String reasonCode) {
         return new CreditReservationRejected(
-            newEventId(), Instant.now(), PRODUCER, e.correlationId(), List.of(),
-            e.requestId(), e.requesterId(), e.reward(), reason, reasonCode);
+            newEventId(), Instant.now(), PRODUCER, e.correlationId(), e.requestId(), e.requesterId(), e.reward(), reason, reasonCode);
     }
 
     // no default: a new SettleResult does not compile until it is given an outcome

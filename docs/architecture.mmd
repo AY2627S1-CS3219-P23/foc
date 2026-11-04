@@ -17,6 +17,9 @@ title: "Favours on Campus (FoC) — High-Level Service Architecture"
 %% Supplier DB engines (PostgreSQL, decided with issue #85 and the
 %% supplier scaffolding). Details in docs/architecture.md.
 %% Reviewed by: Leong Wei Zhi (via pull request).
+%% 2026-11-04, Claude Code (Fable 5.1), notification D34: the rating edge
+%% label no longer names the removed parties field. Author review: Leong
+%% Wei Zhi, pending pull request review.
 %% 2026-10-09 (Claude Code, Opus 5.5), PR #163 Copilot review: Credit
 %% Service edges brought in line with the team's saga design
 %% (docs/credit-service.md D6-D9): the User -> Credit and Order ->
@@ -82,7 +85,7 @@ flowchart TB
     USER_SVC ==>|"publish user.created (verified sign-up) /<br/>user.purged (day-31 purge), through an outbox"| BROKER
     BROKER ==>|"deliver user events: open the credit account;<br/>close it, its balance to the common pool,<br/>no further redistribution shares (Credit F1.1, F6.1.1)"| CREDIT_SVC
     BROKER ==>|"deliver request.completed: upsert the rating-eligibility<br/>projection — no call to the Order Service;<br/>repeated events processed once (N1.1)"| RATING_SVC
-    RATING_SVC ==>|"publish rating.submitted (ids + stars,<br/>parties = ratee only), through an outbox"| BROKER
+    RATING_SVC ==>|"publish rating.submitted (ids + stars;<br/>ratee told only, notification D34), through an outbox"| BROKER
     BROKER ==>|"deliver rating.submitted on the Notification Service's<br/>own queue trio: the ratee's in-app notification<br/>(#44 decision, issue #255)"| NOTIF_SVC
 
     USER_DB[("User DB<br/>PostgreSQL<br/>60 000 accounts (User NFR2)")]

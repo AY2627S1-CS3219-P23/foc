@@ -27,6 +27,10 @@
  * 2026-10-26, Claude Code (Opus 5.5), PR #260 review: the dispute fields
  * are checked in each stored payload, and the accepted-event test uses
  * rowsOfType. Author review: Ryan Ang, pending pull request review.
+ * 2026-11-04, Claude Code (Fable 5.1), D34 (author decision via options
+ * Q&A): the parties field left the contract; the collected/completed
+ * sentinels now store two rows (requester and courier) under the rule.
+ * Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.notification.messaging.rabbitmq;
 
@@ -154,7 +158,7 @@ class RequestEventsRabbitMqIntegrationTest {
 		long baseline = notifications.count();
 		byte[] fixture = fixtureBytes("request.accepted");
 
-		// Canonical request-accepted fixture (two parties), as raw JSON
+		// Canonical request-accepted fixture (requester and courier), as raw JSON
 		// under its canonical routing key.
 		publishRawJson(fixture, "request.accepted");
 		await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
@@ -164,13 +168,14 @@ class RequestEventsRabbitMqIntegrationTest {
 				.containsExactlyInAnyOrder("usr-req-1001", "usr-cou-2002");
 
 		// Duplicate delivery, then a sentinel event: the queue is FIFO, so
-		// once the sentinel's row exists the duplicate has been fully
-		// processed — and must have produced nothing.
+		// once the sentinel's rows exist the duplicate has been fully
+		// processed — and must have produced nothing. A collected event
+		// tells the requester and the courier (D34): two rows.
 		publishRawJson(fixture, "request.accepted");
 		publishEvent(collected("e-int-3"));
 		await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-				assertThat(countByEventId("e-int-3")).isEqualTo(1));
-		assertThat(notifications.count()).isEqualTo(baseline + 3);
+				assertThat(countByEventId("e-int-3")).isEqualTo(2));
+		assertThat(notifications.count()).isEqualTo(baseline + 4);
 
 		// Topic routing: a key outside request.# never reaches this queue —
 		// the body is a perfectly valid request event, so a row for it would
@@ -182,14 +187,13 @@ class RequestEventsRabbitMqIntegrationTest {
 		// and dead-lettered straight to the DLQ (D7) — no rows, queue not
 		// wedged, message kept intact for replay.
 		publishRawJson("""
-				{"eventType": "request.refunded", "eventId": "e-int-unknown",
-				 "parties": ["usr-req-1001"]}
+				{"eventType": "request.refunded", "eventId": "e-int-unknown"}
 				""".getBytes(StandardCharsets.UTF_8), "request.refunded");
 
 		// Closing sentinel: once it lands, everything above is settled.
 		publishEvent(completed("e-int-4"));
 		await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-				assertThat(countByEventId("e-int-4")).isEqualTo(1));
+				assertThat(countByEventId("e-int-4")).isEqualTo(2));
 		assertThat(countByEventId("e-int-credit")).isZero();
 		assertThat(countByEventId("e-int-unknown")).isZero();
 
@@ -245,7 +249,7 @@ class RequestEventsRabbitMqIntegrationTest {
 		}
 		publishEvent(collected("e-int-dispute-sentinel"));
 		await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-				assertThat(countByEventId("e-int-dispute-sentinel")).isEqualTo(1));
+				assertThat(countByEventId("e-int-dispute-sentinel")).isEqualTo(2));
 		for (String eventType : disputeTypes) {
 			assertThat(rowsOfType(eventType)).hasSize(2);
 		}
@@ -258,11 +262,11 @@ class RequestEventsRabbitMqIntegrationTest {
 	void transientFailureRecoversThroughRetryQueue() {
 		publishEvent(collected("flaky-e-1"));
 
-		// The row can only exist after a full park-and-return cycle: the
+		// The rows can only exist after a full park-and-return cycle: the
 		// decorator failed the first delivery, so success proves the
 		// message survived the retry queue (F2.2).
 		await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-				assertThat(countByEventId("flaky-e-1")).isEqualTo(1));
+				assertThat(countByEventId("flaky-e-1")).isEqualTo(2));
 
 		awaitDrained();
 		assertThat(readyMessageCount(RabbitMqTopology.REQUEST_EVENTS_DEAD_LETTER_QUEUE)).isZero();
@@ -331,13 +335,13 @@ class RequestEventsRabbitMqIntegrationTest {
 
 	private static RequestCollected collected(String eventId) {
 		return new RequestCollected(eventId, Instant.parse("2026-09-19T09:00:00Z"),
-				"order-service", "c-int", List.of("usr-req-1001"), "req-20260919-0042",
+				"order-service", "c-int", "req-20260919-0042",
 				"usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "integration");
 	}
 
 	private static RequestCompleted completed(String eventId) {
 		return new RequestCompleted(eventId, Instant.parse("2026-09-19T09:05:00Z"),
-				"order-service", "c-int", List.of("usr-req-1001"), "req-20260919-0042",
+				"order-service", "c-int", "req-20260919-0042",
 				"usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "integration");
 	}
 
@@ -346,7 +350,7 @@ class RequestEventsRabbitMqIntegrationTest {
 				{"eventType": "request.created", "eventId": "%s",
 				 "occurredAt": "2026-09-19T09:00:00Z",
 				 "producer": "order-service", "correlationId": "c-int",
-				 "parties": ["usr-req-1001"], "requestId": "req-20260919-0042",
+				 "requestId": "req-20260919-0042",
 				 "requesterId": "usr-req-1001", "pickupLocation": "Techno Edge",
 				 "dropoffLocation": "COM3-01-19", "note": "integration"}
 				""".formatted(eventId)).getBytes(StandardCharsets.UTF_8);

@@ -14,7 +14,6 @@ package foc.contracts.events.credit;
 import foc.contracts.events.core.EventTypeRegistry;
 
 import java.time.Instant;
-import java.util.List;
 
 /**
  * The Credit Service reserved a request's reward from the requester's
@@ -26,7 +25,6 @@ public record CreditReserved(
 		Instant occurredAt,
 		String producer,
 		String correlationId,
-		List<String> parties,
 		String requestId,
 		String requesterId,
 		Integer amount) implements CreditEvent {

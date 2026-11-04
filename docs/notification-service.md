@@ -3,7 +3,7 @@
   Tool: Claude Code (Fable 5), 2026-09-15 – 2026-09-21.
   Scope: transcribed and maintained the team-decided notification-service
   design in this document and the companion diagram. Every design decision
-  (D1–D32) was made by a team member — recorded per decision in the
+  (D1–D34) was made by a team member — recorded per decision in the
   Decisions table, chosen via neutral options Q&As where AI assisted — and
   the decision-by-decision history lives in ai/usage-log.md and git
   history. The tool documented decisions, derived the traceability
@@ -70,6 +70,14 @@
   queue trio bound on the exact rating.submitted key, D16/D32/F1.3 notes
   qualified from one-domain wording (recipient scope decided on #44).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-04, Claude Code (Fable 5.1): D34 added — recipient resolution,
+  the author's decision via neutral options Q&A after the tool declined
+  to say which option was better — with the "Recipient resolution
+  (D34)" section (factual comparison matrix, the author's own
+  reasoning, rule table, ingest diagram), the parties metadata row
+  removed from the event-contract notes, D18's one-time-break note,
+  and the F1.2/F1.3 traceability rows. Author review: Leong Wei Zhi,
+  pending pull request review.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -90,7 +98,8 @@ Companion diagram: [`notification-service.mmd`](notification-service.mmd)
 
 All decisions were made by Leong Wei Zhi (D1–D10 on 2026-09-15, D11 on
 2026-09-18, D12–D19 on 2026-09-19, D20–D22 on 2026-09-20, D23 on
-2026-10-12, D24–D31 on 2026-10-17, D32 on 2026-10-19) and count as
+2026-10-12, D24–D31 on 2026-10-17, D32 on 2026-10-19, D33 on
+2026-10-30, D34 on 2026-11-04) and count as
 the team's finalized design for this service. Superseded decisions
 (D5, D14, D29 — display names in events, reversed the same day in
 favor of D30 — and D30/D31 themselves, the ingest-time lookup and its
@@ -114,7 +123,7 @@ removed; gaps in the numbering are intentional.
 | D15 | Cross-service contract names | **Shared Java library** `foc-contracts/` (framework-free Maven module) — the sole exception to the no-shared-code convention. Holds the typed event contracts and canonical fixtures; see [Event contracts](#event-contracts-d17d18) | drift caught at compile time / by contract tests |
 | D16 | Exchange type | **Topic exchange**, one per producing domain; canonical routing keys. This service binds `request.#` on `request-events` (it notifies on every request event). *2026-10-30 note (issue #255):* on `rating-events` it binds the exact `rating.submitted` key instead — the rating domain opts in event by event | Notif F1.1–F1.3; Extensibility |
 | D17 | Event contract shape | **Flat typed event records, no envelope** — one record per request-lifecycle fact; see [Event contracts](#event-contracts-d17d18) | schema per event |
-| D18 | Event identity & dispatch | **One canonical identity string per event** (e.g. `request.accepted`), registered once in `EventTypeRegistry`; consumers dispatch on the body `eventType`. A breaking contract change ships as a new event type | Notif F1.3; portability |
+| D18 | Event identity & dispatch | **One canonical identity string per event** (e.g. `request.accepted`), registered once in `EventTypeRegistry`; consumers dispatch on the body `eventType`. A breaking contract change ships as a new event type. *2026-11-04 note (D34):* the `parties` removal shipped as a one-time coordinated break of this rule rather than as `.v2` types — every producer and consumer builds `foc-contracts` from source and deploys together, and consumers ignore the field on messages published before it | Notif F1.3; portability |
 | D19 | Idempotency scope | **Event-ID dedupe only** — the per-entity sequence stale-discard mechanism was removed and requirement F2.4 retired; out-of-order deliveries each notify | Notif F2.1 |
 | D20 | Dead-letter exchange form | **The default exchange (`""`)** serves as the dead-letter exchange on both legs — see [Failure handling](#failure-handling-d6d7-d20d21) | minimal topology |
 | D21 | Unconvertible-message path | **Dead-letter on first rejection**, skipping the retry queue — retrying a message that cannot convert could never succeed | Notif F2.3 |
@@ -127,6 +136,7 @@ removed; gaps in the numbering are intentional.
 | D28 | REST filter authorities | **Empty authorities**: the JWT filter authenticates the subject only — this service's verifier exposes no role claim and no route is role-gated; the denylist is NOT re-checked on REST (gateway decision G4; D23 stays the STOMP-only exception) | least change |
 | D32 | Display names (supersedes D30/D31) | **Events and stored payloads carry party IDs only; the web resolves the acting party's id (`courierId`; since issue #255 also `raterId`) → username at read time** (gateway `GET /api/user/users/{id}` with the caller's own JWT, SPA-side cache: 10 min positive / 30 s negative TTL, in-flight dedupe) — no service-to-service call remains, the internal-token machinery is gone, F1.1 holds unamended, renames show current names (D30's ingest snapshot went stale), and a failed lookup renders the actor-less copy — see [Display names](#display-names-d32) | Notif F3.1 UX |
 | D33 | Dropped-courier prune (issue #266) | **Ingesting `request.dropped` deletes the dropping courier's stored rows for that request**, in the same transaction as the dedupe insert — the drop removes them as a party (order-service nulls `courierId`), so every row they held (`request.accepted`, `request.collected`, dispute events) could only dead-end on the detail 404. Bounded to rows at or before the drop and guarded against retry-queue reordering, with the badge re-synced when the Center opens (PR #277 review). Chosen (options Q&A) over a past-party read-access record in order-service and over web-only 404 softening — see [Dropped-courier prune](#dropped-courier-prune-d33) | Notif F3.1 UX; issue #266 |
+| D34 | Recipient resolution | **Events carry business facts only; this service derives who is told from each event's own id fields (`requesterId`, `courierId`, `rateeId`), one rule per event type** — the `parties` wire field is removed from every contract record, and `request.expired` gains a nullable `courierId` so the courier who had accepted stays reachable. Chosen (options Q&A) over a publisher-sent notification command and over keeping `parties` on the event — see [Recipient resolution](#recipient-resolution-d34) | Notif F1.1, F1.2; contract decoupling |
 
 ## Components
 
@@ -179,7 +189,9 @@ business fields):
 | `occurredAt` timestamp | notification display and audit |
 | `producer` (e.g. `order-service`) | provenance/audit |
 | `correlationId` | correlates the event with the request/flow that caused it |
-| `parties` (user IDs to notify) | one notification per entry, without querying other services (F1.1, F1.2) |
+
+Who is told is not wire metadata: this service derives it per event
+type from the business fields (D34).
 
 Identity mechanics (D18): the identity string travels twice by design —
 as the body `eventType`, which consumers **dispatch on** (D11's
@@ -202,17 +214,18 @@ and `request.rejected`
 the courier withdrawing after an accept (Order F5.2): the request
 returns to the open feed and the reward stays held, so it is a
 distinct type — never `request.cancelled`, which would release the
-reward — with `parties` = the requester only and a non-null
+reward — told to the requester only (D34), with a non-null
 `courierId` (the courier who dropped). All request events
 carry `requestId`, `requesterId`, `pickupLocation`, `dropoffLocation`,
 and `note` (nullable: a request may have none); the post-acceptance events add `courierId` (nullable on
-`request.cancelled` — a pre-acceptance cancel has no courier),
+`request.cancelled` — a pre-acceptance cancel has no courier — and on
+`request.expired` — null when the request expired while still open, D34),
 `request.submitted` adds `reward` and `request.rejected` adds
 `reason`. The N3 dispute events (issue #234) add, on
 `request.disputed`, `category` and a nullable `disputeNote`, and on
 `request.dispute-resolved`, `courierAmount`, `requesterAmount` and a
-nullable `resolutionNote`; both carry `courierId` and `parties` =
-requester and courier. Display names are deliberately **not** event fields — and not
+nullable `resolutionNote`; both carry `courierId`, and both parties are
+told (D34). Display names are deliberately **not** event fields — and not
 stored payload fields either (D32, superseding D30): payloads keep the
 party IDs as-is and the web resolves `courierId` to a username at read
 time — see [Display names](#display-names-d32). The credit domain's `credit.reserved` and
@@ -221,8 +234,8 @@ time — see [Display names](#display-names-d32). The credit domain's `credit.re
 `credit-events` exchange, which this service does not bind.
 
 The rating domain (N1, issue #255): `rating.submitted` carries
-`ratingId`, `requestId`, `raterId`, `rateeId` and `stars`, with
-`parties` = **the ratee only** — the rater knows what they did
+`ratingId`, `requestId`, `raterId`, `rateeId` and `stars`; this service
+tells **the ratee only** (D34) — the rater knows what they did
 (decision on #44). It arrives on the `rating-events` exchange through
 this service's second queue trio, bound on the exact key rather than
 `rating.#`: future rating events opt in one binding at a time. The
@@ -327,8 +340,8 @@ ingest deletes the rows there would be nothing behind:
 - **Scope:** only the dropping courier's rows for that request. The
   requester's history is untouched and they still receive the
   `request.dropped` row; a courier who re-accepts gains fresh rows.
-- **Badge** (PR #277 review): `request.dropped` has requester-only
-  parties, so no push tells the dropping courier's bell that rows
+- **Badge** (PR #277 review): `request.dropped` tells the requester
+  only (D34), so no push tells the dropping courier's bell that rows
   vanished, and no other trigger (login, reconnect, push, read write)
   may come. The Center re-syncs the unread count on mount (author
   decision via options Q&A, over a live prune signal and over an
@@ -340,6 +353,64 @@ ingest deletes the rows there would be nothing behind:
   until the next sync trigger, now including opening the Center (see
   Badge above); and their Request History stays empty for that
   request, which is this decision's intended meaning, not a gap.
+
+## Recipient resolution (D34)
+
+Events carry business facts only. This service decides who is told,
+one rule per event type, from the ids already on the event. Until D34
+every record carried a `parties` list that the publisher filled in. The
+change follows the pattern in the note the author brought on
+2026-11-04: the business event names the people involved; who and how
+to notify is the notification service's logic.
+
+Options compared (factual properties; decided by Leong Wei Zhi,
+2026-11-04):
+
+| | A. This service derives recipients (chosen — D34) | B. Publisher sends a notification command | C. `parties` on the business event (before D34) |
+| --- | --- | --- | --- |
+| Where the who-to-tell rule lives | here, `RecipientResolver`, one arm per type | each publisher, in a second message | each publisher, in the event |
+| Message types on the broker | 17 | 18: command record, registry entry, fixture, a third queue trio here | 17 |
+| Messages per business action | 1 | 2, same outbox transaction | 1 |
+| Notification relative to the fact | same message | a second message on another exchange; no ordering between the two | same message |
+| Outward calls at ingest | none (F1.1) | none | none |
+| Contract change | `parties` removed; `request.expired` gains nullable `courierId` | `parties` removed; new command type | none |
+| foc-contracts convention 1 (facts, never commands) | holds | needs a written exception | holds |
+
+Decider's reasoning (Leong Wei Zhi, 2026-11-04): with one business
+event feeding every consumer, the notification follows the fact it
+describes. A separate command would be a second message whose arrival
+relative to the event has to be reasoned about. The accepted cost is
+that this service holds the who-to-tell rule, which the publisher could
+have stated, since it already holds the ids. Checked against the code:
+every recipient is a field on the event once `request.expired` carries
+`courierId`, so the rule needs no lookup and adds no coupling.
+
+| Event type | Told |
+| --- | --- |
+| `request.submitted`, `created`, `rejected`, `cancelled`, `courier-arrived` | requester |
+| `request.dropped` | requester only; the dropping courier is named in `courierId` for the D33 prune, not told |
+| `request.accepted`, `collected`, `completed`, `disputed`, `dispute-resolved` | requester and courier |
+| `request.expired` | requester, plus the courier who had accepted when `courierId` is set |
+| `rating.submitted` | ratee only (#44) |
+| `credit.*`, `user.*` | nobody; this service binds neither exchange |
+
+```mermaid
+flowchart LR
+    Q["request-events /<br/>rating-events queue"] ==> C["converter:<br/>dispatch on eventType"]
+    C --> D{"eventId<br/>seen?"}
+    D -->|yes| X["ack, nothing stored"]
+    D -->|no| P["request.dropped?<br/>prune the courier's rows (D33)"]
+    P --> R["RecipientResolver:<br/>rule per event type"]
+    R --> N["one row per recipient<br/>(dropped-since guard, D33)"]
+    N ==> S["STOMP push to each<br/>recipient's /user queue"]
+```
+
+Adding an event type now also means adding its rule here:
+`RecipientResolverTest` iterates the registry and fails until every
+request and rating fixture resolves to someone. A type without a rule
+logs at WARN and stores nothing. Messages published before D34 still
+carry `parties`; consumers ignore it as an unknown field
+(`DomainEventContractTest.ignoresUnknownFields`).
 
 ## REST API contract (D24–D28)
 
@@ -380,8 +451,8 @@ not drawn on the diagram — the traceability table below maps them.
 | Requirement | Satisfied by |
 | --- | --- |
 | Notif F1.1 — notify on events without querying the producing service | each typed event carries all needed data; processor reads only the event + own DB |
-| Notif F1.2 — notify each party of an event | one notification per entry in the event's `parties`; push gateway targets each party's per-user destination |
-| Notif F1.3 — new event types without publisher changes | a new event type is a contracts release consumed via a jar bump (registry-driven converter, `DomainEvent`-generic processor; the `request.#` binding covers new request events unchanged, a new rating event declares its exact-key binding — D16, issue #255). Unknown *fields* are tolerated; an unknown *type* dead-letters intact for replay after a consumer upgrade (D7/D21) |
+| Notif F1.2 — notify each party of an event | one notification per recipient `RecipientResolver` derives from the event's own id fields (D34); push gateway targets each recipient's per-user destination |
+| Notif F1.3 — new event types without publisher changes | a new event type is a contracts release consumed via a jar bump (registry-driven converter, `DomainEvent`-generic processor plus one `RecipientResolver` rule per event type — D34; the `request.#` binding covers new request events unchanged, a new rating event declares its exact-key binding — D16, issue #255). A new request or rating event also needs its recipient rule in this service, still no publisher change. Unknown *fields* are tolerated; an unknown *type* dead-letters intact for replay after a consumer upgrade (D7/D21) |
 | Notif F1.4 — delivery failure never affects the producing operation | fire-and-forget publish; all retry/failure handling stays on the consumer side of the broker |
 | Notif F2.1 — no duplicate notification on redelivery | unique event-ID constraint checked in the same DB transaction as the notification insert (D4) |
 | Notif F2.2 — retry failed deliveries | listener republish → TTL retry queue → redelivery with backoff, up to max attempts (D6/D20) |
@@ -540,9 +611,9 @@ Why the push channel is centralized here rather than per service:
   STOMP `CONNECT` frame carries `Authorization: Bearer <JWT>` (HS256,
   shared `JWT_SECRET`, verified with jjwt). A channel interceptor
   validates it and sets the session principal to the token's `sub` —
-  the platform user ID, the same ID in event `parties[]` and
-  notification `recipientId`, which is what `/user/...` routing matches
-  on. The interceptor also rejects **revoked** tokens via the D23
+  the platform user ID, the same ID the events carry as
+  `requesterId`/`courierId`/`rateeId` and this service stores as
+  `recipientId` (D34), which is what `/user/...` routing matches on. The interceptor also rejects **revoked** tokens via the D23
   denylist lookups — the token's own key and the account's password-
   reset cutoff. Invalid, revoked or missing tokens reject the CONNECT
   with a STOMP ERROR frame and the session closes. STOMP 1.2's

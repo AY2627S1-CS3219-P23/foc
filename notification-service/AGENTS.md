@@ -21,7 +21,7 @@ RabbitMQ, stores notifications, and pushes them over STOMP. Read the
 root `AGENTS.md` first (architecture, course constraints, AI usage
 policy). The design authority is
 [`docs/notification-service.md`](../docs/notification-service.md) —
-every architectural choice is a numbered decision (D1–D29) there; cite
+every architectural choice is a numbered decision (D1–D34) there; cite
 the decision ID when touching related code.
 
 ## Package map (`src/main/java/foc/notification/`)
@@ -30,7 +30,7 @@ the decision ID when touching related code.
 | --- | --- |
 | `entity/` | `Notification` (one row per recipient, read/unread flag), `ProcessedEvent` (dedupe inbox) |
 | `repository/` | Spring Data JPA repositories for both entities |
-| `service/` | `EventProcessor` (port), `IdempotentEventProcessor` (dedupe + insert + publishes `NotificationStoredEvent`), `NotificationDto`, `RetentionPurgeScheduler` (purges `notifications` + `processed_events` past the retention window, #137) |
+| `service/` | `EventProcessor` (port), `IdempotentEventProcessor` (dedupe + insert + publishes `NotificationStoredEvent`), `RecipientResolver` (who an event notifies, per event type from its id fields — D34), `NotificationDto`, `RetentionPurgeScheduler` (purges `notifications` + `processed_events` past the retention window, #137) |
 | `messaging/rabbitmq/` | The only package allowed to touch broker types: `DomainEventsListener` (manual ack, retry republish), `DomainEventMessageConverter` (dispatch on body `eventType` via `EventTypeRegistry`), `RabbitMqTopology` + `RabbitMqTopologyInitializer` (startup declaration), `RabbitMqMessageConverterConfig` |
 | `messaging/stomp/` | `WebSocketStompConfig` (`/ws`, SockJS, heartbeats — also owns the app's sole `TaskScheduler`), `JwtChannelInterceptor` (CONNECT auth), `NotificationPushListener` (`AFTER_COMMIT` push), `StompPrincipal` |
 | `security/` | `JwtVerifier` (HS256, jjwt; fails startup on missing/short secret), `JwtAuthenticationFilter` (REST bearer → security context, empty authorities per D28; built inline by `SecurityConfig`, not a bean), `RestAuthEntryPoint`/`RestAccessDeniedHandler` (401/403 problem+json), `redis/RedisTokenDenylist` (D23 — STOMP CONNECT only, never the REST path, G4) |
@@ -55,7 +55,8 @@ the decision ID when touching related code.
   other broker headers; `EventTypeRegistry` in `foc-contracts` is the
   single class↔identity source.
 - **JWT verified at STOMP CONNECT** (issue #67): principal = token
-  `sub` = platform user ID = `parties[]` entry = `recipientId`. The
+  `sub` = platform user ID = the recipient `RecipientResolver` names from the
+  event's `requesterId`/`courierId`/`rateeId` (D34) = `recipientId`. The
   REST API verifies the same token per request (issue #66) but must
   **not** read the denylist — the gateway does that for HTTP (G4);
   `ArchitectureTest` confines Redis types to `security.redis`.
@@ -78,7 +79,8 @@ the decision ID when touching related code.
 ./mvnw test
 ```
 
-Tests: `IdempotentEventProcessorTest`, `NotificationRepositoryTest`,
+Tests: `IdempotentEventProcessorTest`, `RecipientResolverTest` (the D34
+rule per event type, registry-driven), `NotificationRepositoryTest`,
 `ProcessedEventRepositoryTest`,
 `RetentionPurgeSchedulerTest` (H2), `DomainEventContractTest` (fixture
 tolerant-reader lock-in), `DomainEventMessageConverterTest`,

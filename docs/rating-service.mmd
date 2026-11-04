@@ -7,6 +7,9 @@ title: "FoC Rating Service — Component-Level Architecture"
 %% Leong Wei Zhi, recorded in docs/rating-service.md) from the merged
 %% implementation; the tool made no design decisions.
 %% Author review: Leong Wei Zhi, pending pull request review.
+%% 2026-11-04, Claude Code (Fable 5.1), notification D34: the outbox edge
+%% label no longer names the removed parties field. Author review: Leong
+%% Wei Zhi, pending pull request review.
 %% Legend, decisions and traceability: see docs/rating-service.md
 flowchart TB
     ORDER_SVC["<b>Order Service</b> (order-service/)<br/>publishes request.completed on its<br/>normal event stream — no N1 change"]
@@ -50,5 +53,5 @@ flowchart TB
     READ_API ---|"Spring Data JPA"| RATING_DB
     REPORT_API ---|"Spring Data JPA"| RATING_DB
     OUTBOX ---|"drain unsent rows"| RATING_DB
-    OUTBOX ==>|"publish rating.submitted —<br/>ids + stars, parties = ratee only (D8)"| RATING_EXCH
+    OUTBOX ==>|"publish rating.submitted —<br/>ids + stars; ratee told only (D8, notification D34)"| RATING_EXCH
     RATING_EXCH ==>|"route: rating.submitted<br/>to the consumer's own trio"| NOTIF_SVC

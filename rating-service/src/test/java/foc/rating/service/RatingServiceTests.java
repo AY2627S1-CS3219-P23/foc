@@ -3,10 +3,13 @@
  * Tool: Claude Code (Fable 5), 2026-10-30, issue #252.
  * Scope: tests of the submit flow's outbox side, following
  * order-service's RequestsServiceTests (read the rows back, parse the
- * payload): the wire body in both directions (parties = the ratee
- * alone, no write-up in the payload, D32), the same-transaction
+ * payload): the wire body in both directions (ids only, no write-up
+ * in the payload, D32; no recipient list, notification D34), the same-transaction
  * guarantee (a rollback leaves neither row), and the unique key the
  * pre-check leans on.
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author decision
+ * via options Q&A): the parties assertions became a no-recipient-list
+ * check. Author review: Leong Wei Zhi, pending pull request review.
  * Author review: [pending]
  */
 package foc.rating.service;
@@ -73,7 +76,7 @@ class RatingServiceTests {
     }
 
     @Test
-    @DisplayName("One submit writes one rating.submitted with the mapped fields, the ratee alone in parties")
+    @DisplayName("One submit writes one rating.submitted with the mapped fields and no recipient list")
     void submitWritesRatingSubmittedWithTheMappedFields() {
         String requestId = completedRequest("req-svc-1");
 
@@ -91,10 +94,9 @@ class RatingServiceTests {
         assertThat(event.get("raterId").stringValue()).isEqualTo(REQUESTER);
         assertThat(event.get("rateeId").stringValue()).isEqualTo(COURIER);
         assertThat(event.get("stars").intValue()).isEqualTo(5);
-        // the ratee alone is notified (#44); the rater is not told of
-        // their own action
-        assertThat(event.get("parties")).hasSize(1);
-        assertThat(event.get("parties").get(0).stringValue()).isEqualTo(COURIER);
+        // the ratee is named by rateeId; who is told is the Notification
+        // Service's rule (#44, D34), so no recipient list rides on the wire
+        assertThat(event.has("parties")).isFalse();
         // IDs only (D32): the write-up never rides in the payload
         assertThat(event.has("text")).isFalse();
         assertThat(event.has("body")).isFalse();
@@ -110,7 +112,6 @@ class RatingServiceTests {
         JsonNode event = eventsFor(requestId).get(0);
         assertThat(event.get("raterId").stringValue()).isEqualTo(COURIER);
         assertThat(event.get("rateeId").stringValue()).isEqualTo(REQUESTER);
-        assertThat(event.get("parties").get(0).stringValue()).isEqualTo(REQUESTER);
     }
 
     @Test

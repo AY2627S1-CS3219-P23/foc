@@ -4,7 +4,6 @@
   "occurredAt": "2026-09-19T09:30:00Z",
   "producer": "rating-service",
   "correlationId": "corr-7f3a1c9e",
-  "parties": ["usr-cou-2002"],
   "ratingId": "rat-20260919-0001",
   "requestId": "req-20260919-0042",
   "raterId": "usr-req-1001",

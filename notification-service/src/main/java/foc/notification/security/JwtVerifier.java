@@ -30,9 +30,10 @@ import org.springframework.stereotype.Component;
 
 /**
  * Verifies platform JWTs (HS256, shared {@code JWT_SECRET}) and
- * extracts the user ID from the {@code sub} claim — the same ID that
- * appears in domain events' {@code parties()} and notification
- * {@code recipientId} (provisional platform convention, issue #67).
+ * extracts the user ID from the {@code sub} claim — the same ID the
+ * request events carry as {@code requesterId}/{@code courierId} and this
+ * service stores as the notification {@code recipientId} (platform
+ * convention, issue #67; recipients derived per D34).
  *
  * <p>Public and transport-agnostic: the STOMP CONNECT interceptor
  * uses it now, and the REST API (issue #66) is expected to reuse it.

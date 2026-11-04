@@ -31,6 +31,11 @@
  * The redelivery fixture's re-accept moved to a later occurredAt, as
  * a real re-accept is: at the old shared timestamp the new guard
  * (ties go to the drop, like the prune bound) would skip its row.
+ * 2026-11-04, Claude Code (Fable 5.1), D34 (author decision via options
+ * Q&A): builders no longer take a parties list — recipients come from
+ * the event's requesterId/courierId; the counts that assumed a
+ * requester-only accepted event follow the rule (two rows).
+ * Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.notification.service;
 
@@ -79,24 +84,25 @@ class IdempotentEventProcessorTest {
 		processedEvents.deleteAll();
 	}
 
-	private static RequestAccepted accepted(String eventId, String requestId, List<String> parties) {
-		return accepted(eventId, requestId, OCCURRED_AT, parties);
+	// recipients follow the rule (D34): accepted tells the requester and the
+	// courier, created the requester alone
+	private static RequestAccepted accepted(String eventId, String requestId) {
+		return accepted(eventId, requestId, OCCURRED_AT);
 	}
 
-	private static RequestAccepted accepted(String eventId, String requestId, Instant occurredAt,
-			List<String> parties) {
-		return new RequestAccepted(eventId, occurredAt, "order-service", "c-1", parties,
+	private static RequestAccepted accepted(String eventId, String requestId, Instant occurredAt) {
+		return new RequestAccepted(eventId, occurredAt, "order-service", "c-1",
 				requestId, "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "hi");
 	}
 
-	private static RequestCreated created(String eventId, String requestId, List<String> parties) {
-		return new RequestCreated(eventId, OCCURRED_AT, "order-service", "c-1", parties,
+	private static RequestCreated created(String eventId, String requestId) {
+		return new RequestCreated(eventId, OCCURRED_AT, "order-service", "c-1",
 				requestId, "usr-req-1001", "Techno Edge", "COM3-01-19", "hi");
 	}
 
 	@Test
-	void createsOneNotificationPerParty() {
-		eventProcessor.process(accepted("e-1", "req-1", List.of("usr-req-1001", "usr-cou-2002")));
+	void createsOneNotificationPerRecipient() {
+		eventProcessor.process(accepted("e-1", "req-1"));
 
 		List<Notification> rows = notifications.findAll();
 		assertThat(rows).hasSize(2);
@@ -113,7 +119,7 @@ class IdempotentEventProcessorTest {
 
 	@Test
 	void payloadStoresBusinessFieldsOnly() {
-		eventProcessor.process(created("e-1", "req-1", List.of("usr-req-1001")));
+		eventProcessor.process(created("e-1", "req-1"));
 
 		String stored = notifications.findAll().get(0).getPayload();
 		Map<String, Object> payload = objectMapper.readValue(stored, Map.class);
@@ -133,7 +139,7 @@ class IdempotentEventProcessorTest {
 
 	@Test
 	void duplicateEventIdIsSilentNoOp() {
-		RequestAccepted event = accepted("e-1", "req-1", List.of("usr-req-1001", "usr-cou-2002"));
+		RequestAccepted event = accepted("e-1", "req-1");
 		eventProcessor.process(event);
 		eventProcessor.process(event);
 
@@ -142,15 +148,16 @@ class IdempotentEventProcessorTest {
 
 	@Test
 	void distinctEventsForSameRequestEachNotify() {
-		eventProcessor.process(created("e-1", "req-1", List.of("usr-req-1001")));
-		eventProcessor.process(accepted("e-2", "req-1", List.of("usr-req-1001")));
+		eventProcessor.process(created("e-1", "req-1"));
+		eventProcessor.process(accepted("e-2", "req-1"));
 
-		assertThat(notifications.count()).isEqualTo(2);
+		// created: the requester; accepted: the requester and the courier (D34)
+		assertThat(notifications.count()).isEqualTo(3);
 		assertThat(notifications.findAll()).extracting(Notification::getEventType)
-				.containsExactlyInAnyOrder("request.created", "request.accepted");
+				.containsExactlyInAnyOrder("request.created", "request.accepted", "request.accepted");
 	}
 
-	// request.dropped: requester-only parties, courierId = the dropper
+	// request.dropped: courierId = the dropper, who is named but not told (D34)
 	private static RequestDropped dropped(String eventId, String requestId, String courierId) {
 		return dropped(eventId, requestId, courierId, OCCURRED_AT);
 	}
@@ -158,7 +165,7 @@ class IdempotentEventProcessorTest {
 	private static RequestDropped dropped(String eventId, String requestId, String courierId,
 			Instant occurredAt) {
 		return new RequestDropped(eventId, occurredAt, "order-service", "c-1",
-				List.of("usr-req-1001"), requestId, "usr-req-1001", courierId,
+				requestId, "usr-req-1001", courierId,
 				"Techno Edge", "COM3-01-19", "hi");
 	}
 
@@ -168,8 +175,8 @@ class IdempotentEventProcessorTest {
 	// requester's rows and the courier's rows for other requests stay.
 	@Test
 	void droppedPrunesTheDroppingCouriersRowsForThatRequestOnly() {
-		eventProcessor.process(accepted("e-1", "req-1", List.of("usr-req-1001", "usr-cou-2002")));
-		eventProcessor.process(accepted("e-2", "req-2", List.of("usr-req-1001", "usr-cou-2002")));
+		eventProcessor.process(accepted("e-1", "req-1"));
+		eventProcessor.process(accepted("e-2", "req-2"));
 
 		eventProcessor.process(dropped("e-3", "req-1", "usr-cou-2002"));
 
@@ -190,11 +197,13 @@ class IdempotentEventProcessorTest {
 	// request 12 must not take request 123's rows with it.
 	@Test
 	void droppedPruneDoesNotMatchRequestIdPrefixes() {
-		eventProcessor.process(accepted("e-1", "req-123", List.of("usr-cou-2002")));
+		eventProcessor.process(accepted("e-1", "req-123"));
 
 		eventProcessor.process(dropped("e-2", "req-12", "usr-cou-2002"));
 
-		assertThat(notifications.findAll()).extracting(Notification::getEventId).contains("e-1");
+		// the courier's req-123 row survives a drop of req-12
+		assertThat(notifications.findAll()).filteredOn(n -> n.getRecipientId().equals("usr-cou-2002"))
+				.extracting(Notification::getEventId).containsExactly("e-1");
 	}
 
 	// A redelivered dropped event is discarded by the dedupe before the
@@ -205,8 +214,7 @@ class IdempotentEventProcessorTest {
 	void redeliveredDroppedEventDoesNotPruneAgain() {
 		RequestDropped event = dropped("e-1", "req-1", "usr-cou-2002");
 		eventProcessor.process(event);
-		eventProcessor.process(accepted("e-2", "req-1", OCCURRED_AT.plusSeconds(5),
-				List.of("usr-req-1001", "usr-cou-2002")));
+		eventProcessor.process(accepted("e-2", "req-1", OCCURRED_AT.plusSeconds(5)));
 
 		eventProcessor.process(event);
 
@@ -223,11 +231,9 @@ class IdempotentEventProcessorTest {
 	// review).
 	@Test
 	void retriedDropSparesAReacceptsNewerRows() {
-		eventProcessor.process(accepted("e-1", "req-1", OCCURRED_AT,
-				List.of("usr-req-1001", "usr-cou-2002")));
+		eventProcessor.process(accepted("e-1", "req-1", OCCURRED_AT));
 		// the re-accept lands before the drop's redelivery does
-		eventProcessor.process(accepted("e-2", "req-1", OCCURRED_AT.plusSeconds(10),
-				List.of("usr-req-1001", "usr-cou-2002")));
+		eventProcessor.process(accepted("e-2", "req-1", OCCURRED_AT.plusSeconds(10)));
 
 		// the drop sits between the two accepts; its first attempt
 		// committed nothing, so this processing runs the prune
@@ -247,10 +253,8 @@ class IdempotentEventProcessorTest {
 	void courierEventLandingAfterItsDropStoresNoCourierRow() {
 		eventProcessor.process(dropped("e-1", "req-1", "usr-cou-2002", OCCURRED_AT.plusSeconds(5)));
 
-		eventProcessor.process(accepted("e-2", "req-1", OCCURRED_AT,
-				List.of("usr-req-1001", "usr-cou-2002")));
-		eventProcessor.process(accepted("e-3", "req-1", OCCURRED_AT.plusSeconds(5),
-				List.of("usr-req-1001", "usr-cou-2002")));
+		eventProcessor.process(accepted("e-2", "req-1", OCCURRED_AT));
+		eventProcessor.process(accepted("e-3", "req-1", OCCURRED_AT.plusSeconds(5)));
 
 		assertThat(notifications.findAll()).filteredOn(n -> n.getRecipientId().equals("usr-cou-2002"))
 				.isEmpty();
@@ -259,8 +263,7 @@ class IdempotentEventProcessorTest {
 				.containsExactlyInAnyOrder("e-1", "e-2", "e-3");
 		// the guard is per request: the same courier's rows elsewhere
 		// store untouched
-		eventProcessor.process(accepted("e-4", "req-2", OCCURRED_AT,
-				List.of("usr-req-1001", "usr-cou-2002")));
+		eventProcessor.process(accepted("e-4", "req-2", OCCURRED_AT));
 		assertThat(notifications.findAll()).filteredOn(n -> n.getRecipientId().equals("usr-cou-2002"))
 				.extracting(Notification::getEventId).containsExactly("e-4");
 	}

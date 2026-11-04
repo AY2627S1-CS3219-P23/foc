@@ -40,6 +40,10 @@
  * guarded at ingest — a courier-party event landing after the drop
  * that covers it stores no courier row (author decision via options
  * Q&A, over a D33 accepted-limitation entry).
+ * 2026-11-04, Claude Code (Fable 5.1), D34 (author decision via options
+ * Q&A): the fan-out iterates RecipientResolver's per-type rule instead
+ * of the removed parties field — events carry business facts only.
+ * Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.notification.service;
 
@@ -72,7 +76,8 @@ import tools.jackson.databind.ObjectMapper;
  * auto-configured Jackson mapper — the same mapper the AMQP converter
  * uses (D15) — into the payload column, keeping the client-facing
  * shape free of transport metadata; (4) one notification row per
- * party (F1.2), each followed by a {@link NotificationStoredEvent}
+ * recipient the {@link RecipientResolver} names from the event's own
+ * id fields (F1.2, D34), each followed by a {@link NotificationStoredEvent}
  * published inside the transaction — transaction-bound listeners (the
  * STOMP push gateway) receive it only after the commit, and discarded
  * events publish nothing.
@@ -125,11 +130,11 @@ class IdempotentEventProcessor implements EventProcessor {
 		processedEvents.save(new ProcessedEvent(event.eventId()));
 		Map<String, Object> fields = businessFields(event);
 		String payloadJson = objectMapper.writeValueAsString(fields);
-		for (String party : event.parties()) {
-			if (droppedSince(fields, party, event.occurredAt())) {
+		for (String recipient : RecipientResolver.recipientsOf(event)) {
+			if (droppedSince(fields, recipient, event.occurredAt())) {
 				continue;
 			}
-			Notification saved = notifications.save(new Notification(party, event.eventId(),
+			Notification saved = notifications.save(new Notification(recipient, event.eventId(),
 					event.eventType(), payloadJson, event.occurredAt()));
 			eventPublisher.publishEvent(new NotificationStoredEvent(saved));
 		}
@@ -144,15 +149,15 @@ class IdempotentEventProcessor implements EventProcessor {
 	// row, whose payload carries both ids; ties go to the drop,
 	// mirroring the prune's <= bound. A re-accept is strictly newer
 	// than the drop it follows, so its rows store normally — as does
-	// every row of a party that is not the event's courier.
-	private boolean droppedSince(Map<String, Object> fields, String party, Instant occurredAt) {
+	// every row of a recipient that is not the event's courier.
+	private boolean droppedSince(Map<String, Object> fields, String recipient, Instant occurredAt) {
 		if (!(fields.get("requestId") instanceof String requestId)
-				|| !party.equals(fields.get("courierId"))) {
+				|| !recipient.equals(fields.get("courierId"))) {
 			return false;
 		}
 		return notifications.countByEventTypeSincePayloadMatchingBoth(
 				EventTypeRegistry.routingKeyFor(RequestDropped.class), occurredAt,
-				fieldPattern("requestId", requestId), fieldPattern("courierId", party)) > 0;
+				fieldPattern("requestId", requestId), fieldPattern("courierId", recipient)) > 0;
 	}
 
 	@SuppressWarnings("unchecked")
