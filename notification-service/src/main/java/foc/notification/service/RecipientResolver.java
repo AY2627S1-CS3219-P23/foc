@@ -14,13 +14,14 @@
  * PR #287 review (@Sinnez1): reversed for the five events whose courier
  * is required — a missing one fails loudly, as does a type without a
  * rule; the processor resolves recipients before its first write, so the
- * message dead-letters and stays replayable. Credit and user events are
- * recorded and ignored explicitly.
+ * message dead-letters and stays replayable.
+ * 2026-11-04, follow-up to PR #287 (author's call): the explicit credit
+ * and user arms removed — this service binds neither exchange, so one
+ * that arrives is refused like any type without a rule.
  */
 package foc.notification.service;
 
 import foc.contracts.events.core.DomainEvent;
-import foc.contracts.events.credit.CreditEvent;
 import foc.contracts.events.rating.RatingSubmitted;
 import foc.contracts.events.request.CourierArrived;
 import foc.contracts.events.request.RequestAccepted;
@@ -34,10 +35,7 @@ import foc.contracts.events.request.RequestDropped;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestRejected;
 import foc.contracts.events.request.RequestSubmitted;
-import foc.contracts.events.user.UserEvent;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Who a consumed event notifies (D34), read off the event's own id
@@ -60,15 +58,13 @@ import org.slf4j.LoggerFactory;
  * as well. {@link IdempotentEventProcessor} resolves recipients before
  * its first write, so either throw leaves nothing behind and the
  * listener's retry/DLQ path keeps the message replayable once the rule
- * or the producer is fixed (PR #287 review). Credit and user events are
- * recorded and ignored with a WARN — this service binds neither
- * exchange, so one arriving here was published by hand.
- * {@code RecipientResolverTest} checks every registered type against its
- * fixture.
+ * or the producer is fixed (PR #287 review). Credit and user events take
+ * that path too: this service binds neither exchange (D16), so one can
+ * only arrive by hand or by a rebinding, and dead-lettering it is the
+ * visible outcome. {@code RecipientResolverTest} checks every registered
+ * request and rating type against its fixture.
  */
 final class RecipientResolver {
-
-	private static final Logger log = LoggerFactory.getLogger(RecipientResolver.class);
 
 	private RecipientResolver() {
 	}
@@ -91,10 +87,6 @@ final class RecipientResolver {
 					? List.of(e.requesterId())
 					: List.of(e.requesterId(), e.courierId());
 			case RatingSubmitted e -> List.of(e.rateeId());
-			// never bound here (D16): recorded and ignored, so a hand-published
-			// one does not loop through retries for nothing
-			case CreditEvent e -> ignored(e);
-			case UserEvent e -> ignored(e);
 			default -> throw new IllegalStateException(
 					"no recipient rule for " + event.eventType() + " (eventId " + event.eventId() + ")");
 		};
@@ -110,11 +102,5 @@ final class RecipientResolver {
 					event.eventType() + " (eventId " + event.eventId() + ") has no courierId");
 		}
 		return List.of(requesterId, courierId);
-	}
-
-	private static List<String> ignored(DomainEvent event) {
-		log.warn("{} (eventId {}) reached this service, which binds no {} events; nothing to tell",
-				event.eventType(), event.eventId(), event instanceof CreditEvent ? "credit" : "user");
-		return List.of();
 	}
 }

@@ -11,6 +11,8 @@
  * PR #287 review (@Sinnez1): the null-courier case now expects a loud
  * failure on the events that require one; a type without a rule fails
  * loudly too.
+ * 2026-11-04, follow-up to PR #287 (author's call): credit and user
+ * events are refused like any unmapped type, no longer ignored.
  */
 package foc.notification.service;
 
@@ -152,12 +154,16 @@ class RecipientResolverTest {
 				.doesNotContain(rating.raterId());
 	}
 
-	// this service binds neither exchange; a hand-published one is logged, not stored
+	// This service binds neither exchange (D16), so a credit or user event
+	// can only arrive by hand or by a rebinding: it is refused like any
+	// type without a rule and dead-letters where someone can see it.
 	@Test
-	void creditAndUserEventsTellNobody() throws IOException {
+	void creditAndUserEventsAreRefusedLikeAnyUnmappedType() throws IOException {
 		for (String type : List.of("credit.reserved", "credit.reservation-rejected",
 				"user.created", "user.purged")) {
-			assertThat(RecipientResolver.recipientsOf(readFixture(type))).as(type).isEmpty();
+			DomainEvent event = readFixture(type);
+			assertThatThrownBy(() -> RecipientResolver.recipientsOf(event)).as(type)
+					.isInstanceOf(IllegalStateException.class).hasMessageContaining(type);
 		}
 	}
 
