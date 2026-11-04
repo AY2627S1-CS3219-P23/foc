@@ -28,7 +28,7 @@
   2026-11-02, Claude Code (Fable 5): prepended the PR #286 review-fixes
   entry below.
   2026-11-04, Claude Code (Fable 5.1): prepended the notification D34
-  (parties removal) entry below, then the PR #287 review-round entry.
+  (parties removal) entry below, then the PR #287 review-round entries.
   PR #269's main merge: this file merged cleanly (main appends at the
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
@@ -60,6 +60,33 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-04 — Leong Wei Zhi (notification-service + web: PR #287 review round 2, D34)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** fix, docs
+- **Scope:** `IdempotentEventProcessor` resolves recipients before its
+  first write; `RecipientResolver` fails loudly on a missing required
+  courier (the five two-party events) and on a registered type with no
+  rule, so the message dead-letters and stays replayable, while credit
+  and user events are recorded and ignored explicitly;
+  `RecipientResolverTest` and `IdempotentEventProcessorTest` cover the
+  refusals and the no-write guarantee; the D34 section states the runtime
+  rule. Web: `actorIdOf` takes the event type and answers null for
+  templates that never name the actor (derived from the templates'
+  arity), so an expired row's new `courierId` costs the Notification
+  Center no username lookup; `event-message.test.ts` pins it.
+- **Prompt(s):** "address the latest pr comments" — @Sinnez1's four
+  non-blocking notes on the approval: the swallowed-default and
+  null-courier concerns and the dedupe-before-resolve ordering (applied
+  together as "resolve first, fail loudly"), and the wasted username
+  lookup on expired rows (applied by narrowing `actorIdOf`). The rollout
+  note the review also asked for was already in the D34 section from
+  round 1.
+- **Author review:** notification-service 115/115 with
+  `SPRING_RABBITMQ_HOST=broker.invalid`; web `vitest` 437/437 (4 new),
+  `tsc -b`, `eslint` and `prettier` clean on the changed files. Leong Wei
+  Zhi reviews via pull request.
 
 ---
 ## 2026-11-04 — Leong Wei Zhi (notification-service: PR #287 review round, D34)

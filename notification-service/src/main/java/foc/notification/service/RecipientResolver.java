@@ -11,10 +11,16 @@
  * PR #287 review (@claude bot): the two-party arms go through a
  * null-safe helper — a missing courier tells the requester alone
  * instead of List.of throwing inside process().
+ * PR #287 review (@Sinnez1): reversed for the five events whose courier
+ * is required — a missing one fails loudly, as does a type without a
+ * rule; the processor resolves recipients before its first write, so the
+ * message dead-letters and stays replayable. Credit and user events are
+ * recorded and ignored explicitly.
  */
 package foc.notification.service;
 
 import foc.contracts.events.core.DomainEvent;
+import foc.contracts.events.credit.CreditEvent;
 import foc.contracts.events.rating.RatingSubmitted;
 import foc.contracts.events.request.CourierArrived;
 import foc.contracts.events.request.RequestAccepted;
@@ -28,6 +34,7 @@ import foc.contracts.events.request.RequestDropped;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestRejected;
 import foc.contracts.events.request.RequestSubmitted;
+import foc.contracts.events.user.UserEvent;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,16 +52,19 @@ import org.slf4j.LoggerFactory;
  * courier who had accepted when there was one. Rating submitted: the
  * ratee alone (#44).
  *
- * <p>A null courier on a two-party event means the requester alone is
- * told: the converter already dead-letters a body that omits a required
- * courier (D21), so this only covers the open-request expiry and callers
- * on the port — nothing throws here.
- *
- * <p>A type with no rule stores nothing and logs at WARN (the repo's
- * logging-default rule for switches). Credit and user events land there
- * by design — this service binds neither exchange. A new request or
- * rating event needs its rule here; {@code RecipientResolverTest} checks
- * every registered type against its fixture.
+ * <p>Only {@code request.expired} may lack a courier (the request was
+ * still open). On the five events that require one, a null courier is a
+ * contract violation: the converter already dead-letters such a body
+ * (D21), and this resolver throws too, so a caller on the port cannot
+ * quietly lose the courier's row. A registered type with no rule throws
+ * as well. {@link IdempotentEventProcessor} resolves recipients before
+ * its first write, so either throw leaves nothing behind and the
+ * listener's retry/DLQ path keeps the message replayable once the rule
+ * or the producer is fixed (PR #287 review). Credit and user events are
+ * recorded and ignored with a WARN — this service binds neither
+ * exchange, so one arriving here was published by hand.
+ * {@code RecipientResolverTest} checks every registered type against its
+ * fixture.
  */
 final class RecipientResolver {
 
@@ -71,25 +81,40 @@ final class RecipientResolver {
 			case RequestCancelled e -> List.of(e.requesterId());
 			case CourierArrived e -> List.of(e.requesterId());
 			case RequestDropped e -> List.of(e.requesterId());
-			case RequestAccepted e -> requesterAnd(e.requesterId(), e.courierId());
-			case RequestCollected e -> requesterAnd(e.requesterId(), e.courierId());
-			case RequestCompleted e -> requesterAnd(e.requesterId(), e.courierId());
-			case RequestDisputed e -> requesterAnd(e.requesterId(), e.courierId());
-			case RequestDisputeResolved e -> requesterAnd(e.requesterId(), e.courierId());
-			case RequestExpired e -> requesterAnd(e.requesterId(), e.courierId());
+			case RequestAccepted e -> both(e, e.requesterId(), e.courierId());
+			case RequestCollected e -> both(e, e.requesterId(), e.courierId());
+			case RequestCompleted e -> both(e, e.requesterId(), e.courierId());
+			case RequestDisputed e -> both(e, e.requesterId(), e.courierId());
+			case RequestDisputeResolved e -> both(e, e.requesterId(), e.courierId());
+			// the one event whose courier is optional: null while the request was still open
+			case RequestExpired e -> e.courierId() == null
+					? List.of(e.requesterId())
+					: List.of(e.requesterId(), e.courierId());
 			case RatingSubmitted e -> List.of(e.rateeId());
-			default -> {
-				log.warn("no recipient rule for {} (eventId {}); storing nothing",
-						event.eventType(), event.eventId());
-				yield List.of();
-			}
+			// never bound here (D16): recorded and ignored, so a hand-published
+			// one does not loop through retries for nothing
+			case CreditEvent e -> ignored(e);
+			case UserEvent e -> ignored(e);
+			default -> throw new IllegalStateException(
+					"no recipient rule for " + event.eventType() + " (eventId " + event.eventId() + ")");
 		};
 	}
 
-	// The requester, plus the courier when the event names one. List.of
-	// rejects nulls, and a throw here would land after the dedupe insert
-	// (PR #287 review) — so a null courier simply means nobody else to tell.
-	private static List<String> requesterAnd(String requesterId, String courierId) {
-		return courierId == null ? List.of(requesterId) : List.of(requesterId, courierId);
+	// A required courier that is missing is a contract violation the
+	// converter already rejects (D21); on the port it fails loudly too,
+	// before anything is written, instead of quietly dropping the
+	// courier's row (PR #287 review).
+	private static List<String> both(DomainEvent event, String requesterId, String courierId) {
+		if (courierId == null) {
+			throw new IllegalStateException(
+					event.eventType() + " (eventId " + event.eventId() + ") has no courierId");
+		}
+		return List.of(requesterId, courierId);
+	}
+
+	private static List<String> ignored(DomainEvent event) {
+		log.warn("{} (eventId {}) reached this service, which binds no {} events; nothing to tell",
+				event.eventType(), event.eventId(), event instanceof CreditEvent ? "credit" : "user");
+		return List.of();
 	}
 }

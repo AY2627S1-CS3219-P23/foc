@@ -36,10 +36,14 @@
  * the event's requesterId/courierId; the counts that assumed a
  * requester-only accepted event follow the rule (two rows).
  * Author review: Leong Wei Zhi, pending pull request review.
+ * PR #287 review (@Sinnez1): a refused event (missing required courier)
+ * writes nothing — no dedupe row — so the same id stores normally once
+ * the body is right.
  */
 package foc.notification.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import foc.contracts.events.request.RequestAccepted;
 import foc.contracts.events.request.RequestCreated;
@@ -115,6 +119,24 @@ class IdempotentEventProcessorTest {
 			assertThat(row.isRead()).isFalse();
 		});
 		assertThat(processedEvents.existsById("e-1")).isTrue();
+	}
+
+	// Recipients are resolved before the first write (PR #287 review): a
+	// contract violation the converter would have dead-lettered leaves no
+	// dedupe row behind, so the event is not half-recorded as processed and
+	// a corrected redelivery under the same id stores normally.
+	@Test
+	void refusedEventWritesNothingAndStaysReplayable() {
+		RequestAccepted noCourier = new RequestAccepted("e-bad", OCCURRED_AT, "order-service", "c-1",
+				"req-1", "usr-req-1001", null, "Techno Edge", "COM3-01-19", "hi");
+
+		assertThatThrownBy(() -> eventProcessor.process(noCourier)).isInstanceOf(IllegalStateException.class);
+
+		assertThat(processedEvents.existsById("e-bad")).isFalse();
+		assertThat(notifications.count()).isZero();
+
+		eventProcessor.process(accepted("e-bad", "req-1"));
+		assertThat(notifications.count()).isEqualTo(2);
 	}
 
 	@Test

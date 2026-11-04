@@ -81,6 +81,9 @@
   PR #287 review (@claude bot, Copilot): the D34 section records the
   pre-D34 accepted-expiry rollout limitation and the drain-before-deploy
   step, as the approved plan accepted it.
+  PR #287 review (@Sinnez1): the D34 section's runtime rule — resolve
+  before the first write, fail loudly on a missing rule or required
+  courier so the message dead-letters for replay.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -410,8 +413,13 @@ flowchart LR
 
 Adding an event type now also means adding its rule here:
 `RecipientResolverTest` iterates the registry and fails until every
-request and rating fixture resolves to someone. A type without a rule
-logs at WARN and stores nothing. Messages published before D34 still
+request and rating fixture resolves to someone. At runtime the
+processor resolves recipients before its first write, and a type
+without a rule, or a required courier that is missing, throws: nothing
+is recorded, the listener retries and dead-letters the message, and a
+DLQ replay delivers it once the rule or the producer is fixed (PR #287
+review). Credit and user events, which this service never binds, are
+recorded and ignored with a WARN. Messages published before D34 still
 carry `parties`; consumers ignore it as an unknown field
 (`DomainEventContractTest.ignoresUnknownFields`).
 

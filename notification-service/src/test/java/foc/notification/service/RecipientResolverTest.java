@@ -8,10 +8,14 @@
  * pull request review.
  * PR #287 review (@claude bot, Copilot): a null-courier case and a
  * pre-D34 accepted-expiry body pinning the accepted rollout limitation.
+ * PR #287 review (@Sinnez1): the null-courier case now expects a loud
+ * failure on the events that require one; a type without a rule fails
+ * loudly too.
  */
 package foc.notification.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import foc.contracts.events.core.DomainEvent;
 import foc.contracts.events.core.EventTypeRegistry;
@@ -88,15 +92,36 @@ class RecipientResolverTest {
 		assertThat(RecipientResolver.recipientsOf(expired)).containsExactly(REQUESTER, COURIER);
 	}
 
-	// The converter dead-letters a body that omits a required courier
-	// before process() runs (D21); a caller on the port must not blow up
-	// on one either — the requester is still told (PR #287 review).
+	// A required courier that is missing is a contract violation: the
+	// converter dead-letters such a body (D21), and the resolver refuses it
+	// too rather than quietly telling the requester alone (PR #287 review).
 	@Test
-	void missingCourierOnATwoPartyEventTellsTheRequesterAlone() {
+	void missingCourierOnATwoPartyEventFailsLoudly() {
 		RequestAccepted accepted = new RequestAccepted("e-acc", Instant.parse("2026-09-19T08:30:00Z"),
 				"order-service", "c-1", "req-1", REQUESTER, null, "Techno Edge", "COM3-01-19", null);
 
-		assertThat(RecipientResolver.recipientsOf(accepted)).containsExactly(REQUESTER);
+		assertThatThrownBy(() -> RecipientResolver.recipientsOf(accepted))
+				.isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("request.accepted").hasMessageContaining("e-acc");
+	}
+
+	// A registered type with no rule must not be swallowed: the processor
+	// resolves before its first write, so this throw dead-letters the
+	// message for replay once the rule exists (PR #287 review).
+	@Test
+	void aTypeWithoutARuleFailsLoudly() {
+		record Unmapped(String eventId, Instant occurredAt, String producer, String correlationId)
+				implements DomainEvent {
+			@Override
+			public String eventType() {
+				return "request.unmapped";
+			}
+		}
+
+		assertThatThrownBy(() -> RecipientResolver.recipientsOf(
+				new Unmapped("e-new", Instant.parse("2026-09-19T08:30:00Z"), "order-service", "c-1")))
+				.isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("request.unmapped").hasMessageContaining("e-new");
 	}
 
 	// Accepted rollout limitation (D34): an expiry published before D34 for

@@ -44,6 +44,9 @@
  * Q&A): the fan-out iterates RecipientResolver's per-type rule instead
  * of the removed parties field — events carry business facts only.
  * Author review: Leong Wei Zhi, pending pull request review.
+ * PR #287 review (@Sinnez1): recipients are resolved before the first
+ * write, so a missing rule or courier throws with nothing to roll back
+ * and the message stays replayable through the retry/DLQ path.
  */
 package foc.notification.service;
 
@@ -55,6 +58,7 @@ import foc.notification.entity.ProcessedEvent;
 import foc.notification.repository.NotificationRepository;
 import foc.notification.repository.ProcessedEventRepository;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -67,7 +71,10 @@ import tools.jackson.databind.ObjectMapper;
  * back together (D4).
  *
  * <p>Flow: (1) an already-seen event ID returns immediately (F2.1);
- * (2) the event ID is recorded — its primary key is the backstop for
+ * (1b) recipients are resolved from the event's own id fields (D34) —
+ * a type without a rule or a missing required courier throws here,
+ * before any write, so the listener's retry/DLQ path keeps the message
+ * replayable (PR #287 review); (2) the event ID is recorded — its primary key is the backstop for
  * a concurrent duplicate, whose losing transaction rolls back at
  * commit and resolves via broker redelivery into case 1 (only
  * reachable with listener concurrency &gt; 1; the default is 1);
@@ -111,6 +118,11 @@ class IdempotentEventProcessor implements EventProcessor {
 		if (processedEvents.existsById(event.eventId())) {
 			return;
 		}
+		// Recipients first (PR #287 review): a throw here leaves nothing
+		// behind — no dedupe row recording a half-delivered event — so the
+		// message retries and dead-letters for replay once the rule or the
+		// producer is fixed.
+		List<String> recipients = RecipientResolver.recipientsOf(event);
 		// A drop removes the courier as a party (order-service nulls
 		// courierId), so every row they hold for this request now
 		// dead-ends on the detail 404 — delete them (D33, issue #266).
@@ -130,7 +142,7 @@ class IdempotentEventProcessor implements EventProcessor {
 		processedEvents.save(new ProcessedEvent(event.eventId()));
 		Map<String, Object> fields = businessFields(event);
 		String payloadJson = objectMapper.writeValueAsString(fields);
-		for (String recipient : RecipientResolver.recipientsOf(event)) {
+		for (String recipient : recipients) {
 			if (droppedSince(fields, recipient, event.occurredAt())) {
 				continue;
 			}
