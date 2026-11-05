@@ -5,6 +5,11 @@
 # Redis points at an unresolvable host (the denylist fails open), and
 # fixed test secrets.
 # Author review: Ko-Khan, pending pull request review.
+# 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): RabbitMQ at an
+# unresolvable host with the listener off, so the suites need no broker
+# (rating-service's pattern) — cross-replica STOMP fanout over AMQP (team
+# decision, Leong Wei Zhi via options Q&A). Author review: Leong Wei Zhi,
+# pending pull request review.
 
 # This file replaces the main application.yaml on the test classpath
 # (same name), so every chat.* setting the beans read is repeated here.
@@ -14,6 +19,13 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+  rabbitmq:
+    # no broker in tests: an unresolvable host is harmless, and the push
+    # listener stays off; the STOMP test loops pushes back in-process
+    host: broker.invalid
+    listener:
+      simple:
+        auto-startup: false
   data:
     redis:
       # no Redis in tests: lookups fail fast and fail open

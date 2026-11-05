@@ -142,6 +142,11 @@
 # CHAT_INTERNAL_TOKEN for its open/close calls (C11, C12); the gateway
 # waits for chat-service's start like the others. Author review: Ko-Khan,
 # pending pull request review.
+# 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): chat-service gets
+# the RabbitMQ connection and depends_on rabbitmq (like order-service) for
+# the cross-replica STOMP fanout over AMQP (team decision, Leong Wei Zhi
+# via options Q&A). Author review: Leong Wei Zhi, pending pull request
+# review.
 
 name: foc
 
@@ -656,8 +661,16 @@ services:
       CHAT_PURGE_CRON: "${CHAT_PURGE_CRON:-0 0 3 * * *}"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      # each replica's pushes reach the others over the chat.push fanout
+      # exchange (issue #48, DP10)
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-foc}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set in .env}
     depends_on:
       chat-db:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     restart: unless-stopped
 

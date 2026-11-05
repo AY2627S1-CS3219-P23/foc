@@ -12,6 +12,10 @@
   packages, security chain, D24-D29); stale D1-D22 range fixed.
   2026-10-17, Claude Code (Fable 5), PR #198 Codex review: the config/
   row records the CORS registration's /notifications/** scope.
+  2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): package map and
+  test list updated for the cross-replica STOMP fanout over AMQP (team
+  decision, Leong Wei Zhi via options Q&A). Author review: Leong Wei Zhi,
+  pending pull request review.
 -->
 
 # notification-service/ — Agent Guide
@@ -31,8 +35,8 @@ the decision ID when touching related code.
 | `entity/` | `Notification` (one row per recipient, read/unread flag), `ProcessedEvent` (dedupe inbox) |
 | `repository/` | Spring Data JPA repositories for both entities |
 | `service/` | `EventProcessor` (port), `IdempotentEventProcessor` (dedupe + insert + publishes `NotificationStoredEvent`), `RecipientResolver` (who an event notifies, per event type from its id fields — D34), `NotificationDto`, `RetentionPurgeScheduler` (purges `notifications` + `processed_events` past the retention window, #137) |
-| `messaging/rabbitmq/` | The only package allowed to touch broker types: `DomainEventsListener` (manual ack, retry republish), `DomainEventMessageConverter` (dispatch on body `eventType` via `EventTypeRegistry`), `RabbitMqTopology` + `RabbitMqTopologyInitializer` (startup declaration), `RabbitMqMessageConverterConfig` |
-| `messaging/stomp/` | `WebSocketStompConfig` (`/ws`, SockJS, heartbeats — also owns the app's sole `TaskScheduler`), `JwtChannelInterceptor` (CONNECT auth), `NotificationPushListener` (`AFTER_COMMIT` push), `StompPrincipal` |
+| `messaging/rabbitmq/` | The only package allowed to touch broker types: `DomainEventsListener` (manual ack, retry republish), `DomainEventMessageConverter` (dispatch on body `eventType` via `EventTypeRegistry`), `RabbitMqTopology` + `RabbitMqTopologyInitializer` (startup declaration), `RabbitMqMessageConverterConfig`, `NotificationPushFanoutTopology` + `RabbitMqUserPushFanout` (the `notification.push` fanout: per-replica anonymous queue, AUTO-ack push listener — DP10) |
+| `messaging/stomp/` | `WebSocketStompConfig` (`/ws`, SockJS, heartbeats — also owns the app's sole `TaskScheduler`), `JwtChannelInterceptor` (CONNECT auth), `NotificationPushListener` (`AFTER_COMMIT` push, published to every replica via the `UserPushFanout` port), `LocalUserPushDelivery` (a fanned-out `UserPush` → this replica's broker), `StompPrincipal` |
 | `security/` | `JwtVerifier` (HS256, jjwt; fails startup on missing/short secret), `JwtAuthenticationFilter` (REST bearer → security context, empty authorities per D28; built inline by `SecurityConfig`, not a bean), `RestAuthEntryPoint`/`RestAccessDeniedHandler` (401/403 problem+json), `redis/RedisTokenDenylist` (D23 — STOMP CONNECT only, never the REST path, G4) |
 | `config/` | `SecurityConfig` — stateless chain: `/error`, `/actuator/health` and the `/ws` SockJS paths open (the CONNECT frame authenticates, not the handshake), everything else bearer-authenticated; CORS from `WEB_ALLOWED_ORIGIN`, registered for `/notifications/**` only — never `/**`, which would put the REST origin policy in front of the WS handshake/SockJS paths (PR #198 review) |
 | `controller/` | `NotificationController` (`/notifications/me` routes, D24–D27), `ApiExceptionHandler` (problem+json 400/404), the contract's exceptions |
@@ -89,7 +93,9 @@ tolerant-reader lock-in), `DomainEventMessageConverterTest`,
 (REST contract: order, paging 400s, ownership 404s, idempotent
 writes), `StompPushIntegrationTest` (real STOMP session,
 random port, no Docker), `RequestEventsRabbitMqIntegrationTest`
-(Testcontainers — auto-skips without Docker), `ArchitectureTest`
+(Testcontainers — auto-skips without Docker),
+`NotificationPushFanoutIntegrationTest` (Testcontainers: one push reaches
+two replicas' queues once each), `ArchitectureTest`
 (D11 boundary).
 
 Schema is JPA-managed (`ddl-auto: update`) — it never drops columns;

@@ -7,6 +7,10 @@
  * (CONNECT-frame JWT auth, /ws endpoint with SockJS fallback, 10 s
  * heartbeats; docs/notification-service.md "Session mechanics").
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): cross-replica
+ * STOMP fanout over AMQP (team decision, Leong Wei Zhi via options Q&A)
+ * — the class comment's "D10: single instance, no relay" now points at
+ * the fanout. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.notification.messaging.stomp;
 
@@ -31,8 +35,9 @@ import tools.jackson.databind.json.JsonMapper;
  * {@code /ws} with SockJS fallback (native WebSocket is SockJS's
  * first transport, so capable browsers pay nothing; upgrade-hostile
  * networks degrade to XHR transports), the in-memory simple broker on
- * {@code /queue} with per-user destinations (D10: single instance, no
- * relay), 10 s heartbeats both ways, and JWT authentication at
+ * {@code /queue} with per-user destinations (no relay: each replica's
+ * pushes reach the others over the {@code notification.push} fanout
+ * exchange, DP10 — {@link UserPushFanout}), 10 s heartbeats both ways, and JWT authentication at
  * CONNECT via {@link JwtChannelInterceptor}. Clients never SEND, so
  * no application destination prefix is registered — and the
  * interceptor enforces it (PR #185 review). Frames are

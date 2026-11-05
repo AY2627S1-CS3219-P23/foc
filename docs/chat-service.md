@@ -10,6 +10,10 @@
   2026-11-01: PR review: the Interface note that the gateway 404s
   /api/chat/internal (reviewer's request, the issue #225 pattern).
   Author review: Ko-Khan, pending pull request review.
+  2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): STOMP note on
+  the cross-replica fanout over AMQP (team decision, Leong Wei Zhi via
+  options Q&A, docs/deployment.md). Transcription only. Author review:
+  Leong Wei Zhi, pending pull request review.
 -->
 
 # Chat Service — requester–courier chat (nice-to-have N6)
@@ -87,6 +91,12 @@ existence is not revealed).
   (either may be omitted, not both): parties of an open chat only. A
   refused message comes back to the sending session only, on
   `/user/queue/errors`, as `{"detail": "..."}`.
+- Each replica runs the in-memory simple broker. Topic and unread
+  pushes reach every replica over the `chat.push` RabbitMQ fanout
+  exchange (one exclusive auto-delete queue per replica), each
+  delivering to its own sessions — DP10, Leong Wei Zhi, 2026-11-05
+  ([`deployment.md`](deployment.md)). The `/user/queue/errors` reply
+  stays local (it answers the sending session).
 
 ### Internal (order-service only, `X-Internal-Token` header)
 

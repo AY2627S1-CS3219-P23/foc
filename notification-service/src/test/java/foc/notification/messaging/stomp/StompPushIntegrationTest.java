@@ -34,6 +34,12 @@
  * isolation case's silent step is a courier-arrived event (requester
  * only under the rule). Author review: Leong Wei Zhi, pending pull
  * request review.
+ * 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): cross-replica
+ * STOMP fanout over AMQP (team decision, Leong Wei Zhi via options Q&A)
+ * — the push now leaves through UserPushFanout; this broker-free test
+ * loops it straight back to LocalUserPushDelivery (the AMQP leg has its
+ * own Testcontainers test). Author review: Leong Wei Zhi, pending pull
+ * request review.
  */
 package foc.notification.messaging.stomp;
 
@@ -131,6 +137,20 @@ class StompPushIntegrationTest {
 					return cutoff != null && issuedAt.isBefore(cutoff);
 				}
 			};
+		}
+	}
+
+	/**
+	 * No broker in this context: the fanout is looped straight back to
+	 * this replica's delivery, as its own queue would do (DP10). The AMQP
+	 * leg is covered by NotificationPushFanoutIntegrationTest.
+	 */
+	@TestConfiguration
+	static class LoopbackFanoutConfig {
+		@Bean
+		@Primary
+		UserPushFanout loopbackFanout(LocalUserPushDelivery localDelivery) {
+			return localDelivery::deliver;
 		}
 	}
 

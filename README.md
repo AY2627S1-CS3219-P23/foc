@@ -15,6 +15,9 @@
   2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): AI Use Summary
   extended for ShedLock on the scheduled jobs. Author review: Leong Wei
   Zhi, pending pull request review.
+  2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): AI Use Summary
+  extended for the cross-replica STOMP fanout over AMQP. Author review:
+  Leong Wei Zhi, pending pull request review.
   Author review: Leong Wei Zhi, pending pull request review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
   public profile's joined date and deliveries-completed count (issue
@@ -1498,6 +1501,14 @@ user, order, credit, rating and chat services (issue #48, DP10): the
 dependencies, a lock-table migration, a lock configuration and a
 `@SchedulerLock` on every `@Scheduled` job, with tests per service. Using
 ShedLock's JDBC provider was Leong Wei Zhi's decision; the tool wrote the
+code to it. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) made the notification and chat STOMP pushes reach
+every replica (issue #48, DP10): each push is published to a RabbitMQ
+fanout exchange (`notification.push`, `chat.push`) and every replica's own
+anonymous queue delivers it to its local broker, with chat-service's
+RabbitMQ wiring in compose and Kubernetes, tests, and the design-doc
+notes. Fanout over AMQP was Leong Wei Zhi's decision; the tool wrote the
 code to it. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through

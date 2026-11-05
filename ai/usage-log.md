@@ -32,6 +32,9 @@
   2026-11-05, Claude Code (Opus 5.5): prepended the issue #48 ShedLock
   (DP10) entry below. Author review: Leong Wei Zhi, pending pull request
   review.
+  2026-11-05, Claude Code (Opus 5.5): prepended the issue #48 STOMP
+  fanout (DP10) entry below. Author review: Leong Wei Zhi, pending pull
+  request review.
   PR #269's main merge: this file merged cleanly (main appends at the
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
@@ -63,6 +66,40 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-05 — Leong Wei Zhi (issue #48, DP10: cross-replica STOMP fanout over AMQP)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** notification-service: `NotificationPushListener` publishes a
+  `UserPush` (user id, destination, the existing `NotificationDto`) through
+  a new `UserPushFanout` port instead of `convertAndSendToUser`;
+  `LocalUserPushDelivery` (stomp) delivers received pushes;
+  `NotificationPushFanoutTopology` (new config: `notification.push` fanout
+  exchange, per-replica `AnonymousQueue`, binding as a `Declarables`, an
+  AUTO-ack / no-requeue push listener factory) and `RabbitMqUserPushFanout`
+  (publish + listener) in `messaging.rabbitmq`; `WebSocketStompConfig`
+  comment. chat-service: `spring-boot-starter-amqp` + `spring.rabbitmq`
+  config (test yaml: `broker.invalid`, listener off); `StompChatPublisher`
+  publishes `ChatPush` (TOPIC/USER kind, user, destination, frame JSON)
+  via `ChatPushFanout`; `LocalChatPushDelivery`, `ChatPushFanoutConfig`
+  (`chat.push`), `RabbitChatPushFanout`. Unit tests for each piece, a
+  Testcontainers two-replica test in notification, loopback fanouts in
+  both STOMP integration tests. `compose.yaml` and
+  `infra/k8s/apps/chat-service.yaml` give chat-service RabbitMQ; D10 /
+  open item in `docs/notification-service.md`, `docs/chat-service.md`,
+  `docs/gateway.md`, notification `AGENTS.md`. Third PR of the issue-#48
+  stack, on `feat/48-shedlock`.
+- **Prompt(s):** this PR's brief: implement the team's DP10 choice for
+  STOMP across replicas — RabbitMQ fanout over AMQP (Leong Wei Zhi via
+  options Q&A; no STOMP relay on Amazon MQ): publish each push to a
+  fanout exchange, every replica binds its own server-named exclusive
+  auto-delete queue and delivers to its own simple broker; exchange
+  names `notification.push` / `chat.push`; own ack mode for the push
+  listener; no local send by the publisher.
+- **Author review:** `SPRING_RABBITMQ_HOST=broker.invalid ./mvnw verify` in
+  foc-contracts, notification-service and chat-service (results in the
+  PR); Leong Wei Zhi reviews via pull request.
 
 ---
 ## 2026-11-05 — Leong Wei Zhi (issue #48, DP10: ShedLock on the scheduled jobs)

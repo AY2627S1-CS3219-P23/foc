@@ -6,6 +6,10 @@
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
 # docs/architecture.md); values mirror compose.yaml's defaults.
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): RABBITMQ_PASSWORD
+# from foc-secrets (host/port/user come from foc-config) for the
+# cross-replica STOMP fanout over AMQP (team decision, Leong Wei Zhi via
+# options Q&A). Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1
 kind: Service
@@ -57,6 +61,11 @@ spec:
                 secretKeyRef:
                   name: foc-secrets
                   key: CHAT_DB_PASSWORD
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: RABBITMQ_PASSWORD
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:

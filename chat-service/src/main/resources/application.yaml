@@ -7,6 +7,10 @@
 # (C12), the retention window and purge cron (C10) and the message
 # limits (C7). The values are Ko-Khan's.
 # Author review: Ko-Khan, pending pull request review.
+# 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): spring.rabbitmq
+# connection (the other services' env vars and defaults) for the
+# cross-replica STOMP fanout over AMQP (team decision, Leong Wei Zhi via
+# options Q&A). Author review: Leong Wei Zhi, pending pull request review.
 
 spring:
   application:
@@ -21,6 +25,13 @@ spring:
       # entities against it at startup and never changes it
       ddl-auto: validate
     open-in-view: false
+  rabbitmq:
+    # carries each push to every replica (chat.push fanout, DP10); the
+    # push listener sets its own acknowledgement (ChatPushFanoutConfig)
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:foc}
+    password: ${RABBITMQ_PASSWORD:}
   data:
     redis:
       # Platform Redis holding the token denylist, read once per STOMP

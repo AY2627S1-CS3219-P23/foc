@@ -8,6 +8,11 @@
  * 2026-10-31: the receiver's own queue gets the unread frame (C16-C19),
  * without being subscribed to the chat.
  * Author review: Ko-Khan, pending pull request review.
+ * 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): cross-replica STOMP
+ * fanout over AMQP (team decision, Leong Wei Zhi via options Q&A) — no
+ * broker here, so the fanout is looped back in-process through the AMQP
+ * adapter's own receive path (JSON and all). Author review: Leong Wei
+ * Zhi, pending pull request review.
  */
 package foc.chat.stomp;
 
@@ -27,8 +32,12 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
 import org.springframework.messaging.simp.stomp.StompHeaders;
@@ -37,6 +46,7 @@ import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
+import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ChatStompIntegrationTest extends PostgresTestContainer {
@@ -44,6 +54,16 @@ class ChatStompIntegrationTest extends PostgresTestContainer {
     private static final long REQUESTER = 11;
     private static final long COURIER = 22;
     private static final byte[] PNG_HEADER = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+
+    // what this replica's own queue would hand back (DP10), minus the broker
+    @TestConfiguration
+    static class LoopbackFanout {
+        @Bean
+        @Primary
+        ChatPushFanout loopbackFanout(RabbitChatPushFanout amqp, JsonMapper jsonMapper) {
+            return push -> amqp.onPush(MessageBuilder.withBody(jsonMapper.writeValueAsBytes(push)).build());
+        }
+    }
 
     @LocalServerPort
     private int port;

@@ -56,6 +56,11 @@
   resolv.conf; UPSTREAM_SUFFIX, REDIS_HOST/REDIS_PORT). Behaviour under
   compose unchanged; the deployment decisions are Leong Wei Zhi's
   (docs/deployment.md). No new gateway decision.
+  2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): the known-limit
+  bullet on D10's scale-out question marked resolved (fanout over AMQP,
+  Leong Wei Zhi via options Q&A, docs/deployment.md). Transcription only;
+  no gateway change. Author review: Leong Wei Zhi, pending pull request
+  review.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
 
@@ -210,8 +215,9 @@ compose) and `REDIS_HOST` is fully qualified (issue #48,
   (PR #176 review) for whoever first designs one that does.
 - `docs/notification-service.md` D10 ("no Redis") predates this: Redis
   now exists as platform infrastructure for the denylist. D10's
-  scale-out question (Redis pub/sub vs broker relay) remains open and
-  unrelated.
+  scale-out question (Redis pub/sub vs broker relay) is resolved by
+  DP10 ([`deployment.md`](deployment.md), 2026-11-05): fanout over AMQP,
+  so Redis stays unrelated to it.
 
 ## Container
 

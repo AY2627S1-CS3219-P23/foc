@@ -87,6 +87,11 @@
   2026-11-04, follow-up to PR #287 (author's call): the resolver no
   longer special-cases credit and user events; the rule table and the
   runtime paragraph say they take the unmapped-type path.
+  2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): D10 and the
+  scale-out open item record the team's decision — cross-replica STOMP
+  fanout over AMQP (Leong Wei Zhi via options Q&A, docs/deployment.md).
+  Transcription only. Author review: Leong Wei Zhi, pending pull request
+  review.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -125,7 +130,7 @@ removed; gaps in the numbering are intentional.
 | D7 | Dead-letter handling | **Durable dead-letter queue**; unknown event types dead-letter (replayable after a consumer upgrade) rather than being dropped | Notif F2.3 |
 | D8 | Broker persistence | **Durable exchanges/queues + persistent messages** (durability is opt-in in RabbitMQ) | Notif NFR1.2 |
 | D9 | Retention window | `NOTIF_RETENTION_DAYS` env var, **default 30 days**; scheduled purge job. *2026-10-17 (issue #137):* the same run and window also sweep the `processed_events` dedupe table | Notif F3.4 |
-| D10 | Redis / scale-out | **No Redis** in the single-instance design (see Open items). *2026-10-11 note:* a platform Redis now exists for the **logout token denylist** ([`gateway.md`](gateway.md), issue #151) — unrelated to this service's scale-out question, which stays open. *2026-10-12 note:* this service now **reads** that denylist at STOMP CONNECT (D23); the scale-out question is still open | — |
+| D10 | Redis / scale-out | **No Redis** in the single-instance design (see Open items). *2026-10-11 note:* a platform Redis now exists for the **logout token denylist** ([`gateway.md`](gateway.md), issue #151) — unrelated to this service's scale-out question, which stays open. *2026-10-12 note:* this service now **reads** that denylist at STOMP CONNECT (D23); the scale-out question is still open. *2026-11-05 (DP10, Leong Wei Zhi via options Q&A, [`deployment.md`](deployment.md)):* scale-out decided — **fanout over AMQP**: the replica producing a push publishes it to the `notification.push` fanout exchange; every replica binds its own exclusive, auto-delete queue and delivers to its own simple broker. No STOMP relay | — |
 | D11 | Broker isolation | **Ports and adapters**: all RabbitMQ code confined to one adapter package — see [Broker decoupling](#broker-decoupling-d11) | broker swap surface |
 | D12 | Topology provisioning | **App-declared at startup** via Spring AMQP beans (no broker definitions file) | topology lives beside its owner |
 | D13 | Naming convention | Exchange named after the producing domain (`request-events`); queues prefixed with the consuming service (`notification-service.request-events` + `.retry`/`.dlq`) | ownership visible in the management UI |
@@ -709,9 +714,10 @@ Why the push channel is centralized here rather than per service:
 
 ## Open items (team decisions still pending)
 
-- **Scale-out** (team decision 2026-09-15): the current design is
-  single-instance and uses Redis only for the D23 denylist read — not
-  for connection state. If the service is later
-  scaled to multiple instances (nice-to-have N5.4), the team will then
-  choose between Redis pub/sub and a RabbitMQ STOMP broker relay for
-  cross-instance WebSocket fan-out.
+None.
+
+- ~~**Scale-out**~~ — *resolved 2026-11-05 (DP10, Leong Wei Zhi via
+  options Q&A, [`deployment.md`](deployment.md)):* cross-instance
+  fan-out is **RabbitMQ fanout over AMQP** (`notification.push`, one
+  exclusive auto-delete queue per replica, see D10), not Redis pub/sub
+  or a STOMP broker relay. Redis stays the D23 denylist only.
