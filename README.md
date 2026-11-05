@@ -1498,5 +1498,14 @@ pattern, with its Maven test dependencies. The tool compared the H2 and
 Testcontainers options as facts and the author chose Testcontainers; the
 NFR bounds are the team's. Recorded in `ai/usage-log.md`.
 
+Claude Code (Opus 5.5) wrote the N5 cloud deployment (issue #48): the
+`infra/` Terraform and Kubernetes manifests, the Deploy workflow, the
+gateway's resolver/upstream-suffix change and `docs/deployment.md`. The
+tool asked the deployment decisions as neutral options rounds and priced
+the options from AWS's public price files; the platform, sizing,
+data-store, secrets, rollout and lifetime choices (DP1–DP13) were Leong
+Wei Zhi's, including replacing a first EKS design with the single Spot +
+k3s host to fit the team's $50 budget. Recorded in `ai/usage-log.md`.
+
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

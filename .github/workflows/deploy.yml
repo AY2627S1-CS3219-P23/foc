@@ -1,0 +1,132 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5.3.3 automated
+# deployment).
+# Scope: build the nine images for linux/amd64, push them to GHCR, and roll
+# them out on the k3s host through SSM Run Command (team decisions: GHCR +
+# SSM, OIDC role in the sandbox account, k3s API private — Leong Wei Zhi,
+# 2026-11-05, options Q&A; infra/README.md has the runbook).
+# Author review: Leong Wei Zhi, pending pull request review.
+#
+# Manual trigger only, from main (the OIDC role trusts main alone). Needs
+# the repo variables AWS_ROLE_ARN, AWS_REGION, INSTANCE_ID and PUBLIC_HOST
+# from `terraform output`.
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/ay2627s1-cs3219-p23
+
+jobs:
+  images:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: true
+      matrix:
+        image:
+          - user-service
+          - supplier-service
+          - order-service
+          - credit-service
+          - notification-service
+          - rating-service
+          - chat-service
+          - gateway
+          - web
+    runs-on: ubuntu-latest
+    name: image (${{ matrix.image }})
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # same contexts as ci.yml's docker job; the web bundle gets the
+      # public gateway URLs baked in (Vite inlines VITE_* at build time)
+      - name: Resolve build context
+        id: meta
+        env:
+          PUBLIC_HOST: ${{ vars.PUBLIC_HOST }}
+        run: |
+          case "${{ matrix.image }}" in
+            web)
+              test -n "$PUBLIC_HOST" || { echo "PUBLIC_HOST repo variable is not set"; exit 1; }
+              echo "context=web" >> "$GITHUB_OUTPUT"
+              echo "file=web/Dockerfile" >> "$GITHUB_OUTPUT"
+              {
+                echo "build_args<<EOF"
+                for svc in user supplier order credit notification rating chat; do
+                  echo "VITE_$(echo "$svc" | tr a-z A-Z)_SERVICE_URL=http://$PUBLIC_HOST/api/$svc"
+                done
+                echo "EOF"
+              } >> "$GITHUB_OUTPUT"
+              ;;
+            gateway)
+              echo "context=gateway" >> "$GITHUB_OUTPUT"
+              echo "file=gateway/Dockerfile" >> "$GITHUB_OUTPUT"
+              echo "build_args=" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "context=." >> "$GITHUB_OUTPUT"
+              echo "file=${{ matrix.image }}/Dockerfile" >> "$GITHUB_OUTPUT"
+              echo "build_args=" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.meta.outputs.context }}
+          file: ${{ steps.meta.outputs.file }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.REGISTRY }}/foc-${{ matrix.image }}:${{ github.sha }}
+          build-args: ${{ steps.meta.outputs.build_args }}
+          cache-from: type=gha,scope=deploy-${{ matrix.image }}
+          cache-to: type=gha,scope=deploy-${{ matrix.image }},mode=max
+
+  rollout:
+    needs: images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Run deploy.sh on the host
+        env:
+          INSTANCE_ID: ${{ vars.INSTANCE_ID }}
+          PUBLIC_HOST: ${{ vars.PUBLIC_HOST }}
+        run: |
+          set -euo pipefail
+          id=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "foc deploy $GITHUB_SHA" \
+            --parameters "commands=[\"bash /opt/foc/infra/k8s/deploy.sh $GITHUB_SHA $PUBLIC_HOST\"],executionTimeout=[\"3600\"]" \
+            --query Command.CommandId --output text)
+          echo "SSM command $id"
+          # the built-in waiter gives up after ~100 s; a cold rollout of
+          # seven JVMs takes longer
+          for _ in $(seq 1 180); do
+            status=$(aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" \
+              --query Status --output text 2>/dev/null || echo Pending)
+            case "$status" in
+              Pending|InProgress|Delayed) sleep 10 ;;
+              *) break ;;
+            esac
+          done
+          aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" \
+            --query '[StandardOutputContent,StandardErrorContent]' --output text
+          echo "status: $status"
+          test "$status" = "Success"
