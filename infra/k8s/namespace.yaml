@@ -1,0 +1,11 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
+# Scope: the foc namespace.
+# Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
+# docs/architecture.md); values mirror compose.yaml's defaults.
+# Author review: Leong Wei Zhi, pending pull request review.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: foc

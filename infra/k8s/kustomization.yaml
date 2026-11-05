@@ -1,0 +1,48 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
+# Scope: the kustomization deploy.sh applies (kubectl apply -k).
+# Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
+# docs/architecture.md); values mirror compose.yaml's defaults.
+# Author review: Leong Wei Zhi, pending pull request review.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# namespaces are set per manifest: a kustomize-wide namespace would
+# also be stamped onto the cluster-scoped ClusterSecretStore
+resources:
+  - namespace.yaml
+  - config.yaml
+  - secrets.yaml
+  - data/postgres.yaml
+  - data/rabbitmq.yaml
+  - data/redis.yaml
+  - apps/user-service.yaml
+  - apps/supplier-service.yaml
+  - apps/order-service.yaml
+  - apps/credit-service.yaml
+  - apps/notification-service.yaml
+  - apps/rating-service.yaml
+  - apps/chat-service.yaml
+  - apps/gateway.yaml
+  - apps/web.yaml
+  - ingress.yaml
+  - hpa.yaml
+# __IMAGE_TAG__ is replaced by deploy.sh with the commit SHA
+images:
+  - name: ghcr.io/ay2627s1-cs3219-p23/foc-user-service
+    newTag: __IMAGE_TAG__
+  - name: ghcr.io/ay2627s1-cs3219-p23/foc-supplier-service
+    newTag: __IMAGE_TAG__
+  - name: ghcr.io/ay2627s1-cs3219-p23/foc-order-service
+    newTag: __IMAGE_TAG__
+  - name: ghcr.io/ay2627s1-cs3219-p23/foc-credit-service
+    newTag: __IMAGE_TAG__
+  - name: ghcr.io/ay2627s1-cs3219-p23/foc-notification-service
+    newTag: __IMAGE_TAG__
+  - name: ghcr.io/ay2627s1-cs3219-p23/foc-rating-service
+    newTag: __IMAGE_TAG__
+  - name: ghcr.io/ay2627s1-cs3219-p23/foc-chat-service
+    newTag: __IMAGE_TAG__
+  - name: ghcr.io/ay2627s1-cs3219-p23/foc-gateway
+    newTag: __IMAGE_TAG__
+  - name: ghcr.io/ay2627s1-cs3219-p23/foc-web
+    newTag: __IMAGE_TAG__

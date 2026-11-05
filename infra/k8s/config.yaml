@@ -1,0 +1,22 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
+# Scope: non-secret env shared by the workloads; __PUBLIC_HOST__ is
+# replaced by deploy.sh with the Elastic IP.
+# Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
+# docs/architecture.md); values mirror compose.yaml's defaults.
+# Author review: Leong Wei Zhi, pending pull request review.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: foc-config
+  namespace: foc
+data:
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_USER: foc
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  WEB_ALLOWED_ORIGIN: "http://__PUBLIC_HOST__"
+  # heap sized from the container memory limit
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75"

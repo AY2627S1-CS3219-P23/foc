@@ -1,0 +1,70 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
+# Scope: the OpenResty API gateway; UPSTREAM_SUFFIX and a fully qualified
+# REDIS_HOST because the nginx resolver ignores search domains.
+# Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
+# docs/architecture.md); values mirror compose.yaml's defaults.
+# Author review: Leong Wei Zhi, pending pull request review.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: foc
+spec:
+  selector:
+    app: gateway
+  ports:
+    - port: 8080
+---
+# no replicas: the HorizontalPodAutoscaler in hpa.yaml owns the count
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: foc
+spec:
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: gateway
+          image: ghcr.io/ay2627s1-cs3219-p23/foc-gateway
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: foc-config
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: JWT_SECRET
+            - name: UPSTREAM_SUFFIX
+              value: ".foc.svc.cluster.local"
+            - name: REDIS_HOST
+              value: "redis.foc.svc.cluster.local"
+            - name: REDIS_PORT
+              value: "6379"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 20

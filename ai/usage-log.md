@@ -62,6 +62,14 @@ Entry template:
 ```
 
 ---
+## 2026-11-05 — Leong Wei Zhi (N5 cloud deployment, issue #48: infra/ + gateway)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** new `infra/` (Terraform: state bootstrap, VPC, t3.xlarge Spot host + Elastic IP, IAM instance role + GitHub OIDC deploy role, Secrets Manager, cloud-init installing k3s + External Secrets Operator; Kubernetes manifests for the 7 Postgres + RabbitMQ + Redis StatefulSets, 9 Deployments, ESO secrets, Traefik ingress, HPAs; `deploy.sh`), `.github/workflows/deploy.yml` (GHCR build + SSM rollout), gateway `nginx.conf`/`auth.lua` (resolver from resolv.conf, `UPSTREAM_SUFFIX`, env-driven Redis host/port; compose unchanged), `docs/deployment.md`, `infra/README.md`, AGENTS.md, gateway.md and architecture.md notes. First PR of the issue-#48 stack.
+- **Prompt(s):** "i have my aws console open, how should i start deploying?" → the tool listed the team decisions owed under the AI policy and asked them as neutral options rounds; Leong Wei Zhi chose EKS + managed data stores first, then — after "wait what is the total cost?" (the tool priced it from AWS's public price files at ~$280–350) and "that is too expensive, we only have $50" — the single Spot instance + k3s design (DP1–DP13 in `docs/deployment.md`, all their choices). "create a plan" → plan with a six-PR split; "sure please stack the prs".
+- **Author review:** `kubectl kustomize infra/k8s` renders (51 objects); Terraform `fmt`/`validate`/`plan` and the compose gateway regression listed in the PR; Leong Wei Zhi reviews via pull request.
+
+---
 ## 2026-11-04 — Leong Wei Zhi (notification-service: resolver drops the credit/user arms, follow-up to PR #287)
 - **Tool:** Claude Code (Fable 5.1)
 - **Mode:** refactor, docs

@@ -58,6 +58,9 @@
   2026-11-04, Claude Code (Fable 5.1), notification D34: the legend's
   user-id note and the rating row no longer name the removed `parties`
   field. Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-05, Claude Code (Opus 5.5), issue #48: the N5 note links the
+  new deployment record (docs/deployment.md). Author review: Leong Wei
+  Zhi, pending pull request review.
 -->
 
 # Favours on Campus (FoC) — High-Level Service Architecture
@@ -92,7 +95,7 @@ dashboard incl. admin credit adjustments, N8 supplier bookmarks) remain
 intentionally excluded: they live inside existing components (their
 design records: [`disputes.md`](disputes.md),
 [`supplier-service.md`](supplier-service.md) N8); N5 concerns
-deployment, not runtime structure. (In the latest backlog, chat and
+deployment, not runtime structure ([`deployment.md`](deployment.md)). (In the latest backlog, chat and
 admin credit adjustment were reclassified from committed requirements
 to nice-to-haves N6/N7, so they no longer appear here.)
 
