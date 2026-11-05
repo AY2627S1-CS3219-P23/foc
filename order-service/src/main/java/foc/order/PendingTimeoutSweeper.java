@@ -7,11 +7,16 @@
  * the author's decisions.
  * 2026-10-16: queries by the OrderStates enum.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): @SchedulerLock
+ * so the sweep runs on one replica at a time (team decision, Leong Wei
+ * Zhi via options Q&A). Author review: Leong Wei Zhi, pending pull
+ * request review.
  */
 package foc.order;
 
 import foc.order.model.Requests;
 import foc.order.repository.RequestsRepository;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,6 +55,7 @@ public class PendingTimeoutSweeper {
     }
 
     @Scheduled(fixedDelayString = "${order.pending.sweep.interval-ms}")
+    @SchedulerLock(name = "order.pending-timeout-sweep", lockAtMostFor = "PT30S")
     public void cancelOverdue() {
         Instant cutoff = Instant.now().minus(timeout);
         for (Requests request : requestsRepository.findByStatusAndCreatedAtBefore(OrderStates.PENDING, cutoff)) {

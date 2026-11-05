@@ -29,6 +29,9 @@
   entry below.
   2026-11-04, Claude Code (Fable 5.1): prepended the notification D34
   (parties removal) entry below, then the PR #287 review-round entries.
+  2026-11-05, Claude Code (Opus 5.5): prepended the issue #48 ShedLock
+  (DP10) entry below. Author review: Leong Wei Zhi, pending pull request
+  review.
   PR #269's main merge: this file merged cleanly (main appends at the
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
@@ -60,6 +63,34 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-05 — Leong Wei Zhi (issue #48, DP10: ShedLock on the scheduled jobs)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** user-, order-, credit-, rating- and chat-service:
+  `shedlock-spring` + `shedlock-provider-jdbc-template` 7.10.1 in each
+  pom; a `V<n>__shedlock.sql` migration (the README's Postgres table); a
+  `config/SchedulerLockConfig` (`@EnableSchedulerLock`, JDBC provider with
+  DB time and the app's transaction manager; chat's ordered outside its
+  purge's `@Transactional`); `@SchedulerLock` on all 13 `@Scheduled`
+  methods plus credit's startup run (same lock as its daily run);
+  `AccountPurgeScheduler.purgeExpiredDeletedAccounts` made public so the
+  proxy applies; a `SchedulerLockTest` per service (table, lock
+  refusal, caller-transaction safety, one unique lock per job, proxies)
+  and rating's `ShedlockMigrationTest`; user's migration count 10 → 11.
+  Second PR of the issue-#48 stack, on `feat/48-infra`.
+- **Prompt(s):** the stacked-PR plan from the infra entry below; this PR's
+  brief: ShedLock with the JDBC provider on every scheduled job in the
+  five services (DP10/B1, Leong Wei Zhi's decision), notification-service
+  left to a later PR. Lock names and `lockAtMostFor` values (pollers 30 s,
+  crons 10 min, the chat-call dispatcher 15 min to outlast a full batch of
+  timed-out sends) follow the brief's sizing rule.
+- **Author review:** `./mvnw verify` per service with
+  `SPRING_RABBITMQ_HOST=broker.invalid` (results in the PR; credit's
+  `commonPoolStartsAsOneEmptyRow` and user's Postgres connection limit
+  fail the same way on the base branch); Leong Wei Zhi reviews via pull
+  request.
 
 ---
 ## 2026-11-05 — Leong Wei Zhi (N5 cloud deployment, issue #48: infra/ + gateway)

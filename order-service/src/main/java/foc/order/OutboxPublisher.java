@@ -7,11 +7,16 @@
  * poll), with the package, names and property prefix changed; copied,
  * not shared, with the same values, by the author's decision.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): @SchedulerLock
+ * so the poll runs on one replica at a time (team decision, Leong Wei
+ * Zhi via options Q&A). Author review: Leong Wei Zhi, pending pull
+ * request review.
  */
 package foc.order;
 
 import foc.order.model.OutboxEvent;
 import foc.order.repository.OutboxEventRepository;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -62,6 +67,7 @@ public class OutboxPublisher {
     // this one has finished, so a slow publish cannot overlap the next
     // poll and send the same event twice.
     @Scheduled(fixedDelayString = "${order.outbox.publisher.poll-interval-ms}")
+    @SchedulerLock(name = "order.outbox-publisher", lockAtMostFor = "PT30S")
     public void publishUnsent() {
         // capped, so a backlog after an outage drains over several polls
         List<OutboxEvent> due = outboxEvents.findDue(Instant.now(), Limit.of(batchSize));

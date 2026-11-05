@@ -33,6 +33,9 @@ Author review: Ryan to review via the PR.
        counts to 8 and 9; the fresh-database case proves the table and its
        primary key. Same day, PR review: V10 (the sent index) moves them
        to 9 and 10. Author review: Ryan Ang, pending pull request review.
+2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): V11 (ShedLock's lock
+       table) moves the counts to 10 and 11. Author review: Leong Wei Zhi,
+       pending pull request review.
 */
 
 package foc.user;
@@ -60,7 +63,7 @@ import org.springframework.core.io.ClassPathResource;
 class FlywayMigrationTest extends PostgresTestContainer {
 
     // scripts in db/migration; a new V<n> bumps this
-    private static final int MIGRATION_SCRIPTS = 10;
+    private static final int MIGRATION_SCRIPTS = 11;
 
     // the application's Flyway, built from application.yaml's spring.flyway
     @Autowired

@@ -5,6 +5,10 @@
  * CHAT_RETENTION_DAYS (30 by default), daily at 03:00 by default
  * (CHAT_PURGE_CRON), then the closed chats left empty.
  * Author review: Ko-Khan, pending pull request review.
+ * 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): @SchedulerLock
+ * so the purge runs on one replica at a time (team decision, Leong Wei
+ * Zhi via options Q&A). Author review: Leong Wei Zhi, pending pull
+ * request review.
  */
 package foc.chat.service;
 
@@ -12,6 +16,7 @@ import foc.chat.repository.ChatMessageRepository;
 import foc.chat.repository.ChatRepository;
 import java.time.Duration;
 import java.time.Instant;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,6 +44,7 @@ public class ChatRetentionPurge {
     }
 
     @Scheduled(cron = "${chat.retention.purge-cron}")
+    @SchedulerLock(name = "chat.retention-purge", lockAtMostFor = "PT10M")
     @Transactional
     public void purge() {
         Instant cutoff = Instant.now().minus(retention);

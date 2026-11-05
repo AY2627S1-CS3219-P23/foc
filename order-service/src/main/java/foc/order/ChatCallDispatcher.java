@@ -7,6 +7,10 @@
  * author's values). The 1 s first-attempt poll is the tool's choice,
  * listed in the doc.
  * Author review: Ko-Khan, pending pull request review.
+ * 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): @SchedulerLock
+ * so one replica at a time sends the owed calls, which keeps each
+ * request's calls in order (team decision, Leong Wei Zhi via options
+ * Q&A). Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.order;
 
@@ -15,6 +19,7 @@ import foc.order.repository.ChatCallRepository;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -56,8 +61,12 @@ public class ChatCallDispatcher {
     }
 
     // a delay, not a rate: polls never overlap, so a call is never sent
-    // twice at once
+    // twice at once. The lock keeps that true across replicas, and with it
+    // each request's calls in order. lockAtMostFor outlasts the slowest
+    // poll: a full batch (100 by default) of sends that each time out, 2 s to
+    // connect plus 5 s to read (HttpChatClient), is under 12 min
     @Scheduled(fixedDelayString = "${order.chat.dispatcher.poll-interval-ms}")
+    @SchedulerLock(name = "order.chat-call-dispatch", lockAtMostFor = "PT15M")
     public void dispatch() {
         List<ChatCall> due = calls.findDue(Instant.now(), Limit.of(batchSize));
         for (ChatCall call : due) {

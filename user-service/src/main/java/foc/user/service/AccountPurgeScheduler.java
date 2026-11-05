@@ -51,6 +51,10 @@ one user.purged per purged account to the outbox (team decision USR-2), so
 an account is gone if and only if credit-service will hear of it. The ids
 come from the locked set the transaction already reads. Author review: Ryan
 Ang, pending pull request review.
+2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): @SchedulerLock so
+the purge runs on one replica at a time; the method made public, since
+ShedLock proxies only public methods (team decision, Leong Wei Zhi via
+options Q&A). Author review: Leong Wei Zhi, pending pull request review.
 */
 
 package foc.user.service;
@@ -59,6 +63,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -131,7 +136,8 @@ class AccountPurgeScheduler {
     // account cannot be recovered, so the ids read here are still the
     // accounts the transaction below deletes (the cutoff is fixed for the run).
     @Scheduled(cron = "${user.retention.purge-cron}")
-    void purgeExpiredDeletedAccounts() {
+    @SchedulerLock(name = "user.account-purge", lockAtMostFor = "PT10M")
+    public void purgeExpiredDeletedAccounts() {
         Instant now = Instant.now();
         Instant cutoff = now.minus(retentionDays, ChronoUnit.DAYS);
         // supplier-service first (issue #225): once the users are gone

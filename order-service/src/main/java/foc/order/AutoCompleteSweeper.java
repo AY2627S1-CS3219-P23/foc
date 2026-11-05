@@ -6,11 +6,16 @@
  * PendingTimeoutSweeper. The 1 h default (configurable) and the 5 min
  * sweep interval are the author's decisions.
  * Reviewed by: Ko-Khan (via pull request).
+ * 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): @SchedulerLock
+ * so the sweep runs on one replica at a time (team decision, Leong Wei
+ * Zhi via options Q&A). Author review: Leong Wei Zhi, pending pull
+ * request review.
  */
 package foc.order;
 
 import foc.order.model.Requests;
 import foc.order.repository.RequestsRepository;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,6 +54,7 @@ public class AutoCompleteSweeper {
     }
 
     @Scheduled(fixedDelayString = "${order.auto-complete.sweep.interval-ms}")
+    @SchedulerLock(name = "order.auto-complete-sweep", lockAtMostFor = "PT30S")
     public void completeOverdue() {
         Instant cutoff = Instant.now().minus(delay);
         for (Requests request : requestsRepository.findByStatusAndArrivedAtBefore(OrderStates.ARRIVED, cutoff)) {

@@ -10,11 +10,16 @@
  * escalates requests still COLLECTED a grace period after their deadline
  * to DISPUTED (team decision DSP-6, docs/disputes.md). Author review:
  * Ryan Ang, pending pull request review.
+ * 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): @SchedulerLock
+ * so the sweep runs on one replica at a time (team decision, Leong Wei
+ * Zhi via options Q&A). Author review: Leong Wei Zhi, pending pull
+ * request review.
  */
 package foc.order;
 
 import foc.order.model.Requests;
 import foc.order.repository.RequestsRepository;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -65,6 +70,7 @@ public class DeadlineExpirySweeper {
     }
 
     @Scheduled(fixedDelayString = "${order.expiry.sweep.interval-ms}")
+    @SchedulerLock(name = "order.deadline-expiry-sweep", lockAtMostFor = "PT30S")
     public void sweep() {
         expireOverdue();
         escalateOverdue();

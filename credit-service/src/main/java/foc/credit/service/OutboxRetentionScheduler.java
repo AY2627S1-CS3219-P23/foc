@@ -11,6 +11,10 @@
  * Same day, PR #224 review (Leong Wei Zhi): off in tests, like the
  * other two scheduled components, the reviewer's suggestion.
  * Author review: Ryan Ang, pending pull request review.
+ * 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): @SchedulerLock
+ * so the purge runs on one replica at a time (team decision, Leong Wei
+ * Zhi via options Q&A). Author review: Leong Wei Zhi, pending pull
+ * request review.
  */
 package foc.credit.service;
 
@@ -18,6 +22,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,6 +71,7 @@ public class OutboxRetentionScheduler {
     }
 
     @Scheduled(cron = "${credit.outbox.retention.purge-cron}", zone = ExpiryAndRedistributionScheduler.ZONE)
+    @SchedulerLock(name = "credit.outbox-retention", lockAtMostFor = "PT10M")
     public void purgeSentReplies() {
         Instant cutoff = clock.instant().minus(Duration.ofDays(retentionDays));
         int deleted = outboxEvents.deleteSentBefore(cutoff);

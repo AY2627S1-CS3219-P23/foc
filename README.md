@@ -12,6 +12,9 @@
   no paragraph here) and for the N1 documentation pass itself (issue
   #258, the new docs/rating-service.md + .mmd and the doc updates it
   touches).
+  2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): AI Use Summary
+  extended for ShedLock on the scheduled jobs. Author review: Leong Wei
+  Zhi, pending pull request review.
   Author review: Leong Wei Zhi, pending pull request review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
   public profile's joined date and deliveries-completed count (issue
@@ -1489,6 +1492,13 @@ the options from AWS's public price files; the platform, sizing,
 data-store, secrets, rollout and lifetime choices (DP1–DP13) were Leong
 Wei Zhi's, including replacing a first EKS design with the single Spot +
 k3s host to fit the team's $50 budget. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) added ShedLock to the scheduled jobs of the
+user, order, credit, rating and chat services (issue #48, DP10): the
+dependencies, a lock-table migration, a lock configuration and a
+`@SchedulerLock` on every `@Scheduled` job, with tests per service. Using
+ShedLock's JDBC provider was Leong Wei Zhi's decision; the tool wrote the
+code to it. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

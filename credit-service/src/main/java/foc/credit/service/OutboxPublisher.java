@@ -10,6 +10,10 @@
  * the replies that are due (team decision), so replies no queue takes
  * cannot fill every batch and hold back the ones behind them.
  * Author review: Ryan Ang, pending pull request review.
+ * 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): @SchedulerLock
+ * so the poll runs on one replica at a time (team decision, Leong Wei
+ * Zhi via options Q&A). Author review: Leong Wei Zhi, pending pull
+ * request review.
  */
 package foc.credit.service;
 
@@ -17,6 +21,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -67,6 +72,7 @@ public class OutboxPublisher {
     // this one has finished, so a slow publish cannot overlap the next
     // poll and send the same reply twice.
     @Scheduled(fixedDelayString = "${credit.outbox.publisher.poll-interval-ms}")
+    @SchedulerLock(name = "credit.outbox-publisher", lockAtMostFor = "PT30S")
     public void publishUnsent() {
         // capped, so a backlog after an outage drains over several polls
         List<OutboxEvent> due = outboxEvents.findDue(Instant.now(), Limit.of(batchSize));

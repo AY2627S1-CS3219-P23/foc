@@ -13,6 +13,11 @@
  * the month if its run is missing; the 00:10 job is gone. The tool
  * rewrote the class to it.
  * Author review: Ryan Ang, pending pull request review.
+ * 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): @SchedulerLock
+ * on the daily run and the startup run, one lock for both, so the
+ * routine runs on one replica at a time (team decision, Leong Wei Zhi
+ * via options Q&A). Author review: Leong Wei Zhi, pending pull request
+ * review.
  */
 package foc.credit.service;
 
@@ -22,6 +27,7 @@ import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.List;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -77,12 +83,16 @@ public class ExpiryAndRedistributionScheduler {
     static final String DAILY_CRON = "0 0 0 * * *";
 
     @Scheduled(cron = DAILY_CRON, zone = ZONE)
+    @SchedulerLock(name = "credit.expiry-and-redistribution", lockAtMostFor = "PT10M")
     public void runDaily() {
         run();
     }
 
-    // also a month whose run was missed while the service was down
+    // also a month whose run was missed while the service was down. The
+    // same lock as the daily run: a replica starting while another runs
+    // the routine skips its own run, which the other is already doing
     @EventListener(ApplicationReadyEvent.class)
+    @SchedulerLock(name = "credit.expiry-and-redistribution", lockAtMostFor = "PT10M")
     public void runAtStartup() {
         run();
     }

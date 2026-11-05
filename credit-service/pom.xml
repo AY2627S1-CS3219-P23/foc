@@ -13,6 +13,11 @@
   2026-10-10: testcontainers-rabbitmq (test scope) for the real-broker
   topology test, as notification-service has it.
   Author review: Ryan Ang, pending pull request review.
+  2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): shedlock-spring and
+  shedlock-provider-jdbc-template (ShedLock 7.10.1, the line for Spring 7 /
+  Boot 4.x) so each @Scheduled job runs on one replica at a time (team
+  decision, Leong Wei Zhi via options Q&A). Author review: Leong Wei Zhi,
+  pending pull request review.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -45,6 +50,8 @@
 		<java.version>21</java.version>
 		<!-- Not managed by the Boot BOM; pinned explicitly. -->
 		<jjwt.version>0.13.0</jjwt.version>
+		<!-- Not managed by the Boot BOM; 7.x supports Spring 7 / Boot 4.x. -->
+		<shedlock.version>7.10.1</shedlock.version>
 	</properties>
 	<dependencies>
 		<!-- shared event contracts (D15); install foc-contracts first -->
@@ -72,6 +79,18 @@
 		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
+		<!-- one replica runs each @Scheduled job at a time (issue #48, DP10);
+		     the lock rows live in the service's own database -->
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-spring</artifactId>
+			<version>${shedlock.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-provider-jdbc-template</artifactId>
+			<version>${shedlock.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
