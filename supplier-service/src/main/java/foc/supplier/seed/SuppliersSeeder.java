@@ -43,6 +43,13 @@
  * 2026-10-07 (PR #161 review, LeongWZ): a CSV row with an empty Type cell
  * (category bound to null) no longer throws an NPE that aborts startup;
  * that supplier is seeded with no categories.
+ * 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): Flyway baseline /
+ * advisory-locked seeding for multi-replica starts (team decision, Leong
+ * Wei Zhi via options Q&A): the empty-table check and the inserts now run
+ * in one transaction that first takes SeedLock's advisory lock, so two
+ * replicas starting against one empty database seed the CSV once (the
+ * second waits, re-checks, and finds the rows). Author review: Leong Wei
+ * Zhi, pending pull request review.
  * Reviewed by: [pending]
  */
 package foc.supplier.seed;
@@ -58,6 +65,8 @@ import foc.supplier.repository.SuppliersRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.InputStreamReader;
 import java.nio.charset.Charset;
@@ -68,48 +77,61 @@ import java.util.Set;
 public class SuppliersSeeder implements CommandLineRunner {
     private final SuppliersRepository suppliersRepository;
     private final SupplierCategoriesRepository supplierCategoriesRepository;
+    private final SeedLock seedLock;
+    private final TransactionTemplate transactionTemplate;
 
-    public SuppliersSeeder(SuppliersRepository suppliersRepository, SupplierCategoriesRepository supplierCategoriesRepository) {
+    public SuppliersSeeder(SuppliersRepository suppliersRepository, SupplierCategoriesRepository supplierCategoriesRepository,
+                           SeedLock seedLock, PlatformTransactionManager transactionManager) {
         this.suppliersRepository = suppliersRepository;
         this.supplierCategoriesRepository = supplierCategoriesRepository;
+        this.seedLock = seedLock;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     @Override
     public void run(String... args) throws Exception {
-        if (suppliersRepository.count() == 0) {
-            ClassPathResource csvResource = new ClassPathResource("csv/supplier-seed-data.csv");
+        // Replicas starting together serialise here; the lock is released
+        // when this transaction commits, by which time the rows are visible.
+        transactionTemplate.executeWithoutResult(status -> {
+            seedLock.lock();
+            if (suppliersRepository.count() == 0) {
+                seedFromCsv();
+            }
+        });
+    }
 
-            try (InputStreamReader reader = new InputStreamReader(csvResource.getInputStream(), Charset.forName("windows-1252"))) {
-                CsvToBean<Suppliers> csvToBean = new CsvToBeanBuilder<Suppliers>(reader)
-                        .withType(Suppliers.class)
-                        .withIgnoreLeadingWhiteSpace(true)
-                        .build();
+    private void seedFromCsv() {
+        ClassPathResource csvResource = new ClassPathResource("csv/supplier-seed-data.csv");
 
-                for (Suppliers supplier : csvToBean) {
-                    Suppliers savedSupplier = suppliersRepository.save(supplier);
+        try (InputStreamReader reader = new InputStreamReader(csvResource.getInputStream(), Charset.forName("windows-1252"))) {
+            CsvToBean<Suppliers> csvToBean = new CsvToBeanBuilder<Suppliers>(reader)
+                    .withType(Suppliers.class)
+                    .withIgnoreLeadingWhiteSpace(true)
+                    .build();
 
-                    Set<String> categories = new LinkedHashSet<>();
-                    // an empty Type cell binds to null; such a supplier just has no categories
-                    String rawCategories = savedSupplier.getCategory();
-                    if (rawCategories != null) {
-                        for (String raw : rawCategories.split("/")) {
-                            String category = SupplierCategories.normalizeCategory(raw);
-                            if (category != null) {
-                                categories.add(category);
-                            }
+            for (Suppliers supplier : csvToBean) {
+                Suppliers savedSupplier = suppliersRepository.save(supplier);
+
+                Set<String> categories = new LinkedHashSet<>();
+                // an empty Type cell binds to null; such a supplier just has no categories
+                String rawCategories = savedSupplier.getCategory();
+                if (rawCategories != null) {
+                    for (String raw : rawCategories.split("/")) {
+                        String category = SupplierCategories.normalizeCategory(raw);
+                        if (category != null) {
+                            categories.add(category);
                         }
                     }
-                    for (String category : categories) {
-                        SupplierCategories supplierCategory = new SupplierCategories();
-                        supplierCategory.setSupplier(savedSupplier);
-                        supplierCategory.setCategory(category);
-                        supplierCategoriesRepository.save(supplierCategory);
-                    }
                 }
-            } catch (Exception e) {
-                throw new IllegalStateException("Failed to seed suppliers", e);
+                for (String category : categories) {
+                    SupplierCategories supplierCategory = new SupplierCategories();
+                    supplierCategory.setSupplier(savedSupplier);
+                    supplierCategory.setCategory(category);
+                    supplierCategoriesRepository.save(supplierCategory);
+                }
             }
-
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to seed suppliers", e);
         }
     }
 }

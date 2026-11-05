@@ -6,15 +6,25 @@
 # 2026-09-29, issue #106: a fixed test JWT secret (32+ bytes, mirrors
 # notification-service's test setup) so the context loads without
 # JWT_SECRET set in the environment.
+# 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): Flyway baseline /
+# advisory-locked seeding for multi-replica starts (team decision, Leong
+# Wei Zhi via options Q&A): Flyway off for the H2 tests (V1 is PostgreSQL
+# DDL; the Testcontainers tests switch it on), and an H2 stand-in for
+# pg_advisory_xact_lock (H2AdvisoryLock) so SuppliersSeeder still seeds
+# here. Author review: Leong Wei Zhi, pending pull request review.
 
 spring:
   datasource:
-    url: jdbc:h2:mem:supplier;DB_CLOSE_DELAY=-1
+    # INIT: H2 has no advisory locks; this no-op alias lets the seeder's
+    # lock statement run (the real lock is tested on Postgres)
+    url: "jdbc:h2:mem:supplier;DB_CLOSE_DELAY=-1;INIT=CREATE ALIAS IF NOT EXISTS PG_ADVISORY_XACT_LOCK FOR 'foc.supplier.H2AdvisoryLock.lock'"
     username: sa
     password: ""
   jpa:
     hibernate:
       ddl-auto: create-drop
+  flyway:
+    enabled: false
 
 supplier:
   web-allowed-origin: http://localhost:5173

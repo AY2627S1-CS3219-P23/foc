@@ -18,6 +18,9 @@
   2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): AI Use Summary
   extended for the cross-replica STOMP fanout over AMQP. Author review:
   Leong Wei Zhi, pending pull request review.
+  2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): AI Use Summary
+  extended for supplier-service's Flyway baseline and advisory-locked
+  seeding. Author review: Leong Wei Zhi, pending pull request review.
   Author review: Leong Wei Zhi, pending pull request review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
   public profile's joined date and deliveries-completed count (issue
@@ -1510,6 +1513,15 @@ anonymous queue delivers it to its local broker, with chat-service's
 RabbitMQ wiring in compose and Kubernetes, tests, and the design-doc
 notes. Fanout over AMQP was Leong Wei Zhi's decision; the tool wrote the
 code to it. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) made supplier-service safe to start as several
+replicas on one database (issue #48, DP10): Flyway with a V1 baseline
+taken from the schema Hibernate generated (existing databases are
+baselined, Hibernate now only validates), and the CSV seeder run under a
+PostgreSQL advisory lock so it seeds once, with Testcontainers tests for
+both. Adopting Flyway and locking the seeder were Leong Wei Zhi's
+decisions; the tool wrote the code to them. Recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

@@ -30,6 +30,11 @@
   entity's names filled in, and D13's default-order note added, from
   Alastair Tan Choon Wei's decisions and what was built. Transcription
   only; no rationale drafted - the team writes that.
+  2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): Flyway baseline /
+  advisory-locked seeding for multi-replica starts (team decision, Leong
+  Wei Zhi via options Q&A): seed loader and database rows note it.
+  Transcription only. Author review: Leong Wei Zhi, pending pull request
+  review.
   Reviewed by: XXX
 -->
 
@@ -113,8 +118,8 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | **Internal validation/lookup API** | For Order Service: confirm a supplier exists (Order F1.1.1) and return its coordinates for distance checks (Order F8.1, D6) |
 | **Bookmark REST API** (JWT, per-user; N8) | List, add and remove the caller's own bookmarks and enforce the cap (D10) and the parallel-add guard (D14). The caller's id comes from the verified JWT, never from the request. Endpoints in the Bookmark API section below |
 | **Internal purge API** (`SERVICE` role only; N8.5) | Removes every bookmark of the accounts the User Service has purged (D12). Not a user endpoint: no login token can call it, and the gateway returns `404` for it |
-| **Seed loader** (issue #102) | Parses the supplier seed CSV and populates the database on first startup |
-| **Supplier Database** (PostgreSQL, D1) | Owns supplier and category data exclusively |
+| **Seed loader** (issue #102) | Parses the supplier seed CSV and populates the database on first startup. Multi-replica safe: empty-check + inserts in one transaction under a PostgreSQL advisory lock (`SeedLock`, two-int key `(1, 1)`, apart from D14's per-user keys), so replicas starting together seed once (DP10, issue #48, [`deployment.md`](deployment.md)) |
+| **Supplier Database** (PostgreSQL, D1) | Owns supplier and category data exclusively. Schema by Flyway (`db/migration/V1__baseline.sql` = the former ddl-auto schema; `baseline-on-migrate` adopts pre-Flyway volumes as V1); Hibernate only validates (DP10, issue #48) |
 
 ## Bookmark API (N8)
 

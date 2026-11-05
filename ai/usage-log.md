@@ -35,6 +35,9 @@
   2026-11-05, Claude Code (Opus 5.5): prepended the issue #48 STOMP
   fanout (DP10) entry below. Author review: Leong Wei Zhi, pending pull
   request review.
+  2026-11-05, Claude Code (Opus 5.5): prepended the issue #48 supplier
+  Flyway + locked seeding (DP10) entry below. Author review: Leong Wei
+  Zhi, pending pull request review.
   PR #269's main merge: this file merged cleanly (main appends at the
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
@@ -66,6 +69,41 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-05 — Leong Wei Zhi (issue #48, DP10: supplier-service Flyway baseline + locked seeding)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** supplier-service: `spring-boot-starter-flyway` +
+  `flyway-database-postgresql` (as order-service) and Testcontainers test
+  deps in the pom; `db/migration/V1__baseline.sql` (the schema the
+  pre-Flyway service's `ddl-auto: update` built on postgres:16, from
+  `pg_dump --schema-only`, Hibernate's constraint names kept);
+  `application.yaml` `ddl-auto: validate` + `baseline-on-migrate` /
+  `baseline-version: 1` (as user-service); new `seed/SeedLock`
+  (`pg_advisory_xact_lock(1, 1)`, two-int key space apart from
+  `BookmarkLock`'s user-id keys) and `SuppliersSeeder` running lock →
+  re-check `count() == 0` → inserts in one `TransactionTemplate`;
+  `BookmarkLock` comment. Tests: `PostgresTestContainer` (postgres:16),
+  `SupplierFlywayMigrationTest` (V1 applied, validate passes, CSV seeded),
+  `SuppliersSeederConcurrencyTest` (two simultaneous seeds, both queued
+  on the lock via pg_locks, one CSV copy); the H2 test yaml turns Flyway
+  off and registers a no-op `PG_ADVISORY_XACT_LOCK` alias
+  (`H2AdvisoryLock`). `docs/supplier-service.md` rows. Fourth PR of the
+  issue-#48 stack, on `feat/48-stomp-fanout`.
+- **Prompt(s):** this PR's brief: make supplier-service safe to start as 2
+  replicas against one empty database, per Leong Wei Zhi's DP10 choices
+  (options Q&A): adopt Flyway with a V1 baseline generated from the real
+  ddl-auto schema, baseline-on-migrate for existing volumes, then
+  `validate`; wrap the seeder in a transaction that takes
+  `pg_advisory_xact_lock(<constant>)` and re-checks the empty table, same
+  mechanism as `BookmarkLock`.
+- **Author review:** `./mvnw verify` 79/79; the seeder test fails (42 vs 21
+  rows) with the count moved before the lock; the built jar started on an
+  empty DB (V1 applied), on a DB the pre-Flyway jar built (baselined as
+  V1, no reset), and as two simultaneous replicas on one empty DB (21
+  suppliers); Flyway's and Hibernate's schemas pg_dump-identical. Leong
+  Wei Zhi reviews via pull request.
 
 ---
 ## 2026-11-05 — Leong Wei Zhi (issue #48, DP10: cross-replica STOMP fanout over AMQP)

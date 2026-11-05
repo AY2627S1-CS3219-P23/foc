@@ -8,11 +8,17 @@
  * check cannot be raced past the limit. It is released when the
  * transaction ends, works across service instances, and does not make
  * different users collide. PostgreSQL-only (the tests substitute it, as
- * they run on H2). Nothing else in this database uses advisory locks, so
- * the bare user id is the key.
+ * they run on H2). The bare user id is the key (single-bigint form).
  * Design (D14, docs/supplier-service.md): the advisory lock was suggested
  * during implementation and reviewed and confirmed by the author/team as
  * the accepted design (2026-10-26, PR #259 review).
+ * 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): Flyway baseline /
+ * advisory-locked seeding for multi-replica starts (team decision, Leong
+ * Wei Zhi via options Q&A): comment only. The seeder now also takes an
+ * advisory lock (seed.SeedLock), in the two-int key space, which
+ * PostgreSQL keeps apart from this single-bigint one, so user ids still
+ * cannot collide with it. Author review: Leong Wei Zhi, pending pull
+ * request review.
  * Reviewed by: [pending]
  */
 package foc.supplier.service;

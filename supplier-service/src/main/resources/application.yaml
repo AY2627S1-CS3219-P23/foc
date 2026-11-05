@@ -9,6 +9,11 @@
 # 2026-09-29, issue #106: JWT secret binding for the JWT verification +
 # role gate filter chain (same shared JWT_SECRET as user-service and
 # notification-service).
+# 2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): Flyway baseline /
+# advisory-locked seeding for multi-replica starts (team decision, Leong
+# Wei Zhi via options Q&A): Flyway builds the schema (V1 baseline,
+# baseline-on-migrate as in user-service) and Hibernate only validates.
+# Author review: Leong Wei Zhi, pending pull request review.
 
 spring:
   application:
@@ -19,8 +24,15 @@ spring:
     password: ${SUPPLIER_DB_PASSWORD:}
   jpa:
     hibernate:
-      ddl-auto: update
+      # Flyway owns the schema (db/migration); two replicas starting
+      # together must not both run ddl-auto against one database
+      ddl-auto: validate
     open-in-view: false
+  flyway:
+    # a database ddl-auto built before Flyway has tables but no history:
+    # record it as V1 (the baseline script's schema) and apply V2 onward
+    baseline-on-migrate: true
+    baseline-version: 1
 
 supplier:
   web-allowed-origin: ${WEB_ALLOWED_ORIGIN:http://localhost:5173}
