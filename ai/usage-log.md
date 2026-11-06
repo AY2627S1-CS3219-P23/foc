@@ -62,6 +62,14 @@ Entry template:
 ```
 
 ---
+## 2026-11-06 — Leong Wei Zhi (credit-service tests: order-independent common-pool cases, PR #289 CI)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug, tests
+- **Scope:** `CreditServiceApplicationTests.commonPoolIsOneRow` (was `commonPoolStartsAsOneEmptyRow`) checks only the single row; `EntityMappingTest.commonPool` round-trips relative to the current balance. Both assumed a zero balance, which fails whenever a committing class (expiry/closure) runs first in the shared container, as in #289's CI (pool = 38). Test-only; no production change.
+- **Prompt(s):** "fix ci failure on credit service for #289".
+- **Author review:** credit-service 360/360 in reverse-alphabetical, filesystem and alphabetical test order (reverse order reproduced the CI failure before the fix); Leong Wei Zhi reviews via pull request.
+
+---
 ## 2026-11-05 — Leong Wei Zhi (N5 cloud deployment, issue #48: infra/ + gateway)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs
