@@ -110,16 +110,25 @@ sequenceDiagram
   participant G as GHCR
   participant S as SSM
   participant H as k3s host
-  A->>G: build + push 9 images (amd64), tag = commit sha
+  participant M as Secrets Manager
+  Note over A,G: build — images reach the host only through GHCR
+  A->>G: log in with GITHUB_TOKEN (packages: write)
+  A->>G: push foc-* × 9 (amd64), tag = commit sha
+  Note over A,H: rollout
   A->>S: assume OIDC role, send-command deploy.sh (sha, public host)
   S->>H: run as root
   H->>H: git checkout the sha in /opt/foc
-  H->>H: fill __IMAGE_TAG__ / __PUBLIC_HOST__ in a temp copy
-  H->>H: wait for ESO CRDs + webhook
-  H->>H: kubectl apply -k, rollout status per StatefulSet / Deployment
+  H->>H: set every app image tag to the sha (temp copy)
+  H->>H: wait for ESO CRDs + webhook, then kubectl apply -k
+  M-->>H: ESO syncs foc/ghcr into the ghcr-pull Secret
+  H->>G: kubelet pulls foc-*:sha with ghcr-pull (read:packages token)
+  G-->>H: images
+  H->>H: rollout status per StatefulSet / Deployment
   H-->>A: output + status (polled ≤ 30 min)
 ```
 
+- **GHCR's two credentials:** Actions pushes with its own `GITHUB_TOKEN`. The host pulls with the team's read-only token (`ghcr_token` → `foc/ghcr` → `ghcr-pull`), referenced by all 9 app Deployments. The data images (`postgres`, `rabbitmq`, `redis`) come from Docker Hub without a secret.
+- The images are tagged only with the commit sha, so the tag is how the host picks a build. There is no `latest`.
 - The web bundle has `http://<PUBLIC_HOST>/api/<svc>` baked in at build time. A new Elastic IP means a new build.
 - To roll back, open an earlier Deploy run and **Re-run all jobs**. A re-run keeps that run's commit, while a new dispatch always builds the head of `main`.
 
