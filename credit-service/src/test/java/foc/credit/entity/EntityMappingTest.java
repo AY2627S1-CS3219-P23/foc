@@ -12,6 +12,9 @@
  * saves and reads back courier_share (V4).
  * 2026-10-28, Claude Code (Opus 5.5), issue #267: V6's closed_at round
  * trip, and a CLOSURE history row the type CHECK accepts.
+ * 2026-11-06, Claude Code (Opus 5.5), PR #289 CI fix: the common-pool
+ * case no longer expects a zero balance (committing classes sharing the
+ * container move credits into the pool first).
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.entity;
@@ -217,14 +220,15 @@ class EntityMappingTest extends PostgresTestContainer {
 
     @Test
     void commonPool() {
-        // V1 inserts the row
+        // V1 inserts the row; its balance depends on which committing
+        // classes ran first in the shared container
         CommonPool pool = commonPool.findById(CommonPool.ID).orElseThrow();
-        assertThat(pool.getBalance()).isZero();
+        int before = pool.getBalance();
 
-        pool.setBalance(7);
+        pool.setBalance(before + 7);
         flushAndClear();
 
-        assertThat(commonPool.findById(CommonPool.ID).orElseThrow().getBalance()).isEqualTo(7);
+        assertThat(commonPool.findById(CommonPool.ID).orElseThrow().getBalance()).isEqualTo(before + 7);
     }
 
     @Test
