@@ -12,6 +12,9 @@
   no paragraph here) and for the N1 documentation pass itself (issue
   #258, the new docs/rating-service.md + .mmd and the doc updates it
   touches).
+  2026-11-06, Claude Code (Opus 5.5), issue #48 (DP11): AI Use Summary
+  extended for the realistic demo usernames. Author review: Leong Wei
+  Zhi, pending pull request review.
   Author review: Leong Wei Zhi, pending pull request review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
   public profile's joined date and deliveries-completed count (issue
@@ -1497,6 +1500,14 @@ measurements; the team decided and supplied the wording. Recorded in
 pattern, with its Maven test dependencies. The tool compared the H2 and
 Testcontainers options as facts and the author chose Testcontainers; the
 NFR bounds are the team's. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) gave the user-service demo seed realistic,
+fictional usernames (issue #48, DP11): fixed lists of `firstname_lastname`
+names for the owner, 3 admins and 100 users, with the emails, passwords
+and counts unchanged, plus the seeder test and the docs that name the
+accounts. Realistic names everywhere was Leong Wei Zhi's decision; the
+tool picked the names and wrote the change. Recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

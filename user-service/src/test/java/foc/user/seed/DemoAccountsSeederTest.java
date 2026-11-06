@@ -21,12 +21,17 @@ Author review: Ryan to review via the PR.
 go through UserCreation, so the stubs answer saveAndFlush, and a case pins
 one user.created per seeded account and none on a rerun. Author review:
 Ryan Ang, pending pull request review.
+2026-11-06 (Claude Code, Opus 5.5), issue #48, DP11: the cases name the
+new realistic usernames, and the rules case also checks that no username
+repeats (ignoring case). Author review: Leong Wei Zhi, pending pull
+request review.
 */
 
 package foc.user.seed;
 
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -127,18 +132,18 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
             Role.OWNER, 1L,
             Role.ADMIN, (long) DemoAccountsSeeder.ADMINS,
             Role.USER, (long) DemoAccountsSeeder.USERS));
-        assertThat(userRepository.findByUsernameIgnoreCase("demo_owner").orElseThrow().getRole())
+        assertThat(userRepository.findByUsernameIgnoreCase("daniel_koh").orElseThrow().getRole())
             .isEqualTo(Role.OWNER);
     }
 
     @Test
     @DisplayName("Each role logs in with its own password")
     void rolesLogInWithTheirPasswords() throws Exception {
-        login("demo_owner", DemoAccountsSeeder.OWNER_PASSWORD, 200);
-        login("demo_admin_2", DemoAccountsSeeder.ADMIN_PASSWORD, 200);
-        login("demo_user_042", DemoAccountsSeeder.USER_PASSWORD, 200);
+        login("daniel_koh", DemoAccountsSeeder.OWNER_PASSWORD, 200);
+        login("farhan_ismail", DemoAccountsSeeder.ADMIN_PASSWORD, 200);
+        login("aqil_zainal", DemoAccountsSeeder.USER_PASSWORD, 200);
         // another role's password is wrong
-        login("demo_user_043", DemoAccountsSeeder.ADMIN_PASSWORD, 401);
+        login("meera_subramaniam", DemoAccountsSeeder.ADMIN_PASSWORD, 401);
     }
 
     @Test
@@ -172,17 +177,17 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
     @Test
     @DisplayName("Only missing accounts are added; existing ones are left as they are")
     void addsOnlyMissingAccounts() {
-        User user = userRepository.findByUsernameIgnoreCase("demo_user_005").orElseThrow();
+        User user = userRepository.findByUsernameIgnoreCase("nurul_huda").orElseThrow();
         userRepository.delete(user);
-        User admin = userRepository.findByUsernameIgnoreCase("demo_admin_1").orElseThrow();
+        User admin = userRepository.findByUsernameIgnoreCase("priya_menon").orElseThrow();
         admin.setRole(Role.USER);
         userRepository.save(admin);
 
         seeder.run();
 
-        assertThat(userRepository.findByUsernameIgnoreCase("demo_user_005")).isPresent();
+        assertThat(userRepository.findByUsernameIgnoreCase("nurul_huda")).isPresent();
         // a demoted demo admin stays demoted
-        assertThat(userRepository.findByUsernameIgnoreCase("demo_admin_1").orElseThrow().getRole())
+        assertThat(userRepository.findByUsernameIgnoreCase("priya_menon").orElseThrow().getRole())
             .isEqualTo(Role.USER);
         assertThat(userRepository.count()).isEqualTo(1 + DemoAccountsSeeder.ADMINS + DemoAccountsSeeder.USERS);
     }
@@ -193,14 +198,14 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
         // relies on existsByEmail / existsByUsernameIgnoreCase counting
         // soft-deleted rows; narrowing them would re-insert the account and
         // fail on the unique email
-        User user = userRepository.findByUsernameIgnoreCase("demo_user_010").orElseThrow();
+        User user = userRepository.findByUsernameIgnoreCase("rohan_pillai").orElseThrow();
         user.softDelete(Instant.now());
         userRepository.save(user);
         long before = userRepository.count();
 
         seeder.run();
 
-        assertThat(userRepository.findByUsernameIgnoreCase("demo_user_010").orElseThrow().getDeletedAt())
+        assertThat(userRepository.findByUsernameIgnoreCase("rohan_pillai").orElseThrow().getDeletedAt())
             .isNotNull();
         assertThat(userRepository.count()).isEqualTo(before);
     }
@@ -271,6 +276,11 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
         }
         assertThat(DemoAccountsSeeder.accounts().stream()
                 .collect(Collectors.toMap(DemoAccountsSeeder.DemoAccount::email, Function.identity())))
+            .hasSize(DemoAccountsSeeder.accounts().size());
+        // usernames are unique ignoring case (existsByUsernameIgnoreCase)
+        assertThat(DemoAccountsSeeder.accounts().stream()
+                .collect(Collectors.toMap(account -> account.username().toLowerCase(Locale.ROOT),
+                    Function.identity())))
             .hasSize(DemoAccountsSeeder.accounts().size());
     }
 }
