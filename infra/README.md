@@ -4,6 +4,9 @@
   Scope: runbook for the deployment designed in docs/deployment.md (all
   decisions Leong Wei Zhi's, via options Q&A).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-06, Claude Code (Opus 5.5), issue #48 DP11: seeded-accounts
+  table with the realistic usernames. Author review: Leong Wei Zhi,
+  pending pull request review.
 -->
 
 # infra — cloud deployment
@@ -104,5 +107,12 @@ GHCR images outlive the AWS account; delete them under the org's
 
 ## Seeded accounts
 
-`USER_SEED_DEMO=true` in the cloud. Accounts and passwords:
-[`user-service/README.md`](../user-service/README.md).
+`USER_SEED_DEMO=true` in the cloud (DP11). Log in by username or email.
+
+| Role | Username(s) | Email | Password |
+| --- | --- | --- | --- |
+| OWNER | `daniel_koh` | `e9000001@u.nus.edu` | `OwnerPass123` |
+| ADMIN | `priya_menon`, `farhan_ismail`, `chloe_ng` | `e9000101`–`e9000103@u.nus.edu` | `AdminPass123` |
+| USER | `weiling_tan`, `arjun_nair`, `siti_rahman`, … (100) | `e9100001`–`e9100100@u.nus.edu` | `StudentPass123` |
+
+All 100 users: [`user-service/README.md`](../user-service/README.md#demo-accounts-local-only).
