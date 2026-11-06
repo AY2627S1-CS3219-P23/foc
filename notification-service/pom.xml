@@ -39,6 +39,14 @@
   2026-10-19, Claude Code (Fable 5), issue #221: starter-restclient
   removed with the RestUserDirectory adapter (D32 supersedes D30/D31 —
   the web hydrates names at read time; no sync user-service call).
+  2026-11-06, Claude Code (Opus 5.5), issue #48 (DP10): notification-service
+  safe at multiple replicas (team decision, Leong Wei Zhi via options Q&A):
+  spring-boot-starter-flyway and flyway-database-postgresql as in
+  order-service; shedlock-spring and shedlock-provider-jdbc-template
+  (ShedLock 7.10.1, the line for Spring 7 / Boot 4.x) for the retention
+  purge; testcontainers-postgresql for the migration, ShedLock and
+  concurrent-dedupe tests. Author review: Leong Wei Zhi, pending pull
+  request review.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -72,6 +80,8 @@
 		<!-- Not managed by the Boot BOM; pinned explicitly. -->
 		<jjwt.version>0.13.0</jjwt.version>
 		<archunit.version>1.4.2</archunit.version>
+		<!-- Not managed by the Boot BOM; 7.x supports Spring 7 / Boot 4.x. -->
+		<shedlock.version>7.10.1</shedlock.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -90,6 +100,28 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+		<!-- schema migrations (issue #48, DP10): replicas starting together
+		     must not race Hibernate's ddl-auto -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-flyway</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
+		<!-- one replica runs each @Scheduled job at a time (issue #48, DP10);
+		     the lock rows live in the service's own database -->
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-spring</artifactId>
+			<version>${shedlock.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-provider-jdbc-template</artifactId>
+			<version>${shedlock.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -173,6 +205,13 @@
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers-rabbitmq</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- real Postgres for the Flyway, ShedLock and concurrent-dedupe
+		     tests (issue #48) -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-postgresql</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>

@@ -47,6 +47,15 @@
  * PR #287 review (@Sinnez1): recipients are resolved before the first
  * write, so a missing rule or courier throws with nothing to roll back
  * and the message stays replayable through the retry/DLQ path.
+ * 2026-11-06, Claude Code (Opus 5.5), issue #48 (DP10): insert-first
+ * dedupe for multiple replicas (team decision, Leong Wei Zhi via options
+ * Q&A), as rating-service D4: the dedupe row is persisted and flushed
+ * before any business write, and a primary-key violation on it (a
+ * concurrent duplicate on another replica or consumer) rolls the whole
+ * transaction back and returns like the seen-before path, so the listener
+ * acks. TransactionTemplate replaces @Transactional so that catch sits
+ * outside the transaction. Author review: Leong Wei Zhi, pending pull
+ * request review.
  */
 package foc.notification.service;
 
@@ -57,12 +66,17 @@ import foc.notification.entity.Notification;
 import foc.notification.entity.ProcessedEvent;
 import foc.notification.repository.NotificationRepository;
 import foc.notification.repository.ProcessedEventRepository;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -74,10 +88,14 @@ import tools.jackson.databind.ObjectMapper;
  * (1b) recipients are resolved from the event's own id fields (D34) —
  * a type without a rule or a missing required courier throws here,
  * before any write, so the listener's retry/DLQ path keeps the message
- * replayable (PR #287 review); (2) the event ID is recorded — its primary key is the backstop for
- * a concurrent duplicate, whose losing transaction rolls back at
- * commit and resolves via broker redelivery into case 1 (only
- * reachable with listener concurrency &gt; 1; the default is 1);
+ * replayable (PR #287 review); (2) the event ID is recorded and flushed
+ * before any business write (insert-first, DP10, issue #48) — its
+ * primary key is the backstop for a concurrent duplicate that passed
+ * step 1 at the same time (two replicas, or listener concurrency &gt; 1):
+ * the losing INSERT waits for the winner's transaction, fails on the
+ * key once it commits, and the loser's transaction rolls back whole
+ * before returning normally, so the listener acks it like case 1 (the
+ * single-active-consumer work queues make this rare, not impossible);
  * (3) the event's business fields (everything outside
  * {@link DomainEvent#METADATA_FIELDS}) are serialized with Boot's
  * auto-configured Jackson mapper — the same mapper the AMQP converter
@@ -97,24 +115,45 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 class IdempotentEventProcessor implements EventProcessor {
 
+	private static final Logger log = LoggerFactory.getLogger(IdempotentEventProcessor.class);
+
+	/** PostgreSQL's (and H2's) SQLSTATE for a unique or primary-key violation. */
+	private static final String UNIQUE_VIOLATION = "23505";
+
 	private final ProcessedEventRepository processedEvents;
 	private final NotificationRepository notifications;
 	private final ObjectMapper objectMapper;
 	private final ApplicationEventPublisher eventPublisher;
+	private final TransactionTemplate transactions;
 
 	IdempotentEventProcessor(ProcessedEventRepository processedEvents,
 			NotificationRepository notifications,
 			ObjectMapper objectMapper,
-			ApplicationEventPublisher eventPublisher) {
+			ApplicationEventPublisher eventPublisher,
+			PlatformTransactionManager transactionManager) {
 		this.processedEvents = processedEvents;
 		this.notifications = notifications;
 		this.objectMapper = objectMapper;
 		this.eventPublisher = eventPublisher;
+		this.transactions = new TransactionTemplate(transactionManager);
 	}
 
 	@Override
-	@Transactional
 	public void process(DomainEvent event) {
+		try {
+			transactions.executeWithoutResult(status -> apply(event));
+		} catch (ConcurrentDuplicate duplicate) {
+			// Caught here, outside the transaction: it has already rolled
+			// back whole, so nothing of this delivery is left behind and the
+			// winner's rows stand. Returning normally acks it (DP10).
+			log.info("event {} ({}) already processed by a concurrent delivery; skipped",
+					event.eventId(), event.eventType());
+		}
+	}
+
+	private void apply(DomainEvent event) {
+		// Seen before (a sequential redelivery): the common duplicate,
+		// answered without a failed INSERT.
 		if (processedEvents.existsById(event.eventId())) {
 			return;
 		}
@@ -123,23 +162,24 @@ class IdempotentEventProcessor implements EventProcessor {
 		// message retries and dead-letters for replay once the rule or the
 		// producer is fixed.
 		List<String> recipients = RecipientResolver.recipientsOf(event);
+		// Insert-first (DP10, issue #48): the dedupe row is the first write,
+		// so a concurrent duplicate stops here before pruning or storing
+		// anything.
+		recordFirst(event.eventId());
 		// A drop removes the courier as a party (order-service nulls
 		// courierId), so every row they hold for this request now
 		// dead-ends on the detail 404 — delete them (D33, issue #266).
 		// Bounded to rows at or before the drop: a retried drop (first
 		// attempt rolled back, so the dedupe never recorded it) must not
 		// take the fresh rows of a re-accept with it (PR #277 review).
-		// MUST run before the saves below: the bulk query's
-		// clearAutomatically empties the persistence context, and the
-		// dedupe row's insert (assigned PK, so queued until flush, unlike
-		// the notifications' immediate IDENTITY inserts) would be
-		// discarded with it — a redelivery would then prune again and
-		// store the requester's row twice.
+		// Safe after the dedupe row now: the bulk query's
+		// clearAutomatically empties the persistence context, but
+		// recordFirst has already flushed that row's INSERT, so the clear
+		// cannot discard it (it once had to run before an unflushed save).
 		if (event instanceof RequestDropped dropped) {
 			notifications.deleteByRecipientIdAndPayloadLike(dropped.courierId(),
 					fieldPattern("requestId", dropped.requestId()), dropped.occurredAt());
 		}
-		processedEvents.save(new ProcessedEvent(event.eventId()));
 		Map<String, Object> fields = businessFields(event);
 		String payloadJson = objectMapper.writeValueAsString(fields);
 		for (String recipient : recipients) {
@@ -149,6 +189,43 @@ class IdempotentEventProcessor implements EventProcessor {
 			Notification saved = notifications.save(new Notification(recipient, event.eventId(),
 					event.eventType(), payloadJson, event.occurredAt()));
 			eventPublisher.publishEvent(new NotificationStoredEvent(saved));
+		}
+	}
+
+	// persist + flush: the INSERT runs now, not at commit, so a concurrent
+	// duplicate's key violation surfaces here, before any other write. It
+	// is not swallowed inside the transaction — a failed statement aborts
+	// a PostgreSQL transaction, so nothing more may run in it: the marker
+	// exception carries it out of the callback, the template rolls the
+	// transaction back, and process() catches the marker (as rating-service
+	// D4, the PK violation ends the transaction). Any other integrity
+	// failure (an over-long id, say) is rethrown as is, for the listener's
+	// retry/DLQ path, never mistaken for a duplicate.
+	private void recordFirst(String eventId) {
+		try {
+			processedEvents.saveAndFlush(new ProcessedEvent(eventId));
+		} catch (DataIntegrityViolationException ex) {
+			if (isUniqueViolation(ex)) {
+				throw new ConcurrentDuplicate(ex);
+			}
+			throw ex;
+		}
+	}
+
+	private static boolean isUniqueViolation(Throwable ex) {
+		for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+			if (cause instanceof SQLException sql && UNIQUE_VIOLATION.equals(sql.getSQLState())) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Another delivery of this event committed its dedupe row first. */
+	private static final class ConcurrentDuplicate extends RuntimeException {
+
+		ConcurrentDuplicate(Throwable cause) {
+			super("concurrent duplicate event", cause, false, false);
 		}
 	}
 

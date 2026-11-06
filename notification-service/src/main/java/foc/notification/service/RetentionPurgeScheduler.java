@@ -16,6 +16,11 @@
  * unacked work-queue redelivery path alongside DLQ replay (no code
  * change — same accepted ≥30-day-outage class).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-11-06, Claude Code (Opus 5.5), issue #48 (DP10): @SchedulerLock
+ * so the purge runs on one replica at a time; the method made public,
+ * since ShedLock proxies only public methods (team decision, Leong Wei
+ * Zhi via options Q&A). Author review: Leong Wei Zhi, pending pull
+ * request review.
  */
 package foc.notification.service;
 
@@ -23,6 +28,7 @@ import foc.notification.repository.NotificationRepository;
 import foc.notification.repository.ProcessedEventRepository;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,6 +52,13 @@ import org.springframework.stereotype.Component;
  * bean (the STOMP heartbeat scheduler declared in
  * {@code WebSocketStompConfig}) — Boot backs off its own default
  * scheduler once a user-defined one exists.
+ *
+ * <p>With several replicas, each fires the cron; only the one holding the
+ * {@code notification.retention-purge} ShedLock row runs the purge, the
+ * others skip that run (DP10, issue #48; {@code SchedulerLockConfig}).
+ * The two bulk deletes are JPQL queries, never {@code delete(entity)}:
+ * {@code ProcessedEvent} is {@code Persistable}, and Spring Data skips a
+ * {@code delete} of an entity it believes new.
  */
 @Component
 class RetentionPurgeScheduler {
@@ -65,7 +78,8 @@ class RetentionPurgeScheduler {
 	}
 
 	@Scheduled(cron = "${notification.retention.purge-cron}")
-	void purgeExpiredNotifications() {
+	@SchedulerLock(name = "notification.retention-purge", lockAtMostFor = "PT10M")
+	public void purgeExpiredNotifications() {
 		Instant cutoff = Instant.now().minus(retentionDays, ChronoUnit.DAYS);
 		int deletedNotifications = notifications.deleteByCreatedAtBefore(cutoff);
 		int deletedEvents = processedEvents.deleteByProcessedAtBefore(cutoff);

@@ -39,6 +39,11 @@
  * PR #287 review (@Sinnez1): a refused event (missing required courier)
  * writes nothing — no dedupe row — so the same id stores normally once
  * the body is right.
+ * 2026-11-06, Claude Code (Opus 5.5), issue #48 (DP10): insert-first dedupe
+ * (team decision, Leong Wei Zhi via options Q&A) — an integrity failure
+ * on the dedupe row that is not a key violation (an over-long event id)
+ * is rethrown, not taken for a duplicate. Author review: Leong Wei Zhi,
+ * pending pull request review.
  */
 package foc.notification.service;
 
@@ -58,6 +63,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -166,6 +172,21 @@ class IdempotentEventProcessorTest {
 		eventProcessor.process(event);
 
 		assertThat(notifications.count()).isEqualTo(2);
+	}
+
+	// Insert-first (DP10): only a unique-key violation on the dedupe row
+	// means "already processed"; H2's value-too-long on the 255-char key
+	// column is an integrity failure too, and must reach the listener's
+	// retry/DLQ path instead of being acked as a duplicate.
+	@Test
+	void anIntegrityFailureOtherThanTheKeyIsNotTakenForADuplicate() {
+		String overLongId = "e-" + "x".repeat(300);
+
+		assertThatThrownBy(() -> eventProcessor.process(created(overLongId, "req-1")))
+				.isInstanceOf(DataIntegrityViolationException.class);
+
+		assertThat(processedEvents.count()).isZero();
+		assertThat(notifications.count()).isZero();
 	}
 
 	@Test

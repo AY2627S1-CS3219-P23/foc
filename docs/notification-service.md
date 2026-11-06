@@ -92,6 +92,12 @@
   fanout over AMQP (Leong Wei Zhi via options Q&A, docs/deployment.md).
   Transcription only. Author review: Leong Wei Zhi, pending pull request
   review.
+  2026-11-06, Claude Code (Opus 5.5), issue #48 (DP10): notification-service
+  safe at multiple replicas (team decision, Leong Wei Zhi via options Q&A,
+  docs/deployment.md): D3/D4/D9/D33 notes, the work-queue, processor,
+  purge and DB component rows and a configuration note (Flyway V1/V2,
+  insert-first dedupe, single active consumer, ShedLock). Transcription
+  only. Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -124,12 +130,12 @@ removed; gaps in the numbering are intentional.
 | --- | --- | --- | --- |
 | D1 | Message broker | **RabbitMQ** | M6; Notif F1.1, NFR1 |
 | D2 | Client push transport | **WebSocket with STOMP** (Spring simple broker, per-user destinations) | Notif F1.2; Order NFR1.1–1.2 |
-| D3 | Notification DB engine | **PostgreSQL**, accessed via Spring Data JPA | Notif F2.1, F3 |
-| D4 | Duplicate detection | **Unique event ID** recorded in the DB, in the *same transaction* as the notification insert. *2026-10-17 note (issue #137):* dedupe rows past the D9 retention window are purged, reopening the dedupe window for those event IDs — accepted: retries are 10 s TTL × 3 then DLQ, so re-processing needs a delivery resurfacing ≥ 30 days later (a manual DLQ replay, or a post-commit delivery left unacked on the work queue across an outage that long), and it would recreate notifications the purge already deleted | Notif F2.1 |
+| D3 | Notification DB engine | **PostgreSQL**, accessed via Spring Data JPA. *2026-11-06 (DP10, issue #48, [`deployment.md`](deployment.md)):* schema by **Flyway** — `V1__baseline` = the former `ddl-auto: update` schema (pg_dump-identical), `V2__shedlock`; `baseline-on-migrate` adopts pre-Flyway volumes as V1; Hibernate only validates | Notif F2.1, F3 |
+| D4 | Duplicate detection | **Unique event ID** recorded in the DB, in the *same transaction* as the notification insert. *2026-10-17 note (issue #137):* dedupe rows past the D9 retention window are purged, reopening the dedupe window for those event IDs — accepted: retries are 10 s TTL × 3 then DLQ, so re-processing needs a delivery resurfacing ≥ 30 days later (a manual DLQ replay, or a post-commit delivery left unacked on the work queue across an outage that long), and it would recreate notifications the purge already deleted. *2026-11-06 (DP10, issue #48, [`deployment.md`](deployment.md)):* **insert-first**, as rating-service D4 — `ProcessedEvent` is `Persistable` (callback `isNew`), the seen-before check stays, then the dedupe row is persisted and flushed before any business write; a concurrent duplicate's primary-key violation rolls its transaction back whole and is acked like a seen-before event | Notif F2.1 |
 | D6 | Retry policy | **Broker redelivery with TTL retry queue**: 3 total attempts, 10 s backoff, env-overridable — see [Failure handling](#failure-handling-d6d7-d20d21) | Notif F2.2 |
 | D7 | Dead-letter handling | **Durable dead-letter queue**; unknown event types dead-letter (replayable after a consumer upgrade) rather than being dropped | Notif F2.3 |
 | D8 | Broker persistence | **Durable exchanges/queues + persistent messages** (durability is opt-in in RabbitMQ) | Notif NFR1.2 |
-| D9 | Retention window | `NOTIF_RETENTION_DAYS` env var, **default 30 days**; scheduled purge job. *2026-10-17 (issue #137):* the same run and window also sweep the `processed_events` dedupe table | Notif F3.4 |
+| D9 | Retention window | `NOTIF_RETENTION_DAYS` env var, **default 30 days**; scheduled purge job. *2026-10-17 (issue #137):* the same run and window also sweep the `processed_events` dedupe table. *2026-11-06 (DP10, issue #48, [`deployment.md`](deployment.md)):* the purge runs under **ShedLock** (`notification.retention-purge`, `lockAtMostFor` 10 min) — one replica per run | Notif F3.4 |
 | D10 | Redis / scale-out | **No Redis** in the single-instance design (see Open items). *2026-10-11 note:* a platform Redis now exists for the **logout token denylist** ([`gateway.md`](gateway.md), issue #151) — unrelated to this service's scale-out question, which stays open. *2026-10-12 note:* this service now **reads** that denylist at STOMP CONNECT (D23); the scale-out question is still open. *2026-11-05 (DP10, Leong Wei Zhi via options Q&A, [`deployment.md`](deployment.md)):* scale-out decided — **fanout over AMQP**: the replica producing a push publishes it to the `notification.push` fanout exchange; every replica binds its own exclusive, auto-delete queue and delivers to its own simple broker. No STOMP relay | — |
 | D11 | Broker isolation | **Ports and adapters**: all RabbitMQ code confined to one adapter package — see [Broker decoupling](#broker-decoupling-d11) | broker swap surface |
 | D12 | Topology provisioning | **App-declared at startup** via Spring AMQP beans (no broker definitions file) | topology lives beside its owner |
@@ -149,7 +155,7 @@ removed; gaps in the numbering are intentional.
 | D27 | List paging & filter | **Hand-validated `page`/`size`** (defaults 0/20, cap 100, out-of-range → 400 — credit-service's anti-`Pageable` stance) plus an optional **`unread=true` filter**, bound as a primitive `boolean` — deliberately as lenient as Spring's standard conversion (`1`/`yes`/`on` and `0`/`no`/`off` alongside `true`/`false`), not hand-validated like `page`/`size` | Notif F3.1 |
 | D28 | REST filter authorities | **Empty authorities**: the JWT filter authenticates the subject only — this service's verifier exposes no role claim and no route is role-gated; the denylist is NOT re-checked on REST (gateway decision G4; D23 stays the STOMP-only exception) | least change |
 | D32 | Display names (supersedes D30/D31) | **Events and stored payloads carry party IDs only; the web resolves the acting party's id (`courierId`; since issue #255 also `raterId`) → username at read time** (gateway `GET /api/user/users/{id}` with the caller's own JWT, SPA-side cache: 10 min positive / 30 s negative TTL, in-flight dedupe) — no service-to-service call remains, the internal-token machinery is gone, F1.1 holds unamended, renames show current names (D30's ingest snapshot went stale), and a failed lookup renders the actor-less copy — see [Display names](#display-names-d32) | Notif F3.1 UX |
-| D33 | Dropped-courier prune (issue #266) | **Ingesting `request.dropped` deletes the dropping courier's stored rows for that request**, in the same transaction as the dedupe insert — the drop removes them as a party (order-service nulls `courierId`), so every row they held (`request.accepted`, `request.collected`, dispute events) could only dead-end on the detail 404. Bounded to rows at or before the drop and guarded against retry-queue reordering, with the badge re-synced when the Center opens (PR #277 review). Chosen (options Q&A) over a past-party read-access record in order-service and over web-only 404 softening — see [Dropped-courier prune](#dropped-courier-prune-d33) | Notif F3.1 UX; issue #266 |
+| D33 | Dropped-courier prune (issue #266) | **Ingesting `request.dropped` deletes the dropping courier's stored rows for that request**, in the same transaction as the dedupe insert — the drop removes them as a party (order-service nulls `courierId`), so every row they held (`request.accepted`, `request.collected`, dispute events) could only dead-end on the detail 404. Bounded to rows at or before the drop and guarded against retry-queue reordering, with the badge re-synced when the Center opens (PR #277 review). Chosen (options Q&A) over a past-party read-access record in order-service and over web-only 404 softening — see [Dropped-courier prune](#dropped-courier-prune-d33). *2026-11-06 (DP10, issue #48, [`deployment.md`](deployment.md)):* with several replicas, the work queues are **`x-single-active-consumer`**, so one replica consumes at a time and the prune and its guard still see a request's events in queue order | Notif F3.1 UX; issue #266 |
 | D34 | Recipient resolution | **Events carry business facts only; this service derives who is told from each event's own id fields (`requesterId`, `courierId`, `rateeId`), one rule per event type** — the `parties` wire field is removed from every contract record, and `request.expired` gains a nullable `courierId` so the courier who had accepted stays reachable. Chosen (options Q&A) over a publisher-sent notification command and over keeping `parties` on the event — see [Recipient resolution](#recipient-resolution-d34) | Notif F1.1, F1.2; contract decoupling |
 
 ## Components
@@ -168,15 +174,15 @@ removed; gaps in the numbering are intentional.
 | Component | Responsibility |
 | --- | --- |
 | **request-events / rating-events exchanges** (RabbitMQ) | Durable **topic** exchanges (D16), one per producing domain, published to under canonical routing keys; publishing is fire-and-forget (F1.4). |
-| **Work queues** (RabbitMQ) | One durable queue per consumed exchange (D13 trios): `…request-events` bound with `request.#`, `…rating-events` bound on the exact `rating.submitted` key (issue #255); they hold undelivered events across restarts (NFR1.2), deliver at-least-once (NFR1.1). |
+| **Work queues** (RabbitMQ) | One durable queue per consumed exchange (D13 trios): `…request-events` bound with `request.#`, `…rating-events` bound on the exact `rating.submitted` key (issue #255); they hold undelivered events across restarts (NFR1.2), deliver at-least-once (NFR1.1). Single active consumer: one replica consumes each at a time (DP10, D33 note). |
 | **Retry queues** (RabbitMQ) | Durable TTL queue per trio; parks a failed event while attempts remain, returns it to its own work queue on TTL expiry (F2.2) — the listener derives the target from the consuming queue's name (`<work queue>.retry`). |
 | **Dead-letter queues** (RabbitMQ) | Durable queue per trio for events that exhausted max attempts — or couldn't convert (D21); retained for inspection and manual re-publish (F2.3). |
 | **AMQP listener** (Spring Boot) | Consumes with manual acknowledgement; acks only after the processor's DB transaction commits (NFR1.1). |
-| **Idempotent event processor** (Spring Boot) | Core logic: rejects already-seen event IDs (F2.1), creates one notification row per party (F1.2) from the typed event alone — never querying another service (F1.1). Works against the `DomainEvent` interface, so every cataloged event type flows through generically. |
+| **Idempotent event processor** (Spring Boot) | Core logic: rejects already-seen event IDs (F2.1), creates one notification row per party (F1.2) from the typed event alone — never querying another service (F1.1). Works against the `DomainEvent` interface, so every cataloged event type flows through generically. Insert-first dedupe across replicas (D4 note, DP10). |
 | **Notification REST API** (Spring Boot) | Lets the Web App list the caller's notifications (paged, newest first, optional unread filter), read the unread count, and mark rows read/unread (F3.1, F3.2) — JWT-authenticated, every route scoped to the token's user (D24–D28, issue #66). |
 | **STOMP push gateway** (Spring Boot) | WebSocket endpoint with Spring's STOMP simple broker; pushes each stored notification to the affected users' `/user/...` destinations within the 5-second budget (F1.2; Order NFR1.1–1.2). |
-| **Retention purge scheduler** (Spring Boot) | Scheduled job deleting notifications older than the configured window (F3.4), and `processed_events` dedupe rows past the same window (issue #137). |
-| **Notification DB** (PostgreSQL) | Owned exclusively by this service: notification rows with read/unread state plus processed event IDs — one schema so dedupe and notification insert commit atomically. |
+| **Retention purge scheduler** (Spring Boot) | Scheduled job deleting notifications older than the configured window (F3.4), and `processed_events` dedupe rows past the same window (issue #137); under ShedLock, one replica per run (D9 note, DP10). |
+| **Notification DB** (PostgreSQL) | Owned exclusively by this service: notification rows with read/unread state plus processed event IDs — one schema so dedupe and notification insert commit atomically. Schema by Flyway, plus the `shedlock` table (D3 note, DP10). |
 
 ## Event contracts (D17/D18)
 
@@ -525,6 +531,10 @@ not drawn on the diagram — the traceability table below maps them.
   one-time reset; the pre-D22 `order-events` broker entities are merely
   orphans to delete — see the
   [service README's Troubleshooting section](../notification-service/README.md#troubleshooting).
+- A broker volume whose work queues predate the single-active-consumer
+  argument (DP10, issue #48) fails the same way (`PRECONDITION_FAILED`)
+  — one-time RabbitMQ volume reset, same README section. Database
+  volumes need no reset: Flyway baselines them as V1.
 
 ## Broker decoupling (D11)
 

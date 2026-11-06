@@ -38,6 +38,9 @@
   2026-11-05, Claude Code (Opus 5.5): prepended the issue #48 supplier
   Flyway + locked seeding (DP10) entry below. Author review: Leong Wei
   Zhi, pending pull request review.
+  2026-11-06, Claude Code (Opus 5.5): prepended the issue #48
+  notification-service replicas (DP10) entry below. Author review: Leong
+  Wei Zhi, pending pull request review.
   PR #269's main merge: this file merged cleanly (main appends at the
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
@@ -69,6 +72,56 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-06 — Leong Wei Zhi (issue #48, DP10: notification-service safe at multiple replicas)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, refactor, docs
+- **Scope:** notification-service: Flyway (`spring-boot-starter-flyway` +
+  `flyway-database-postgresql`, as order-service) with
+  `db/migration/V1__baseline.sql` (the schema the pre-Flyway service's
+  `ddl-auto: update` built on postgres:17, from `pg_dump --schema-only`,
+  names kept) and `V2__shedlock.sql` (the other services' DDL);
+  `application.yaml` `ddl-auto: validate` + `baseline-on-migrate` /
+  `baseline-version: 1` (as user-service). ShedLock 7.10.1:
+  `config/SchedulerLockConfig` (copy of the other services') and
+  `@SchedulerLock(notification.retention-purge, PT10M)` on the now-public
+  `RetentionPurgeScheduler.purgeExpiredNotifications`. Insert-first dedupe
+  as rating-service D4: `ProcessedEvent` implements `Persistable`
+  (callback `isNew`); `IdempotentEventProcessor` keeps the seen-before
+  check, then `saveAndFlush`es the dedupe row before the D33 prune and the
+  notification inserts; a unique violation (SQLSTATE 23505) on it is
+  carried out of a `TransactionTemplate` (replacing `@Transactional`) by a
+  private marker exception, so the whole transaction rolls back and
+  `process` returns normally (acked); other integrity failures rethrow.
+  `RabbitMqTopology`: both work queues `x-single-active-consumer`.
+  Tests: `PostgresTestContainer` (postgres:17) +
+  `NotificationFlywayMigrationTest`, `SchedulerLockTest`,
+  `RetentionPurgeLockTest`, `ConcurrentDedupeTest` (two deliveries queued
+  on a held key via pg_locks → one row, one push), mock-based
+  `IdempotentEventProcessorDuplicateTest`, `RabbitMqTopologyTest`,
+  `SingleActiveConsumerIntegrationTest` (Testcontainers RabbitMQ); H2 test
+  yaml turns Flyway off, `RetentionPurgeSchedulerTest` builds the
+  scheduler directly, one new H2 processor case. Docs:
+  `docs/notification-service.md` D3/D4/D9/D33 notes + component rows,
+  service `AGENTS.md`, README Troubleshooting (RabbitMQ volume reset).
+  Fifth PR of the issue-#48 stack, on `feat/48-supplier-replicas`.
+- **Prompt(s):** this PR's brief: make notification-service safe at 2
+  replicas per Leong Wei Zhi's DP10 choices (options Q&A): adopt Flyway
+  with a V1 baseline generated from the real ddl-auto schema,
+  baseline-on-migrate, then `validate`; ShedLock on the retention purge
+  as the shedlock PR did; Persistable insert-first dedupe mirroring
+  rating-service, a PK violation acked as a concurrent duplicate without
+  poisoning the transaction; `x-single-active-consumer` on the
+  domain-events consumer queue to protect D33.
+- **Author review:** `./mvnw verify` 144/144 (124 before, 20 new); the
+  concurrency and PK-path tests fail with the duplicate classification
+  removed; the built jar started on an empty DB (V1+V2 applied, validate
+  passed), on a DB the pre-Flyway jar built (baselined at 1, V2 applied,
+  validate passed), and as two simultaneous replicas on one empty DB
+  (migrated once); Flyway's and Hibernate's schemas pg_dump-identical,
+  and identical to the running stack's notification-db. Leong Wei Zhi
+  reviews via pull request.
 
 ---
 ## 2026-11-05 — Leong Wei Zhi (issue #48, DP10: supplier-service Flyway baseline + locked seeding)

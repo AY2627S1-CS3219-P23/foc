@@ -21,6 +21,10 @@
   2026-11-05, Claude Code (Opus 5.5), issue #48 (DP10): AI Use Summary
   extended for supplier-service's Flyway baseline and advisory-locked
   seeding. Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-06, Claude Code (Opus 5.5), issue #48 (DP10): AI Use Summary
+  extended for notification-service's multi-replica safety (Flyway,
+  ShedLock, insert-first dedupe, single active consumer). Author review:
+  Leong Wei Zhi, pending pull request review.
   Author review: Leong Wei Zhi, pending pull request review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
   public profile's joined date and deliveries-completed count (issue
@@ -1522,6 +1526,16 @@ PostgreSQL advisory lock so it seeds once, with Testcontainers tests for
 both. Adopting Flyway and locking the seeder were Leong Wei Zhi's
 decisions; the tool wrote the code to them. Recorded in
 `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) made notification-service safe to run as several
+replicas (issue #48, DP10): Flyway with a V1 baseline taken from the
+schema Hibernate generated and a V2 ShedLock table (existing databases
+are baselined, Hibernate now only validates), the retention purge under
+ShedLock, an insert-first dedupe in which a concurrent duplicate's
+primary-key violation rolls back and is acked (as rating-service does),
+and single-active-consumer work queues, with Testcontainers tests for
+each. All four were Leong Wei Zhi's decisions; the tool wrote the code to
+them. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

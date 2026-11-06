@@ -16,6 +16,11 @@
   test list updated for the cross-replica STOMP fanout over AMQP (team
   decision, Leong Wei Zhi via options Q&A). Author review: Leong Wei Zhi,
   pending pull request review.
+  2026-11-06, Claude Code (Opus 5.5), issue #48 (DP10): package map,
+  idempotency invariant, test list and schema note updated for Flyway,
+  ShedLock, the insert-first dedupe and the single-active-consumer work
+  queues (team decision, Leong Wei Zhi via options Q&A). Author review:
+  Leong Wei Zhi, pending pull request review.
 -->
 
 # notification-service/ — Agent Guide
@@ -32,13 +37,13 @@ the decision ID when touching related code.
 
 | Package | Contents |
 | --- | --- |
-| `entity/` | `Notification` (one row per recipient, read/unread flag), `ProcessedEvent` (dedupe inbox) |
+| `entity/` | `Notification` (one row per recipient, read/unread flag), `ProcessedEvent` (dedupe inbox; `Persistable` with a callback `isNew`, so `save` INSERTs — DP10) |
 | `repository/` | Spring Data JPA repositories for both entities |
-| `service/` | `EventProcessor` (port), `IdempotentEventProcessor` (dedupe + insert + publishes `NotificationStoredEvent`), `RecipientResolver` (who an event notifies, per event type from its id fields — D34), `NotificationDto`, `RetentionPurgeScheduler` (purges `notifications` + `processed_events` past the retention window, #137) |
+| `service/` | `EventProcessor` (port), `IdempotentEventProcessor` (dedupe + insert + publishes `NotificationStoredEvent`), `RecipientResolver` (who an event notifies, per event type from its id fields — D34), `NotificationDto`, `RetentionPurgeScheduler` (purges `notifications` + `processed_events` past the retention window, #137; `@SchedulerLock` `notification.retention-purge`, one replica per run — DP10) |
 | `messaging/rabbitmq/` | The only package allowed to touch broker types: `DomainEventsListener` (manual ack, retry republish), `DomainEventMessageConverter` (dispatch on body `eventType` via `EventTypeRegistry`), `RabbitMqTopology` + `RabbitMqTopologyInitializer` (startup declaration), `RabbitMqMessageConverterConfig`, `NotificationPushFanoutTopology` + `RabbitMqUserPushFanout` (the `notification.push` fanout: per-replica anonymous queue, AUTO-ack push listener — DP10) |
 | `messaging/stomp/` | `WebSocketStompConfig` (`/ws`, SockJS, heartbeats — also owns the app's sole `TaskScheduler`), `JwtChannelInterceptor` (CONNECT auth), `NotificationPushListener` (`AFTER_COMMIT` push, published to every replica via the `UserPushFanout` port), `LocalUserPushDelivery` (a fanned-out `UserPush` → this replica's broker), `StompPrincipal` |
 | `security/` | `JwtVerifier` (HS256, jjwt; fails startup on missing/short secret), `JwtAuthenticationFilter` (REST bearer → security context, empty authorities per D28; built inline by `SecurityConfig`, not a bean), `RestAuthEntryPoint`/`RestAccessDeniedHandler` (401/403 problem+json), `redis/RedisTokenDenylist` (D23 — STOMP CONNECT only, never the REST path, G4) |
-| `config/` | `SecurityConfig` — stateless chain: `/error`, `/actuator/health` and the `/ws` SockJS paths open (the CONNECT frame authenticates, not the handshake), everything else bearer-authenticated; CORS from `WEB_ALLOWED_ORIGIN`, registered for `/notifications/**` only — never `/**`, which would put the REST origin policy in front of the WS handshake/SockJS paths (PR #198 review) |
+| `config/` | `SchedulerLockConfig` (ShedLock JDBC provider, DB time — DP10); `SecurityConfig` — stateless chain: `/error`, `/actuator/health` and the `/ws` SockJS paths open (the CONNECT frame authenticates, not the handshake), everything else bearer-authenticated; CORS from `WEB_ALLOWED_ORIGIN`, registered for `/notifications/**` only — never `/**`, which would put the REST origin policy in front of the WS handshake/SockJS paths (PR #198 review) |
 | `controller/` | `NotificationController` (`/notifications/me` routes, D24–D27), `ApiExceptionHandler` (problem+json 400/404), the contract's exceptions |
 | `dto/` | `PageResponse` (the platform page envelope — a copy, not an import, D15), `MarkReadRequest`, `UnreadCountResponse` |
 
@@ -51,7 +56,15 @@ the decision ID when touching related code.
   notification insert commit in one transaction. The dedupe window is
   bounded by the retention purge (#137): rows older than
   `NOTIF_RETENTION_DAYS` are swept — an accepted trade-off, since
-  redelivery ends at the DLQ within seconds.
+  redelivery ends at the DLQ within seconds. Across replicas (DP10) the
+  dedupe row is persisted and flushed before any business write; a
+  concurrent duplicate's PK violation rolls back the whole transaction
+  and is acked. Never catch it inside the transaction, and purge
+  `processed_events` only with query deletes (`delete(entity)` skips
+  `Persistable` entities it thinks new).
+- **Single active consumer** (DP10): the work queues are declared
+  `x-single-active-consumer` — one replica consumes at a time, keeping
+  request events in order for the D33 prune.
 - **Broker isolation** (D11): only `messaging.rabbitmq` may import
   `org.springframework.amqp` / `com.rabbitmq`. `ArchitectureTest`
   (ArchUnit) fails the build otherwise.
@@ -86,7 +99,15 @@ the decision ID when touching related code.
 Tests: `IdempotentEventProcessorTest`, `RecipientResolverTest` (the D34
 rule per event type, registry-driven), `NotificationRepositoryTest`,
 `ProcessedEventRepositoryTest`,
-`RetentionPurgeSchedulerTest` (H2), `DomainEventContractTest` (fixture
+`RetentionPurgeSchedulerTest` (H2, built without the lock proxy),
+`IdempotentEventProcessorDuplicateTest` (PK-violation path, mocks),
+`RabbitMqTopologyTest` (queue arguments), Testcontainers Postgres
+(`PostgresTestContainer`, Flyway on, `validate`):
+`NotificationFlywayMigrationTest` (V1+V2, pre-Flyway baseline),
+`SchedulerLockTest`, `RetentionPurgeLockTest`, `ConcurrentDedupeTest`
+(two simultaneous deliveries → one row, one push);
+`SingleActiveConsumerIntegrationTest` (Testcontainers RabbitMQ: second
+consumer idle until the first goes), `DomainEventContractTest` (fixture
 tolerant-reader lock-in), `DomainEventMessageConverterTest`,
 `JwtVerifierTest`, `SecurityConfigTest` (REST chain 401s + the
 `/ws/info` stays-open canary for #67), `NotificationControllerTest`
@@ -98,6 +119,9 @@ random port, no Docker), `RequestEventsRabbitMqIntegrationTest`
 two replicas' queues once each), `ArchitectureTest`
 (D11 boundary).
 
-Schema is JPA-managed (`ddl-auto: update`) — it never drops columns;
-stale dev volumes need the reset in the
-[README's Troubleshooting section](README.md#troubleshooting).
+Schema is Flyway-managed (`src/main/resources/db/migration`, DP10):
+`V1__baseline` is the former `ddl-auto: update` schema, `V2__shedlock`;
+Hibernate only validates, so an entity change needs a new migration.
+Pre-Flyway volumes are baselined as V1 automatically. H2 tests turn
+Flyway off and build from the entities. Stale broker volumes need the
+reset in the [README's Troubleshooting section](README.md#troubleshooting).

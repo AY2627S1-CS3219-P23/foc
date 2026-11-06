@@ -7,6 +7,12 @@
  * design doc's "testing follows the port" style (D11).
  * 2026-10-17, issue #137: processed_events sweep covered.
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-11-06, Claude Code (Opus 5.5), issue #48 (DP10): the scheduler is
+ * built directly instead of autowired — the bean is now a ShedLock proxy
+ * (team decision, Leong Wei Zhi via options Q&A), and H2 has no shedlock
+ * table (Flyway is off here), so a call through it would skip the purge.
+ * RetentionPurgeLockTest covers the lock on Postgres. Author review: Leong
+ * Wei Zhi, pending pull request review.
  */
 package foc.notification.service;
 
@@ -37,7 +43,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class RetentionPurgeSchedulerTest {
 
-	@Autowired
+	// the test application.yaml's notification.retention.days
+	private static final int RETENTION_DAYS = 30;
+
+	// the purge logic itself, without the bean's ShedLock proxy
 	private RetentionPurgeScheduler scheduler;
 
 	@Autowired
@@ -51,6 +60,7 @@ class RetentionPurgeSchedulerTest {
 
 	@BeforeEach
 	void clearDatabase() {
+		scheduler = new RetentionPurgeScheduler(notifications, processedEvents, RETENTION_DAYS);
 		notifications.deleteAll();
 		processedEvents.deleteAll();
 	}

@@ -22,6 +22,10 @@
   Status line note the processed_events sweep (author decision via
   options Q&A: same window, no new env var).
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-11-06, Claude Code (Opus 5.5), issue #48 (DP10): Troubleshooting
+  notes the single-active-consumer queue reset and Flyway's automatic
+  baseline (team decision, Leong Wei Zhi via options Q&A). Author review:
+  Leong Wei Zhi, pending pull request review.
 -->
 
 # Notification Service
@@ -101,6 +105,21 @@ docker compose down rabbitmq notification-db
 docker volume rm foc_rabbitmq-data foc_notification-db-data
 docker compose up -d rabbitmq notification-db
 ```
+
+Multi-replica change (issue #48, DP10): the two work queues
+(`notification-service.request-events`, `…rating-events`) now carry
+`x-single-active-consumer`, so a broker volume that already holds them
+fails startup with `PRECONDITION_FAILED`. Reset the RabbitMQ volume once
+(or delete those two queues in the management UI):
+
+```sh
+docker compose down
+docker volume rm foc_rabbitmq-data
+docker compose up -d
+```
+
+The database needs nothing: Flyway records an existing ddl-auto schema
+as V1 (`baseline-on-migrate`) and applies V2 (`shedlock`).
 
 Separately, after the order→request rename the old `order-events`
 exchange and `notification-service.order-events*` queues are harmless

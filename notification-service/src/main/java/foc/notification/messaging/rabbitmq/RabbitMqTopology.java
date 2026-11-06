@@ -21,6 +21,11 @@
  * rating-events exchange on the exact rating.submitted key via the
  * registry (D13/D16; recipient scope decided on #44). Author review:
  * Leong Wei Zhi, pending pull request review.
+ * 2026-11-06, Claude Code (Opus 5.5), issue #48 (DP10): both work queues
+ * declared x-single-active-consumer, so with several replicas one consumes
+ * at a time and the D33 drop prune sees request events in order (team
+ * decision, Leong Wei Zhi via options Q&A). Author review: Leong Wei Zhi,
+ * pending pull request review.
  */
 package foc.notification.messaging.rabbitmq;
 
@@ -74,6 +79,14 @@ import org.springframework.context.annotation.Configuration;
  * by the container on first delivery and dead-letters straight to the
  * DLQ — retrying it could never succeed (author decision, 2026-09-20).
  *
+ * <p>Single active consumer (DP10, issue #48): each work queue is
+ * declared {@code x-single-active-consumer}, so however many replicas
+ * subscribe, the broker delivers to one at a time and fails over to the
+ * next when it goes; the others stay registered but idle. One consumer
+ * keeps a request's events in queue order across replicas, which the D33
+ * drop prune and its ingest guard rely on. The retry and dead-letter
+ * queues have no consumers, so they are unchanged.
+ *
  * <p>Each domain's declarations are grouped into one
  * {@link Declarables} bean; {@link RabbitMqTopologyInitializer}
  * declares every such group generically, so adding topology (a second
@@ -88,7 +101,8 @@ import org.springframework.context.annotation.Configuration;
  * <p>Migration note: queue/exchange arguments are immutable once
  * declared — a broker volume holding the pre-refactor fanout exchange,
  * or the pre-#65 work queue (no dead-letter arguments), or a retry
- * queue declared with a different TTL, makes the declaration fail
+ * queue declared with a different TTL, or a work queue declared before
+ * the single-active-consumer argument (DP10), makes the declaration fail
  * ({@code PRECONDITION_FAILED}); reset the volume once — see the
  * service README.
  *
@@ -144,6 +158,7 @@ public class RabbitMqTopology {
 			@Value("${notification.rabbitmq.retry.ttl-ms}") int retryTtlMs) {
 		TopicExchange exchange = new TopicExchange(EventContracts.REQUEST_EVENTS_EXCHANGE, true, false);
 		Queue workQueue = QueueBuilder.durable(REQUEST_EVENTS_QUEUE)
+				.singleActiveConsumer()
 				.deadLetterExchange(DEFAULT_EXCHANGE)
 				.deadLetterRoutingKey(REQUEST_EVENTS_DEAD_LETTER_QUEUE)
 				.build();
@@ -170,6 +185,7 @@ public class RabbitMqTopology {
 			@Value("${notification.rabbitmq.retry.ttl-ms}") int retryTtlMs) {
 		TopicExchange exchange = new TopicExchange(EventContracts.RATING_EVENTS_EXCHANGE, true, false);
 		Queue workQueue = QueueBuilder.durable(RATING_EVENTS_QUEUE)
+				.singleActiveConsumer()
 				.deadLetterExchange(DEFAULT_EXCHANGE)
 				.deadLetterRoutingKey(RATING_EVENTS_DEAD_LETTER_QUEUE)
 				.build();
