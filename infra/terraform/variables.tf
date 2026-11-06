@@ -2,7 +2,7 @@
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
 # Scope: inputs for the single-instance deployment; defaults are the
 # team's decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
-# docs/architecture.md). Secret values go in the git-ignored
+# docs/deployment.md). Secret values go in the git-ignored
 # secrets.auto.tfvars (see secrets.auto.tfvars.example).
 # Author review: Leong Wei Zhi, pending pull request review.
 

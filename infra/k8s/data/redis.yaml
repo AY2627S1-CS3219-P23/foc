@@ -3,7 +3,7 @@
 # Scope: the platform Redis (logout denylist), redis:8.8-alpine with
 # --appendonly yes on a local-path volume — G7 unchanged.
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
-# docs/architecture.md); values mirror compose.yaml's defaults.
+# docs/deployment.md); values mirror compose.yaml's defaults.
 # Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1

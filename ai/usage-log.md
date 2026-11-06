@@ -77,6 +77,14 @@ Entry template:
 ```
 
 ---
+## 2026-11-06 — Leong Wei Zhi (issue #48 docs: infra runbook)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** docs
+- **Scope:** `infra/README.md` gains what runs on the host (workloads, images, requests/limits, volumes, totals), a deploy sequence diagram, a Secrets section (flow, keys, plaintext locations, what changing each value takes — DB/RabbitMQ passwords only apply to an empty volume), operating commands (psql, redis-cli, RabbitMQ UI over SSM port forwarding) and a troubleshooting table; rollback and generated-secret rotation corrected. The 21 infra file headers now point at `docs/deployment.md` instead of `docs/architecture.md`; `docs/deployment.md` links the new sections. Documentation only.
+- **Prompt(s):** "create another pr to improve infra deployment documentation".
+- **Author review:** every value checked against `infra/terraform` and `infra/k8s` (secret keys and consumers, resources, probes, timeouts); Leong Wei Zhi reviews via pull request.
+
+---
 ## 2026-11-06 — Leong Wei Zhi (credit-service tests: order-independent common-pool cases, PR #289 CI)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** debug, tests

@@ -2,7 +2,7 @@
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
 # Scope: the kustomization deploy.sh applies (kubectl apply -k).
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
-# docs/architecture.md); values mirror compose.yaml's defaults.
+# docs/deployment.md); values mirror compose.yaml's defaults.
 # Author review: Leong Wei Zhi, pending pull request review.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization

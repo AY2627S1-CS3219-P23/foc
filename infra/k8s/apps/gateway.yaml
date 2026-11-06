@@ -3,7 +3,7 @@
 # Scope: the OpenResty API gateway; UPSTREAM_SUFFIX and a fully qualified
 # REDIS_HOST because the nginx resolver ignores search domains.
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
-# docs/architecture.md); values mirror compose.yaml's defaults.
+# docs/deployment.md); values mirror compose.yaml's defaults.
 # Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1

@@ -7,12 +7,18 @@
   tool recommended nothing); this document records them. Implementation
   and this write-up by the tool, per the allowed-use rules.
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-06, Claude Code (Opus 5.5): pointer to the runbook's new
+  sections. Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # Cloud deployment (N5, issue #48)
 
 Runbook: [`infra/README.md`](../infra/README.md). Local `docker compose`
 stays the development stack and the fallback for demos.
+
+Operating it: the runbook also covers [what runs on the host](../infra/README.md#what-runs-on-the-host),
+[secrets](../infra/README.md#secrets), [operating commands](../infra/README.md#operating)
+and [troubleshooting](../infra/README.md#troubleshooting).
 
 ```mermaid
 flowchart LR

@@ -1,7 +1,7 @@
 # AI-assisted (CS3219 AI Usage Policy disclosure):
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
 # Scope: the single k3s host per the team's decisions (Leong Wei Zhi,
-# 2026-11-05, options Q&A, recorded in docs/architecture.md): EC2
+# 2026-11-05, options Q&A, recorded in docs/deployment.md): EC2
 # t3.xlarge Spot, persistent request that STOPS on interruption (the disk
 # and cluster data survive), Elastic IP for a stable URL (the web bundle
 # has it baked in).

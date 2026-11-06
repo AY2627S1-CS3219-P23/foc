@@ -3,7 +3,7 @@
 # Scope: the web SPA (nginx, static build with the public gateway URLs baked
 # in at image build time by the deploy workflow).
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
-# docs/architecture.md); values mirror compose.yaml's defaults.
+# docs/deployment.md); values mirror compose.yaml's defaults.
 # Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1

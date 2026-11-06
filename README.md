@@ -25,6 +25,9 @@
   extended for notification-service's multi-replica safety (Flyway,
   ShedLock, insert-first dedupe, single active consumer). Author review:
   Leong Wei Zhi, pending pull request review.
+  2026-11-06, Claude Code (Opus 5.5), issue #48 docs: AI Use Summary
+  paragraph for the infra runbook additions. Author review: Leong Wei
+  Zhi, pending pull request review.
   2026-11-06, Claude Code (Opus 5.5), issue #48 (DP11): AI Use Summary
   extended for the realistic demo usernames. Author review: Leong Wei
   Zhi, pending pull request review.
@@ -1547,6 +1550,14 @@ and counts unchanged, plus the seeder test and the docs that name the
 accounts. Realistic names everywhere was Leong Wei Zhi's decision; the
 tool picked the names and wrote the change. Recorded in
 `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) extended the cloud runbook `infra/README.md`
+(issue #48): what runs on the host, the deploy sequence, where secrets
+live and what changing each takes, operating commands and a
+troubleshooting table, all read from `infra/terraform` and `infra/k8s`;
+it also pointed the infra file headers at `docs/deployment.md`, where
+the decisions are recorded. Documentation only; no design changes.
+Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

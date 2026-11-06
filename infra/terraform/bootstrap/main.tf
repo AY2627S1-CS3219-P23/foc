@@ -2,7 +2,7 @@
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
 # Scope: the S3 bucket that holds the main stack's Terraform state, per the
 # team's decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
-# docs/architecture.md): Terraform with S3 state, nothing kept on teardown.
+# docs/deployment.md): Terraform with S3 state, nothing kept on teardown.
 # Author review: Leong Wei Zhi, pending pull request review.
 #
 # Applied once, with local state (this directory's terraform.tfstate is
