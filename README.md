@@ -1491,5 +1491,12 @@ was worth doing, the tool declined under the AI policy and offered
 measurements; the team decided and supplied the wording. Recorded in
 `ai/usage-log.md`.
 
+2026-11-07: Claude Code (Sonnet 5.5) wrote the Supplier Service's NFR1.1
+(5-second listings) and NFR2.1 (1,000-supplier capacity) tests, issue
+#300, as a Testcontainers PostgreSQL test following the other services'
+pattern, with its Maven test dependencies. The tool compared the H2 and
+Testcontainers options as facts and the author chose Testcontainers; the
+NFR bounds are the team's. Recorded in `ai/usage-log.md`.
+
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

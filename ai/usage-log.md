@@ -7746,3 +7746,28 @@ Entry template:
   decided, and the tool only transcribed that decision.
 - **Author review:** timings and the decision are the team's; the
   author reviews the diff and the PR.
+
+## 2026-11-07 — Alastair Tan Choon Wei (supplier NFR tests, issue #300)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** tests
+- **Scope:** `supplier-service/src/test/java/foc/supplier/SupplierNfrTest.java`
+  (new: NFR2.1 — exactly 1,000 suppliers stored, every one listable once
+  across pages and in one request, search and category filter correct at
+  that size; NFR1.1 — ten listing/search/filter/nearest/sort requests
+  each complete within 5 s after a warm-up call),
+  `supplier-service/src/test/java/foc/supplier/PostgresTestContainer.java`
+  (new: copied from rating-service's base class, postgres:17,
+  skipped without Docker) and `supplier-service/pom.xml` (the three
+  versionless Testcontainers test dependencies, as in rating-service).
+  The tests run on a real PostgreSQL rather than the H2 the other
+  supplier tests use; those are unchanged.
+- **Prompt(s):** "lets work on issue #300 now. what to add?", "can u
+  check what other services are using for such tests?", "ok lets do it
+  similarly like other services. we do testcontainers testing. can u
+  implement it now". The tool laid out the H2 and Testcontainers options
+  as facts; the author chose Testcontainers to match the other services.
+  The 5 s bound and the 1,000 target are the team's own NFRs
+  (`docs/supplier-service.md`); no cap is enforced and none was added.
+- **Author review:** `./mvnw verify` in `supplier-service` — 90 tests, 0
+  failures (14 new), run with JDK 22 locally since JDK 21 is not
+  installed (CI uses 21). The author reviews via pull request.

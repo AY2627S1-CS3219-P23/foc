@@ -16,6 +16,10 @@
   2026-09-29, issue #104: spring-boot-starter-validation added for
   @Valid request-body validation on the new admin CRUD endpoints,
   mirroring user-service's use of it.
+  2026-11-07, issue #300 (Claude Code, Sonnet 5.5): the Testcontainers
+  test deps (spring-boot-testcontainers, junit-jupiter, postgresql),
+  versionless like rating-service's, for the NFR1.1/NFR2.1 tests run
+  against a real Postgres. Author review: [pending]
   Reviewed by: [pending]
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -128,6 +132,21 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-postgresql</artifactId>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
