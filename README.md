@@ -1481,5 +1481,22 @@ expiry field and the one-release rollout, and supplied the reasoning
 recorded in `docs/notification-service.md`. Recorded in
 `ai/usage-log.md`.
 
+2026-11-07: Claude Code (Sonnet 5.5) appended the author's 44 new supplier
+rows to the two supplier seed CSV copies (issue #299), timed the supplier
+list and search endpoints at 65 and 1,000 rows on a throwaway database,
+and updated `docs/supplier-service.md`, `docs/architecture.md` and
+`docs/architecture.mmd` to record the team's decision to remove the
+caching requirement (NFR1.1.1, issue #298; D15). Asked whether caching
+was worth doing, the tool declined under the AI policy and offered
+measurements; the team decided and supplied the wording. Recorded in
+`ai/usage-log.md`.
+
+2026-11-07: Claude Code (Sonnet 5.5) wrote the Supplier Service's NFR1.1
+(5-second listings) and NFR2.1 (1,000-supplier capacity) tests, issue
+#300, as a Testcontainers PostgreSQL test following the other services'
+pattern, with its Maven test dependencies. The tool compared the H2 and
+Testcontainers options as facts and the author chose Testcontainers; the
+NFR bounds are the team's. Recorded in `ai/usage-log.md`.
+
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

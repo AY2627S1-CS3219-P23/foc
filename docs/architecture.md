@@ -58,6 +58,10 @@
   2026-11-04, Claude Code (Fable 5.1), notification D34: the legend's
   user-id note and the rating row no longer name the removed `parties`
   field. Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-07 (Claude Code, Sonnet 5.5), issue #298: Supplier caching
+  (NFR1.1.1) removed from the non-functional list and the open-decisions
+  list, per the team's decision recorded in docs/supplier-service.md
+  D15. Transcription only; no decision made by the tool.
 -->
 
 # Favours on Campus (FoC) — High-Level Service Architecture
@@ -181,8 +185,8 @@ These shape sizing and implementation rather than adding components:
   access the records (User NFR4).
 - **Supplier Service:** 1,000 suppliers (Supplier NFR2, revised
   2026-09-27 from the original 100,000 — see docs/supplier-service.md
-  D7); listings within 5 s, with caching on frequently queried fields
-  such as name and location (Supplier NFR1.1, NFR1.1.1).
+  D7); listings within 5 s (Supplier NFR1.1). No caching: NFR1.1.1 was
+  removed on 2026-11-07 — see docs/supplier-service.md D15.
 - **Order Service:** courier listings reflect requests entering/leaving
   the created state within 5 s; every state change visible to requester
   and assigned courier within 5 s (Order NFR1.1–1.2) — via the
@@ -197,8 +201,9 @@ These shape sizing and implementation rather than adding components:
 
 ## Decisions still open (team, not AI)
 
-- **Supplier caching mechanism** (Supplier NFR1.1.1) — in-process vs. a
-  shared cache; drawn inside the Supplier Service until decided.
+Resolved 2026-11-07: the **supplier caching mechanism** (Supplier
+NFR1.1.1) is no longer open — the team removed the caching requirement
+and will not implement it (docs/supplier-service.md D15).
 
 Resolved 2026-10-26: the **bookmark cleanup on account purge** (N8.5) is
 a direct API call — the User Service's purge job calls the Supplier

@@ -30,6 +30,10 @@
   entity's names filled in, and D13's default-order note added, from
   Alastair Tan Choon Wei's decisions and what was built. Transcription
   only; no rationale drafted - the team writes that.
+  2026-11-07 (Claude Code, Sonnet 5.5), issue #298: NFR1.1.1 (caching)
+  struck and D15 added, transcribing the team's decision (relayed by
+  Alastair Tan Choon Wei) not to implement caching; the wording of D15
+  is the team's. Transcription only; no decision made by the tool.
   Reviewed by: XXX
 -->
 
@@ -62,7 +66,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | F2.2.1 | Empty-state message when no supplier matches | Medium | Week 6 |
 | NFR1 | Performance | High | Week 6 |
 | NFR1.1 | Supplier listings retrieved within 5 seconds | High | Week 6 |
-| NFR1.1.1 | Caching on frequently queried fields (e.g. supplier name, location) | Medium | Week 11 |
+| ~~NFR1.1.1~~ | ~~Caching on frequently queried fields (e.g. supplier name, location)~~ | ~~Medium~~ | ~~Week 11~~ — **Removed (2026-11-07):** team decision, see D15 (issue #298) |
 | NFR2 | Capacity | High | Week 6 |
 | NFR2.1 | Store up to 1,000 suppliers | High | Week 6 |
 
@@ -103,6 +107,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D12 | Account-purge cleanup | **Decided (2026-10-26, Alastair Tan Choon Wei):** a direct API call. The User Service's account-purge job (the day-31 hard delete) calls `POST /purge/bookmarks` with `{"userIds":[…]}` on the Supplier Service, before it deletes the accounts, in batches of 500; so a soft-deleted account keeps its bookmarks through the 30-day recovery window and they go with the purge. The endpoint needs the `SERVICE` role: a one-minute JWT the User Service mints with the shared `JWT_SECRET` (login never issues that role), and the gateway answers `404` for `/api/supplier/purge` from outside (options C + B). If the call fails, that run skips deleting the accounts (all or nothing) and tries again on its next daily run. Batch size, token lifetime and the call timeouts (5 s connect, 15 s read) were set at implementation. | **Decided** |
 | D13 | Bookmarks in the supplier list | **Decided (2026-10-19, Alastair Tan Choon Wei):** `GET /suppliers` returns a `bookmarked` flag on each supplier for the calling user (user id from the JWT), and the server orders the list before paging. By default, bookmarked suppliers come first, most recently bookmarked first, followed by the rest in the default order (name). When any search or filter is applied (e.g. a search term, a category, nearest to me), bookmarked suppliers get no precedence and the list follows that search or filter's order, so bookmarks-first holds only for the default, unfiltered view; the `bookmarked` flag is still returned. As built: name ascending (or no sort) is the default order; a descending name sort or any other sort the user picks gets no bookmark precedence. | **Decided** |
 | D14 | Concurrent bookmark adds | **Decided (2026-10-26, Alastair Tan Choon Wei):** the implementation uses a PostgreSQL per-user advisory transaction lock to prevent simultaneous bookmark additions. This approach was suggested during implementation and reviewed and confirmed by the author/team as the accepted design. The lock failure returns a conflict response (`409`, "You are bookmarking too fast, please try again.") and does not persist the bookmark; it is not retried. It guards against parallel requests (e.g. scripts); the web client does not trigger it in normal use. | **Decided** |
+| D15 | Caching | **Decided (2026-11-07, team; issue #298):** NFR1.1.1 (caching on frequently queried fields) is removed and caching will not be implemented. Caching is not needed because the capacity target was reduced from 100,000 to 1,000 suppliers (NFR2.1, D7). The most queried operation, retrieving the supplier listing, runs comfortably within NFR1.1's 5-second bound: under 1 second in the team's tests (2026-11-07, 1,000 suppliers, list, search, category filter and nearest-first requests). | **Decided** |
 
 ## Components
 
