@@ -6,7 +6,7 @@
  * run against a real PostgreSQL via Testcontainers like the other
  * services' tests. The 5 s bound and the 1,000 target come from
  * docs/supplier-service.md; the tool chose no requirement or design.
- * Author review: [pending]
+ * Author review: Alastair Tan Choon Wei, pending pull request review.
  */
 package foc.supplier;
 

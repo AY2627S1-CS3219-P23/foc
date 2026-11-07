@@ -4,7 +4,8 @@
  * Scope: copied from rating-service's PostgresTestContainer (same
  * postgres:17 image, @ServiceConnection, skipped when Docker is
  * unavailable) so supplier-service's NFR tests run on a real Postgres
- * like the other services' tests. Author review: [pending]
+ * like the other services' tests. Author review: Alastair Tan Choon Wei,
+ * pending pull request review.
  */
 package foc.supplier;
 

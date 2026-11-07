@@ -19,7 +19,8 @@
   2026-11-07, issue #300 (Claude Code, Sonnet 5.5): the Testcontainers
   test deps (spring-boot-testcontainers, junit-jupiter, postgresql),
   versionless like rating-service's, for the NFR1.1/NFR2.1 tests run
-  against a real Postgres. Author review: [pending]
+  against a real Postgres. Author review: Alastair Tan Choon Wei,
+  pending pull request review.
   Reviewed by: [pending]
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
