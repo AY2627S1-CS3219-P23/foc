@@ -7720,3 +7720,29 @@ Entry template:
   `V3__rating_and_outbox.sql`, `RatingRepository`/`RatingService`,
   `OutboxPublisher` and `RateableRequest`; prettier clean on the
   touched web markdown. Leong Wei Zhi reviews via pull request.
+
+## 2026-11-07 — Alastair Tan Choon Wei (supplier seed data #299; caching docs #298)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** data + docs + local debugging
+- **Scope:** `data/csv/supplier-seed-data.csv` and
+  `supplier-service/src/main/resources/csv/supplier-seed-data.csv` (the
+  author's 44 new supplier rows appended to both copies, keeping the
+  original rows' Windows-1252 bytes and CRLF endings; the rows were
+  supplied by the author, the tool only appended them and checked the
+  result); a local-only, gitignored `.env` (variables added from
+  `.env.example` so `docker compose` runs again); a throwaway database
+  and container used to time the supplier list/search endpoints at 65
+  and 1,000 rows (removed afterwards, nothing committed); and, for
+  #298, `docs/supplier-service.md` (NFR1.1.1 struck, D15 added),
+  `docs/architecture.md` (non-functional list and open-decisions list)
+  and `docs/architecture.mmd` (Supplier Service node label), recording
+  the team's decision not to implement caching, in the author's words.
+- **Prompt(s):** "im want to clear github issue #299 ...", "paste only
+  the 44 new rows onto the end of the original file", "run the seed and
+  run the UI", "any chance u can help me run the test?", "for #298,
+  please update the docs to remove caching NFR ...". Asked whether
+  caching was worth doing, the tool declined under the AI policy
+  (performance trade-off) and offered measurements instead; the team
+  decided, and the tool only transcribed that decision.
+- **Author review:** timings and the decision are the team's; the
+  author reviews the diff and the PR.
