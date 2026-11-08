@@ -29,6 +29,11 @@
   entry below.
   2026-11-04, Claude Code (Fable 5.1): prepended the notification D34
   (parties removal) entry below, then the PR #287 review-round entries.
+  2026-11-06, Claude Code (Opus 5.5): prepended the issue #48 realistic
+  demo usernames (DP11) entry below. Author review: Leong Wei Zhi,
+  pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1): the DP11 entry below notes the
+  stand-alone PR (DP17) and drops its infra/README.md item.
   PR #269's main merge: this file merged cleanly (main appends at the
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
@@ -60,6 +65,37 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-06 — Leong Wei Zhi (issue #48, DP11: realistic demo usernames)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** user-service `seed/DemoAccountsSeeder`: the generated
+  `demo_owner` / `demo_admin_N` / `demo_user_NNN` usernames replaced by
+  fixed lists of fictional `firstname_lastname` names (1 owner, 3 admins,
+  100 users; `ADMINS`/`USERS` now the list sizes); emails, passwords,
+  counts and the race handling unchanged. `DemoAccountsSeederTest` names
+  the new usernames and also checks they are unique ignoring case. Docs:
+  `user-service/README.md` demo-account table (all 100 in a collapsed
+  table) + the existing-volume note, `.env.example` comment,
+  `docs/postman/` README + environment. First opened as PR #295 on the
+  closed issue-#48 stack, where it also touched `infra/README.md`; on
+  2026-11-08 it became its own PR off `main` (DP17): Claude Code (Fable
+  5.1) cherry-picked it and dropped the `infra/README.md` hunk.
+- **Prompt(s):** this PR's brief: per Leong Wei Zhi's DP11 decision
+  (options Q&A), realistic usernames everywhere with the same counts,
+  emails and public passwords; a deterministic list of fictional, diverse
+  NUS-style names that passes the existing username rules; update every
+  current reference, leave historical records alone.
+- **Author review:** `./mvnw verify` 405 tests, 404 green; the one error
+  was the known "too many clients already" Testcontainers flake in
+  `OutboxPublisherIntegrationTest`, green when rerun alone
+  (`DemoAccountsSeederTest` 10/10). Re-run off `main` on 2026-11-08: 399
+  tests (the stack's ShedLock tests are gone), the same single flake,
+  green alone. PR #303 review: the `docs/deployment.md` link replaced by
+  plain text (the file is not on `main`), and a test pins the counts
+  (3 admins, 100 users, 104 accounts). Leong Wei Zhi reviews via pull
+  request.
 
 ---
 ## 2026-11-04 — Leong Wei Zhi (notification-service: resolver drops the credit/user arms, follow-up to PR #287)

@@ -10,6 +10,9 @@
   environment JSON cannot carry a comment, so this header covers all
   three files (the collection also repeats it in its description).
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-11-06, Claude Code (Opus 5.5), issue #48 DP11: the environment and
+  this README name the new realistic seeded usernames. Author review:
+  Leong Wei Zhi, pending pull request review.
 -->
 
 # D3 demo as a Postman collection
@@ -25,7 +28,8 @@ Same as the wiki script:
 
 ```bash
 # .env set (JWT_SECRET etc.), and USER_SEED_DEMO=true so the demo
-# accounts exist (demo_user_001..100, demo_admin_1..3 — all pre-verified)
+# accounts exist (weiling_tan, arjun_nair, … 100 users; priya_menon and 2
+# more admins — all pre-verified; list in user-service/README.md)
 docker compose up -d --build
 docker compose stop web        # backends keep running; the UI is not needed
 ```
@@ -73,8 +77,12 @@ Deviations from the wiki page, all mechanical:
   first 200, second 409 — since a collection run is single-threaded;
   the true `& wait` race stays a wiki/terminal demo.
 - The wiki logs in as `demo_requester`/`demo_courier`/`demo_admin`;
-  the actual seeded accounts are `demo_user_001`, `demo_user_002`, and
-  `demo_admin_1` (see `user-service/.../seed/DemoAccountsSeeder.java`).
+  the actual seeded accounts are `weiling_tan`, `arjun_nair`, and
+  `priya_menon` (see `user-service/.../seed/DemoAccountsSeeder.java`).
+  A `user-db` volume seeded before DP11 still has the old names
+  (`demo_user_001`, `demo_user_002`, `demo_admin_1`): set those in the
+  environment, or log in by email (`e9100001@u.nus.edu`, …), which is
+  the same on both.
 - The cancel and drop steps use 2-credit requests: after step 8
   transfers 3 to the courier, only 2 of the provisioned 5 remain
   available, so the wiki's "create as in step 2" (3 credits) could not
@@ -85,6 +93,6 @@ Deviations from the wiki page, all mechanical:
 A full run spends the requester down to 0 available (3 transferred,
 2 still held by the dropped request D). To run again on the same stack,
 point `requesterUser`/`courierUser` at a fresh seeded pair
-(`demo_user_003`/`demo_user_004`, …) — or `docker compose down -v` for a
+(`siti_rahman`/`junjie_lim`, …) — or `docker compose down -v` for a
 clean stack. The seeded passwords in the environment file are the
 committed constants from `DemoAccountsSeeder.java`, not secrets.
