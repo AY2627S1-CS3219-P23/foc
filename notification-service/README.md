@@ -23,8 +23,10 @@
   options Q&A: same window, no new env var).
   Reviewed by: Leong Wei Zhi (via pull request).
   2026-11-08, Claude Code (Fable 5.1), issue #305: Troubleshooting updated
-  for the Flyway-owned schema (D36). Author review: Leong Wei Zhi, pending
-  pull request review.
+  for the Flyway-owned schema (D36); PR #306 Copilot review: the legacy
+  columns' symptom described as it is (baseline does not compare, validate
+  ignores extra columns, inserts fail). Author review: Leong Wei Zhi,
+  pending pull request review.
 -->
 
 # Notification Service
@@ -96,10 +98,13 @@ Dev volumes created before the typed-contracts refactor or the
 retry/DLQ topology (#65) fail at startup: the old fanout exchange and
 the pre-#65 work queue carry incompatible declarations
 (`PRECONDITION_FAILED`), and a DB schema with the removed NOT NULL
-`entity_type`/`entity_id` columns fails Flyway's baseline validation
-(since #305 Flyway owns the schema and Hibernate only validates it; a
-volume built by the former `ddl-auto: update` with the *current*
-columns is baselined as V1 and needs nothing). Reset both volumes once:
+`entity_type`/`entity_id` columns still rejects every notification
+insert: since #305 Flyway owns the schema, but `baseline-on-migrate`
+records an existing schema as V1 without comparing it to the baseline
+script, and Hibernate's `validate` ignores extra columns, so such a
+volume starts and then fails on the first stored notification. A volume
+built by the former `ddl-auto: update` with the *current* columns is
+baselined as V1 and needs nothing. Reset both volumes once:
 
 ```sh
 docker compose down rabbitmq notification-db

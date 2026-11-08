@@ -13,7 +13,8 @@
 # Same day, review follow-up: replicas pinned to 1 (DP10, issue #305).
 # 2026-11-08, Claude Code (Fable 5.1), issue #305 (team decision, Leong Wei
 # Zhi via options Q&A): the pin removed — pushes fan out over AMQP, so the
-# HPA scales this Deployment like the others (DP9/DP10).
+# HPA scales this Deployment like the others (DP9/DP10). PR #306 Copilot
+# review: RABBITMQ_PASSWORD from foc-secrets, which the first cut missed.
 ---
 apiVersion: v1
 kind: Service
@@ -76,6 +77,13 @@ spec:
                 secretKeyRef:
                   name: foc-secrets
                   key: JWT_SECRET
+            # the push fanout's broker login (issue #305); host, port and
+            # user come from foc-config like the other RabbitMQ clients
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: RABBITMQ_PASSWORD
             - name: CHAT_WS_ALLOWED_ORIGINS
               value: "http://__PUBLIC_HOST__"
             - name: CHAT_INTERNAL_TOKEN

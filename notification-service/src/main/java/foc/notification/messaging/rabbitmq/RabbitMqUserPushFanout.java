@@ -65,6 +65,9 @@ class RabbitMqUserPushFanout implements UserPushFanout {
 		this.localDelivery = localDelivery;
 	}
 
+	// May throw (broker down, serialization): the one caller,
+	// NotificationPushListener, runs AFTER_COMMIT and catches it, so a
+	// failed push can never nack the committed delivery (PR #306 review).
 	@Override
 	public void publish(UserPush push) {
 		Message message = MessageBuilder.withBody(objectMapper.writeValueAsBytes(push))

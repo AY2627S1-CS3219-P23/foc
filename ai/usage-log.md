@@ -107,10 +107,21 @@ Entry template:
   connection with one replica, so only that replica should send the
   notification?" (answered: the fanout reaches every replica and only the
   socket holder's user-destination resolution delivers).
+- **PR #306 review round (same day):** Copilot — chat's k8s Deployment
+  gets `RABBITMQ_PASSWORD` from `foc-secrets` (missed in the first cut;
+  the cloud chat pods could not have logged in to the broker), and the
+  notification README's legacy-columns symptom corrected (baseline does
+  not compare the schema, Hibernate validate ignores extra columns, so
+  inserts fail rather than startup). Claude reviewer — the AFTER_COMMIT
+  listener already catches `publish` failures (unit-tested); a comment on
+  `publish` now says so.
 - **Author review:** notification-service `./mvnw verify` with Docker
   (Testcontainers RabbitMQ + Postgres), chat-service `./mvnw test`; the
-  compose `--scale 2` acceptance and the cloud HPA check are the
-  author's before merge. Leong Wei Zhi reviews via pull request.
+  compose `--scale 2` acceptance (both services at 2 replicas, fanout
+  queues delivered on every replica, a concurrent duplicate acked on
+  23505, the existing notification-db volume baselined) ran on the local
+  stack; the cloud HPA check is the author's after #302 deploys. Leong
+  Wei Zhi reviews via pull request.
 
 ## 2026-11-06 — Leong Wei Zhi (issue #48, DP11: realistic demo usernames)
 - **Tool:** Claude Code (Opus 5.5)
