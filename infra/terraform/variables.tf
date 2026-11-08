@@ -8,6 +8,9 @@
 # 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7): the External
 # Secrets Operator chart version is gone with the operator. Author review:
 # Leong Wei Zhi, pending pull request review.
+# 2026-11-08, Claude Code (Fable 5.1), first deploy: github_owner_id and
+# github_repo_id for the immutable OIDC subject. Author review: Leong Wei
+# Zhi, pending pull request review.
 
 variable "region" {
   type    = string
@@ -32,6 +35,22 @@ variable "root_volume_gb" {
 variable "k3s_version" {
   type    = string
   default = "v1.36.5+k3s1"
+}
+
+# GitHub's "immutable subject" OIDC setting (on for this repository) puts
+# the owner and repository ids into the token's sub claim:
+#   repo:<owner>@<owner id>/<name>@<repo id>:ref:refs/heads/main
+# The deploy role trusts that form as well as the plain one.
+variable "github_owner_id" {
+  description = "numeric id of the GitHub organisation that owns github_repo"
+  type        = number
+  default     = 325983746
+}
+
+variable "github_repo_id" {
+  description = "numeric id of the repository github_repo"
+  type        = number
+  default     = 1360023737
 }
 
 variable "github_repo" {

@@ -9,8 +9,17 @@
 # Manager reader is the host's secrets.sh, not External Secrets Operator;
 # the policies are unchanged. Author review: Leong Wei Zhi, pending pull
 # request review.
+# 2026-11-08, Claude Code (Fable 5.1), first deploy: the deploy role's trust
+# also accepts GitHub's immutable subject (repo:<owner>@<id>/<name>@<id>),
+# which this repository sends; the first rollout failed on the plain form.
+# Author review: Leong Wei Zhi, pending pull request review.
 
 data "aws_caller_identity" "current" {}
+
+locals {
+  github_owner     = split("/", var.github_repo)[0]
+  github_repo_name = split("/", var.github_repo)[1]
+}
 
 # --- instance role ----------------------------------------------------------
 
@@ -69,7 +78,12 @@ resource "aws_iam_role" "deploy" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:ref:refs/heads/main"
+          # a list is an OR: the plain subject, and the one GitHub sends with
+          # the "immutable subject" setting on (owner and repo ids included)
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:${var.github_repo}:ref:refs/heads/main",
+            "repo:${local.github_owner}@${var.github_owner_id}/${local.github_repo_name}@${var.github_repo_id}:ref:refs/heads/main",
+          ]
         }
       }
     }]

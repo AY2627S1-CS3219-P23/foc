@@ -1531,7 +1531,9 @@ limit 1 (DP7 and DP10 re-decided), and chose to record the alternatives
 as facts without reasons. The tool then rebuilt the branch, removed
 External Secrets Operator, fixed the two review findings in the Deploy
 workflow and rewrote the two documents; `docs/deployment.md` carries no
-PR history, by request. Recorded in `ai/usage-log.md`.
+PR history, by request. On the first cloud deploy the same day, it
+diagnosed the rollout's OIDC refusal (GitHub's immutable subject claim)
+and widened the deploy role's trust to accept it. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

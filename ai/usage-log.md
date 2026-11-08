@@ -48,6 +48,8 @@
   the #284 ones sit at the top. Nothing reworded or removed.
   2026-11-08, Claude Code (Fable 5.1): prepended the issue #48 simplified
   deployment entry below.
+  2026-11-08, Claude Code (Fable 5.1): prepended the first-deploy OIDC
+  trust fix entry below.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -67,6 +69,14 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-08 — Leong Wei Zhi (N5 first cloud deploy, issue #48: OIDC trust for GitHub's immutable subject)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** debug, generate
+- **Scope:** the first Deploy run's rollout job failed with `Not authorized to perform sts:AssumeRoleWithWebIdentity`. Cause: this repository has GitHub's immutable OIDC subject on (`gh api repos/<repo>/actions/oidc/customization/sub` shows `use_immutable_subject: true`), so the token's `sub` is `repo:AY2627S1-CS3219-P23@325983746/foc@1360023737:ref:refs/heads/main`, which the trust policy's plain-form condition did not match. `infra/terraform/iam.tf`: the `sub` condition is now a list of the plain and the immutable form; `variables.tf`: `github_owner_id` and `github_repo_id` with the repository's ids as defaults; `infra/README.md`: the troubleshooting row. Applied to the sandbox account from the deploy worktree (one in-place change to `aws_iam_role.deploy`), then the failed job re-run.
+- **Prompt(s):** "logged in, run the applies from here" → bootstrap and main applies (plan reviewed, then the saved plan applied), repo variables, Deploy run, this fix on the failure.
+- **Author review:** `terraform fmt`/`validate`, plan showed exactly one in-place change; the re-run rollout job's result is in the PR; Leong Wei Zhi reviews via pull request.
 
 ---
 ## 2026-11-06 — Leong Wei Zhi (issue #48, DP11: realistic demo usernames)
