@@ -52,6 +52,8 @@
   trust fix entry below.
   2026-11-08, Claude Code (Fable 5.1): prepended the HTTPS (ACM on an ALB)
   entry below.
+  2026-11-08, Claude Code (Fable 5.1): prepended the web admin-test flake
+  entry below.
   2026-11-08, Claude Code (Fable 5.1): prepended the issue #305 entry
   below.
   Author review: Leong Wei Zhi to review via pull request.
@@ -193,6 +195,14 @@ Entry template:
   plain text (the file is not on `main`), and a test pins the counts
   (3 admins, 100 users, 104 accounts). Leong Wei Zhi reviews via pull
   request.
+## 2026-11-08 — Leong Wei Zhi (web: flaky Admin Dashboard Stuck Orders test)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** debug, tests
+- **Scope:** `web/src/test/admin.test.tsx`, "a remembered threshold is used on the next visit": `StuckOrdersSection` fetches in a `useEffect` after the region renders, so the synchronous `getHeldReservations('P7D')` expectation raced it (`Number of calls: 0` once in CI on a branch that changes no web file; green on three other runs of the same tree). First fix: the expectation wrapped in `waitFor`. PR #304 review (Sinnez1): `findRegion()` now waits for the section's loading text (`Checking held credits…` / `Loading failed orders…`) to disappear, so every Stuck/Failed Orders case gets a settled section, and the P7D case asserts the rendered outcome (empty result, `No credits have been held longer than 7 days.`) before the call expectations. Test-only.
+- **Prompt(s):** the CI failure output pasted with "web ci failed".
+- **Author review:** `npx vitest run src/test/admin.test.tsx` three times in a row, then the whole web suite once after the review change (results in the PR); Leong Wei Zhi reviews via pull request.
+
+---
 ## 2026-11-08 — Leong Wei Zhi (N5 cloud deployment, issue #48: simplified re-plan; DP7 and DP10 re-decided)
 - **Tool:** Claude Code (Fable 5.1)
 - **Mode:** generate, refactor, docs

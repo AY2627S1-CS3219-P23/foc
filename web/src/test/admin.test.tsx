@@ -41,6 +41,12 @@
 // three outcomes and their /resolve bodies, the split adding up to the
 // reward, and order-service's 409 for an admin who is a party.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-11-08, Claude Code (Fable 5.1): the remembered-threshold case waits
+// for the fetch the effect makes instead of asserting it synchronously
+// (flaked once in CI on a branch with no web change). Author review:
+// Leong Wei Zhi, pending pull request review. PR #304 review (Sinnez1):
+// findRegion waits for the section's first load to settle, and the case
+// checks the rendered 7-day result.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -969,7 +975,16 @@ function failed(
 }
 
 async function findRegion(name: 'Stuck Orders' | 'Failed Orders') {
-  return within(await screen.findByRole('region', { name }))
+  const region = within(await screen.findByRole('region', { name }))
+  // the section is committed before its first fetch (an effect) has run,
+  // so wait for that load to settle: every caller then sees a settled
+  // section instead of racing the effect
+  await waitFor(() =>
+    expect(
+      region.queryByText(/^(Checking held credits|Loading failed orders)…$/),
+    ).toBeNull(),
+  )
+  return region
 }
 
 function lastAdminListParams() {
@@ -1163,10 +1178,18 @@ describe('Stuck Orders section', () => {
 
   test('a remembered threshold is used on the next visit', async () => {
     localStorage.setItem('foc.admin.stuckThreshold', 'P7D')
+    vi.mocked(creditApi.getHeldReservations).mockResolvedValue({
+      items: [],
+      truncated: false,
+    })
     renderAdmin()
 
     const region = await findRegion('Stuck Orders')
     expect(region.getByLabelText('Held longer than')).toHaveValue('P7D')
+    // the rendered outcome of the P7D load, not only the call
+    expect(
+      await region.findByText('No credits have been held longer than 7 days.'),
+    ).toBeInTheDocument()
     expect(creditApi.getHeldReservations).toHaveBeenCalledWith('P7D')
     expect(creditApi.getHeldReservations).not.toHaveBeenCalledWith('PT1H')
   })

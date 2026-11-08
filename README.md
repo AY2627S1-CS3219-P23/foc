@@ -25,6 +25,9 @@
   2026-11-08, Claude Code (Fable 5.1), issue #48 (DP18 to DP21): the cloud
   deployment paragraph extended for HTTPS. Author review: Leong Wei Zhi,
   pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1): AI Use Summary extended for the
+  admin-test flake fix. Author review: Leong Wei Zhi, pending pull request
+  review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
   public profile's joined date and deliveries-completed count (issue
   #280), and the #257 paragraph's deviation sentence updated to point
@@ -1548,6 +1551,11 @@ port-80 redirect, the host's exposure and the pipeline variable were
 Leong Wei Zhi's choices from neutral options rounds; the tool wrote the
 Terraform, flipped the four baked origins to https and extended the two
 documents. Recorded in `ai/usage-log.md`.
+
+2026-11-08: Claude Code (Fable 5.1) made the Admin Dashboard tests wait for a
+section's first load to settle before asserting on it, after one case
+flaked in CI on an unrelated branch. Test-only. Recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
