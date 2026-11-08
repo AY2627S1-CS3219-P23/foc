@@ -41,6 +41,8 @@
   web/AGENTS.md (#284's 2026-11-01 entry, then #258's 2026-11-02 one).
   This log merged cleanly — main's #258 entries append at the bottom,
   the #284 ones sit at the top. Nothing reworded or removed.
+  2026-11-08, Claude Code (Fable 5.1): prepended the web admin-test flake
+  entry below.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -60,6 +62,14 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-08 — Leong Wei Zhi (web: flaky Admin Dashboard Stuck Orders test)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** debug, tests
+- **Scope:** `web/src/test/admin.test.tsx`, "a remembered threshold is used on the next visit": the `getHeldReservations('P7D')` expectation is wrapped in `waitFor`, because `StuckOrdersSection` fetches in a `useEffect` after the region renders, so the synchronous expectation raced it (`Number of calls: 0` once in CI on a branch that changes no web file; green on three other runs of the same tree). Test-only.
+- **Prompt(s):** the CI failure output pasted with "web ci failed".
+- **Author review:** `npx vitest run src/test/admin.test.tsx` three times in a row (results in the PR); Leong Wei Zhi reviews via pull request.
 
 ---
 ## 2026-11-04 — Leong Wei Zhi (notification-service: resolver drops the credit/user arms, follow-up to PR #287)

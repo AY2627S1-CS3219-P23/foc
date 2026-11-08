@@ -41,6 +41,10 @@
 // three outcomes and their /resolve bodies, the split adding up to the
 // reward, and order-service's 409 for an admin who is a party.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-11-08, Claude Code (Fable 5.1): the remembered-threshold case waits
+// for the fetch the effect makes instead of asserting it synchronously
+// (flaked once in CI on a branch with no web change). Author review:
+// Leong Wei Zhi, pending pull request review.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -1167,7 +1171,10 @@ describe('Stuck Orders section', () => {
 
     const region = await findRegion('Stuck Orders')
     expect(region.getByLabelText('Held longer than')).toHaveValue('P7D')
-    expect(creditApi.getHeldReservations).toHaveBeenCalledWith('P7D')
+    // the fetch runs in an effect after the region renders, so wait for it
+    await waitFor(() =>
+      expect(creditApi.getHeldReservations).toHaveBeenCalledWith('P7D'),
+    )
     expect(creditApi.getHeldReservations).not.toHaveBeenCalledWith('PT1H')
   })
 

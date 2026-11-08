@@ -13,6 +13,9 @@
   #258, the new docs/rating-service.md + .mmd and the doc updates it
   touches).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1): AI Use Summary extended for the
+  admin-test flake fix. Author review: Leong Wei Zhi, pending pull request
+  review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
   public profile's joined date and deliveries-completed count (issue
   #280), and the #257 paragraph's deviation sentence updated to point
@@ -1497,6 +1500,11 @@ measurements; the team decided and supplied the wording. Recorded in
 pattern, with its Maven test dependencies. The tool compared the H2 and
 Testcontainers options as facts and the author chose Testcontainers; the
 NFR bounds are the team's. Recorded in `ai/usage-log.md`.
+
+2026-11-08: Claude Code (Fable 5.1) made one Admin Dashboard test wait for
+the Stuck Orders fetch instead of asserting it synchronously, after it
+flaked once in CI on an unrelated branch. Test-only. Recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
