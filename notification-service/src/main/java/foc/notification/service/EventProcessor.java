@@ -9,6 +9,9 @@
  * 2026-09-20: order→request event vocabulary rename applied (author
  * decision D22, docs/notification-service.md).
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-11-08, Claude Code (Fable 5.1), issue #305: contract note on the
+ * concurrent-duplicate throw. Author review: Leong Wei Zhi, pending pull
+ * request review.
  */
 package foc.notification.service;
 
@@ -22,7 +25,10 @@ import foc.contracts.events.core.DomainEvent;
  * <p>Contract for callers: a normal return means the event's effects
  * are durably committed (or it was a duplicate and was deliberately
  * discarded) — safe to acknowledge. A thrown exception means nothing
- * was committed — safe to redeliver (NFR1.1).
+ * was committed — safe to redeliver (NFR1.1). One throw is settled
+ * differently: a unique-key violation means another delivery of the same
+ * event committed first (two replicas, issue #305), so the adapter acks
+ * it as a duplicate rather than redelivering.
  */
 public interface EventProcessor {
 

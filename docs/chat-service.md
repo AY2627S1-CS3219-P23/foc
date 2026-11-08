@@ -82,6 +82,11 @@ existence is not revealed).
   `first` is true only for the message that took their unread count from
   0 to 1, and `preview` is the text's first 80 characters (null for an
   image-only message).
+- Pushes fan out over RabbitMQ (issue #305): a replica publishes each
+  frame to the service-local fanout exchange `chat.push`, every replica
+  consumes it on its own anonymous queue and delivers it to its own
+  sockets, so a browser gets a frame once whichever replica it is
+  connected to. The service's only AMQP use; no events (C11 unchanged).
 - Send to `/app/chats/{chatId}/messages` with
   `{"text": "...", "image": {"contentType": "image/png", "data": "<base64>"}}`
   (either may be omitted, not both): parties of an open chat only. A

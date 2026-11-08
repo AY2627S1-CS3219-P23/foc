@@ -3,7 +3,7 @@
   Tool: Claude Code (Fable 5), 2026-09-15 – 2026-09-21.
   Scope: transcribed and maintained the team-decided notification-service
   design in this document and the companion diagram. Every design decision
-  (D1–D34) was made by a team member — recorded per decision in the
+  (D1–D36) was made by a team member — recorded per decision in the
   Decisions table, chosen via neutral options Q&As where AI assisted — and
   the decision-by-decision history lives in ai/usage-log.md and git
   history. The tool documented decisions, derived the traceability
@@ -87,6 +87,12 @@
   2026-11-04, follow-up to PR #287 (author's call): the resolver no
   longer special-cases credit and user events; the rule table and the
   runtime paragraph say they take the unmapped-type path.
+  2026-11-08, Claude Code (Fable 5.1), issue #305: D35 (cross-replica
+  STOMP push over an AMQP fanout) and D36 (Flyway baseline) added, D4 and
+  D10 annotated, the Open items scale-out entry closed, the "Cross-replica
+  push" section added — all team decisions by Leong Wei Zhi via neutral
+  options Q&A; the tool recorded them. Author review: Leong Wei Zhi,
+  pending pull request review.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -120,12 +126,12 @@ removed; gaps in the numbering are intentional.
 | D1 | Message broker | **RabbitMQ** | M6; Notif F1.1, NFR1 |
 | D2 | Client push transport | **WebSocket with STOMP** (Spring simple broker, per-user destinations) | Notif F1.2; Order NFR1.1–1.2 |
 | D3 | Notification DB engine | **PostgreSQL**, accessed via Spring Data JPA | Notif F2.1, F3 |
-| D4 | Duplicate detection | **Unique event ID** recorded in the DB, in the *same transaction* as the notification insert. *2026-10-17 note (issue #137):* dedupe rows past the D9 retention window are purged, reopening the dedupe window for those event IDs — accepted: retries are 10 s TTL × 3 then DLQ, so re-processing needs a delivery resurfacing ≥ 30 days later (a manual DLQ replay, or a post-commit delivery left unacked on the work queue across an outage that long), and it would recreate notifications the purge already deleted | Notif F2.1 |
+| D4 | Duplicate detection | **Unique event ID** recorded in the DB, in the *same transaction* as the notification insert. *2026-10-17 note (issue #137):* dedupe rows past the D9 retention window are purged, reopening the dedupe window for those event IDs — accepted: retries are 10 s TTL × 3 then DLQ, so re-processing needs a delivery resurfacing ≥ 30 days later (a manual DLQ replay, or a post-commit delivery left unacked on the work queue across an outage that long), and it would recreate notifications the purge already deleted. *2026-11-08 note (issue #305):* at two replicas a concurrent duplicate loses on the `processed_events` primary key, its whole transaction rolls back, and the listener acks that failure (SQLSTATE 23505) as a duplicate — no retry hop, no insert-first rewrite, no single active consumer (options Q&A) | Notif F2.1 |
 | D6 | Retry policy | **Broker redelivery with TTL retry queue**: 3 total attempts, 10 s backoff, env-overridable — see [Failure handling](#failure-handling-d6d7-d20d21) | Notif F2.2 |
 | D7 | Dead-letter handling | **Durable dead-letter queue**; unknown event types dead-letter (replayable after a consumer upgrade) rather than being dropped | Notif F2.3 |
 | D8 | Broker persistence | **Durable exchanges/queues + persistent messages** (durability is opt-in in RabbitMQ) | Notif NFR1.2 |
 | D9 | Retention window | `NOTIF_RETENTION_DAYS` env var, **default 30 days**; scheduled purge job. *2026-10-17 (issue #137):* the same run and window also sweep the `processed_events` dedupe table | Notif F3.4 |
-| D10 | Redis / scale-out | **No Redis** in the single-instance design (see Open items). *2026-10-11 note:* a platform Redis now exists for the **logout token denylist** ([`gateway.md`](gateway.md), issue #151) — unrelated to this service's scale-out question, which stays open. *2026-10-12 note:* this service now **reads** that denylist at STOMP CONNECT (D23); the scale-out question is still open | — |
+| D10 | Redis / scale-out | **No Redis** in the single-instance design (see Open items). *2026-10-11 note:* a platform Redis now exists for the **logout token denylist** ([`gateway.md`](gateway.md), issue #151) — unrelated to this service's scale-out question, which stays open. *2026-10-12 note:* this service now **reads** that denylist at STOMP CONNECT (D23). *2026-11-08 note (issue #305):* scale-out settled by D35 — pushes fan out over AMQP, Redis stays denylist-only | — |
 | D11 | Broker isolation | **Ports and adapters**: all RabbitMQ code confined to one adapter package — see [Broker decoupling](#broker-decoupling-d11) | broker swap surface |
 | D12 | Topology provisioning | **App-declared at startup** via Spring AMQP beans (no broker definitions file) | topology lives beside its owner |
 | D13 | Naming convention | Exchange named after the producing domain (`request-events`); queues prefixed with the consuming service (`notification-service.request-events` + `.retry`/`.dlq`) | ownership visible in the management UI |
@@ -146,6 +152,8 @@ removed; gaps in the numbering are intentional.
 | D32 | Display names (supersedes D30/D31) | **Events and stored payloads carry party IDs only; the web resolves the acting party's id (`courierId`; since issue #255 also `raterId`) → username at read time** (gateway `GET /api/user/users/{id}` with the caller's own JWT, SPA-side cache: 10 min positive / 30 s negative TTL, in-flight dedupe) — no service-to-service call remains, the internal-token machinery is gone, F1.1 holds unamended, renames show current names (D30's ingest snapshot went stale), and a failed lookup renders the actor-less copy — see [Display names](#display-names-d32) | Notif F3.1 UX |
 | D33 | Dropped-courier prune (issue #266) | **Ingesting `request.dropped` deletes the dropping courier's stored rows for that request**, in the same transaction as the dedupe insert — the drop removes them as a party (order-service nulls `courierId`), so every row they held (`request.accepted`, `request.collected`, dispute events) could only dead-end on the detail 404. Bounded to rows at or before the drop and guarded against retry-queue reordering, with the badge re-synced when the Center opens (PR #277 review). Chosen (options Q&A) over a past-party read-access record in order-service and over web-only 404 softening — see [Dropped-courier prune](#dropped-courier-prune-d33) | Notif F3.1 UX; issue #266 |
 | D34 | Recipient resolution | **Events carry business facts only; this service derives who is told from each event's own id fields (`requesterId`, `courierId`, `rateeId`), one rule per event type** — the `parties` wire field is removed from every contract record, and `request.expired` gains a nullable `courierId` so the courier who had accepted stays reachable. Chosen (options Q&A) over a publisher-sent notification command and over keeping `parties` on the event — see [Recipient resolution](#recipient-resolution-d34) | Notif F1.1, F1.2; contract decoupling |
+| D35 | Cross-replica push (issue #305) | **Each push is published to the service-local fanout exchange `notification.push`; every replica consumes it on its own anonymous queue and delivers to its own sockets**, so a browser gets the frame once wherever its socket is. Chosen (options Q&A) over a STOMP broker relay through RabbitMQ's STOMP plugin (the `/user/queue` destinations would leave a durable queue per session, and it needs the plugin, a port and destination renames) — see [Cross-replica push](#cross-replica-push-d35) | N5.4; Order NFR1.1-1.2 at 2 replicas |
+| D36 | Schema management (issue #305) | **Flyway owns the schema** (`V1__baseline.sql`, the schema `ddl-auto: update` had generated; `baseline-on-migrate` records an existing volume as V1), Hibernate only validates — two replicas starting on an empty database cannot race table creation. Chosen (options Q&A) over keeping `ddl-auto: update` and documenting the race | N5.4 |
 
 ## Components
 
@@ -438,6 +446,46 @@ in the management UI. The approved D34 plan records this as accepted
 rather than adding a converter shim that reads `parties` back out of
 legacy bodies (PR #287 review).
 
+## Cross-replica push (D35)
+
+With one JVM the simple broker holds every socket; with two, a push
+produced on A for a browser connected to B went nowhere. The producing
+replica cannot know where the socket is, so it tells every replica:
+
+```mermaid
+sequenceDiagram
+  participant Q as request-events queue
+  participant A as replica A
+  participant X as notification.push (fanout)
+  participant B as replica B
+  participant W as browser (socket on B)
+  Q->>A: request.accepted
+  A->>A: commit notification + processed_events
+  A->>X: UserPush{recipientId, dto} (AFTER_COMMIT)
+  X->>A: copy on A's anonymous queue
+  X->>B: copy on B's anonymous queue
+  A->>A: convertAndSendToUser: no session, no-op
+  B->>W: convertAndSendToUser: STOMP MESSAGE
+```
+
+- `NotificationPushListener` (AFTER_COMMIT) → `UserPushFanout.publish`
+  → `RabbitMqUserPushFanout` (raw JSON, non-persistent) →
+  `@RabbitListener` on an anonymous exclusive auto-delete queue per
+  replica → `LocalUserPushDelivery.deliver`. No local send from the
+  publisher: its own copy arrives through the same path.
+- A socket lives on exactly one replica, so each replica's user-
+  destination resolution is exactly the routing table needed; no shared
+  state, no web change, D11 intact (the port lives in `messaging.stomp`,
+  the AMQP adapter in `messaging.rabbitmq`).
+- Best-effort, as before: an undecodable or undeliverable push is logged
+  and dropped (the fanout listener runs on its own auto-ack,
+  no-requeue container factory); the REST list is the catch-up path.
+- At two replicas a duplicate delivery can race the dedupe read (D4
+  note); the loser is acked on its primary-key failure. The work queues
+  stay competing-consumer (no single active consumer, options Q&A):
+  the D33 `occurredAt` bound and the reverse-reorder guard cover the
+  known reorders.
+
 ## REST API contract (D24–D28)
 
 All routes sit behind the gateway prefix (`/api/notification/…`,
@@ -709,9 +757,6 @@ Why the push channel is centralized here rather than per service:
 
 ## Open items (team decisions still pending)
 
-- **Scale-out** (team decision 2026-09-15): the current design is
-  single-instance and uses Redis only for the D23 denylist read — not
-  for connection state. If the service is later
-  scaled to multiple instances (nice-to-have N5.4), the team will then
-  choose between Redis pub/sub and a RabbitMQ STOMP broker relay for
-  cross-instance WebSocket fan-out.
+- ~~**Scale-out** (team decision 2026-09-15)~~ — closed 2026-11-08 by
+  D35/D36 (issue #305): pushes fan out over an AMQP exchange, Redis stays
+  denylist-only, the schema is Flyway-managed.

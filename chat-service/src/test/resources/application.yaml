@@ -5,6 +5,10 @@
 # Redis points at an unresolvable host (the denylist fails open), and
 # fixed test secrets.
 # Author review: Ko-Khan, pending pull request review.
+# 2026-11-08, Claude Code (Fable 5.1), issue #305: the push-fanout listener
+# stays stopped unless a test brings a broker (ChatStompIntegrationTest
+# does, through Testcontainers). Author review: Leong Wei Zhi, pending pull
+# request review.
 
 # This file replaces the main application.yaml on the test classpath
 # (same name), so every chat.* setting the beans read is repeated here.
@@ -14,6 +18,11 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+  rabbitmq:
+    listener:
+      simple:
+        # no broker in most tests: ChatStompIntegrationTest turns it on
+        auto-startup: false
   data:
     redis:
       # no Redis in tests: lookups fail fast and fail open

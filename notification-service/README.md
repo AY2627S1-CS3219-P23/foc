@@ -93,8 +93,10 @@ Dev volumes created before the typed-contracts refactor or the
 retry/DLQ topology (#65) fail at startup: the old fanout exchange and
 the pre-#65 work queue carry incompatible declarations
 (`PRECONDITION_FAILED`), and a DB schema with the removed NOT NULL
-`entity_type`/`entity_id` columns rejects inserts (`ddl-auto: update`
-never drops columns). Reset both volumes once:
+`entity_type`/`entity_id` columns fails Flyway's baseline validation
+(since #305 Flyway owns the schema and Hibernate only validates it; a
+volume built by the former `ddl-auto: update` with the *current*
+columns is baselined as V1 and needs nothing). Reset both volumes once:
 
 ```sh
 docker compose down rabbitmq notification-db

@@ -34,6 +34,12 @@
  * the missing-consumer-queue guard now nacks with requeue instead of
  * throwing (in MANUAL mode an uncaught exception settles nothing and
  * the delivery would pin a prefetch slot until restart).
+ * 2026-11-08, Claude Code (Fable 5.1), issue #305 (team decision, Leong
+ * Wei Zhi via options Q&A): a duplicate-key failure from the processor is
+ * acked as a duplicate instead of taking a retry hop — with two replicas
+ * the same event can be in flight twice, and the loser's whole transaction
+ * rolled back on the processed_events primary key. Author review: Leong
+ * Wei Zhi, pending pull request review.
  */
 package foc.notification.messaging.rabbitmq;
 
@@ -41,6 +47,7 @@ import com.rabbitmq.client.Channel;
 import foc.contracts.events.core.DomainEvent;
 import foc.notification.service.EventProcessor;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Map;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
@@ -126,6 +133,9 @@ class DomainEventsListener {
 			RabbitMqTopology.REQUEST_EVENTS_QUEUE, RabbitMqTopology.REQUEST_EVENTS_RETRY_QUEUE,
 			RabbitMqTopology.RATING_EVENTS_QUEUE, RabbitMqTopology.RATING_EVENTS_RETRY_QUEUE);
 
+	/** PostgreSQL's (and H2's) SQLSTATE for a unique or primary-key violation. */
+	static final String UNIQUE_VIOLATION = "23505";
+
 	/**
 	 * Ceiling on waiting for the broker to confirm a retry republish;
 	 * on timeout the original stays unacked and is redelivered.
@@ -153,6 +163,19 @@ class DomainEventsListener {
 		try {
 			eventProcessor.process(event);
 		} catch (RuntimeException ex) {
+			if (isDuplicateKey(ex)) {
+				// Two replicas processed the same event at once (issue #305):
+				// both passed the dedupe read, the loser's INSERT into
+				// processed_events — the schema's only unique key — hit the
+				// winner's row, and its whole transaction (notifications
+				// included) rolled back; only the winner's AFTER_COMMIT push
+				// went out. The outcome is the seen-before case, so ack it
+				// instead of spending a retry hop on it.
+				log.info("event {} already processed by a concurrent delivery; acked",
+						event.eventId());
+				channel.basicAck(deliveryTag, false);
+				return;
+			}
 			long attempts = attemptsSoFar(amqpMessage);
 			log.warn("event {} failed on attempt {}/{}", event.eventId(), attempts, maxAttempts);
 			// Map.of rejects null keys, so the absent-header case is guarded
@@ -185,6 +208,16 @@ class DomainEventsListener {
 			throw ex;
 		}
 		channel.basicAck(deliveryTag, false);
+	}
+
+	/** A unique violation anywhere in the cause chain (the JPA commit wraps it). */
+	static boolean isDuplicateKey(Throwable ex) {
+		for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+			if (cause instanceof SQLException sql && UNIQUE_VIOLATION.equals(sql.getSQLState())) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** 1 for the delivery in hand, plus the attempts already stamped. */

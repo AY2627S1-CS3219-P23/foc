@@ -34,6 +34,11 @@
  * isolation case's silent step is a courier-arrived event (requester
  * only under the rule). Author review: Leong Wei Zhi, pending pull
  * request review.
+ * 2026-11-08, Claude Code (Fable 5.1), issue #305 (D35): pushes now cross
+ * the notification.push fanout, so the context runs against a Testcontainers
+ * RabbitMQ (skips without Docker) with the listeners started; the
+ * assertions are unchanged and now prove commit → fanout → local delivery.
+ * Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.notification.messaging.stomp;
 
@@ -67,6 +72,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -83,21 +89,34 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 import org.springframework.web.socket.sockjs.client.RestTemplateXhrTransport;
 import org.springframework.web.socket.sockjs.client.SockJsClient;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
+import org.testcontainers.utility.DockerImageName;
 
 /**
  * Drives {@link EventProcessor} directly (real transaction commit →
- * AFTER_COMMIT push) and asserts delivery through real STOMP sessions.
+ * AFTER_COMMIT publish → fanout over a real RabbitMQ → this replica's
+ * local delivery, D35) and asserts delivery through real STOMP sessions.
  * The 5-second receive bound doubles as the Order NFR1.1-1.2 budget
  * assertion. Subscription readiness is awaited via
  * {@link SimpUserRegistry} — never with sleeps — and negative cases
  * are proven with sentinel frames.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
+		// The push fanout listener must run for a push to reach a session.
+		"spring.rabbitmq.listener.simple.auto-startup=true",
 		// Own H2 instance so this context never shares tables with the
 		// cached broker-free context used by the other test classes.
 		"spring.datasource.url=jdbc:h2:mem:notification-stomp;DB_CLOSE_DELAY=-1"
 })
+@Testcontainers(disabledWithoutDocker = true)
 class StompPushIntegrationTest {
+
+	@Container
+	@ServiceConnection
+	static RabbitMQContainer rabbitMq =
+			new RabbitMQContainer(DockerImageName.parse("rabbitmq:4-management"));
 
 	private static final String TEST_SECRET = "test-secret-0123456789abcdef0123456789abcdef";
 	private static final Instant OCCURRED_AT = Instant.parse("2026-09-19T08:30:00Z");

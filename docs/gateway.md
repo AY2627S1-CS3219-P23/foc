@@ -210,8 +210,8 @@ compose) and `REDIS_HOST` is fully qualified (issue #48,
   (PR #176 review) for whoever first designs one that does.
 - `docs/notification-service.md` D10 ("no Redis") predates this: Redis
   now exists as platform infrastructure for the denylist. D10's
-  scale-out question (Redis pub/sub vs broker relay) remains open and
-  unrelated.
+  scale-out question was settled by D35 (issue #305): pushes fan out
+  over AMQP, not Redis, so the gateway is unaffected.
 
 ## Container
 

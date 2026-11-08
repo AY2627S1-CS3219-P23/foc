@@ -32,6 +32,10 @@
 # Reviewed by: Leong Wei Zhi (via pull request).
 # 2026-10-19, Claude Code (Fable 5), issue #221: user-service lookup keys
 # removed with the adapter (D32 supersedes D30/D31 — read-time hydration).
+# 2026-11-08, Claude Code (Fable 5.1), issue #305 (D36): Flyway off for the
+# H2 suites (V1 is PostgreSQL DDL); the PostgresTestContainer subclass
+# switches it on with ddl-auto validate. Author review: Leong Wei Zhi,
+# pending pull request review.
 
 notification:
   rabbitmq:
@@ -77,3 +81,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+  flyway:
+    # H2 builds the schema from the entities (above); the
+    # PostgresTestContainer subclass runs the real migration
+    enabled: false

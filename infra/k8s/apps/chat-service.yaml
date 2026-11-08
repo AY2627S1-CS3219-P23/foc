@@ -11,6 +11,9 @@
 # second round (Sinnez1): the foc-config hash too.
 # Author review: Leong Wei Zhi, pending pull request review.
 # Same day, review follow-up: replicas pinned to 1 (DP10, issue #305).
+# 2026-11-08, Claude Code (Fable 5.1), issue #305 (team decision, Leong Wei
+# Zhi via options Q&A): the pin removed — pushes fan out over AMQP, so the
+# HPA scales this Deployment like the others (DP9/DP10).
 ---
 apiVersion: v1
 kind: Service
@@ -23,19 +26,12 @@ spec:
   ports:
     - port: 8080
 ---
-# one replica and no HPA (DP10): a STOMP push reaches only the replica
-# that holds the browser's socket; issue #305 tracks cross-replica delivery
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: chat-service
   namespace: foc
 spec:
-  replicas: 1
-  # a deploy must not overlap two pods either (DP10: one socket-holding
-  # replica), so the old pod stops before the new one starts
-  strategy:
-    type: Recreate
   selector:
     matchLabels:
       app: chat-service

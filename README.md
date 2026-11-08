@@ -1535,3 +1535,15 @@ PR history, by request. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
+
+Issue #305 (chat and notification safe at two replicas, 2026-11-08) —
+Claude Code (Fable 5.1) implemented the team's decisions (Leong Wei Zhi,
+neutral options Q&A): STOMP pushes fan out over a per-service AMQP
+exchange so the replica holding the browser's socket delivers them
+(notification D35, chat), notification-service acks a concurrent
+duplicate on its `processed_events` key and moves to a Flyway baseline
+(D36), the two HPAs return and the one-replica pins go (DP9/DP10); unit
+and Testcontainers tests, compose and k8s wiring, and the docs. The
+alternatives (STOMP broker relay, insert-first dedupe, single active
+consumer, ShedLock) were declined by the author and are recorded in
+`ai/usage-log.md`.

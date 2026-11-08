@@ -9,6 +9,10 @@
  * guessed retry target; the mapped path must ack only after publishing
  * to that queue's own retry sibling.
  * Author review: Leong Wei Zhi, pending pull request review.
+ * 2026-11-08, Claude Code (Fable 5.1), issue #305: a duplicate-key failure
+ * (SQLSTATE 23505 in the cause chain) is acked, not republished; any other
+ * integrity failure still takes the retry path. Author review: Leong Wei
+ * Zhi, pending pull request review.
  */
 package foc.notification.messaging.rabbitmq;
 
@@ -24,12 +28,14 @@ import static org.mockito.Mockito.when;
 import com.rabbitmq.client.Channel;
 import foc.contracts.events.rating.RatingSubmitted;
 import foc.notification.service.EventProcessor;
+import java.sql.SQLException;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitOperations;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.dao.DataIntegrityViolationException;
 
 /**
  * Settle decisions for the retry path (PR #276 review): the happy and
@@ -93,6 +99,41 @@ class DomainEventsListenerTest {
 				.isInstanceOf(IllegalStateException.class);
 
 		verify(operations).send("", RabbitMqTopology.RATING_EVENTS_RETRY_QUEUE, delivery);
+		verify(channel).basicAck(DELIVERY_TAG, false);
+		verifyNoMoreInteractions(channel);
+	}
+
+	@Test
+	void concurrentDuplicateIsAckedWithoutARetryHop() throws Exception {
+		doThrow(new DataIntegrityViolationException("dup",
+				new SQLException("duplicate key value violates unique constraint", "23505")))
+				.when(eventProcessor).process(any());
+		MessageProperties properties = new MessageProperties();
+		properties.setConsumerQueue(RabbitMqTopology.REQUEST_EVENTS_QUEUE);
+		Message delivery = new Message(new byte[0], properties);
+
+		listener.onDomainEvent(rating(), delivery, channel, DELIVERY_TAG);
+
+		verify(channel).basicAck(DELIVERY_TAG, false);
+		verifyNoMoreInteractions(channel);
+		verifyNoInteractions(rabbitTemplate);
+	}
+
+	@Test
+	void otherIntegrityFailuresStillRetry() throws Exception {
+		doThrow(new DataIntegrityViolationException("too long",
+				new SQLException("value too long", "22001"))).when(eventProcessor).process(any());
+		RabbitOperations operations = mock(RabbitOperations.class);
+		when(rabbitTemplate.invoke(any())).thenAnswer(invocation -> invocation
+				.<RabbitOperations.OperationsCallback<Object>>getArgument(0).doInRabbit(operations));
+		MessageProperties properties = new MessageProperties();
+		properties.setConsumerQueue(RabbitMqTopology.REQUEST_EVENTS_QUEUE);
+		Message delivery = new Message(new byte[0], properties);
+
+		assertThatThrownBy(() -> listener.onDomainEvent(rating(), delivery, channel, DELIVERY_TAG))
+				.isInstanceOf(DataIntegrityViolationException.class);
+
+		verify(operations).send("", RabbitMqTopology.REQUEST_EVENTS_RETRY_QUEUE, delivery);
 		verify(channel).basicAck(DELIVERY_TAG, false);
 		verifyNoMoreInteractions(channel);
 	}

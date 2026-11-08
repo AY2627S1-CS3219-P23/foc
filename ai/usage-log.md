@@ -48,6 +48,8 @@
   the #284 ones sit at the top. Nothing reworded or removed.
   2026-11-08, Claude Code (Fable 5.1): prepended the issue #48 simplified
   deployment entry below.
+  2026-11-08, Claude Code (Fable 5.1): prepended the issue #305 entry
+  below.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -69,6 +71,47 @@ Entry template:
 ```
 
 ---
+## 2026-11-08 — Leong Wei Zhi (issue #305: chat and notification safe at 2 replicas)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** plan, generate, docs
+- **Scope:** branch `feat/305-replica-push` on PR #302's
+  `feat/48-cloud-deploy`. notification-service: `UserPush`,
+  `UserPushFanout`, `LocalUserPushDelivery` (messaging.stomp),
+  `RabbitMqUserPushFanout` + the `pushFanoutContainerFactory` bean
+  (messaging.rabbitmq), `NotificationPushListener` publishes to the port;
+  `DomainEventsListener` acks a SQLSTATE 23505 failure as a duplicate;
+  Flyway (`V1__baseline.sql`, `ddl-auto: validate`, baseline-on-migrate)
+  with `PostgresTestContainer` + `NotificationFlywayMigrationTest`; unit
+  tests for the fanout halves and the listener branches;
+  `StompPushIntegrationTest` now runs a Testcontainers RabbitMQ.
+  chat-service: `spring-boot-starter-amqp`, `ChatPush`,
+  `ChatPushFanoutConfig` (AMQP JSON converter, `chat.push`),
+  `StompChatPublisher` publishes, `ChatPushListener` delivers; unit tests
+  and the STOMP integration test through a Testcontainers RabbitMQ.
+  `compose.yaml` chat RabbitMQ env; `infra/k8s` (the two HPAs back, the
+  `replicas: 1` pins and Recreate strategy removed, chat's
+  `RABBITMQ_PASSWORD`); `docs/deployment.md` DP9/DP10 and the 2-replica
+  tables; `docs/notification-service.md` D35/D36 + section;
+  `docs/chat-service.md`, `docs/gateway.md`, `infra/README.md`, both
+  services' AGENTS.md and the notification README; this log and the
+  README summary.
+- **Decisions (Leong Wei Zhi, neutral options Q&A, 2026-11-08):** AMQP
+  fanout over a STOMP broker relay; ack the duplicate-key failure rather
+  than keep the retry hop or rewrite to insert-first; no
+  `x-single-active-consumer`; a Flyway baseline rather than documenting
+  the first-boot race; chat keeps Boot's RabbitMQ health indicator; one
+  PR stacked on #302. The closed PRs #291/#294 were the reference, not
+  reused.
+- **Prompt(s):** "make a plan to resolve …/issues/305 the implementation
+  should focus on simplicity"; "client only has one persistent websocket
+  connection with one replica, so only that replica should send the
+  notification?" (answered: the fanout reaches every replica and only the
+  socket holder's user-destination resolution delivers).
+- **Author review:** notification-service `./mvnw verify` with Docker
+  (Testcontainers RabbitMQ + Postgres), chat-service `./mvnw test`; the
+  compose `--scale 2` acceptance and the cloud HPA check are the
+  author's before merge. Leong Wei Zhi reviews via pull request.
+
 ## 2026-11-06 — Leong Wei Zhi (issue #48, DP11: realistic demo usernames)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs

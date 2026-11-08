@@ -31,8 +31,8 @@ the decision ID when touching related code.
 | `entity/` | `Notification` (one row per recipient, read/unread flag), `ProcessedEvent` (dedupe inbox) |
 | `repository/` | Spring Data JPA repositories for both entities |
 | `service/` | `EventProcessor` (port), `IdempotentEventProcessor` (dedupe + insert + publishes `NotificationStoredEvent`), `RecipientResolver` (who an event notifies, per event type from its id fields — D34), `NotificationDto`, `RetentionPurgeScheduler` (purges `notifications` + `processed_events` past the retention window, #137) |
-| `messaging/rabbitmq/` | The only package allowed to touch broker types: `DomainEventsListener` (manual ack, retry republish), `DomainEventMessageConverter` (dispatch on body `eventType` via `EventTypeRegistry`), `RabbitMqTopology` + `RabbitMqTopologyInitializer` (startup declaration), `RabbitMqMessageConverterConfig` |
-| `messaging/stomp/` | `WebSocketStompConfig` (`/ws`, SockJS, heartbeats — also owns the app's sole `TaskScheduler`), `JwtChannelInterceptor` (CONNECT auth), `NotificationPushListener` (`AFTER_COMMIT` push), `StompPrincipal` |
+| `messaging/rabbitmq/` | The only package allowed to touch broker types: `DomainEventsListener` (manual ack, retry republish, duplicate-key ack), `DomainEventMessageConverter` (dispatch on body `eventType` via `EventTypeRegistry`), `RabbitMqTopology` + `RabbitMqTopologyInitializer` (startup declaration), `RabbitMqMessageConverterConfig`, `RabbitMqUserPushFanout` (the `notification.push` fanout adapter of `UserPushFanout`, D35) |
+| `messaging/stomp/` | `WebSocketStompConfig` (`/ws`, SockJS, heartbeats — also owns the app's sole `TaskScheduler`), `JwtChannelInterceptor` (CONNECT auth), `NotificationPushListener` (`AFTER_COMMIT` → `UserPushFanout.publish`), `UserPush` + `UserPushFanout` (the push envelope and its outbound port), `LocalUserPushDelivery` (the per-user STOMP send every replica makes for a fanned-out push), `StompPrincipal` |
 | `security/` | `JwtVerifier` (HS256, jjwt; fails startup on missing/short secret), `JwtAuthenticationFilter` (REST bearer → security context, empty authorities per D28; built inline by `SecurityConfig`, not a bean), `RestAuthEntryPoint`/`RestAccessDeniedHandler` (401/403 problem+json), `redis/RedisTokenDenylist` (D23 — STOMP CONNECT only, never the REST path, G4) |
 | `config/` | `SecurityConfig` — stateless chain: `/error`, `/actuator/health` and the `/ws` SockJS paths open (the CONNECT frame authenticates, not the handshake), everything else bearer-authenticated; CORS from `WEB_ALLOWED_ORIGIN`, registered for `/notifications/**` only — never `/**`, which would put the REST origin policy in front of the WS handshake/SockJS paths (PR #198 review) |
 | `controller/` | `NotificationController` (`/notifications/me` routes, D24–D27), `ApiExceptionHandler` (problem+json 400/404), the contract's exceptions |
@@ -47,7 +47,13 @@ the decision ID when touching related code.
   notification insert commit in one transaction. The dedupe window is
   bounded by the retention purge (#137): rows older than
   `NOTIF_RETENTION_DAYS` are swept — an accepted trade-off, since
-  redelivery ends at the DLQ within seconds.
+  redelivery ends at the DLQ within seconds. At two replicas (#305) a
+  concurrent duplicate loses on the `processed_events` primary key; the
+  listener acks that failure (SQLSTATE 23505) as a duplicate.
+- **Pushes go through the fanout, never straight to the local broker**
+  (D35, #305): `NotificationPushListener` publishes to `UserPushFanout`;
+  `LocalUserPushDelivery` is called only by the fanout adapter, once per
+  replica, so a socket gets each frame exactly once.
 - **Broker isolation** (D11): only `messaging.rabbitmq` may import
   `org.springframework.amqp` / `com.rabbitmq`. `ArchitectureTest`
   (ArchUnit) fails the build otherwise.
@@ -88,10 +94,17 @@ tolerant-reader lock-in), `DomainEventMessageConverterTest`,
 `/ws/info` stays-open canary for #67), `NotificationControllerTest`
 (REST contract: order, paging 400s, ownership 404s, idempotent
 writes), `StompPushIntegrationTest` (real STOMP session,
-random port, no Docker), `RequestEventsRabbitMqIntegrationTest`
+random port, Testcontainers RabbitMQ for the push fanout — auto-skips
+without Docker), `NotificationFlywayMigrationTest` (Testcontainers
+Postgres: V1 applies, a ddl-auto database baselines),
+`RabbitMqUserPushFanoutTest` / `LocalUserPushDeliveryTest` /
+`NotificationPushListenerTest` (the D35 fanout halves),
+`RequestEventsRabbitMqIntegrationTest`
 (Testcontainers — auto-skips without Docker), `ArchitectureTest`
 (D11 boundary).
 
-Schema is JPA-managed (`ddl-auto: update`) — it never drops columns;
-stale dev volumes need the reset in the
-[README's Troubleshooting section](README.md#troubleshooting).
+Flyway owns the schema (`src/main/resources/db/migration`, D36, #305);
+Hibernate only validates it. Add a new migration, never edit an applied
+one. A volume built by the old `ddl-auto: update` is baselined as V1 on
+first start, so no reset is needed for the schema; broker-volume resets
+are in the [README's Troubleshooting section](README.md#troubleshooting).
