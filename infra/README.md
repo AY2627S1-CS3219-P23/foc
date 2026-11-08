@@ -22,8 +22,8 @@
 # infra: cloud deployment runbook
 
 Design and decisions: [`docs/deployment.md`](../docs/deployment.md).
-An EKS cluster (two t3a.medium Spot nodes plus one on-demand node in
-private subnets, a NAT instance for egress), one RDS PostgreSQL instance
+An EKS cluster (two t3a.medium Spot nodes across three zones plus one
+on-demand node in zone a, all in private subnets, a NAT instance for egress), one RDS PostgreSQL instance
 with the seven service databases, RabbitMQ and Redis on the on-demand
 node with EBS volumes, behind a load balancer that serves
 `https://foc23.ddnsfree.com`.
@@ -41,7 +41,7 @@ flowchart TD
 | Path | What |
 | --- | --- |
 | `terraform/bootstrap/` | S3 state bucket (local state, applied once) |
-| `terraform/` | network (`network.tf`: two public + two private subnets), NAT instance (`nat.tf`), EKS cluster, the Spot and on-demand node groups, add-ons and the deploy role's access entry (`eks.tf`), RDS (`rds.tf`), ACM certificate + Application Load Balancer (`tls.tf`), GitHub OIDC deploy role (`iam.tf`), Secrets Manager (`secrets.tf`) |
+| `terraform/` | network (`network.tf`: two public + three private subnets), NAT instance (`nat.tf`), EKS cluster, the Spot and on-demand node groups, add-ons and the deploy role's access entry (`eks.tf`), RDS (`rds.tf`), ACM certificate + Application Load Balancer (`tls.tf`), GitHub OIDC deploy role (`iam.tf`), Secrets Manager (`secrets.tf`) |
 | `k8s/` | kustomization applied by the Deploy job: gp3 StorageClass, RabbitMQ and Redis StatefulSets, app Deployments, Traefik Ingress, HPAs; `data/db-init.yaml` is the Job that creates the seven database roles |
 | `k8s/secrets.sh` | copies `foc/app` and `foc/ghcr` from Secrets Manager into the k8s Secrets `foc-secrets`, `foc-db-admin` (the RDS master credentials, mounted by db-init only) and `ghcr-pull` (every deploy, from the Deploy job) |
 | `k8s/deploy.sh` | run by the Deploy workflow: kubeconfig, Traefik chart, secrets, db-init, apply, rollouts |

@@ -29,8 +29,9 @@
   recorded as an option considered, by Leong Wei Zhi's choice. Then, on
   request, both node groups moved to t3a.medium (facts given on the
   t3/t3a/t2 medium types), and the Spot group's headroom slot (maximum 3)
-  was removed: it is fixed at node_count. Author review: Leong Wei Zhi,
-  pending pull request review.
+  was removed: it is fixed at node_count. Then the Spot group gained a
+  third zone (facts given: pools, cross-zone traffic, rebalancing).
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # Cloud deployment (N5, issue #48)
@@ -57,8 +58,8 @@ flowchart LR
       alb
       nat["NAT instance<br/>t4g.nano, Elastic IP"]
     end
-    subgraph priv["private subnets (2 zones)"]
-      subgraph eks["EKS: t3a.medium Spot x2 (two zones) + t3a.medium on-demand x1 (zone a)"]
+    subgraph priv["private subnets (3 zones; RDS and the on-demand node in a and b / a)"]
+      subgraph eks["EKS: t3a.medium Spot x2 (three zones) + t3a.medium on-demand x1 (zone a)"]
         traefik["Traefik<br/>NodePort 30080"] -->|"/api"| gateway
         traefik -->|"/"| web["web (nginx SPA)"]
         gateway --> svc["7 backend Deployments<br/>(HPA 1 to 2)"]
@@ -98,8 +99,8 @@ on 2026-11-09). The AI tool presented facts and prices only.
 | --- | --- | --- |
 | DP1 | Account, region | NUS Innovation Sandbox account, `ap-southeast-1` (its SCPs allow writes there and in `us-east-1` only) |
 | DP2 | Platform | **Amazon EKS**, Kubernetes 1.37, authentication by access entries (`API` mode); vpc-cni, kube-proxy and CoreDNS as EKS installs them; add-ons: metrics-server, EBS CSI driver, Pod Identity agent |
-| DP3 | Nodes | Two managed node groups of **t3a.medium** (AMD; same 2 vCPU / 4 GB shape as t3.medium, chosen 2026-11-09 for its lower on-demand rate): **Spot, exactly 2** (minimum, desired and maximum; the earlier headroom slot for a third node was removed on 2026-11-09) across two zones, and **one on-demand node in zone a** labelled `foc.dev/pool: stable`, which RabbitMQ and Redis select and application pods may also use (not tainted). x86, since the images are built for `linux/amd64`; IMDS hop limit 1 so pods cannot use the node role. The on-demand node was added on 2026-11-09 after review: the EBS volumes are zone-bound, and a Spot replacement in the other zone would have left the broker or Redis `Pending` |
-| DP4 | Network and data stores | Nodes and the database in **private subnets** (two zones); egress through a **NAT instance** (fck-nat on an on-demand `t4g.nano`, one Elastic IP). **One RDS PostgreSQL 17 `db.t4g.micro`** with the seven service databases. RabbitMQ and Redis (AOF, G7 unchanged) stay StatefulSets on **EBS gp3** volumes, on the on-demand node (DP3) |
+| DP3 | Nodes | Two managed node groups of **t3a.medium** (AMD; same 2 vCPU / 4 GB shape as t3.medium, chosen 2026-11-09 for its lower on-demand rate): **Spot, exactly 2** (minimum, desired and maximum; the earlier headroom slot for a third node was removed on 2026-11-09) across **three zones** (a, b, c: three Spot capacity pools, chosen 2026-11-09 over the two zones the load balancer needed), and **one on-demand node in zone a** labelled `foc.dev/pool: stable`, which RabbitMQ and Redis select and application pods may also use (not tainted). x86, since the images are built for `linux/amd64`; IMDS hop limit 1 so pods cannot use the node role. The on-demand node was added on 2026-11-09 after review: the EBS volumes are zone-bound, and a Spot replacement in the other zone would have left the broker or Redis `Pending` |
+| DP4 | Network and data stores | Nodes and the database in **private subnets** (zones a and b; a zone-c subnet for the Spot group only); egress through a **NAT instance** (fck-nat on an on-demand `t4g.nano`, one Elastic IP). **One RDS PostgreSQL 17 `db.t4g.micro`** with the seven service databases. RabbitMQ and Redis (AOF, G7 unchanged) stay StatefulSets on **EBS gp3** volumes, on the on-demand node (DP3) |
 | DP5 | Public access | `https://foc23.ddnsfree.com` through the load balancer (DP17, DP18). No node has a public address; the cluster API endpoint is public for GitHub Actions and private for the nodes |
 | DP6 | IaC | Terraform, state in S3 (`use_lockfile`), a bootstrap stack for the bucket |
 | DP7 | Secrets | AWS Secrets Manager (`foc/app`, `foc/ghcr`); `secrets.sh` copies them into k8s Secrets **from the Deploy job**, with the deploy role, on every deploy. `foc/app` also carries the database address and the RDS master credentials; the script writes the master credentials to their own Secret (`foc-db-admin`), which only the db-init Job mounts |
@@ -323,23 +324,26 @@ The two application nodes are Spot capacity: AWS may reclaim one with a
 two-minute notice, and the hourly price floats with the market up to the
 on-demand rate ($0.0472/h for t3a.medium; $0.024/h was the sample of
 2026-11-09). Interruptions come per capacity pool (one instance type in
-one zone); the Spot node group spreads its two nodes over two zones, so
-they normally sit in two pools. The on-demand node (RabbitMQ, Redis and
+one zone); the Spot node group lists three zones, so its two nodes sit in
+two of three pools and a replacement can come from any of the three. The
+on-demand node (RabbitMQ, Redis and
 whatever apps the scheduler put there) is never reclaimed.
 
 | Event | What happens | Gap seen by users |
 | --- | --- | --- |
 | Rebalance recommendation (AWS warns that a pool is tightening) | the node group launches a replacement node first, then drains the old one once the new one is Ready (capacity rebalancing is on for managed node groups) | none beyond the pod restart below |
 | Interruption notice (two minutes) | EKS cordons and drains the node: its pods are evicted and recreated at once on any node with room; the instance terminates; the group, now below its minimum of 2, launches a replacement, which joins after about 2 to 3 minutes and takes the pods still `Pending` | chat, notification and whatever else was on that node restart elsewhere: 1 to 2 minutes until the JVMs pass their startup probe; open WebSockets drop and the browsers reconnect (DP14) |
-| Both Spot nodes reclaimed together (two pools tightening in the same hour) | the group launches two replacements as capacity allows; the evicted apps are recreated on the on-demand node as far as its memory allows (about 2.5 GB free), the rest wait, then pull their images through the NAT instance | services that fit on the on-demand node keep answering; the others return after about 5 to 10 minutes; RabbitMQ, Redis and RDS are untouched |
-| No Spot capacity for t3a.medium in either zone | the Spot group stays at zero nodes until capacity returns; AWS gives no bound | only what fits on the on-demand node runs, until capacity returns or `node_instance_type` is changed and applied |
+| Both Spot nodes reclaimed together (their two pools tightening in the same hour) | the group launches two replacements as capacity allows; the evicted apps are recreated on the on-demand node as far as its memory allows (about 2.5 GB free), the rest wait, then pull their images through the NAT instance | services that fit on the on-demand node keep answering; the others return after about 5 to 10 minutes; RabbitMQ, Redis and RDS are untouched |
+| No Spot capacity for t3a.medium in any of the three zones | the Spot group stays at zero nodes until capacity returns; AWS gives no bound | only what fits on the on-demand node runs, until capacity returns or `node_instance_type` is changed and applied |
 
 The interruption frequency for t3a.medium here is visible only in the
 console's Spot Instance Advisor, not from the CLI. Ways to widen the odds,
 none taken: several instance types in the node group (t3a.medium,
-t3.medium, t2.medium: more pools, no cost), a third zone with a third
-private subnet (no cost while two nodes run), or one on-demand node
-alongside the Spot ones (about $41 for 32 days).
+t3.medium, t2.medium: more pools, no cost). The third zone was taken
+(2026-11-09, on request: a third private subnet, no cost; pods in zone c
+reach the zone-a services over cross-zone traffic at $0.01/GB each way,
+as zone b already does; the group may occasionally move a node between
+zones to stay balanced). The on-demand node for the volumes is DP3.
 
 ## Behaviour at 2 replicas (DP10)
 

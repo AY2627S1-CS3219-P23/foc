@@ -32,6 +32,12 @@ variable "availability_zone_b" {
   default     = "ap-southeast-1b"
 }
 
+variable "availability_zone_c" {
+  description = "third zone, for the Spot node group only (a third Spot capacity pool; DP3, 2026-11-09)"
+  type        = string
+  default     = "ap-southeast-1c"
+}
+
 variable "domain_name" {
   description = "the site's hostname: the ACM certificate's name and the PUBLIC_HOST repo variable; its DNS records live at Dynu (DP17)"
   type        = string

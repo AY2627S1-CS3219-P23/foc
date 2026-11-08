@@ -9,8 +9,9 @@
 # subnet and the load balancer's security group. Author review: Leong Wei
 # Zhi, pending pull request review.
 # 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform, DP3 and
-# DP4): the k3s host's security group is gone; two private subnets for the
-# nodes and the database, routed to the NAT instance (nat.tf); the cluster
+# DP4): the k3s host's security group is gone; private subnets for the
+# nodes and the database (zones a and b, plus zone c for the Spot group),
+# routed to the NAT instance (nat.tf); the cluster
 # security group takes Traefik's NodePort from the load balancer only.
 # Author review: Leong Wei Zhi, pending pull request review.
 
@@ -80,6 +81,15 @@ resource "aws_subnet" "private_b" {
   tags              = { Name = "foc-private-b" }
 }
 
+# third zone for the Spot node group only (DP3): one more Spot capacity
+# pool. The on-demand node, its volumes and the NAT instance stay in zone a
+resource "aws_subnet" "private_c" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.20.13.0/24"
+  availability_zone = var.availability_zone_c
+  tags              = { Name = "foc-private-c" }
+}
+
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
   route {
@@ -96,6 +106,11 @@ resource "aws_route_table_association" "private" {
 
 resource "aws_route_table_association" "private_b" {
   subnet_id      = aws_subnet.private_b.id
+  route_table_id = aws_route_table.private.id
+}
+
+resource "aws_route_table_association" "private_c" {
+  subnet_id      = aws_subnet.private_c.id
   route_table_id = aws_route_table.private.id
 }
 

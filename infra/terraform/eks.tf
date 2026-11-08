@@ -2,8 +2,8 @@
 # Tool: Claude Code (Fable 5.1), 2026-11-09, issue #48 (EKS re-platform).
 # Scope: the EKS cluster and its Spot node group per the team's decisions
 # (Leong Wei Zhi, 2026-11-09, options Q&A, recorded in docs/deployment.md):
-# DP2 EKS, DP3 t3a.medium nodes (AMD; t3.medium until 2026-11-09) in the private subnets: two Spot in
-# two zones plus one on-demand in zone a that RabbitMQ and Redis select
+# DP2 EKS, DP3 t3a.medium nodes (AMD; t3.medium until 2026-11-09) in the private subnets: two Spot across
+# three zones plus one on-demand in zone a that RabbitMQ and Redis select
 # (PR #316 review, re-decided 2026-11-09; the Spot group is fixed at
 # node_count, no headroom slot), DP8 cluster-admin access entry for the GitHub deploy role, DP9
 # metrics-server for the HPAs, the EBS CSI driver for the RabbitMQ and
@@ -13,7 +13,10 @@
 # Author review: Leong Wei Zhi, pending pull request review.
 
 locals {
+  # cluster ENIs and the database subnet group: zones a and b
   private_subnet_ids = [aws_subnet.private.id, aws_subnet.private_b.id]
+  # the Spot node group draws from three zones (three capacity pools, DP3)
+  spot_subnet_ids = [aws_subnet.private.id, aws_subnet.private_b.id, aws_subnet.private_c.id]
   # Traefik's NodePort (infra/helm/traefik-values.yaml); the load balancer's
   # target group and the cluster security group rule use the same number
   traefik_node_port = 30080
@@ -122,7 +125,7 @@ resource "aws_eks_node_group" "main" {
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = "foc-spot"
   node_role_arn   = aws_iam_role.node.arn
-  subnet_ids      = local.private_subnet_ids
+  subnet_ids      = local.spot_subnet_ids
   capacity_type   = "SPOT"
   instance_types  = [var.node_instance_type]
   labels          = { "foc.dev/pool" = "spot" }
@@ -149,6 +152,7 @@ resource "aws_eks_node_group" "main" {
     aws_iam_role_policy_attachment.node,
     aws_route_table_association.private,
     aws_route_table_association.private_b,
+    aws_route_table_association.private_c,
     aws_instance.nat,
   ]
 }
