@@ -12,20 +12,22 @@
   row covers GitHub's immutable subject. Author review: Leong Wei Zhi,
   pending pull request review.
   2026-11-08, Claude Code (Fable 5.1), issue #48 (HTTPS): the certificate
-  and FreeDNS steps, https smoke test and troubleshooting rows (DP18 to
+  and DNS steps, https smoke test and troubleshooting rows (DP18 to
   DP21). Author review: Leong Wei Zhi, pending pull request review.
+  Same day: the DNS provider is Dynu (DP18 revised). Author review: Leong
+  Wei Zhi, pending pull request review.
 -->
 
 # infra: cloud deployment runbook
 
 Design and decisions: [`docs/deployment.md`](../docs/deployment.md).
 One EC2 Spot instance running k3s behind a load balancer that serves
-`https://foc23.mooo.com`; everything else runs in the cluster.
+`https://foc23.ddnsfree.com`; everything else runs in the cluster.
 
 ```mermaid
 flowchart TD
-  b["1. bootstrap<br/>state bucket"] --> c["2a. terraform apply -target<br/>certificate; validation CNAME at FreeDNS"]
-  c --> a["2b. terraform apply<br/>VPC, Spot host, IAM, secrets, ALB; site CNAME at FreeDNS"]
+  b["1. bootstrap<br/>state bucket"] --> c["2a. terraform apply -target<br/>certificate; validation CNAME at Dynu"]
+  c --> a["2b. terraform apply<br/>VPC, Spot host, IAM, secrets, ALB; site CNAME at Dynu"]
   a --> v["3. repo variables<br/>from terraform output"]
   v --> d["4. Actions: Deploy<br/>(main)"]
   d --> s["5. smoke test"]
@@ -46,9 +48,11 @@ flowchart TD
 - **Tools:** Terraform 1.10 or newer, AWS CLI v2, the Session Manager plugin.
 - **Credentials:** `export AWS_PROFILE=nusisb_IsbUsersPS-555552813604`, then `aws sso login`.
 - **Team values:** a Gmail app password and a GHCR token with `read:packages`, for `secrets.auto.tfvars`.
-- **DNS:** a FreeDNS account (freedns.afraid.org) holding the hostname in
-  the `domain_name` variable (`foc23.mooo.com`) under **Subdomains**. Two
-  records are added there by hand during step 2; Terraform prints both.
+- **DNS:** a Dynu account (dynu.com) holding the hostname in the
+  `domain_name` variable (`foc23.ddnsfree.com`) under **DDNS Services**. Two
+  CNAME records are added there by hand during step 2; Terraform prints
+  both. (FreeDNS was tried first and refuses CNAME records on its shared
+  domains.)
 
 ## 1 and 2a. Bootstrap and certificate
 
@@ -61,13 +65,15 @@ terraform output acm_validation_record
 ```
 
 The output holds one record per certificate name (today just
-`foc23.mooo.com`). In FreeDNS, **Subdomains, Add**: type `CNAME`,
-subdomain = its `name` without the trailing `.mooo.com`, domain
-`mooo.com`, destination = its `value` without the trailing dot. ACM issues
-the certificate within minutes of the record resolving:
+`foc23.ddnsfree.com`). In Dynu, **DDNS Services**, the hostname, **DNS
+Records**, add one: type `CNAME`, node name = its `name` with the
+trailing `.foc23.ddnsfree.com.` removed, trailing dot included (the part
+starting with `_`), host name = its `value` without the trailing dot. ACM
+issues the certificate
+within minutes of the record resolving:
 
 ```sh
-aws acm list-certificates --query 'CertificateSummaryList[?DomainName==`foc23.mooo.com`].Status'
+aws acm list-certificates --query 'CertificateSummaryList[?DomainName==`foc23.ddnsfree.com`].Status'
 # ISSUED
 ```
 
@@ -80,9 +86,10 @@ terraform output -raw owner_setup_token
 ```
 
 The apply waits for the certificate if it is still pending (up to 60
-min), then creates the load balancer. In FreeDNS, change the `foc23`
-record to type `CNAME` with destination `alb_dns_name` (a CNAME cannot
-sit next to an A record of the same name). From this apply on, the host
+min), then creates the load balancer. In Dynu, make `foc23.ddnsfree.com` itself
+a `CNAME` to `alb_dns_name`: remove the hostname's IPv4 address first (a
+CNAME cannot sit next to an A record of the same name), then add a CNAME
+record with an empty node name. From this apply on, the host
 answers the load balancer only: nothing listens on its own public
 address.
 
@@ -187,9 +194,9 @@ of the ConfigMap, and the image tag carries the workflow run id.
 
 | Symptom | Check | Usual cause, fix |
 | --- | --- | --- |
-| `https://<public_host>` times out or the name does not resolve | `dig CNAME <public_host>` | the FreeDNS `foc23` record is missing, still type `A`, or not yet pushed to FreeDNS's name servers (minutes) |
+| `https://<public_host>` times out or the name does not resolve | `dig CNAME <public_host>` | the `foc23.ddnsfree.com` record is missing, still an `A` record, or not yet pushed to Dynu's name servers (minutes) |
 | Browser shows a certificate warning | the URL | the load balancer's own `*.elb.amazonaws.com` name was opened; the certificate covers `<public_host>` only. Expected |
-| Certificate stays `PENDING_VALIDATION` | `aws acm list-certificates`, `dig CNAME <name from acm_validation_record>` | the validation CNAME is missing, mistyped, or FreeDNS did not accept the underscore name (then the domain decision DP18 must be revisited); ACM gives up after 72 h |
+| Certificate stays `PENDING_VALIDATION` | `aws acm list-certificates`, `dig CNAME <name from acm_validation_record>` | the validation CNAME is missing, mistyped, or Dynu did not accept the underscore name (then the domain decision DP18 must be revisited again); ACM gives up after 72 h |
 | 503 from the load balancer | `aws elbv2 describe-target-health`, EC2 console: instance state | the target is unhealthy: Spot stopped the host (wait; it comes back and re-registers by instance id), still booting (`cloud-init status`), or Traefik/web not ready yet |
 | Deploy job: `Not authorized to perform sts:AssumeRoleWithWebIdentity` | run from `main`? `gh api repos/AY2627S1-CS3219-P23/foc/actions/oidc/customization/sub` | the role trusts `refs/heads/main` only, and only GitHub's immutable subject form (`repo:<owner>@<id>/<name>@<id>`): `use_immutable_subject` must be `true`. If the org or repo was renamed or transferred, update `github_repo` (the ids stay the same) and apply |
 | Deploy job: `InvalidInstanceId` | instance running, SSM agent online | stopped by Spot, or the agent not registered yet after boot |
@@ -212,5 +219,5 @@ aws resourcegroupstaggingapi get-resources --tag-filters Key=project,Values=foc 
 Nothing is kept. The secrets are deleted without a recovery window, the
 volumes go with the instance, and the bucket is force-destroyed. GHCR
 images outlive the AWS account; delete them under the org's **Packages**
-tab if wanted. The two FreeDNS records are not Terraform's: delete them
-in **Subdomains** by hand.
+tab if wanted. The two Dynu records are not Terraform's: delete them in
+**DNS Records** by hand.

@@ -3,12 +3,13 @@
 # Scope: the ACM certificate for the site's hostname and the Application
 # Load Balancer that terminates TLS in front of the k3s host (team
 # decisions DP18 to DP20, Leong Wei Zhi, 2026-11-08, options Q&A, recorded
-# in docs/deployment.md). DNS lives at FreeDNS, outside Terraform: the
+# in docs/deployment.md). DNS lives at Dynu, outside Terraform: the
 # validation CNAME and the site CNAME are added by hand from the outputs.
 # Author review: Leong Wei Zhi, pending pull request review.
 # PR #310 review (Copilot): the validation resource names the record FQDNs
 # it expects, taken from the certificate itself. Second comment (Claude
-# reviewer): the balancer's idle timeout sits below Traefik's.
+# reviewer): the balancer's idle timeout sits below Traefik's. Same day:
+# the DNS provider is Dynu (DP18 revised).
 
 # --- certificate -----------------------------------------------------------
 
@@ -24,7 +25,7 @@ resource "aws_acm_certificate" "site" {
 }
 
 # Waits until ACM has seen the validation CNAME (output acm_validation_record)
-# at FreeDNS and issued the certificate. The record is not managed here, so
+# at Dynu and issued the certificate. The record is not managed here, so
 # the expected FQDNs come from the certificate's own validation options.
 # The runbook requests the certificate alone first (-target), so the CNAME
 # exists before this resource starts waiting.

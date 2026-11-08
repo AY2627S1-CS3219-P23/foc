@@ -1539,7 +1539,8 @@ diagnosed the rollout's OIDC refusal (GitHub's immutable subject claim)
 and switched the deploy role's trust to it (the plain form dropped on
 review, by team decision). Later that day it put the site behind an
 Application Load Balancer with an AWS Certificate Manager certificate for
-`foc23.mooo.com` (DP18 to DP21): the domain source, the TLS endpoint, the
+`foc23.ddnsfree.com` (DP18 to DP21; first `foc23.mooo.com` on FreeDNS, moved to
+Dynu the same day when FreeDNS refused CNAME records): the domain source, the TLS endpoint, the
 port-80 redirect, the host's exposure and the pipeline variable were
 Leong Wei Zhi's choices from neutral options rounds; the tool wrote the
 Terraform, flipped the four baked origins to https and extended the two
