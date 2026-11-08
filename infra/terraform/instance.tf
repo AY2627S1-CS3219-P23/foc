@@ -3,14 +3,17 @@
 # Scope: the single k3s host per the team's decisions (Leong Wei Zhi,
 # 2026-11-05, options Q&A, recorded in docs/deployment.md): EC2
 # t3.xlarge Spot, persistent request that STOPS on interruption (the disk
-# and cluster data survive), Elastic IP for a stable URL (the web bundle
-# has it baked in).
+# and cluster data survive).
 # Author review: Leong Wei Zhi, pending pull request review.
 # 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7): IMDS hop limit 1
 # (PR #289 review: with 2, any pod could use the instance role) and no
 # External Secrets chart in cloud-init. Author review: Leong Wei Zhi,
 # pending pull request review. Second round (Sinnez1): the host waits for
 # the secret values and the read policy.
+# 2026-11-08, Claude Code (Fable 5.1), issue #48 (HTTPS): the Elastic IP is
+# gone (DP20): inbound traffic comes through the load balancer in tls.tf,
+# and the auto-assigned public address serves egress and SSM only.
+# Author review: Leong Wei Zhi, pending pull request review.
 
 data "aws_ssm_parameter" "al2023" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
@@ -22,8 +25,9 @@ resource "aws_instance" "host" {
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.host.id]
   iam_instance_profile   = aws_iam_instance_profile.host.name
-  # cloud-init downloads k3s before the Elastic IP is associated; the EIP
-  # replaces this address once attached
+  # egress (k3s install, image pulls, SSM) only: nothing public listens on
+  # this address, the load balancer is the way in (DP20). It changes when
+  # Spot stops and restarts the host; the balancer targets the instance id
   associate_public_ip_address = true
 
   instance_market_options {
@@ -72,14 +76,4 @@ resource "aws_instance" "host" {
     aws_secretsmanager_secret_version.ghcr,
     aws_iam_role_policy.host_secrets,
   ]
-}
-
-resource "aws_eip" "host" {
-  domain = "vpc"
-  tags   = { Name = "foc" }
-}
-
-resource "aws_eip_association" "host" {
-  instance_id   = aws_instance.host.id
-  allocation_id = aws_eip.host.id
 }

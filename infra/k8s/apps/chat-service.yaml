@@ -11,10 +11,12 @@
 # second round (Sinnez1): the foc-config hash too.
 # Author review: Leong Wei Zhi, pending pull request review.
 # Same day, review follow-up: replicas pinned to 1 (DP10, issue #305).
+# Same day, issue #48 (HTTPS): the WebSocket origin is https (DP19, DP21).
 # 2026-11-08, Claude Code (Fable 5.1), issue #305 (team decision, Leong Wei
 # Zhi via options Q&A): the pin removed — pushes fan out over AMQP, so the
 # HPA scales this Deployment like the others (DP9/DP10). PR #306 Copilot
 # review: RABBITMQ_PASSWORD from foc-secrets, which the first cut missed.
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1
 kind: Service
@@ -85,7 +87,7 @@ spec:
                   name: foc-secrets
                   key: RABBITMQ_PASSWORD
             - name: CHAT_WS_ALLOWED_ORIGINS
-              value: "http://__PUBLIC_HOST__"
+              value: "https://__PUBLIC_HOST__"
             - name: CHAT_INTERNAL_TOKEN
               valueFrom:
                 secretKeyRef:
