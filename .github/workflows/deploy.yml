@@ -14,10 +14,14 @@
 # InvocationDoesNotExist fails the job at once. Second round (Sinnez1):
 # image tags carry the run id, and the poll keeps stderr apart from the
 # status.
+# 2026-11-08, Claude Code (Fable 5.1), issue #48 (HTTPS): the web bundle's
+# URLs are https; PUBLIC_HOST is the site's hostname (DP18, DP21). Author
+# review: Leong Wei Zhi, pending pull request review.
 #
 # Manual trigger only, from main (the OIDC role trusts main alone). Needs
 # the repo variables AWS_ROLE_ARN, AWS_REGION, INSTANCE_ID and PUBLIC_HOST
-# from `terraform output`.
+# (the hostname, served over https by the load balancer) from
+# `terraform output`.
 name: Deploy
 
 on:
@@ -80,7 +84,7 @@ jobs:
               {
                 echo "build_args<<EOF"
                 for svc in user supplier order credit notification rating chat; do
-                  echo "VITE_$(echo "$svc" | tr a-z A-Z)_SERVICE_URL=http://$PUBLIC_HOST/api/$svc"
+                  echo "VITE_$(echo "$svc" | tr a-z A-Z)_SERVICE_URL=https://$PUBLIC_HOST/api/$svc"
                 done
                 echo "EOF"
               } >> "$GITHUB_OUTPUT"
