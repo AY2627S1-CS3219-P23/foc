@@ -4,7 +4,7 @@
 # compose: supplier on postgres:16, the rest on postgres:17), local-path
 # volumes; Services keep compose's hostnames (user-db, ...).
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
-# docs/architecture.md); values mirror compose.yaml's defaults.
+# docs/deployment.md); values mirror compose.yaml's defaults.
 # Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1

@@ -1,11 +1,15 @@
 # AI-assisted (CS3219 AI Usage Policy disclosure):
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
 # Scope: the single k3s host per the team's decisions (Leong Wei Zhi,
-# 2026-11-05, options Q&A, recorded in docs/architecture.md): EC2
+# 2026-11-05, options Q&A, recorded in docs/deployment.md): EC2
 # t3.xlarge Spot, persistent request that STOPS on interruption (the disk
 # and cluster data survive), Elastic IP for a stable URL (the web bundle
 # has it baked in).
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP20): IMDS hop limit 1
+# (PR #289 review: with 2, any pod could use the instance role) and no
+# External Secrets chart in cloud-init. Author review: Leong Wei Zhi,
+# pending pull request review.
 
 data "aws_ssm_parameter" "al2023" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
@@ -36,8 +40,9 @@ resource "aws_instance" "host" {
 
   metadata_options {
     http_tokens = "required"
-    # pods (External Secrets Operator) sit one hop behind the node
-    http_put_response_hop_limit = 2
+    # host processes only: pods sit one hop behind the node and must not
+    # reach the instance role (DP20; secrets.sh runs on the host)
+    http_put_response_hop_limit = 1
   }
 
   root_block_device {
@@ -48,9 +53,8 @@ resource "aws_instance" "host" {
   }
 
   user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
-    k3s_version                    = var.k3s_version
-    external_secrets_chart_version = var.external_secrets_chart_version
-    repo_url                       = "https://github.com/${var.github_repo}.git"
+    k3s_version = var.k3s_version
+    repo_url    = "https://github.com/${var.github_repo}.git"
   })
 
   # a new AMI or cloud-init must not replace a running host mid-demo

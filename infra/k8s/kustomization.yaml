@@ -2,16 +2,18 @@
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
 # Scope: the kustomization deploy.sh applies (kubectl apply -k).
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
-# docs/architecture.md); values mirror compose.yaml's defaults.
+# docs/deployment.md); values mirror compose.yaml's defaults.
+# Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP20): secrets.yaml
+# (External Secrets Operator) removed; secrets.sh writes the two Secrets.
 # Author review: Leong Wei Zhi, pending pull request review.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# namespaces are set per manifest: a kustomize-wide namespace would
-# also be stamped onto the cluster-scoped ClusterSecretStore
+# namespaces are set per manifest; secrets.sh applies namespace.yaml on
+# its own first, so the Secrets it writes have somewhere to go
 resources:
   - namespace.yaml
   - config.yaml
-  - secrets.yaml
   - data/postgres.yaml
   - data/rabbitmq.yaml
   - data/redis.yaml

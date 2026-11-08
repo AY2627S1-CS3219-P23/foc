@@ -41,6 +41,8 @@
   web/AGENTS.md (#284's 2026-11-01 entry, then #258's 2026-11-02 one).
   This log merged cleanly — main's #258 entries append at the bottom,
   the #284 ones sit at the top. Nothing reworded or removed.
+  2026-11-08, Claude Code (Fable 5.1): prepended the issue #48 simplified
+  deployment (DP14 to DP20) entry below.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -60,6 +62,14 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-08 — Leong Wei Zhi (N5 cloud deployment, issue #48: simplified re-plan, DP14 to DP20)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** generate, refactor, docs
+- **Scope:** the seven-PR stack (#289 to #297) was closed on 2026-11-07. This branch rebuilds the infra half from #289's two commits (`infra/`, the gateway resolver + `UPSTREAM_SUFFIX` change, `deploy.yml`, the order-independent credit-service tests) and applies DP20: `infra/k8s/secrets.yaml` and the External Secrets Operator chart in `cloud-init` removed; new `infra/k8s/secrets.sh` (the host copies `foc/app` and `foc/ghcr` into the `foc-secrets` and `ghcr-pull` Secrets); `deploy.sh` runs it and restarts the Deployments when the values changed; `instance.tf` IMDS hop limit 1; `variables.tf`, `iam.tf`, `secrets.tf`, `kustomization.yaml` headers. `deploy.yml`: the host checks out the commit before `deploy.sh` runs, and the poll covers the 60 min timeout (both #289 review findings). `docs/deployment.md` rewritten (DP1 to DP20, options-considered tables, scaling, behaviour at 2 replicas); `infra/README.md` rewritten as the short runbook (DP18); 21 infra headers now point at `docs/deployment.md`. The five backend hardening PRs are not carried (DP15); the demo-names change is its own branch (DP17).
+- **Prompt(s):** "Previously, there were PR 289, 290, 291, 292, 294, 297 opened to for deployment. However, I have since dropped it as it was too complicated to be pushed. Create a plan to simplify the deployment plan and add human readable documentation with trade offs considered. I would like the deployment of the microservices to be simple but scalable." The tool did not choose or justify a design (AI policy) and ran three neutral options rounds instead: runtime, provisioning, secrets, deploy path; hardening, PR split, demo names, reasons; docs shape, PR numbers, the IMDS finding. Leong Wei Zhi chose DP14 to DP20 and chose to record the alternatives as factual comparisons without reasons.
+- **Author review:** `terraform fmt -check` and `validate` for both stacks (hashicorp/terraform:1.13.4 image), `kubectl kustomize infra/k8s` renders 48 objects, `secrets.sh` exercised against a stub `aws` with the real `kubectl --dry-run=client`, the gateway image rebuilt under compose and its health route curled, credit-service `./mvnw verify` in reverse-alphabetical order (results in the PR); Leong Wei Zhi reviews via pull request.
 
 ---
 ## 2026-11-06 — Leong Wei Zhi (credit-service tests: order-independent common-pool cases, PR #289 CI)

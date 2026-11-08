@@ -4,7 +4,7 @@
 # k3s ships metrics-server). Two replicas rely on the multi-replica
 # backend changes (ShedLock, STOMP fanout, ...) of the issue #48 stack.
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
-# docs/architecture.md); values mirror compose.yaml's defaults.
+# docs/deployment.md); values mirror compose.yaml's defaults.
 # Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: autoscaling/v2

@@ -2,9 +2,13 @@
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
 # Scope: IAM for the team's decisions (Leong Wei Zhi, 2026-11-05, options
 # Q&A): the instance role (SSM for shell + deploys, Secrets Manager reads
-# for External Secrets Operator), and the GitHub Actions OIDC role that
+# for the host's secrets.sh), and the GitHub Actions OIDC role that
 # may only run commands on this instance through SSM.
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP20): the Secrets
+# Manager reader is the host's secrets.sh, not External Secrets Operator;
+# the policies are unchanged. Author review: Leong Wei Zhi, pending pull
+# request review.
 
 data "aws_caller_identity" "current" {}
 
@@ -27,8 +31,8 @@ resource "aws_iam_role_policy_attachment" "host_ssm" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
-# External Secrets Operator runs on the node and uses these credentials
-# through IMDS (hop limit 2 in instance.tf)
+# secrets.sh and deploy.sh run on the host and read foc/* through IMDS;
+# pods cannot (hop limit 1 in instance.tf, DP20)
 resource "aws_iam_role_policy" "host_secrets" {
   name = "read-foc-secrets"
   role = aws_iam_role.host.id

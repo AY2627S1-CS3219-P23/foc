@@ -13,6 +13,9 @@
   #258, the new docs/rating-service.md + .mmd and the doc updates it
   touches).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1), issue #48 (DP14 to DP20): the cloud
+  deployment paragraph extended for the simplified re-plan. Author review:
+  Leong Wei Zhi, pending pull request review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
   public profile's joined date and deliveries-completed count (issue
   #280), and the #257 paragraph's deviation sentence updated to point
@@ -1498,14 +1501,22 @@ pattern, with its Maven test dependencies. The tool compared the H2 and
 Testcontainers options as facts and the author chose Testcontainers; the
 NFR bounds are the team's. Recorded in `ai/usage-log.md`.
 
-Claude Code (Opus 5.5) wrote the N5 cloud deployment (issue #48): the
-`infra/` Terraform and Kubernetes manifests, the Deploy workflow, the
-gateway's resolver/upstream-suffix change and `docs/deployment.md`. The
-tool asked the deployment decisions as neutral options rounds and priced
-the options from AWS's public price files; the platform, sizing,
-data-store, secrets, rollout and lifetime choices (DP1–DP13) were Leong
-Wei Zhi's, including replacing a first EKS design with the single Spot +
-k3s host to fit the team's $50 budget. Recorded in `ai/usage-log.md`.
+Claude Code (Opus 5.5, 2026-11-05) wrote the N5 cloud deployment (issue
+#48): the `infra/` Terraform and Kubernetes manifests, the Deploy
+workflow, the gateway's resolver/upstream-suffix change and
+`docs/deployment.md`. The tool asked the deployment decisions as neutral
+options rounds and priced the options from AWS's public price files; the
+platform, sizing, data-store, secrets, rollout and lifetime choices
+(DP1–DP13) were Leong Wei Zhi's, including replacing a first EKS design
+with the single Spot + k3s host to fit the team's $50 budget. On
+2026-11-08, after the seven-PR stack was closed, Claude Code (Fable 5.1)
+ran three more options rounds; Leong Wei Zhi kept the infra design,
+dropped the five backend multi-replica PRs, chose fresh PRs, a decision
+page plus a short runbook, and the host-side secrets copy with IMDS hop
+limit 1 (DP14–DP20), and chose to record the alternatives as facts
+without reasons. The tool then rebuilt the branch, removed External
+Secrets Operator, fixed the two review findings in the Deploy workflow
+and rewrote the two documents. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
