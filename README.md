@@ -32,8 +32,9 @@
   for the owner upgrade from the profile page. Author review: Leong Wei
   Zhi, pending pull request review.
   2026-11-09, Claude Code (Opus 5.5): AI Use Summary extended for the
-  notification sound preview. Author review: Leong Wei Zhi, pending pull
-  request review.
+  notification sound preview; PR #314 review (Copilot): its sentence
+  reworded so the subject reads singular. Author review: Leong Wei Zhi,
+  pending pull request review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
   public profile's joined date and deliveries-completed count (issue
   #280), and the #257 paragraph's deviation sentence updated to point
@@ -1575,8 +1576,8 @@ neutral options rounds; the tool implemented them. Recorded in
 
 Claude Code (Opus 5.5, 2026-11-09) made switching the notification sound
 on preview the chime once, from the Notification Center header and the
-profile's Preferences switch alike, plus tests. Both surfaces was Leong
-Wei Zhi's choice via a neutral options question. Recorded in
+profile's Preferences switch alike, plus tests. Covering both surfaces
+was Leong Wei Zhi's choice via a neutral options question. Recorded in
 `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
