@@ -22,6 +22,9 @@
   2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7, DP10): the cloud
   deployment paragraph extended for the simplified re-plan. Author review:
   Leong Wei Zhi, pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1), issue #48 (DP18 to DP21): the cloud
+  deployment paragraph extended for HTTPS. Author review: Leong Wei Zhi,
+  pending pull request review.
   2026-11-08, Claude Code (Fable 5.1): AI Use Summary extended for the
   admin-test flake fix. Author review: Leong Wei Zhi, pending pull request
   review.
@@ -1534,7 +1537,17 @@ limit 1 (DP7 and DP10 re-decided), and chose to record the alternatives
 as facts without reasons. The tool then rebuilt the branch, removed
 External Secrets Operator, fixed the two review findings in the Deploy
 workflow and rewrote the two documents; `docs/deployment.md` carries no
-PR history, by request. Recorded in `ai/usage-log.md`.
+PR history, by request. On the first cloud deploy the same day, it
+diagnosed the rollout's OIDC refusal (GitHub's immutable subject claim)
+and switched the deploy role's trust to it (the plain form dropped on
+review, by team decision). Later that day it put the site behind an
+Application Load Balancer with an AWS Certificate Manager certificate for
+`foc23.ddnsfree.com` (DP18 to DP21; first `foc23.mooo.com` on FreeDNS, moved to
+Dynu the same day when FreeDNS refused CNAME records): the domain source, the TLS endpoint, the
+port-80 redirect, the host's exposure and the pipeline variable were
+Leong Wei Zhi's choices from neutral options rounds; the tool wrote the
+Terraform, flipped the four baked origins to https and extended the two
+documents. Recorded in `ai/usage-log.md`.
 
 2026-11-08: Claude Code (Fable 5.1) made the Admin Dashboard tests wait for a
 section's first load to settle before asserting on it, after one case

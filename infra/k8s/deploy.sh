@@ -13,8 +13,14 @@
 # review. Second round (Sinnez1): the caller checks out the commit, the
 # image tag is an argument, the ConfigMap hash rolls the pods too, and
 # every rollout shares one deadline.
+# 2026-11-08, Claude Code (Fable 5.1), issue #48 (HTTPS): the public host
+# is the site's hostname behind the load balancer, no longer the Elastic
+# IP (DP18, DP20); no logic change. Author review: Leong Wei Zhi, pending
+# pull request review.
 #
 # Usage (as root on the host): deploy.sh <image-tag> <public-host>
+# <public-host> is the hostname the load balancer serves over https; the
+# manifests prefix it with https:// themselves.
 # The caller (the Deploy workflow's SSM command) has already checked out
 # the commit in /opt/foc. Refreshes the Secrets from Secrets Manager
 # (secrets.sh), fills the image tag, public host, Secret version and
@@ -23,7 +29,7 @@
 set -euo pipefail
 
 image_tag="${1:?image tag}"
-public_host="${2:?public host (Elastic IP)}"
+public_host="${2:?public host (hostname)}"
 repo=/opt/foc
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
