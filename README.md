@@ -19,6 +19,9 @@
   2026-11-08, Claude Code (Fable 5.1), issue #48 (DP17): the DP11 paragraph
   notes this change ships as its own PR off main. Author review: Leong Wei
   Zhi, pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7, DP10): the cloud
+  deployment paragraph extended for the simplified re-plan. Author review:
+  Leong Wei Zhi, pending pull request review.
   2026-11-08, Claude Code (Fable 5.1): AI Use Summary extended for the
   admin-test flake fix. Author review: Leong Wei Zhi, pending pull request
   review.
@@ -1515,6 +1518,24 @@ accounts. Realistic names everywhere was Leong Wei Zhi's decision; the
 tool picked the names and wrote the change. First opened as PR #295 on
 the closed issue-#48 stack, it ships as its own PR off `main` (DP17,
 2026-11-08). Recorded in `ai/usage-log.md`.
+Claude Code (Opus 5.5, 2026-11-05) wrote the N5 cloud deployment (issue
+#48): the `infra/` Terraform and Kubernetes manifests, the Deploy
+workflow, the gateway's resolver/upstream-suffix change and
+`docs/deployment.md`. The tool asked the deployment decisions as neutral
+options rounds and priced the options from AWS's public price files; the
+platform, sizing, data-store, secrets, rollout and lifetime choices
+(DP1–DP13) were Leong Wei Zhi's, including replacing a first EKS design
+with the single Spot + k3s host to fit the team's $50 budget. On
+2026-11-08, after the seven-PR stack was closed, Claude Code (Fable 5.1)
+ran three more options rounds; Leong Wei Zhi kept the infra design,
+dropped the five backend multi-replica PRs, chose fresh PRs, a decision
+page plus a short runbook, and the host-side secrets copy with IMDS hop
+limit 1 (DP7 and DP10 re-decided), and chose to record the alternatives
+as facts without reasons. The tool then rebuilt the branch, removed
+External Secrets Operator, fixed the two review findings in the Deploy
+workflow and rewrote the two documents; `docs/deployment.md` carries no
+PR history, by request. Recorded in `ai/usage-log.md`.
+
 2026-11-08: Claude Code (Fable 5.1) made the Admin Dashboard tests wait for a
 section's first load to settle before asserting on it, after one case
 flaked in CI on an unrelated branch. Test-only. Recorded in

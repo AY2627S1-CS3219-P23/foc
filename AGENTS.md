@@ -40,6 +40,11 @@
   service list corrected — it had not kept up with order-service and
   rating-service joining the cutover. Transcription only.
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-05, Claude Code (Opus 5.5), issue #48: infra/ recorded as the
+  second non-service folder and the cloud deployment noted under Tech
+  Stack (team decisions, Leong Wei Zhi via options Q&A,
+  docs/deployment.md). Transcription only. Author review: Leong Wei Zhi,
+  pending pull request review.
   All decisions documented here were made by the team.
   Reviewed by: Leong Wei Zhi (via pull request).
 -->
@@ -60,7 +65,9 @@ credit economy (credits cannot be bought or cashed out).
   service's wrapper (`./mvnw` / `./gradlew`); there is no shared root
   build
 - **Deployment:** Docker per service (`Dockerfile` in each service folder),
-  orchestrated via root `compose.yaml`
+  orchestrated via root `compose.yaml`; the cloud deployment (N5, issue
+  #48) runs the same images on a single k3s host in AWS, provisioned by
+  `infra/` — design in `docs/deployment.md`, runbook in `infra/README.md`
 
 ## Architecture
 
@@ -87,7 +94,9 @@ working in that service.
 One top-level folder is **not** a service: `foc-contracts/` is a shared
 Maven library holding cross-service contract constants (e.g. broker
 exchange names) and the typed event contracts (event records +
-registry) — see the exception under Conventions.
+registry) — see the exception under Conventions. A second one,
+`infra/`, holds the cloud deployment (Terraform + Kubernetes manifests,
+issue #48) — no service code.
 
 ## Conventions
 
