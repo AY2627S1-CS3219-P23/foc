@@ -9,6 +9,7 @@
 # 2026-11-08, Claude Code (Fable 5.1), PR #302 review: the pod template
 # carries the foc-secrets version as an annotation (set by deploy.sh).
 # Author review: Leong Wei Zhi, pending pull request review.
+# Same day, review follow-up: replicas pinned to 1 (DP10, issue #305).
 ---
 apiVersion: v1
 kind: Service
@@ -21,13 +22,15 @@ spec:
   ports:
     - port: 8080
 ---
-# no replicas: the HorizontalPodAutoscaler in hpa.yaml owns the count
+# one replica and no HPA (DP10): a STOMP push reaches only the replica
+# that holds the browser's socket; issue #305 tracks cross-replica delivery
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: chat-service
   namespace: foc
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: chat-service

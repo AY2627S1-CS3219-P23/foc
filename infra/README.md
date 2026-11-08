@@ -134,7 +134,7 @@ the pod templates, so the Deployments roll with the new values.
 | Restart one service | `kubectl -n foc rollout restart deploy/<name>` |
 | Database shell | `kubectl -n foc exec -it user-db-0 -- psql -U user user` |
 | Spot stopped the host | nothing to redeploy. It restarts when capacity returns, same EIP, same data |
-| An HPA shows 2 replicas | expected under load. Unsafe for order, credit, chat, notification, user and rating (duplicate job runs, pushes reach one replica), accepted by DP10; it goes back to 1 about five minutes after CPU drops below 70 % |
+| An HPA shows 2 replicas | expected under load for every service but chat and notification, which have no HPA (one replica, issue #305). The doubled scheduled runs are idempotent (DP10). It goes back to 1 about five minutes after CPU drops below 70 % |
 
 ## Troubleshooting
 
@@ -145,7 +145,7 @@ the pod templates, so the Deployments roll with the new values.
 | Deploy job: `InvalidInstanceId` | instance running, SSM agent online | stopped by Spot, or the agent not registered yet after boot |
 | `foc-secrets` or `ghcr-pull` missing | `sudo bash /opt/foc/infra/k8s/secrets.sh` | the instance role was denied `secretsmanager:GetSecretValue`, or the secret is not in `ap-southeast-1` |
 | `ImagePullBackOff` | `kubectl -n foc describe pod <pod>` | GHCR token wrong or without `read:packages`; no image pushed for that sha |
-| Pod `Pending` | `describe pod` events | `Insufficient cpu`: requests at every HPA max are about 3.4 of 4 vCPU. Or an unbound PVC |
+| Pod `Pending` | `describe pod` events | `Insufficient cpu`: requests at every HPA max are about 3.0 of 4 vCPU. Or an unbound PVC |
 | Backend `CrashLoopBackOff` | `kubectl -n foc logs <pod> -p` | DB password changed after first boot (see Changing a secret) |
 | 502 / 504 on `/api/<svc>` | `kubectl -n foc get pods` | the backend is not ready yet (the startup probe allows 5 min) |
 | Live updates or chat drop after about 60 s | Traefik args in `kube-system` | the `traefik` HelmChartConfig from cloud-init is missing |

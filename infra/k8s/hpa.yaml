@@ -1,15 +1,18 @@
 # AI-assisted (CS3219 AI Usage Policy disclosure):
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
-# Scope: HPA min 1 / max 2 on CPU for every Deployment (team decision;
-# k3s ships metrics-server). The services have no multi-replica
-# hardening: scale-out is unsafe for order, credit, chat, notification,
-# user and rating (duplicate job runs, pushes reach one replica), and
-# accepted for this deployment in docs/deployment.md (DP10).
+# Scope: HPA min 1 / max 2 on CPU for every Deployment except chat and
+# notification, which run one replica (team decision; k3s ships
+# metrics-server). The services have no multi-replica hardening: a STOMP
+# push reaches one replica only, so chat and notification do not scale
+# (issue #305), and the other services' scheduled jobs run on both
+# replicas, accepted as idempotent (docs/deployment.md, DP10).
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
 # docs/deployment.md); values mirror compose.yaml's defaults.
 # Author review: Leong Wei Zhi, pending pull request review.
 # 2026-11-08, Claude Code (Fable 5.1), PR #302 review: header corrected
-# to DP10 (no hardening; behaviour at 2 replicas accepted).
+# to DP10 (no hardening; behaviour at 2 replicas accepted). Same day,
+# review follow-up: the chat and notification HPAs removed (one replica
+# each, issue #305).
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -94,26 +97,6 @@ spec:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: notification-service
-  namespace: foc
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: notification-service
-  minReplicas: 1
-  maxReplicas: 2
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
   name: rating-service
   namespace: foc
 spec:
@@ -121,26 +104,6 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: rating-service
-  minReplicas: 1
-  maxReplicas: 2
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: chat-service
-  namespace: foc
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: chat-service
   minReplicas: 1
   maxReplicas: 2
   metrics:
