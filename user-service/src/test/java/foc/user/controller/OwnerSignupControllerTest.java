@@ -31,6 +31,9 @@ Author review: Ryan validated correctness and naming.
 2026-10-02 (Claude Code, Opus 5.5), issue #154: the wrong-token 403 is
        checked for a problem+json body.
 2026-10-19: Parts copied from AuthControllerTest, which was AI-assisted
+2026-11-08 (Claude Code, Opus 5.5), issue #308: the token now lives in the
+shared OwnerSetupToken bean, so the test sets it there, and puts the
+pinned value back after each test (the bean also serves /users/me/owner).
 */
 
 
@@ -53,6 +56,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -83,7 +87,7 @@ import foc.user.entity.User;
 import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
 import foc.user.service.OtpEmailSender;
-import foc.user.service.OwnerSignupService;
+import foc.user.service.OwnerSetupToken;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -104,7 +108,7 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
     private PendingSignupRepository pendingSignupRepository;
 
     @Autowired
-    private OwnerSignupService ownerSignupService;
+    private OwnerSetupToken ownerSetupToken;
 
     // captures the plain code instead of speaking SMTP; reset per test
     @MockitoBean
@@ -116,7 +120,13 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
     void cleanDatabase() {
         pendingSignupRepository.deleteAll();
         userRepository.deleteAll();
-        ReflectionTestUtils.setField(ownerSignupService, "expectedOwnerKey", "test-value");
+        ReflectionTestUtils.setField(ownerSetupToken, "expectedOwnerKey", "test-value");
+    }
+
+    // the bean is shared with the owner upgrade's tests (#308)
+    @AfterEach
+    void restoreSetupToken() {
+        ReflectionTestUtils.setField(ownerSetupToken, "expectedOwnerKey", "test-owner-setup-token");
     }
 
     private ResultActions postJson(String path, Map<String, String> body) throws Exception {
@@ -212,7 +222,7 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
     @Test
     @DisplayName("No server-side owner key should throw 503")
     void setupOwner_noSetupKey() throws Exception {
-        ReflectionTestUtils.setField(ownerSignupService, "expectedOwnerKey", "");
+        ReflectionTestUtils.setField(ownerSetupToken, "expectedOwnerKey", "");
         signup("e1234567@u.nus.edu", "student_alex", PASSWORD, CORRECT_SETUP_TOKEN)
             .andExpect(status().isServiceUnavailable())
             .andExpect(jsonPath("$.type").value("urn:foc:user:owner-setup-token-missing"))

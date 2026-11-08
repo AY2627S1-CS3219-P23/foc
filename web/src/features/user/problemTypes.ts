@@ -25,6 +25,9 @@
 // can distinguish which addresses hold accounts (forgot-password.tsx
 // keys its retry copy on it).
 // Author review: Leong Wei Zhi (via PR #149).
+// 2026-11-08, Claude Code (Opus 5.5), issue #308: the owner upgrade's two
+// token refusals, both `amend` — the token is checked before the gate
+// code, so the code survives them (decision via options Q&A).
 
 import { ApiError } from '@/lib/api/http'
 
@@ -44,6 +47,12 @@ export const EMAIL_CHANGE_NONE = 'urn:foc:user:email-change-none'
 export const EMAIL_TAKEN = 'urn:foc:user:email-taken'
 /** The username is already taken. 400 */
 export const USERNAME_TAKEN = 'urn:foc:user:username-taken'
+/** The owner setup token sent to POST /users/me/owner is wrong or blank (#308). 403 */
+export const OWNER_SETUP_TOKEN_INVALID =
+  'urn:foc:user:owner-setup-token-invalid'
+/** No owner setup token is configured on the server. 503 */
+export const OWNER_SETUP_TOKEN_MISSING =
+  'urn:foc:user:owner-setup-token-missing'
 /** The password-reset code is wrong, expired, spent, or belongs to no account (#94). 400 */
 export const RESET_CODE_INVALID = 'urn:foc:user:reset-code-invalid'
 
@@ -113,6 +122,8 @@ export function gateFailure(error: unknown): GateFailure {
       return 'restart'
     case USERNAME_TAKEN:
     case EMAIL_TAKEN:
+    case OWNER_SETUP_TOKEN_INVALID: // #308: token checked before the code
+    case OWNER_SETUP_TOKEN_MISSING:
       return 'amend'
     case OTP_RESEND_COOLDOWN:
       return 'wait'

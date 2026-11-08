@@ -20,6 +20,9 @@ cooldown still gates the next code — exhaustion/takeover tests updated
 and cooldown-bypass regressions added.
 Same day, PR #157 Copilot re-review: the harness stubs the locked
 active-user lookup the flows now take first.
+2026-11-08 (Claude Code, Opus 5.5), issue #308: upgradeToOwner's check
+order: an OWNER caller touches nothing, a wrong token leaves the gate
+code alone, a wrong code leaves the role, and only a full match revokes.
 */
 
 package foc.user.service;
@@ -53,6 +56,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import foc.user.controller.ProblemTypes;
 import foc.user.dto.UpdateAccountRequest;
+import foc.user.dto.UpgradeOwnerRequest;
 import foc.user.entity.AccountUpdateOtp;
 import foc.user.entity.PendingEmailChange;
 import foc.user.entity.Role;
@@ -63,6 +67,7 @@ import foc.user.exception.OtpVerificationException;
 import foc.user.repository.AccountUpdateOtpRepository;
 import foc.user.repository.PendingEmailChangeRepository;
 import foc.user.repository.UserRepository;
+import foc.user.security.TokenDenylist;
 
 @ExtendWith(MockitoExtension.class)
 class AccountUpdateServiceTest {
@@ -74,6 +79,7 @@ class AccountUpdateServiceTest {
     private static final Duration OTP_TTL = Duration.ofMinutes(10);
     private static final int OTP_MAX_ATTEMPTS = 5;
     private static final Duration OTP_RESEND_COOLDOWN = Duration.ofSeconds(60);
+    private static final String OWNER_KEY = "test-owner-key";
 
     // stores "hashed:<raw>", so tests know every code's hash up front
     private static final PasswordEncoder PLAIN_ENCODER = new PasswordEncoder() {
@@ -100,6 +106,9 @@ class AccountUpdateServiceTest {
     @Mock
     private OtpEmailSender otpEmailSender;
 
+    @Mock
+    private TokenDenylist tokenDenylist;
+
     private AccountUpdateService service;
     private User user;
 
@@ -108,7 +117,8 @@ class AccountUpdateServiceTest {
         OtpService otpService =
             new OtpService(PLAIN_ENCODER, OTP_TTL, OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN);
         service = new AccountUpdateService(userRepository, gateOtps, pendingEmailChanges,
-            PLAIN_ENCODER, otpService, otpEmailSender, Clock.fixed(NOW, ZoneOffset.UTC));
+            PLAIN_ENCODER, otpService, otpEmailSender, new OwnerSetupToken(OWNER_KEY),
+            tokenDenylist, Clock.fixed(NOW, ZoneOffset.UTC));
 
         user = new User(EMAIL, "student_alex", PLAIN_ENCODER.encode("ValidPassword123"), Role.USER);
         ReflectionTestUtils.setField(user, "id", USER_ID);
@@ -462,5 +472,57 @@ class AccountUpdateServiceTest {
         
         verify(pendingEmailChanges).delete(pending);
         verify(gateOtps).delete(gate);
+    }
+
+    // ---- upgradeToOwner (issue #308) ----
+
+    @Test
+    @DisplayName("upgradeToOwner: an OWNER caller gets the account back, nothing consumed or revoked")
+    void upgradeToOwner_ownerCallerUnchanged() {
+        user.setRole(Role.OWNER);
+
+        assertThat(service.upgradeToOwner(USER_ID, new UpgradeOwnerRequest("wrong", "111111")).role())
+            .isEqualTo("OWNER");
+        verify(gateOtps, never()).findWithLockByUserId(any());
+        verify(tokenDenylist, never()).revokeUserSessions(any());
+    }
+
+    @Test
+    @DisplayName("upgradeToOwner: a wrong token is a typed 403 and leaves the gate code untouched")
+    void upgradeToOwner_wrongTokenKeepsGateCode() {
+        ResponseStatusException e = catchThrowableOfType(ResponseStatusException.class,
+            () -> service.upgradeToOwner(USER_ID, new UpgradeOwnerRequest("wrong", "111111")));
+
+        assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(e.getBody().getType()).isEqualTo(ProblemTypes.OWNER_SETUP_TOKEN_INVALID);
+        assertThat(user.getRole()).isEqualTo(Role.USER);
+        verify(gateOtps, never()).findWithLockByUserId(any());
+        verify(tokenDenylist, never()).revokeUserSessions(any());
+    }
+
+    @Test
+    @DisplayName("upgradeToOwner: a wrong code with the right token leaves the role and the sessions")
+    void upgradeToOwner_wrongCodeKeepsRole() {
+        AccountUpdateOtp gate = gateRow(30);
+
+        assertThatThrownBy(() -> service.upgradeToOwner(USER_ID, new UpgradeOwnerRequest(OWNER_KEY, "222222")))
+            .isInstanceOf(OtpVerificationException.class);
+        assertThat(user.getRole()).isEqualTo(Role.USER);
+        assertThat(gate.getAttempts()).isEqualTo(1);
+        verify(tokenDenylist, never()).revokeUserSessions(any());
+    }
+
+    @Test
+    @DisplayName("upgradeToOwner: token and code match -> OWNER, code consumed, sessions revoked")
+    void upgradeToOwner_success() {
+        AccountUpdateOtp gate = gateRow(30);
+        when(userRepository.save(user)).thenReturn(user);
+
+        assertThat(service.upgradeToOwner(USER_ID, new UpgradeOwnerRequest(OWNER_KEY, "111111")).role())
+            .isEqualTo("OWNER");
+        assertThat(user.getRole()).isEqualTo(Role.OWNER);
+        verify(gateOtps).delete(gate);
+        // no transaction in a unit test, so AfterCommit runs it inline
+        verify(tokenDenylist).revokeUserSessions(USER_ID);
     }
 }

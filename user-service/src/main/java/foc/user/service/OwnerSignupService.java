@@ -30,19 +30,19 @@ Author review: Ryan validated that the endpoint logic matches the feature design
 decision): the verified owner setup inserts through UserCreation, so it
 writes user.created like a sign-up does. Author review: Ryan Ang,
 pending pull request review.
+2026-11-08 (Claude Code, Opus 5.5), issue #308: checkOwnerKey moved,
+unchanged, to OwnerSetupToken, shared with the profile upgrade
+(POST /users/me/owner). Author review: Leong Wei Zhi via the PR.
 */
 
 package foc.user.service;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.MailException;
@@ -51,7 +51,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import foc.user.controller.ProblemTypes;
 import foc.user.dto.SignupOwnerRequest;
 import foc.user.dto.SignupResponse;
 import foc.user.dto.SignupVerifyRequest;
@@ -89,7 +88,7 @@ public class OwnerSignupService {
     // email takes as long to verify as a wrong code (same trick login
     // used before #146 made its messages revealing; these stay identical)
     private final String unknownPendingCodeHash;
-    private final String expectedOwnerKey;
+    private final OwnerSetupToken ownerSetupToken;
     private final UserCreation userCreation;
     
     @Autowired
@@ -99,10 +98,10 @@ public class OwnerSignupService {
             PasswordEncoder passwordEncoder,
             OtpService otpService,
             OtpEmailSender otpEmailSender,
-            @Value("${owner.setup.token:}") String expectedOwnerKey,
+            OwnerSetupToken ownerSetupToken,
             UserCreation userCreation) {
         this(userRepository, pendingSignupRepository, passwordEncoder,
-            otpService, otpEmailSender, Clock.systemUTC(), expectedOwnerKey, userCreation);
+            otpService, otpEmailSender, Clock.systemUTC(), ownerSetupToken, userCreation);
     }
 
     OwnerSignupService(
@@ -114,6 +113,19 @@ public class OwnerSignupService {
             Clock clock,
             String expectedOwnerKey,
             UserCreation userCreation) {
+        this(userRepository, pendingSignupRepository, passwordEncoder,
+            otpService, otpEmailSender, clock, new OwnerSetupToken(expectedOwnerKey), userCreation);
+    }
+
+    OwnerSignupService(
+            UserRepository userRepository,
+            PendingSignupRepository pendingSignupRepository,
+            PasswordEncoder passwordEncoder,
+            OtpService otpService,
+            OtpEmailSender otpEmailSender,
+            Clock clock,
+            OwnerSetupToken ownerSetupToken,
+            UserCreation userCreation) {
         this.userRepository = userRepository;
         this.pendingSignupRepository = pendingSignupRepository;
         this.passwordEncoder = passwordEncoder;
@@ -121,7 +133,7 @@ public class OwnerSignupService {
         this.otpEmailSender = otpEmailSender;
         this.clock = clock;
         this.unknownPendingCodeHash = otpService.hash("no-pending-signup");
-        this.expectedOwnerKey = expectedOwnerKey;
+        this.ownerSetupToken = ownerSetupToken;
         this.userCreation = userCreation;
     }
 
@@ -151,7 +163,7 @@ public class OwnerSignupService {
 
         // Check if ownerKey matches, let user know in otp email
         // User can submit a different ownerKey with different otp after a delay
-        boolean isOwner = checkOwnerKey(request.ownerKey());
+        boolean isOwner = ownerSetupToken.matches(request.ownerKey());
 
         // Generate otp
         String code = otpService.generateCode();
@@ -253,22 +265,6 @@ public class OwnerSignupService {
     private boolean isSameRequest(SignupOwnerRequest request, String username, PendingSignup pending) {
         return pending.getUsername().equalsIgnoreCase(username)
             && passwordEncoder.matches(request.password(), pending.getPasswordHash());
-    }
-
-    private boolean checkOwnerKey(String providedOwnerKey) {
-        if (expectedOwnerKey == null || expectedOwnerKey.isBlank()) {
-            ResponseStatusException e =  new ResponseStatusException(
-                HttpStatus.SERVICE_UNAVAILABLE,
-                "Owner setup is unavailable"
-            );
-            e.getBody().setType(ProblemTypes.OWNER_SETUP_TOKEN_MISSING);
-            throw e;
-        }
-
-        byte[] expected = expectedOwnerKey.getBytes(StandardCharsets.UTF_8);
-        byte[] provided = (providedOwnerKey == null ? "" : providedOwnerKey).getBytes(StandardCharsets.UTF_8);
-
-        return MessageDigest.isEqual(expected, provided);
     }
 
 }

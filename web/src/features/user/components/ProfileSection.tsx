@@ -39,6 +39,9 @@
 // the Notification Center's header toggle flips (author decision via
 // options Q&A: both surfaces). Beyond the profile.png wireframe; see
 // web/AGENTS.md.
+// 2026-11-08, Claude Code (Opus 5.5), issue #308: the owner upgrade card,
+// shown to USER and ADMIN accounts only; on success it signs out to the
+// login page with its own notice (decisions via options Q&A).
 
 import { useEffect, useState } from 'react'
 
@@ -46,6 +49,7 @@ import { errorMessage } from '@/lib/api/http'
 import { useNotifications } from '@/features/notifications/useNotifications'
 import { useGateCode } from '../otp'
 import { profileApi } from '../profileApi'
+import { flagSessionEnded } from '../sessionNotice'
 import type { PendingEmailChange } from '../types'
 import { useAuth } from '../useAuth'
 import { useLocalStorage } from '../useLocalStorage'
@@ -53,6 +57,7 @@ import { ChangePasswordCard } from './ChangePasswordCard'
 import { DeleteAccountModal } from './DeleteAccountModal'
 import { EditAccountCard } from './EditAccountCard'
 import { EmailChangeModal } from './EmailChangeModal'
+import { OwnerUpgradeCard } from './OwnerUpgradeCard'
 import { ProfileDetailsCard } from './ProfileDetailsCard'
 
 const PENDING_EMAIL_KEY = 'pendingEmailChange'
@@ -182,6 +187,19 @@ export function ProfileSection() {
         />
       )}
       <ChangePasswordCard email={user.email} gate={gate} />
+      {user.role !== 'OWNER' && (
+        <OwnerUpgradeCard
+          email={user.email}
+          gate={gate}
+          onUpgraded={() => {
+            // every session of the account was revoked server-side; the
+            // next sign-in's token carries OWNER. logout() lands on
+            // /login the same way deleteAccount's does
+            flagSessionEnded('You are now an owner. Please sign in again.')
+            logout()
+          }}
+        />
+      )}
       <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900">Preferences</h2>
         <div className="mt-4 flex items-center justify-between gap-4">

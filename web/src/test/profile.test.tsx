@@ -45,6 +45,9 @@
 // to the account's own public profile, asserted on the href — the id has
 // to be the one GET /users/me names, since the public profile's gate
 // only accepts a canonical decimal id.
+// 2026-11-08, Claude Code (Opus 5.5), issue #308: the owner upgrade card —
+// hidden for an OWNER, success signs out to the login page with its own
+// notice, and a refused token returns to the field with the code kept.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -58,8 +61,10 @@ import {
   OTP_ATTEMPTS_EXCEEDED,
   OTP_INVALID,
   OTP_RESEND_COOLDOWN,
+  OWNER_SETUP_TOKEN_INVALID,
   USERNAME_TAKEN,
 } from '@/features/user/problemTypes'
+import { clearSessionEnded } from '@/features/user/sessionNotice'
 import type { PendingEmailChange } from '@/features/user/types'
 import type { AdminUser } from '@/features/user/types'
 import { ApiError } from '@/lib/api/http'
@@ -129,10 +134,15 @@ beforeEach(() => {
   })
   vi.spyOn(profileApi, 'changePassword').mockResolvedValue(undefined)
   vi.spyOn(profileApi, 'deleteAccount').mockResolvedValue(undefined)
+  vi.spyOn(profileApi, 'upgradeToOwner').mockImplementation(async () => ({
+    ...me,
+    role: 'OWNER',
+  }))
 })
 
 afterEach(() => {
   localStorage.clear()
+  clearSessionEnded()
 })
 
 // Both cards carry a "Verify & Continue" button and a set of code boxes,
@@ -743,6 +753,91 @@ describe('change password', () => {
       'Invalid verification code',
     )
     expect(passwordCard().getByLabelText('Digit 1 of 6')).toBeInTheDocument()
+  })
+})
+
+describe('owner upgrade', () => {
+  const ownerCard = () => card('Become an Owner')
+
+  async function submitToken(
+    user: ReturnType<typeof userEvent.setup>,
+    token: string,
+  ) {
+    await user.type(ownerCard().getByLabelText('Owner Setup Token'), token)
+    await user.click(
+      ownerCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+  }
+
+  it('is offered to an ADMIN', async () => {
+    me = { ...me, role: 'ADMIN' }
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+    expect(
+      screen.getByRole('heading', { name: 'Become an Owner' }),
+    ).toBeInTheDocument()
+  })
+
+  it('is hidden from an OWNER', async () => {
+    me = { ...me, role: 'OWNER' }
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+    expect(
+      screen.queryByRole('heading', { name: 'Become an Owner' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('upgrades with the token and code, then signs in again', async () => {
+    const user = userEvent.setup()
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+    await submitToken(user, 'the-token')
+    expect(profileApi.requestOtp).toHaveBeenCalled()
+
+    await typeCode(user, OTP, ownerCard())
+    await user.click(ownerCard().getByRole('button', { name: 'Become Owner' }))
+
+    // every session was revoked server-side: the page signs out and the
+    // login form says why
+    expect(
+      await screen.findByRole('heading', { name: 'Log In' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('You are now an owner. Please sign in again.'),
+    ).toBeInTheDocument()
+    expect(profileApi.upgradeToOwner).toHaveBeenCalledWith('the-token', OTP)
+    expect(JSON.parse(localStorage.getItem('user')!)).toBeNull()
+  })
+
+  it('returns to the token field with the code kept when the token is wrong', async () => {
+    const user = userEvent.setup()
+    vi.mocked(profileApi.upgradeToOwner).mockRejectedValueOnce(
+      refusal(403, 'Owner setup token is incorrect', OWNER_SETUP_TOKEN_INVALID),
+    )
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+    await submitToken(user, 'wrong')
+    await typeCode(user, OTP, ownerCard())
+    await user.click(ownerCard().getByRole('button', { name: 'Become Owner' }))
+
+    expect(await ownerCard().findByRole('alert')).toHaveTextContent(
+      'Owner setup token is incorrect',
+    )
+    expect(ownerCard().getByLabelText('Owner Setup Token')).toBeEnabled()
+    expect(
+      ownerCard().getByText(/still valid — continue to use it again/),
+    ).toBeInTheDocument()
+
+    await user.clear(ownerCard().getByLabelText('Owner Setup Token'))
+    await submitToken(user, 'the-token')
+    await user.click(ownerCard().getByRole('button', { name: 'Become Owner' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'Log In' }),
+    ).toBeInTheDocument()
+    expect(profileApi.upgradeToOwner).toHaveBeenLastCalledWith('the-token', OTP)
+    // the refused token cost no resend
+    expect(profileApi.requestOtp).toHaveBeenCalledTimes(1)
   })
 })
 

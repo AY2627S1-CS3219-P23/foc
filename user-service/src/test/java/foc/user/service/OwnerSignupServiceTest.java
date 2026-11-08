@@ -26,6 +26,8 @@ real UserCreation over the mocked repository and a mocked EventOutbox, and
 a verified owner setup writes user.created. PR #268 review: that line's
 comment put on its own line. Author review: Ryan Ang, pending pull
 request review.
+2026-11-08 (Claude Code, Opus 5.5), issue #308: the unconfigured-token
+case sets the key on the service's OwnerSetupToken, where the check moved.
 */
 
 package foc.user.service;
@@ -272,7 +274,8 @@ class OwnerSignupServiceTest {
     @Test
     @DisplayName("Should throw 503 when OWNER_SETUP_KEY is not configured")
     void signupOwner_throwsServiceUnavailableWhenKeyNotConfigured() {
-        ReflectionTestUtils.setField(ownerSignupService, "expectedOwnerKey", "");
+        ReflectionTestUtils.setField(
+            ReflectionTestUtils.getField(ownerSignupService, "ownerSetupToken"), "expectedOwnerKey", "");
 
         SignupOwnerRequest signRequest = new SignupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", PASSWORD, "wrongKey");

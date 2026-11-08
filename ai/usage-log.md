@@ -48,6 +48,8 @@
   the #284 ones sit at the top. Nothing reworded or removed.
   2026-11-08, Claude Code (Fable 5.1): prepended the issue #48 simplified
   deployment entry below.
+  2026-11-08, Claude Code (Opus 5.5): prepended the issue #308 owner
+  upgrade entry below.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -69,6 +71,38 @@ Entry template:
 ```
 
 ---
+## 2026-11-08 — Leong Wei Zhi (issue #308: owner upgrade from the profile page)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, refactor, docs
+- **Scope:** user-service: `POST /users/me/owner`
+  (`AccountUpdateController`, `AccountUpdateService.upgradeToOwner`, new
+  `UpgradeOwnerRequest`), `ProblemTypes.OWNER_SETUP_TOKEN_INVALID`, the
+  `SecurityConfig` line, and `OwnerSignupService.checkOwnerKey` moved
+  unchanged into a new shared `OwnerSetupToken` bean. Tests: new
+  `OwnerUpgradeControllerTest` (9 cases), 4 cases in
+  `AccountUpdateServiceTest`, and the three tests that set the token by
+  reflection now set it on the bean. Web: `OwnerUpgradeCard.tsx`,
+  `ProfileSection.tsx` (card for USER/ADMIN only, sign-out on success),
+  `profileApi.upgradeToOwner`, the two token types in `problemTypes.ts`
+  (both `amend`), `sessionNotice.ts` and `login.tsx` (the flag carries
+  its notice text), 4 cases in `profile.test.tsx`. Docs:
+  `user-service/README.md`, `web/AGENTS.md`, README AI Use Summary.
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/308", then plan
+  approval. The issue left the design to the team, so the tool asked two
+  neutral options rounds and one follow-up; Leong Wei Zhi chose
+  `POST /users/me/owner`, token plus gate code, token checked before the
+  code (a wrong token keeps it), 403 with a new type for a wrong or blank
+  token and 503 when unconfigured, revoke every session and re-login,
+  sign out to `/login` with a notice, one log line as the audit, keep
+  `/register-owner`, and an unchanged 200 for an OWNER caller.
+- **Author review:** user-service `./mvnw clean test`: 413 tests, one
+  error, the known "too many clients already" flake in
+  `OutboxPublisherIntegrationTest`, which also fails on unmodified
+  `main` (400 tests) and passes when run alone; `OwnerUpgradeControllerTest`
+  9/9, `AccountUpdateServiceTest` 23/23. Web: `npx vitest run` 441/441,
+  `tsc -b`, eslint and prettier clean. Leong Wei Zhi reviews via pull
+  request.
 ## 2026-11-06 — Leong Wei Zhi (issue #48, DP11: realistic demo usernames)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs

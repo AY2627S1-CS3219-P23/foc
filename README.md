@@ -22,6 +22,9 @@
   2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7, DP10): the cloud
   deployment paragraph extended for the simplified re-plan. Author review:
   Leong Wei Zhi, pending pull request review.
+  2026-11-08, Claude Code (Opus 5.5), issue #308: AI Use Summary extended
+  for the owner upgrade from the profile page. Author review: Leong Wei
+  Zhi, pending pull request review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
   public profile's joined date and deliveries-completed count (issue
   #280), and the #257 paragraph's deviation sentence updated to point
@@ -1532,6 +1535,16 @@ as facts without reasons. The tool then rebuilt the branch, removed
 External Secrets Operator, fixed the two review findings in the Deploy
 workflow and rewrote the two documents; `docs/deployment.md` carries no
 PR history, by request. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5.5, 2026-11-08) wrote the owner upgrade (issue #308):
+`POST /users/me/owner` in user-service, with the owner setup token check
+moved into a shared `OwnerSetupToken` bean, and the profile page's Become
+an Owner card, plus tests and docs. The endpoint shape, the gate-code
+requirement, the token-before-code order, the 403/503 answers, the
+session revoke and re-login, the log-line audit, keeping `/register-owner`
+and the OWNER caller's unchanged 200 were Leong Wei Zhi's decisions via
+neutral options rounds; the tool implemented them. Recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

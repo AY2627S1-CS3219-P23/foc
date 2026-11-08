@@ -35,6 +35,13 @@ replacement code may be requested, for the 429's Retry-After, and the
 javadoc/comments that still said a spent row "stays deleted" describe
 the persisted-spent lifecycle instead (PR #157 Copilot review).
 Author review: Leong Wei Zhi to review via the PR.
+2026-11-08 (Claude Code, Opus 5.5), issue #308: upgradeToOwner (POST
+/users/me/owner). Decisions by Leong Wei Zhi via options Q&A
+(2026-11-08): owner setup token plus the gate code; the token is checked
+before the code, so a wrong token leaves the code usable; an OWNER
+caller gets the account back unchanged; one log line per upgrade; every
+session revoked after the commit, as AdminService.changeRole does (#178).
+Author review: Leong Wei Zhi to review via the PR.
 */
 
 package foc.user.service;
@@ -43,6 +50,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -52,13 +61,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import foc.user.controller.ProblemTypes;
 import foc.user.dto.ChangePasswordRequest;
 import foc.user.dto.EmailChangePendingResponse;
 import foc.user.dto.UpdateAccountRequest;
 import foc.user.dto.UpdateOtpResponse;
+import foc.user.dto.UpgradeOwnerRequest;
 import foc.user.dto.UserResponse;
 import foc.user.entity.AccountUpdateOtp;
 import foc.user.entity.PendingEmailChange;
+import foc.user.entity.Role;
 import foc.user.entity.User;
 import foc.user.exception.OtpAttemptsExceededException;
 import foc.user.exception.OtpResendTooSoonException;
@@ -67,6 +79,7 @@ import foc.user.exception.SignupIdentifierTakenException;
 import foc.user.repository.AccountUpdateOtpRepository;
 import foc.user.repository.PendingEmailChangeRepository;
 import foc.user.repository.UserRepository;
+import foc.user.security.TokenDenylist;
 
 /**
  * Account updates (design doc §5, issue #92): every change is gated by a
@@ -86,6 +99,8 @@ import foc.user.repository.UserRepository;
 @Service
 public class AccountUpdateService {
 
+    private static final Logger log = LoggerFactory.getLogger(AccountUpdateService.class);
+
     private static final String OTP_JUST_REQUESTED =
         "A verification code was just requested for this account; check your inbox";
 
@@ -95,6 +110,8 @@ public class AccountUpdateService {
     private final PasswordEncoder passwordEncoder;
     private final OtpService otpService;
     private final OtpEmailSender otpEmailSender;
+    private final OwnerSetupToken ownerSetupToken;
+    private final TokenDenylist tokenDenylist;
     private final Clock clock;
 
     @Autowired
@@ -104,9 +121,11 @@ public class AccountUpdateService {
             PendingEmailChangeRepository pendingEmailChanges,
             PasswordEncoder passwordEncoder,
             OtpService otpService,
-            OtpEmailSender otpEmailSender) {
+            OtpEmailSender otpEmailSender,
+            OwnerSetupToken ownerSetupToken,
+            TokenDenylist tokenDenylist) {
         this(userRepository, gateOtps, pendingEmailChanges, passwordEncoder,
-            otpService, otpEmailSender, Clock.systemUTC());
+            otpService, otpEmailSender, ownerSetupToken, tokenDenylist, Clock.systemUTC());
     }
 
     AccountUpdateService(
@@ -116,6 +135,8 @@ public class AccountUpdateService {
             PasswordEncoder passwordEncoder,
             OtpService otpService,
             OtpEmailSender otpEmailSender,
+            OwnerSetupToken ownerSetupToken,
+            TokenDenylist tokenDenylist,
             Clock clock) {
         this.userRepository = userRepository;
         this.gateOtps = gateOtps;
@@ -123,6 +144,8 @@ public class AccountUpdateService {
         this.passwordEncoder = passwordEncoder;
         this.otpService = otpService;
         this.otpEmailSender = otpEmailSender;
+        this.ownerSetupToken = ownerSetupToken;
+        this.tokenDenylist = tokenDenylist;
         this.clock = clock;
     }
 
@@ -429,6 +452,35 @@ public class AccountUpdateService {
         // record's annotations before this runs; only the hash is stored
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
+    }
+
+    // issue #308: the caller's own account becomes OWNER. The token is
+    // checked before the gate code, so a wrong token leaves the code
+    // usable for the retry; an OWNER caller gets the account back with
+    // nothing consumed or revoked (changeRole's same-role answer)
+    @Transactional(noRollbackFor = {OtpVerificationException.class, OtpAttemptsExceededException.class})
+    public UserResponse upgradeToOwner(Long userId, UpgradeOwnerRequest request) {
+        User user = userRepository.getActiveUserWithLock(userId);
+        if (user.getRole() == Role.OWNER) {
+            return UserResponse.from(user);
+        }
+        if (!ownerSetupToken.matches(request.ownerKey())) {
+            ResponseStatusException e = new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Owner setup token is incorrect");
+            e.getBody().setType(ProblemTypes.OWNER_SETUP_TOKEN_INVALID);
+            throw e;
+        }
+        consumeGateOtp(userId, request.otp());
+
+        user.setRole(Role.OWNER);
+        UserResponse response = UserResponse.from(userRepository.save(user));
+        log.info("owner upgrade: user {}", userId);
+        // the role lives in the JWT claim: revoke every session so the
+        // next sign-in carries OWNER. After the commit, for changeRole's
+        // reason (PR #183 review): stamped earlier, a login in the gap
+        // could mint a USER token the stamp no longer outlaws
+        AfterCommit.run(() -> tokenDenylist.revokeUserSessions(userId));
+        return response;
     }
 
     // presents the gate code (F2.1.1): single-use, so a match deletes the

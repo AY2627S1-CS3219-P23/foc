@@ -94,6 +94,10 @@
   2026-11-06, Claude Code (Opus 5.5), issue #48 DP11: demo-account table
   lists the new realistic usernames, plus the note on existing user-db
   volumes. Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-08, Claude Code (Opus 5.5), issue #308: POST /users/me/owner
+  (owner upgrade) in the status and the account-update section, plus
+  its two token types. Author review: Leong Wei Zhi, pending pull
+  request review.
 -->
 
 # User Service
@@ -114,7 +118,8 @@ answers `username` and `joinedAt`, #280), `DELETE /users/me`
 (self-deletion, #93), the account-update flows `POST /users/me/otp` /
 `PATCH /users/me` / `POST /users/me/email/verify` /
 `POST /users/me/email/resend` / `POST /users/me/password` (#92 — see
-below), and the admin endpoints
+below), the owner upgrade `POST /users/me/owner` (#308, below), and the
+admin endpoints
 `GET /users` (list, search, role filter, sort, 20/50/100 page sizes,
 `includeDeleted=true` to list removed accounts with their `deletedAt`),
 `PATCH /users/{id}` (promote/demote) and `DELETE /users/{id}` (soft
@@ -323,6 +328,17 @@ email-change verify had just replaced (PR #157 review).
   **204**. Both entries must match (checked server-side, F2.1.4) and the
   new password passes sign-up's policy (F2.1.5); there is no
   `currentPassword` — the gate code is the authentication.
+- `POST /users/me/owner` `{ ownerKey, otp }` → **200** with the account,
+  now `OWNER` (#308): the owner setup token (`OWNER_SETUP_TOKEN`, the
+  one `/register-owner` uses) plus the gate code. The token is checked
+  **before** the code, so a wrong or blank token is a **403**
+  (`owner-setup-token-invalid`) that leaves the code usable for the
+  retry; an unconfigured token is the same **503** as
+  `/auth/signup-owner`. On success every session of the account is
+  revoked after the commit (#178's per-user stamp), so the caller signs
+  in again and the new token carries `OWNER`; one log line records the
+  upgrade. An `OWNER` caller gets **200** with the account unchanged —
+  nothing consumed or revoked.
 
 OTP-flavoured errors carry a stable problem+json `type` URI, so clients
 can match failures by machine instead of by `detail` wording (the SPA's
@@ -339,6 +355,8 @@ may change). The sign-up OTP errors carry them too:
 | `urn:foc:user:email-change-none` | nothing pending to verify/resend (400) |
 | `urn:foc:user:email-taken` | email already registered (400) |
 | `urn:foc:user:username-taken` | username already taken (400) |
+| `urn:foc:user:owner-setup-token-invalid` | owner upgrade: wrong or blank setup token; the gate code is kept (403) |
+| `urn:foc:user:owner-setup-token-missing` | no owner setup token configured on the server (503) |
 
 ## Password reset & account recovery (#94)
 

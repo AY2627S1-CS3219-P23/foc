@@ -9,6 +9,8 @@ Scope: the account-update routes for issue #92 (requirement F2), design
        failures, uniqueness refusals and validation all render through
        ProblemDetailAdvice with their problem+json type URIs.
 Author review: Leong Wei Zhi to review via the PR.
+2026-11-08 (Claude Code, Opus 5.5), issue #308: POST /users/me/owner,
+the owner upgrade (contract decided by Leong Wei Zhi via options Q&A).
 */
 
 package foc.user.controller;
@@ -28,6 +30,7 @@ import foc.user.dto.ChangePasswordRequest;
 import foc.user.dto.EmailChangePendingResponse;
 import foc.user.dto.UpdateAccountRequest;
 import foc.user.dto.UpdateOtpResponse;
+import foc.user.dto.UpgradeOwnerRequest;
 import foc.user.dto.UserResponse;
 import foc.user.dto.VerifyEmailChangeRequest;
 import foc.user.service.AccountUpdateService;
@@ -90,5 +93,14 @@ public class AccountUpdateController {
     public void changePassword(Authentication authentication,
             @Valid @RequestBody ChangePasswordRequest request) {
         accountUpdateService.changePassword(CallerId.from(authentication), request);
+    }
+
+    // issue #308: 200 with the account as OWNER. Every session of the
+    // account is revoked, so the caller signs in again for an OWNER token
+    @PostMapping(value = "/owner", consumes = MediaType.APPLICATION_JSON_VALUE,
+        produces = MediaType.APPLICATION_JSON_VALUE)
+    public UserResponse upgradeToOwner(Authentication authentication,
+            @Valid @RequestBody UpgradeOwnerRequest request) {
+        return accountUpdateService.upgradeToOwner(CallerId.from(authentication), request);
     }
 }

@@ -6,6 +6,8 @@ Scope: issue #267, revised USR-8 (team decision): every path that inserts
        one user.created for that user in the outbox, through the real
        endpoints and the real seeder against Postgres.
 Author review: Ryan Ang, pending pull request review.
+2026-11-08 (Claude Code, Opus 5.5), issue #308: the setup token is set
+on the shared OwnerSetupToken bean, where the check moved.
 */
 
 package foc.user.service;
@@ -64,7 +66,7 @@ class UserCreatedEventTest extends PostgresTestContainer {
     private OutboxEventRepository outboxEvents;
 
     @Autowired
-    private OwnerSignupService ownerSignupService;
+    private OwnerSetupToken ownerSetupToken;
 
     @Autowired
     private UserCreation userCreation;
@@ -86,7 +88,7 @@ class UserCreatedEventTest extends PostgresTestContainer {
         userRepository.deleteAll();
         outboxEvents.deleteAll();
         // the setup key on the shared bean, as OwnerSignupControllerTest sets it
-        ReflectionTestUtils.setField(ownerSignupService, "expectedOwnerKey", OWNER_KEY);
+        ReflectionTestUtils.setField(ownerSetupToken, "expectedOwnerKey", OWNER_KEY);
     }
 
     // other test classes share the database
