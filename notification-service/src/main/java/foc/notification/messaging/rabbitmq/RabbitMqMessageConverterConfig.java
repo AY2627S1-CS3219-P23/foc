@@ -12,6 +12,9 @@
  * container factory for the push fanout queue — plain converter, auto ack
  * — because the push envelope is not a domain event. Author review: Leong
  * Wei Zhi, pending pull request review.
+ * Same day, PR #306 review (Sinnez1): one consumer and no retry advice set
+ * on the push factory itself, not inherited from the work queues' yaml.
+ * Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.notification.messaging.rabbitmq;
 
@@ -37,10 +40,14 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>The push fanout queue (D35) carries {@code UserPush} envelopes, not
  * events, so its listener runs on {@link #pushFanoutContainerFactory} —
- * the same yaml-configured container (auto-startup, concurrency) but with
- * the plain converter, which leaves the body to the listener, and
- * automatic acks (the manual mode is for the work queues' commit-then-ack).
- * A rejected push is dropped, never requeued: a push is best-effort.
+ * the same yaml-configured container (auto-startup) but with the plain
+ * converter, which leaves the body to the listener, and automatic acks (the
+ * manual mode is for the work queues' commit-then-ack). Its consumer count
+ * and retry are fixed here rather than taken from the
+ * {@code spring.rabbitmq.listener.simple} settings meant for the work
+ * queues: a single consumer keeps one user's pushes in order, and a push
+ * is never retried. A rejected push is dropped, never requeued: a push is
+ * best-effort.
  */
 @Configuration
 class RabbitMqMessageConverterConfig {
@@ -60,6 +67,9 @@ class RabbitMqMessageConverterConfig {
 		factory.setMessageConverter(new SimpleMessageConverter());
 		factory.setAcknowledgeMode(AcknowledgeMode.AUTO);
 		factory.setDefaultRequeueRejected(false);
+		factory.setConcurrentConsumers(1);
+		factory.setMaxConcurrentConsumers(1);
+		factory.setAdviceChain();
 		return factory;
 	}
 }

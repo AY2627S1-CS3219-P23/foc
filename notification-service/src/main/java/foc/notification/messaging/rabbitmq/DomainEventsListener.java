@@ -40,6 +40,10 @@
  * the same event can be in flight twice, and the loser's whole transaction
  * rolled back on the processed_events primary key. Author review: Leong
  * Wei Zhi, pending pull request review.
+ * Same day, PR #306 review (Sinnez1, Claude reviewer): only a violation of
+ * processed_events_pkey counts as the duplicate; any other unique violation
+ * takes the retry/DLQ path. Author review: Leong Wei Zhi, pending pull
+ * request review.
  */
 package foc.notification.messaging.rabbitmq;
 
@@ -47,8 +51,8 @@ import com.rabbitmq.client.Channel;
 import foc.contracts.events.core.DomainEvent;
 import foc.notification.service.EventProcessor;
 import java.io.IOException;
-import java.sql.SQLException;
 import java.util.Map;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -133,8 +137,11 @@ class DomainEventsListener {
 			RabbitMqTopology.REQUEST_EVENTS_QUEUE, RabbitMqTopology.REQUEST_EVENTS_RETRY_QUEUE,
 			RabbitMqTopology.RATING_EVENTS_QUEUE, RabbitMqTopology.RATING_EVENTS_RETRY_QUEUE);
 
-	/** PostgreSQL's (and H2's) SQLSTATE for a unique or primary-key violation. */
-	static final String UNIQUE_VIOLATION = "23505";
+	/**
+	 * The dedupe inbox's primary key (V1__baseline.sql): the one unique
+	 * violation that means "a concurrent delivery already processed it".
+	 */
+	static final String PROCESSED_EVENTS_PKEY = "processed_events_pkey";
 
 	/**
 	 * Ceiling on waiting for the broker to confirm a retry republish;
@@ -166,11 +173,11 @@ class DomainEventsListener {
 			if (isDuplicateKey(ex)) {
 				// Two replicas processed the same event at once (issue #305):
 				// both passed the dedupe read, the loser's INSERT into
-				// processed_events — the schema's only unique key — hit the
-				// winner's row, and its whole transaction (notifications
-				// included) rolled back; only the winner's AFTER_COMMIT push
-				// went out. The outcome is the seen-before case, so ack it
-				// instead of spending a retry hop on it.
+				// processed_events hit the winner's row, and its whole
+				// transaction (notifications included) rolled back; only the
+				// winner's AFTER_COMMIT push went out. The outcome is the
+				// seen-before case, so ack it instead of spending a retry hop
+				// on it.
 				log.info("event {} already processed by a concurrent delivery; acked",
 						event.eventId());
 				channel.basicAck(deliveryTag, false);
@@ -210,10 +217,16 @@ class DomainEventsListener {
 		channel.basicAck(deliveryTag, false);
 	}
 
-	/** A unique violation anywhere in the cause chain (the JPA commit wraps it). */
+	/**
+	 * A violation of {@link #PROCESSED_EVENTS_PKEY} anywhere in the cause
+	 * chain (the JPA commit wraps it); Hibernate names the constraint from
+	 * the database's error. Any other unique violation is a real failure
+	 * and keeps its retry/DLQ path (PR #306 review).
+	 */
 	static boolean isDuplicateKey(Throwable ex) {
 		for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
-			if (cause instanceof SQLException sql && UNIQUE_VIOLATION.equals(sql.getSQLState())) {
+			if (cause instanceof ConstraintViolationException violation
+					&& PROCESSED_EVENTS_PKEY.equals(violation.getConstraintName())) {
 				return true;
 			}
 		}

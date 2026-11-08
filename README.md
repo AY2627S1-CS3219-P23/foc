@@ -1562,4 +1562,7 @@ duplicate on its `processed_events` key and moves to a Flyway baseline
 and Testcontainers tests, compose and k8s wiring, and the docs. The
 alternatives (STOMP broker relay, insert-first dedupe, single active
 consumer, ShedLock) were declined by the author and are recorded in
-`ai/usage-log.md`.
+`ai/usage-log.md`. The PR #306 review rounds (Sinnez1, the Claude
+reviewer) added a 5 s broker connect timeout, an ack scoped to the
+`processed_events_pkey` constraint with a real-Postgres race test, a V2
+migration for legacy volumes and smaller hardening.

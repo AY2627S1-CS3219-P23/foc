@@ -27,6 +27,9 @@
   columns' symptom described as it is (baseline does not compare, validate
   ignores extra columns, inserts fail). Author review: Leong Wei Zhi,
   pending pull request review.
+  Same day, PR #306 review (Sinnez1): V2 drops the legacy columns, so the
+  schema needs no reset any more. Author review: Leong Wei Zhi, pending
+  pull request review.
 -->
 
 # Notification Service
@@ -94,23 +97,23 @@ prefix, every one scoped to the token's user — the full contract
 
 ## Troubleshooting
 
-Dev volumes created before the typed-contracts refactor or the
+Broker volumes created before the typed-contracts refactor or the
 retry/DLQ topology (#65) fail at startup: the old fanout exchange and
 the pre-#65 work queue carry incompatible declarations
-(`PRECONDITION_FAILED`), and a DB schema with the removed NOT NULL
-`entity_type`/`entity_id` columns still rejects every notification
-insert: since #305 Flyway owns the schema, but `baseline-on-migrate`
-records an existing schema as V1 without comparing it to the baseline
-script, and Hibernate's `validate` ignores extra columns, so such a
-volume starts and then fails on the first stored notification. A volume
-built by the former `ddl-auto: update` with the *current* columns is
-baselined as V1 and needs nothing. Reset both volumes once:
+(`PRECONDITION_FAILED`). Reset the broker volume once:
 
 ```sh
-docker compose down rabbitmq notification-db
-docker volume rm foc_rabbitmq-data foc_notification-db-data
-docker compose up -d rabbitmq notification-db
+docker compose down rabbitmq
+docker volume rm foc_rabbitmq-data
+docker compose up -d rabbitmq
 ```
+
+The database volume needs no reset. Since #305 Flyway owns the schema:
+`baseline-on-migrate` records an existing `ddl-auto: update` schema as
+V1 without comparing it, and `V2__drop_legacy_entity_columns.sql` then
+drops the NOT NULL `entity_type`/`entity_id` columns and the
+`entity_sequences` table a pre-typed-contracts volume still carries
+(no-ops elsewhere), so such a volume stores notifications again.
 
 Separately, after the order→request rename the old `order-events`
 exchange and `notification-service.order-events*` queues are harmless

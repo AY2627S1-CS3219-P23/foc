@@ -37,6 +37,7 @@
 # options Q&A): Flyway builds the schema (V1 baseline, baseline-on-migrate
 # as in user-service) and Hibernate only validates. Author review: Leong
 # Wei Zhi, pending pull request review.
+# Same day, PR #306 review: a 5 s broker connect timeout.
 
 spring:
   application:
@@ -63,6 +64,9 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:foc}
     password: ${RABBITMQ_PASSWORD:}
+    # Bounds a connect to a hung broker (amqp-client's default is 60 s),
+    # e.g. the push fanout publish after commit (PR #306 review)
+    connection-timeout: 5s
     listener:
       simple:
         # The listener acks/nacks explicitly, after the processor's

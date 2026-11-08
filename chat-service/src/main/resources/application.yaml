@@ -11,6 +11,7 @@
 # Q&A): spring.rabbitmq connection for the chat.push fanout, the same
 # RABBITMQ_* variables as notification-service. Author review: Leong Wei
 # Zhi, pending pull request review.
+# Same day, PR #306 review: a 5 s broker connect timeout.
 
 spring:
   application:
@@ -32,6 +33,10 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:foc}
     password: ${RABBITMQ_PASSWORD:}
+    # The publish runs on the request thread after commit: a hung broker
+    # costs a send at most this long instead of amqp-client's 60 s
+    # (PR #306 review)
+    connection-timeout: 5s
   data:
     redis:
       # Platform Redis holding the token denylist, read once per STOMP

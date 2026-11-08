@@ -15,6 +15,8 @@
   2026-11-08, Claude Code (Fable 5.1), issue #305: package map, invariants
   and test list for the D35 push fanout, the duplicate-key ack and the D36
   Flyway schema. Author review: Leong Wei Zhi, pending pull request review.
+  Same day, PR #306 review: V2 converges legacy volumes. Author review:
+  Leong Wei Zhi, pending pull request review.
 -->
 
 # notification-service/ — Agent Guide
@@ -52,7 +54,9 @@ the decision ID when touching related code.
   `NOTIF_RETENTION_DAYS` are swept — an accepted trade-off, since
   redelivery ends at the DLQ within seconds. At two replicas (#305) a
   concurrent duplicate loses on the `processed_events` primary key; the
-  listener acks that failure (SQLSTATE 23505) as a duplicate.
+  listener acks that failure as a duplicate only when the violated
+  constraint is `processed_events_pkey`; any other unique violation
+  retries and dead-letters as usual.
 - **Pushes go through the fanout, never straight to the local broker**
   (D35, #305): `NotificationPushListener` publishes to `UserPushFanout`;
   `LocalUserPushDelivery` is called only by the fanout adapter, once per
@@ -99,7 +103,10 @@ tolerant-reader lock-in), `DomainEventMessageConverterTest`,
 writes), `StompPushIntegrationTest` (real STOMP session,
 random port, Testcontainers RabbitMQ for the push fanout — auto-skips
 without Docker), `NotificationFlywayMigrationTest` (Testcontainers
-Postgres: V1 applies, a ddl-auto database baselines),
+Postgres: V1 and V2 apply, a ddl-auto database baselines, a legacy
+entity-columns database converges), `ConcurrentDuplicateIntegrationTest`
+(Testcontainers Postgres: the losing delivery of a raced event id fails
+on `processed_events_pkey`),
 `RabbitMqUserPushFanoutTest` / `LocalUserPushDeliveryTest` /
 `NotificationPushListenerTest` (the D35 fanout halves),
 `RequestEventsRabbitMqIntegrationTest`
@@ -109,5 +116,6 @@ Postgres: V1 applies, a ddl-auto database baselines),
 Flyway owns the schema (`src/main/resources/db/migration`, D36, #305);
 Hibernate only validates it. Add a new migration, never edit an applied
 one. A volume built by the old `ddl-auto: update` is baselined as V1 on
-first start, so no reset is needed for the schema; broker-volume resets
+first start, and V2 drops the pre-typed-contracts columns such a volume
+may still carry, so no reset is needed for the schema; broker-volume resets
 are in the [README's Troubleshooting section](README.md#troubleshooting).

@@ -5,6 +5,10 @@
  * send that NotificationPushListener used to make directly (issue #67),
  * now invoked for every push the fanout delivers to this replica.
  * Author review: Leong Wei Zhi, pending pull request review.
+ * Same day, PR #306 review (Sinnez1): a push without a recipient or a
+ * notification is logged and dropped before the send, and the failure log
+ * no longer reaches into the notification. Author review: Leong Wei Zhi,
+ * pending pull request review.
  */
 package foc.notification.messaging.stomp;
 
@@ -37,11 +41,17 @@ public class LocalUserPushDelivery {
 	}
 
 	public void deliver(UserPush push) {
+		// a malformed frame (e.g. {}) decodes to nulls: drop it here rather
+		// than let the send throw into the container (PR #306 review)
+		if (push.recipientId() == null || push.notification() == null) {
+			log.warn("dropped a push without a recipient or notification");
+			return;
+		}
 		try {
 			messagingTemplate.convertAndSendToUser(push.recipientId(), NOTIFICATIONS_DESTINATION,
 					push.notification());
 		} catch (RuntimeException ex) {
-			log.warn("push failed for notification {}", push.notification().id(), ex);
+			log.warn("push failed for recipient {}", push.recipientId(), ex);
 		}
 	}
 }

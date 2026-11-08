@@ -119,6 +119,23 @@ Entry template:
   inserts fail rather than startup). Claude reviewer — the AFTER_COMMIT
   listener already catches `publish` failures (unit-tested); a comment on
   `publish` now says so.
+- **PR #306 review round 2 (same day, Sinnez1 non-blocking + the
+  blocking connect-timeout item, Claude reviewer):** "address the latest
+  comment from sinnez1 and claude bot". `spring.rabbitmq.connection-timeout:
+  5s` in both services (the after-commit publish on chat's request thread
+  no longer waits amqp-client's 60 s); the test yamls point at
+  `rabbitmq.invalid` with a 200 ms timeout so broker-less suites never
+  publish into a developer's compose RabbitMQ. `DomainEventsListener`
+  acks only a Hibernate `ConstraintViolationException` naming
+  `processed_events_pkey`; `ConcurrentDuplicateIntegrationTest` races
+  one event id on Testcontainers Postgres. `LocalUserPushDelivery` drops
+  a push with a null recipient or notification. The push container
+  factory pins one consumer and no advice chain. `V2__drop_legacy_entity_columns.sql`
+  (drop `entity_type`/`entity_id`/`entity_sequences` if they exist) with
+  a migration test; README/AGENTS/design doc updated, processor Javadoc
+  corrected. Not changed here, pending the team's call: the accept/drop
+  race across replicas, SockJS session affinity, an async chat publish,
+  and chat's readiness including the RabbitMQ indicator.
 - **Author review:** notification-service `./mvnw verify` with Docker
   (Testcontainers RabbitMQ + Postgres), chat-service `./mvnw test`; the
   compose `--scale 2` acceptance (both services at 2 replicas, fanout

@@ -13,9 +13,13 @@
  * (SQLSTATE 23505 in the cause chain) is acked, not republished; any other
  * integrity failure still takes the retry path. Author review: Leong Wei
  * Zhi, pending pull request review.
+ * Same day, PR #306 review: the ack needs processed_events_pkey by name;
+ * a unique violation on another constraint retries. Author review: Leong
+ * Wei Zhi, pending pull request review.
  */
 package foc.notification.messaging.rabbitmq;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -30,6 +34,7 @@ import foc.contracts.events.rating.RatingSubmitted;
 import foc.notification.service.EventProcessor;
 import java.sql.SQLException;
 import java.time.Instant;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
@@ -105,8 +110,7 @@ class DomainEventsListenerTest {
 
 	@Test
 	void concurrentDuplicateIsAckedWithoutARetryHop() throws Exception {
-		doThrow(new DataIntegrityViolationException("dup",
-				new SQLException("duplicate key value violates unique constraint", "23505")))
+		doThrow(new DataIntegrityViolationException("dup", uniqueViolation("processed_events_pkey")))
 				.when(eventProcessor).process(any());
 		MessageProperties properties = new MessageProperties();
 		properties.setConsumerQueue(RabbitMqTopology.REQUEST_EVENTS_QUEUE);
@@ -117,6 +121,14 @@ class DomainEventsListenerTest {
 		verify(channel).basicAck(DELIVERY_TAG, false);
 		verifyNoMoreInteractions(channel);
 		verifyNoInteractions(rabbitTemplate);
+	}
+
+	@Test
+	void aUniqueViolationOnAnotherConstraintIsNotADuplicate() {
+		assertThat(DomainEventsListener.isDuplicateKey(
+				new DataIntegrityViolationException("dup", uniqueViolation("notifications_pkey")))).isFalse();
+		assertThat(DomainEventsListener.isDuplicateKey(new DataIntegrityViolationException("dup",
+				new SQLException("duplicate key value violates unique constraint", "23505")))).isFalse();
 	}
 
 	@Test
@@ -136,6 +148,11 @@ class DomainEventsListenerTest {
 		verify(operations).send("", RabbitMqTopology.REQUEST_EVENTS_RETRY_QUEUE, delivery);
 		verify(channel).basicAck(DELIVERY_TAG, false);
 		verifyNoMoreInteractions(channel);
+	}
+
+	private static ConstraintViolationException uniqueViolation(String constraint) {
+		return new ConstraintViolationException("could not execute statement",
+				new SQLException("duplicate key value violates unique constraint", "23505"), constraint);
 	}
 
 	private static RatingSubmitted rating() {
