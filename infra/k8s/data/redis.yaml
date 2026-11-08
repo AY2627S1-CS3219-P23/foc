@@ -1,0 +1,63 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
+# Scope: the platform Redis (logout denylist), redis:8.8-alpine with
+# --appendonly yes on a local-path volume — G7 unchanged.
+# Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
+# docs/deployment.md); values mirror compose.yaml's defaults.
+# Author review: Leong Wei Zhi, pending pull request review.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: foc
+spec:
+  clusterIP: None
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: foc
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:8.8-alpine
+          args: ["redis-server", "--appendonly", "yes"]
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

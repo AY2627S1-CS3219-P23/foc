@@ -14,6 +14,9 @@
  * 2026-10-25, Claude Code (Opus 5.5), PR #247 review follow-up: a
  * courier share on a record that is not RESOLVED is rejected (V5).
  * PR #248 review: the held-reservations index is partial (V5).
+ * 2026-11-06, Claude Code (Opus 5.5), PR #289 CI fix: the common-pool
+ * case checks the single row only; its balance depends on which committing
+ * class shared the container first.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit;
@@ -52,8 +55,11 @@ class CreditServiceApplicationTests extends PostgresTestContainer {
 	// leaves no row behind for the other classes sharing the container
 	@Test
 	@Transactional
-	void commonPoolStartsAsOneEmptyRow() {
-		assertThat(jdbc.queryForList("select balance from common_pool", Integer.class)).containsExactly(0);
+	void commonPoolIsOneRow() {
+		// V1 seeds it with balance 0, but classes that commit (expiry,
+		// closure) move credits into it, so only the row itself is
+		// order-independent
+		assertThat(jdbc.queryForList("select id from common_pool", Integer.class)).containsExactly(1);
 		// a second row breaks the single-row rule
 		assertThatThrownBy(() -> jdbc.update("insert into common_pool (id, balance) values (2, 0)"))
 				.isInstanceOf(DataIntegrityViolationException.class);
