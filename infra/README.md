@@ -148,7 +148,7 @@ of the ConfigMap, and the image tag carries the workflow run id.
 | Symptom | Check | Usual cause, fix |
 | --- | --- | --- |
 | `curl` to the EIP times out | EC2 console: instance state | Spot stopped it: wait. Still booting: `cloud-init status` |
-| Deploy job: `Not authorized to perform sts:AssumeRoleWithWebIdentity` | run from `main`? `gh api repos/AY2627S1-CS3219-P23/foc/actions/oidc/customization/sub` | the role trusts `refs/heads/main` only, in both the plain and GitHub's immutable subject form (`repo:<owner>@<id>/<name>@<id>`); if the ids changed, update `github_owner_id` / `github_repo_id` and apply |
+| Deploy job: `Not authorized to perform sts:AssumeRoleWithWebIdentity` | run from `main`? `gh api repos/AY2627S1-CS3219-P23/foc/actions/oidc/customization/sub` | the role trusts `refs/heads/main` only, and only GitHub's immutable subject form (`repo:<owner>@<id>/<name>@<id>`): `use_immutable_subject` must be `true`. If the org or repo was renamed or transferred, update `github_repo` (the ids stay the same) and apply |
 | Deploy job: `InvalidInstanceId` | instance running, SSM agent online | stopped by Spot, or the agent not registered yet after boot |
 | `foc-secrets` or `ghcr-pull` missing | `sudo bash /opt/foc/infra/k8s/secrets.sh` | the instance role was denied `secretsmanager:GetSecretValue`, or the secret is not in `ap-southeast-1` |
 | `ImagePullBackOff` | `kubectl -n foc describe pod <pod>` | GHCR token wrong or without `read:packages`; no image pushed for that sha |

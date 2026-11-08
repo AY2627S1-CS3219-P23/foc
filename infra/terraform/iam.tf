@@ -13,12 +13,19 @@
 # also accepts GitHub's immutable subject (repo:<owner>@<id>/<name>@<id>),
 # which this repository sends; the first rollout failed on the plain form.
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-08, Claude Code (Fable 5.1), PR #307 review: the plain subject is
+# dropped (team decision, Leong Wei Zhi), only the immutable one is trusted;
+# null ids fall back to this repository's. Author review: Leong Wei Zhi,
+# pending pull request review.
 
 data "aws_caller_identity" "current" {}
 
 locals {
   github_owner     = split("/", var.github_repo)[0]
   github_repo_name = split("/", var.github_repo)[1]
+  # null ids mean the default github_repo's (validated in variables.tf)
+  github_owner_id = coalesce(var.github_owner_id, 325983746)
+  github_repo_id  = coalesce(var.github_repo_id, 1360023737)
 }
 
 # --- instance role ----------------------------------------------------------
@@ -78,12 +85,10 @@ resource "aws_iam_role" "deploy" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          # a list is an OR: the plain subject, and the one GitHub sends with
-          # the "immutable subject" setting on (owner and repo ids included)
-          "token.actions.githubusercontent.com:sub" = [
-            "repo:${var.github_repo}:ref:refs/heads/main",
-            "repo:${local.github_owner}@${var.github_owner_id}/${local.github_repo_name}@${var.github_repo_id}:ref:refs/heads/main",
-          ]
+          # the subject GitHub sends with the repository's "immutable
+          # subject" setting on (owner and repo ids included); the plain
+          # repo:<owner>/<name> form is not trusted
+          "token.actions.githubusercontent.com:sub" = "repo:${local.github_owner}@${local.github_owner_id}/${local.github_repo_name}@${local.github_repo_id}:ref:refs/heads/main"
         }
       }
     }]
