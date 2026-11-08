@@ -22,6 +22,9 @@
   2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7, DP10): the cloud
   deployment paragraph extended for the simplified re-plan. Author review:
   Leong Wei Zhi, pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1), issue #48 (DP18 to DP21): the cloud
+  deployment paragraph extended for HTTPS. Author review: Leong Wei Zhi,
+  pending pull request review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
   public profile's joined date and deliveries-completed count (issue
   #280), and the #257 paragraph's deviation sentence updated to point
@@ -1534,7 +1537,13 @@ workflow and rewrote the two documents; `docs/deployment.md` carries no
 PR history, by request. On the first cloud deploy the same day, it
 diagnosed the rollout's OIDC refusal (GitHub's immutable subject claim)
 and switched the deploy role's trust to it (the plain form dropped on
-review, by team decision). Recorded in `ai/usage-log.md`.
+review, by team decision). Later that day it put the site behind an
+Application Load Balancer with an AWS Certificate Manager certificate for
+`foc23.mooo.com` (DP18 to DP21): the domain source, the TLS endpoint, the
+port-80 redirect, the host's exposure and the pipeline variable were
+Leong Wei Zhi's choices from neutral options rounds; the tool wrote the
+Terraform, flipped the four baked origins to https and extended the two
+documents. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

@@ -15,6 +15,9 @@
 # validated as owner/name, and the two ids default to null and must be set
 # whenever github_repo is overridden. Author review: Leong Wei Zhi, pending
 # pull request review.
+# 2026-11-08, Claude Code (Fable 5.1), issue #48 (HTTPS): domain_name and
+# availability_zone_b for the ACM certificate and the load balancer (DP18,
+# DP19). Author review: Leong Wei Zhi, pending pull request review.
 
 variable "region" {
   type    = string
@@ -24,6 +27,18 @@ variable "region" {
 variable "availability_zone" {
   type    = string
   default = "ap-southeast-1a"
+}
+
+variable "availability_zone_b" {
+  description = "second zone, for the load balancer only (an ALB needs two subnets in two zones)"
+  type        = string
+  default     = "ap-southeast-1b"
+}
+
+variable "domain_name" {
+  description = "the site's hostname: the ACM certificate's name and the PUBLIC_HOST repo variable; its DNS records live at FreeDNS (DP18)"
+  type        = string
+  default     = "foc23.mooo.com"
 }
 
 variable "instance_type" {

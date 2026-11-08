@@ -50,6 +50,8 @@
   deployment entry below.
   2026-11-08, Claude Code (Fable 5.1): prepended the first-deploy OIDC
   trust fix entry below.
+  2026-11-08, Claude Code (Fable 5.1): prepended the HTTPS (ACM on an ALB)
+  entry below.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -69,6 +71,14 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-08 — Leong Wei Zhi (N5 cloud deployment, issue #48: HTTPS with an ACM certificate on a load balancer)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** generate, docs
+- **Scope:** `infra/terraform/tls.tf` (new: ACM certificate for `foc23.mooo.com` with DNS validation, the validation waiter, an Application Load Balancer with an idle timeout of 3600 s, an instance target group health-checked on `/`, a 443 listener with the certificate and an 80 listener answering 301), `network.tf` (second public subnet in `ap-southeast-1b`, the balancer's security group, the host's port 80 now from that group only; the host group's description left as it was, since changing it forces a replacement), `instance.tf` (Elastic IP and its association removed), `variables.tf` (`domain_name`, `availability_zone_b`), `outputs.tf` (`public_host` is the hostname; `alb_dns_name` and `acm_validation_record` for the two FreeDNS records). `deploy.yml`, `infra/k8s/config.yaml`, `apps/chat-service.yaml`, `apps/notification-service.yaml`: the four `http://` origins are `https://`; `deploy.sh` usage comment. `docs/deployment.md`: DP5 rewritten, DP18 to DP21, two options-considered tables (domain source, TLS endpoint), diagram, cost, teardown. `infra/README.md`: step 2 split into certificate first and the rest, the FreeDNS record steps, https smoke test, four troubleshooting rows, teardown note. No service code changed.
+- **Prompt(s):** "create a plan to use aws certificate manager so foc runs over https". Under the AI policy the tool chose nothing: it checked the account read-only (Route 53 domain registration and the Pricing API are SCP-denied; ACM, hosted zones and the CloudFront prefix list are readable; one subnet exists) and ran three neutral options rounds. Leong Wei Zhi chose the domain source (a free CNAME-capable subdomain over a team-owned domain, a paid registrar or CloudFront's default certificate), the TLS endpoint (ALB over CloudFront, an exportable ACM certificate in Traefik, or an NLB), the 301 on port 80, the host taking port 80 from the balancer only with the Elastic IP dropped, keeping `PUBLIC_HOST` with `https://` hard-coded, and the hostname `foc23.mooo.com`. "what do i need to do on freedns.afraid.org" → the three FreeDNS steps, now in the runbook. The options are recorded as facts without reasons, as on the rest of the page.
+- **Author review:** `terraform fmt`, `validate`; `terraform plan` against the live state: 10 to add, 2 to change (the host security group's ingress rule in place, and the deploy role's trust, which is PR #307's pending change), 2 to destroy (the Elastic IP and its association); a first plan replaced the host security group because its description had changed, so the description was kept; `kubectl kustomize` renders with the placeholders filled; no `http://__PUBLIC_HOST__` or `http://$PUBLIC_HOST` remains. Whether FreeDNS accepts the underscore-prefixed validation CNAME is unconfirmed and is learned at the first apply step. Leong Wei Zhi applies and reviews via pull request.
 
 ---
 ## 2026-11-08 — Leong Wei Zhi (N5 first cloud deploy, issue #48: OIDC trust for GitHub's immutable subject)
