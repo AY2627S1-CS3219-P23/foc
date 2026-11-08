@@ -16,11 +16,15 @@
 // by the next chime rather than mistaken for an autoplay block.
 // Author review: Leong Wei Zhi to review via the PR.
 // 2026-11-09, Claude Code (Opus 5.5), notification sound preview (no
-// issue): playChime({ gesture: true }) for the toggle's own click — a
-// suspended context is resumed and awaited there, since inside a gesture
-// the resume settles (the click may be the page's first pointerdown, so
-// unlockChime's resume is still in flight). Author decision via options
-// Q&A: switching the sound on previews the chime on both surfaces.
+// issue): the sound toggle's preview chime (author decision via options
+// Q&A: switching the sound on previews it on both surfaces).
+// PR #314 review (@Sinnez1): instead of a `gesture` flag that awaited
+// any resume, unlockChime keeps its in-flight resume and a chime waits
+// on that real unlock, bounded (UNLOCK_WAIT_MS) so a synthetic click's
+// never-settling resume holds nothing back; a pending idle suspend is
+// waited out before deciding; one chime waits at a time; and an
+// `enabled` check after the wait drops a preview the user switched off
+// meanwhile.
 // Author review: Leong Wei Zhi to review via the PR.
 
 // One context for the page's lifetime: browsers cap concurrent
@@ -68,17 +72,56 @@ const tone = (at: number, freq: number, dur: number) => {
   osc.stop(at + dur + 0.05)
 }
 
+// unlockChime's resume(), while it is in flight. Started inside a user
+// gesture it settles promptly, so a chime may wait for it — bounded,
+// since a synthetic click (a script's element.click(), assistive tech)
+// is no user activation and its resume stays pending (PR #314 review).
+let unlocking: Promise<void> | null = null
+// the idle timer's suspend(), while in flight: the context still
+// reports running until it lands, so a chime scheduled meanwhile would
+// be cut off by it (PR #314 review)
+let suspending: Promise<void> | null = null
+// one chime waits at a time; a call made while it waits joins it rather
+// than stacking a second, overlapping chime (PR #314 review)
+let waiting = false
+
+// how long a chime waits for an in-flight unlock before it gives up and
+// stays silent — long enough for iOS Safari's slow resume
+const UNLOCK_WAIT_MS = 1_000
+
+const settled = (p: Promise<void>): Promise<void> =>
+  p.then(
+    () => {},
+    () => {},
+  )
+
+// p, or giving up after ms — whichever comes first
+const within = (p: Promise<void>, ms: number): Promise<void> => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([
+    p,
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, ms)
+    }),
+  ]).finally(() => clearTimeout(timer))
+}
+
 // To be called from inside a user gesture (the provider hooks the first
-// pointerdown): iOS Safari only unlocks a context that is created or
-// resumed within a gesture handler — a later resume() from a push
-// effect stays suspended forever. Harmless anywhere else.
+// pointerdown, and the sound toggle calls it from its click): iOS Safari
+// only unlocks a context that is created or resumed within a gesture
+// handler — a later resume() from a push effect stays suspended
+// forever. Harmless anywhere else.
 export const unlockChime = (): void => {
   try {
     const c = liveContext()
     if (!c) return
     if (c.state === 'suspended') {
       idled = false
-      void c.resume().catch(() => {})
+      const p = settled(c.resume())
+      unlocking = p
+      void p.then(() => {
+        if (unlocking === p) unlocking = null
+      })
     }
   } catch {
     // silent by requirement
@@ -89,32 +132,47 @@ export const unlockChime = (): void => {
 // all when audio is unavailable (no Web Audio support), blocked by the
 // autoplay policy (context stuck suspended), or muted by the tab/OS —
 // the OS mute case needs no handling, the graph just plays into
-// silence. `gesture`: called from inside a user gesture (the sound
-// toggle's click), where a suspended context is unlockable — so it is
-// resumed and played through rather than taken for an autoplay block.
-export const playChime = ({ gesture = false } = {}): void => {
+// silence. `enabled` is asked again after any wait: the sound may have
+// been switched off while this call waited (PR #314 review).
+export const playChime = ({
+  enabled = () => true,
+}: { enabled?: () => boolean } = {}): void => {
+  if (waiting) return
   void (async () => {
     try {
       const c = liveContext()
       if (!c) return
       clearTimeout(idleTimer)
-      if (c.state === 'suspended') {
-        if (idled || gesture) {
-          // our own post-chime suspension (the context is already
-          // unlocked), or a gesture that unlocks it: this resume settles
-          // promptly
-          await c.resume()
-          idled = false
-        } else {
-          // Autoplay block. resume()'s promise stays PENDING until a
-          // user gesture, so awaiting it here would stack every blocked
-          // chime and release them together on the first click — kick
-          // it off and stay silent instead (PR #215 review).
-          void c.resume().catch(() => {})
-          return
+      waiting = true
+      try {
+        // our own idle suspend still landing: let it, then wake below
+        if (suspending) await suspending
+        if (c.state === 'suspended') {
+          if (idled) {
+            // our own post-chime suspension: the context is already
+            // unlocked, so this resume settles promptly
+            await c.resume()
+            idled = false
+          } else if (unlocking) {
+            // a gesture's unlock in flight (the toggle's own click, or a
+            // push landing just after the first pointerdown): wait for
+            // it, but never past the bound — a resume that will not
+            // settle must not hold a chime back for a later gesture
+            await within(unlocking, UNLOCK_WAIT_MS)
+          } else {
+            // Autoplay block. resume()'s promise stays PENDING until a
+            // user gesture, so awaiting it here would stack every
+            // blocked chime and release them together on the first
+            // click — kick it off and stay silent instead (PR #215
+            // review).
+            void c.resume().catch(() => {})
+            return
+          }
         }
+      } finally {
+        waiting = false
       }
-      if (c.state !== 'running') return
+      if (!enabled() || c.state !== 'running') return
       const t = c.currentTime
       tone(t, 880, 0.18)
       tone(t + 0.12, 1318.5, 0.3)
@@ -122,7 +180,11 @@ export const playChime = ({ gesture = false } = {}): void => {
       // self-suspension distinguishable from a policy block above
       idleTimer = setTimeout(() => {
         idled = true
-        void ctx?.suspend().catch(() => {})
+        const p = settled(c.suspend())
+        suspending = p
+        void p.then(() => {
+          if (suspending === p) suspending = null
+        })
       }, IDLE_AFTER_MS)
     } catch {
       // silent by requirement: blocked/suspended/muted audio is not an

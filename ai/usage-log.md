@@ -59,7 +59,7 @@
   2026-11-08, Claude Code (Opus 5.5): prepended the issue #308 owner
   upgrade entry below.
   2026-11-09, Claude Code (Opus 5.5): prepended the notification sound
-  preview entry below.
+  preview entry below, then its PR #314 review round.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -100,6 +100,21 @@ Entry template:
   header only.
 - **Author review:** web `npm test` (443/443), lint, Prettier and build green; Leong Wei Zhi
   to review via the pull request.
+- **PR #314 review round (@Sinnez1, CHANGES_REQUESTED), same tool:**
+  prompt "address the latest pr comments". The `gesture` flag is gone:
+  `unlockChime` keeps its in-flight resume and `playChime` waits on that
+  real unlock, at most `UNLOCK_WAIT_MS` (1 s), so a synthetic click's
+  never-settling resume holds nothing back. A pending idle suspend is
+  waited out first, one chime waits at a time, and an `enabled()` check
+  after the wait drops a preview switched off meanwhile. The provider
+  previews only on an off-to-on change (a ref holds the latest write,
+  ahead of the render), and calls `unlockChime` inside the click itself
+  so a keyboard toggle with no pointerdown still unlocks. Tests: the
+  fake's resume/suspend can land late; 6 `chime.test.ts` cases (unlock
+  lands / never settles / rejects, switch-off while waiting, joined
+  call, pending suspend) and 2 Center cases (one-batch double-click,
+  `enabled` follows a switch-off). Five of them fail on the previous
+  commit. `npm test` 450/450, lint, Prettier, build green.
 
 ---
 ## 2026-11-08 — Leong Wei Zhi (issue #308: owner upgrade from the profile page)

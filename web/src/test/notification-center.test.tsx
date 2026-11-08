@@ -60,8 +60,10 @@
 // refreshed.
 // 2026-11-09, Claude Code (Opus 5.5), notification sound preview (no
 // issue): the header toggle case now expects switching the sound on to
-// preview the chime once, as a gesture call. Author review: Leong Wei
-// Zhi, pending pull request review.
+// preview the chime once. PR #314 review (@Sinnez1): the click unlocks
+// the context; a double-click inside one batch previews once; the
+// preview's `enabled` check follows a later switch-off. Author review:
+// Leong Wei Zhi, pending pull request review.
 
 import {
   act,
@@ -210,6 +212,7 @@ function jsonResponse(status: number, body: unknown) {
 beforeEach(() => {
   localStorage.clear()
   chime.playChime.mockClear()
+  chime.unlockChime.mockClear()
   stomp.instances.length = 0
   // the resolver's cache is module-scoped; a leftover entry would let a
   // test pass on a name some earlier test resolved
@@ -1704,12 +1707,50 @@ describe('notification center page', () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
     expect(localStorage.getItem('notificationSoundEnabled')).toBe('true')
     expect(chime.playChime).toHaveBeenCalledTimes(1)
-    expect(chime.playChime).toHaveBeenLastCalledWith({ gesture: true })
+    // the click unlocks the context it previews on
+    expect(chime.unlockChime).toHaveBeenCalled()
 
     await act(async () => {
       onMessage(pushFrame(acceptedBy(100)))
     })
     expect(chime.playChime).toHaveBeenCalledTimes(2)
+  })
+
+  test('a double-click before a re-render previews once', async () => {
+    localStorage.setItem('notificationSoundEnabled', 'false')
+    await renderCenter()
+    const toggle = screen.getByRole('button', { name: 'Notification sound' })
+
+    // both clicks land in one batch, so both read the stale "off" and
+    // ask for on (PR #314 review)
+    act(() => {
+      toggle.click()
+      toggle.click()
+    })
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+    // no pointerdown came first (a keyboard or scripted click): the
+    // setter's own unlock is the one inside the gesture
+    expect(chime.unlockChime).toHaveBeenCalledTimes(1)
+  })
+
+  test('the preview asks for the latest setting, so a quick switch-off drops it', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('notificationSoundEnabled', 'false')
+    await renderCenter()
+    const toggle = screen.getByRole('button', { name: 'Notification sound' })
+
+    await user.click(toggle)
+    const [{ enabled }] = chime.playChime.mock.calls[0] as [
+      { enabled: () => boolean },
+    ]
+    expect(enabled()).toBe(true)
+
+    await user.click(toggle)
+    expect(enabled()).toBe(false)
+    // and switching off never previews
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
   })
 
   test('a stored "false" renders the sound toggle off', async () => {

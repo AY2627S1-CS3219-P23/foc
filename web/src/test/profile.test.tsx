@@ -1100,6 +1100,7 @@ describe('preferences', () => {
 
   beforeEach(() => {
     chime.playChime.mockClear()
+    chime.unlockChime.mockClear()
   })
 
   it('offers the notification sound switch, on by default', async () => {
@@ -1136,7 +1137,7 @@ describe('preferences', () => {
     expect(toggle).toHaveAttribute('aria-checked', 'true')
     expect(localStorage.getItem(SOUND_KEY)).toBe('true')
     expect(chime.playChime).toHaveBeenCalledTimes(1)
-    expect(chime.playChime).toHaveBeenCalledWith({ gesture: true })
+    expect(chime.unlockChime).toHaveBeenCalled()
   })
 
   it('renders a stored "false" as off', async () => {

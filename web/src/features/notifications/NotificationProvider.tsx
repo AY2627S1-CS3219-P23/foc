@@ -69,6 +69,10 @@
 // the shared setter, so the Center header and the Profile switch get it
 // alike. A change synced in from another tab bypasses the setter and
 // stays silent.
+// PR #314 review (@Sinnez1): the preview fires only on an off-to-on
+// change (a ref tracks the latest write ahead of the render), unlocks
+// the context inside the click and then waits on that unlock, and asks
+// the ref again after the wait so a quick switch-off drops it.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet } from 'react-router'
@@ -151,15 +155,31 @@ export const NotificationProvider = () => {
     { sync: true },
   )
   const soundEnabled = storedSound !== false
-  // Switching the sound on previews the chime. Only the toggles call
-  // this, from their click — a user gesture, so the chime may unlock
-  // the audio context itself (the click can be the page's first
-  // pointerdown). A change synced in from another tab writes the stored
-  // value directly and stays silent.
+  // The setting as of the latest write — ahead of the render, so the
+  // setter below sees a click the render has not caught up with, and a
+  // waiting preview sees a switch-off made while it waited (PR #314
+  // review). A change synced in from another tab lands via the render.
+  const soundRef = useRef(soundEnabled)
+  useEffect(() => {
+    soundRef.current = soundEnabled
+  }, [soundEnabled])
+  // Switching the sound on previews the chime — only on an actual
+  // off-to-on change, so a double-click both of whose calls computed
+  // `true` from the same stale render previews once (PR #314 review).
+  // Only the toggles call this, from their click: a user gesture, so it
+  // unlocks the audio context first (the click may be the page's first
+  // gesture, or keyboard-only, with no pointerdown before it) and the
+  // chime waits for that unlock. A change synced in from another tab
+  // writes the stored value directly and stays silent.
   const setSoundEnabled = useCallback(
     (enabled: boolean) => {
+      const wasEnabled = soundRef.current
+      soundRef.current = enabled
       setStoredSound(enabled)
-      if (enabled) playChime({ gesture: true })
+      if (enabled && !wasEnabled) {
+        unlockChime()
+        playChime({ enabled: () => soundRef.current })
+      }
     },
     [setStoredSound],
   )
