@@ -99,6 +99,9 @@
   its two token types. Author review: Leong Wei Zhi, pending pull
   request review. PR #309 review: the accepted risk of unthrottled
   token guesses recorded (Leong Wei Zhi's decision via options Q&A).
+  2026-11-09, PR #309 bot re-review: the note states that the gateway
+  does not rate-limit the routes either. Author review: Leong Wei Zhi,
+  pending pull request review.
 -->
 
 # User Service
@@ -343,7 +346,8 @@ email-change verify had just replaced (PR #157 review).
   **Accepted risk (PR #309 review, Leong Wei Zhi):** wrong tokens are
   not throttled — a wrong token costs no gate-code attempt, so any
   signed-in user can keep guessing (as anyone can on
-  `/auth/signup-owner`). The defence is the token itself: set
+  `/auth/signup-owner`), and the gateway rate-limits neither route
+  (`gateway/nginx.conf` has no `limit_req`). The defence is the token itself: set
   `OWNER_SETUP_TOKEN` to a long random value (the cloud deployment
   generates 32 random alphanumerics), and unset it when no more owners
   are needed — the routes then answer 503.
