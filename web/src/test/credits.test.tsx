@@ -19,10 +19,9 @@
 // stale empty state, and a past-distributions retry shown as loading.
 // PR #211 review: the same loading gate for an empty past-distributions
 // page.
-// 2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1: a pushed
-// balance-changing request event fetches the balance at once and again
-// 2 s later, inside a stub NotificationsContext as
-// request-refetch.test.tsx feeds it.
+// 2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): a pushed
+// credit-change notification fetches the balance at once, inside a stub
+// NotificationsContext as request-refetch.test.tsx feeds it.
 // Author review: Ryan Ang, pending pull request review.
 
 import { act, render, screen, waitFor, within } from '@testing-library/react'
@@ -31,11 +30,9 @@ import { useEffect, useState } from 'react'
 import { Outlet, RouterProvider, createMemoryRouter } from 'react-router'
 
 import { creditApi } from '@/features/credit/api'
-import { BALANCE_EVENTS } from '@/features/credit/balanceEvents'
 import {
   BALANCE_POLL_MS,
   CreditBalanceProvider,
-  PUSH_RECHECK_MS,
 } from '@/features/credit/CreditBalanceProvider'
 import { nextExpiry } from '@/features/credit/expiry'
 import { NO_FILTERS, parseFilters } from '@/features/credit/history'
@@ -974,7 +971,7 @@ describe('balance poll', () => {
   })
 })
 
-describe('balance refresh on a pushed request event', () => {
+describe('balance refresh on a credit-change notification', () => {
   // Stands in for NotificationProvider: the pushed array's reference
   // changes once per render that appends frames.
   let pushFrames: (dtos: NotificationDto[]) => void = () => {}
@@ -1038,95 +1035,54 @@ describe('balance refresh on a pushed request event', () => {
     await screen.findByRole('link', { name: 'Credits: 42' })
   }
 
-  beforeEach(() => {
-    vi.useFakeTimers({
-      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
-      shouldAdvanceTime: true,
-    })
-  })
+  it.each(['credit.transferred', 'credit.released', 'credit.dispute-settled'])(
+    'fetches the balance at once on %s',
+    async (eventType) => {
+      await renderBadge()
 
-  afterEach(() => {
-    vi.useRealTimers()
-  })
+      balance = { available: 37, reserved: 13, total: 50 }
+      await push(eventType)
 
-  it('fetches at once, and again after the recheck for a push that won the race', async () => {
-    await renderBadge()
+      expect(
+        await screen.findByRole('link', { name: 'Credits: 37' }),
+      ).toBeInTheDocument()
+      expect(creditApi.getBalance).toHaveBeenCalledTimes(2)
+    },
+  )
 
-    // the first fetch reads the balance before the transfer committed
-    vi.mocked(creditApi.getBalance)
-      .mockResolvedValueOnce({ available: 42, reserved: 8, total: 50 })
-      .mockResolvedValueOnce({ available: 45, reserved: 8, total: 53 })
-    await push('request.completed')
-    await waitFor(() => expect(creditApi.getBalance).toHaveBeenCalledTimes(2))
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(PUSH_RECHECK_MS)
-    })
-    expect(
-      await screen.findByRole('link', { name: 'Credits: 45' }),
-    ).toBeInTheDocument()
-    expect(creditApi.getBalance).toHaveBeenCalledTimes(3)
-  })
-
-  it.each([...BALANCE_EVENTS])('refreshes on %s', async (eventType) => {
-    await renderBadge()
-
-    balance = { available: 37, reserved: 13, total: 50 }
-    await push(eventType)
-
-    expect(
-      await screen.findByRole('link', { name: 'Credits: 37' }),
-    ).toBeInTheDocument()
-  })
-
-  it('ignores events that change no balance', async () => {
+  it('ignores request events, the saga replies and other notifications', async () => {
     await renderBadge()
 
     await push(
-      'request.created',
-      'request.rejected',
-      'request.accepted',
-      'request.collected',
-      'request.disputed',
+      'request.submitted',
+      'request.completed',
+      'request.cancelled',
+      'request.dispute-resolved',
+      'credit.reserved',
       'rating.submitted',
     )
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(PUSH_RECHECK_MS)
-    })
 
+    // give a wrongly triggered fetch the chance to start
+    await act(async () => {})
     expect(creditApi.getBalance).toHaveBeenCalledTimes(1)
   })
 
-  it('makes one recheck for a burst, after its last frame', async () => {
+  it('fetches once for a burst delivered in one render', async () => {
     await renderBadge()
 
-    await push('request.completed', 'request.cancelled')
-    await waitFor(() => expect(creditApi.getBalance).toHaveBeenCalledTimes(2))
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(PUSH_RECHECK_MS / 2)
-    })
-    await push('request.expired')
-    await waitFor(() => expect(creditApi.getBalance).toHaveBeenCalledTimes(3))
+    await push('credit.transferred', 'credit.released')
 
-    // the first recheck was moved, not added to
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(PUSH_RECHECK_MS / 2)
-    })
-    expect(creditApi.getBalance).toHaveBeenCalledTimes(3)
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(PUSH_RECHECK_MS / 2)
-    })
-    await waitFor(() => expect(creditApi.getBalance).toHaveBeenCalledTimes(4))
+    await waitFor(() => expect(creditApi.getBalance).toHaveBeenCalledTimes(2))
+    await act(async () => {})
+    expect(creditApi.getBalance).toHaveBeenCalledTimes(2)
   })
 
   it('leaves a hidden tab to fetch when it is shown', async () => {
     await renderBadge()
 
     act(() => setVisibility('hidden'))
-    await push('request.completed')
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(PUSH_RECHECK_MS)
-    })
+    await push('credit.transferred')
+    await act(async () => {})
     expect(creditApi.getBalance).toHaveBeenCalledTimes(1)
 
     act(() => setVisibility('visible'))

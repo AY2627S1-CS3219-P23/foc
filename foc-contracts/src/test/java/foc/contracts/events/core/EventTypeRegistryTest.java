@@ -20,6 +20,10 @@
  * 2026-10-28, Claude Code (Opus 5.5), issue #267: count and domain
  * prefix for the user domain; author review: Ryan Ang, pending pull
  * request review.
+ * 2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): count
+ * bumped for credit.transferred, credit.released and
+ * credit.dispute-settled; author review: Ryan Ang, pending pull request
+ * review.
  */
 package foc.contracts.events.core;
 
@@ -38,8 +42,8 @@ import org.junit.jupiter.api.Test;
 class EventTypeRegistryTest {
 
 	@Test
-	void catalogsExactlySeventeenEvents() {
-		assertEquals(17, EventTypeRegistry.entries().size());
+	void catalogsExactlyTwentyEvents() {
+		assertEquals(20, EventTypeRegistry.entries().size());
 	}
 
 	@Test

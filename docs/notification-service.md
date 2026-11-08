@@ -87,6 +87,10 @@
   2026-11-04, follow-up to PR #287 (author's call): the resolver no
   longer special-cases credit and user events; the rule table and the
   runtime paragraph say they take the unmapped-type path.
+  2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): D35 added — the
+  credit-change notification, as the team decided via options Q&A —
+  with the credit events' catalog note and the recipient rows.
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -146,6 +150,7 @@ removed; gaps in the numbering are intentional.
 | D32 | Display names (supersedes D30/D31) | **Events and stored payloads carry party IDs only; the web resolves the acting party's id (`courierId`; since issue #255 also `raterId`) → username at read time** (gateway `GET /api/user/users/{id}` with the caller's own JWT, SPA-side cache: 10 min positive / 30 s negative TTL, in-flight dedupe) — no service-to-service call remains, the internal-token machinery is gone, F1.1 holds unamended, renames show current names (D30's ingest snapshot went stale), and a failed lookup renders the actor-less copy — see [Display names](#display-names-d32) | Notif F3.1 UX |
 | D33 | Dropped-courier prune (issue #266) | **Ingesting `request.dropped` deletes the dropping courier's stored rows for that request**, in the same transaction as the dedupe insert — the drop removes them as a party (order-service nulls `courierId`), so every row they held (`request.accepted`, `request.collected`, dispute events) could only dead-end on the detail 404. Bounded to rows at or before the drop and guarded against retry-queue reordering, with the badge re-synced when the Center opens (PR #277 review). Chosen (options Q&A) over a past-party read-access record in order-service and over web-only 404 softening — see [Dropped-courier prune](#dropped-courier-prune-d33) | Notif F3.1 UX; issue #266 |
 | D34 | Recipient resolution | **Events carry business facts only; this service derives who is told from each event's own id fields (`requesterId`, `courierId`, `rateeId`), one rule per event type** — the `parties` wire field is removed from every contract record, and `request.expired` gains a nullable `courierId` so the courier who had accepted stays reachable. Chosen (options Q&A) over a publisher-sent notification command and over keeping `parties` on the event — see [Recipient resolution](#recipient-resolution-d34) | Notif F1.1, F1.2; contract decoupling |
+| D35 | Credit-change notification (PR #313) | **This service binds `credit.transferred`, `credit.released` and `credit.dispute-settled` on the `credit-events` exchange (exact keys, its own queue trio) and notifies each party whose balance moved**: `credit.transferred` and `credit.dispute-settled` the requester and the courier (a dispute share of 0 included), `credit.released` the requester. `credit.reserved` and `credit.reservation-rejected` stay unbound: a reserve is not notified. The web shows the viewer's side of the change (signed amount first), opens `/credits` on click, and refreshes the balance on these pushes. Team decision (options Q&A), 2026-11-08 | Credit NFR1.1 |
 
 ## Components
 
@@ -240,7 +245,12 @@ party IDs as-is and the web resolves `courierId` to a username at read
 time — see [Display names](#display-names-d32). The credit domain's `credit.reserved` and
 `credit.reservation-rejected` carry `requestId`, `requesterId` and
 `amount` (plus `reason` and a nullable `reasonCode` on the rejection) and go to the separate
-`credit-events` exchange, which this service does not bind.
+`credit-events` exchange; this service does not bind them. It binds the
+three credit-change events on that exchange instead (D35):
+`credit.transferred` (`requestId`, `requesterId`, `courierId`,
+`amount`), `credit.released` (`requestId`, `requesterId`, `amount`) and
+`credit.dispute-settled` (`requestId`, `requesterId`, `courierId`,
+`courierAmount`, `requesterAmount`).
 
 The rating domain (N1, issue #255): `rating.submitted` carries
 `ratingId`, `requestId`, `raterId`, `rateeId` and `stars`; this service
@@ -401,11 +411,13 @@ every recipient is a field on the event once `request.expired` carries
 | `request.accepted`, `collected`, `completed`, `disputed`, `dispute-resolved` | requester and courier |
 | `request.expired` | requester, plus the courier who had accepted when `courierId` is set |
 | `rating.submitted` | ratee only (#44) |
-| `credit.*`, `user.*` | never bound here (D16); one that arrives anyway is refused like any type without a rule and dead-letters |
+| `credit.transferred`, `credit.dispute-settled` | requester and courier, a dispute share of 0 included (D35) |
+| `credit.released` | requester (D35) |
+| `credit.reserved`, `credit.reservation-rejected`, `user.*` | never bound here (D16, D35); one that arrives anyway is refused like any type without a rule and dead-letters |
 
 ```mermaid
 flowchart LR
-    Q["request-events /<br/>rating-events queue"] ==> C["converter:<br/>dispatch on eventType"]
+    Q["request-events /<br/>rating-events /<br/>credit-events queue"] ==> C["converter:<br/>dispatch on eventType"]
     C --> D{"eventId<br/>seen?"}
     D -->|yes| X["ack, nothing stored"]
     D -->|no| P["request.dropped?<br/>prune the courier's rows (D33)"]

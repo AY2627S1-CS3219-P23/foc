@@ -102,7 +102,7 @@ import org.springframework.stereotype.Component;
  * catalogs flows through unchanged, so a new domain queue is one more
  * entry in the {@code queues} list below plus its row in
  * {@link #RETRY_QUEUE_BY_WORK_QUEUE} (the rating queue arrived with
- * issue #255). Nothing here is domain-specific: the retry target is
+ * issue #255, the credit queue with the credit-change notification). Nothing here is domain-specific: the retry target is
  * looked up per delivery from its consuming queue; a delivery the map
  * cannot place is nacked with requeue — settled, so it never pins a
  * prefetch slot, and redelivered rather than guessed at.
@@ -124,7 +124,8 @@ class DomainEventsListener {
 	 */
 	static final Map<String, String> RETRY_QUEUE_BY_WORK_QUEUE = Map.of(
 			RabbitMqTopology.REQUEST_EVENTS_QUEUE, RabbitMqTopology.REQUEST_EVENTS_RETRY_QUEUE,
-			RabbitMqTopology.RATING_EVENTS_QUEUE, RabbitMqTopology.RATING_EVENTS_RETRY_QUEUE);
+			RabbitMqTopology.RATING_EVENTS_QUEUE, RabbitMqTopology.RATING_EVENTS_RETRY_QUEUE,
+			RabbitMqTopology.CREDIT_EVENTS_QUEUE, RabbitMqTopology.CREDIT_EVENTS_RETRY_QUEUE);
 
 	/**
 	 * Ceiling on waiting for the broker to confirm a retry republish;
@@ -147,7 +148,8 @@ class DomainEventsListener {
 
 	@RabbitListener(queues = {
 			RabbitMqTopology.REQUEST_EVENTS_QUEUE,
-			RabbitMqTopology.RATING_EVENTS_QUEUE })
+			RabbitMqTopology.RATING_EVENTS_QUEUE,
+			RabbitMqTopology.CREDIT_EVENTS_QUEUE })
 	void onDomainEvent(@Payload DomainEvent event, Message amqpMessage, Channel channel,
 			@Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) throws IOException {
 		try {

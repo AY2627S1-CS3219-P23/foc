@@ -12,11 +12,15 @@
   packages, security chain, D24-D29); stale D1-D22 range fixed.
   2026-10-17, Claude Code (Fable 5), PR #198 Codex review: the config/
   row records the CORS registration's /notifications/** scope.
+  2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): the credit-change
+  events (D35) in the summary line.
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # notification-service/ — Agent Guide
 
-Java 21 + Spring Boot 4 service that consumes request events from
+Java 21 + Spring Boot 4 service that consumes request events (and the
+rating and credit-change events, issue #255 and D35) from
 RabbitMQ, stores notifications, and pushes them over STOMP. Read the
 root `AGENTS.md` first (architecture, course constraints, AI usage
 policy). The design authority is

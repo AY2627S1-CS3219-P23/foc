@@ -76,6 +76,11 @@
 // screen; and the badge count re-syncs on mount (author decision via
 // options Q&A) — the dropped-courier prune deletes rows no push
 // announces, so the bell could disagree with an opened Center.
+// 2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): a credit-change
+// row (credit.transferred, .released, .dispute-settled) opens /credits
+// instead of the request (team decision), and every row's copy is given
+// the viewer's id, since a credit row reads differently to each party.
+// Author review: Ryan Ang, pending pull request review.
 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
@@ -83,12 +88,14 @@ import { useNavigate } from 'react-router'
 import { listNotifications, markAllRead, setNotificationRead } from './api'
 import {
   actorIdOf,
+  isCreditEvent,
   notificationMessage,
   relativeTime,
   requestIdOf,
 } from './eventMessage'
 import { useNotifications } from './useNotifications'
 import type { NotificationDto } from './types'
+import { useCurrentUserId } from '@/features/order/useCurrentUserId'
 import { useUsernames } from '@/features/user/usernames'
 import { errorMessage } from '@/lib/api/http'
 
@@ -321,6 +328,11 @@ export function NotificationCenter() {
         // bulk call, and the PATCH is idempotent for rows that are.
         markReadPending(notification.id)
       }
+      // a credit-change row opens the balance and history it changed
+      if (isCreditEvent(notification.eventType)) {
+        navigate('/credits')
+        return
+      }
       // the id is an arbitrary payload string — encoded so a `/`, `?`
       // or `#` in it cannot route somewhere unintended (PR #263 review)
       navigate(`/deliveries/${encodeURIComponent(requestId)}`)
@@ -436,6 +448,8 @@ export function NotificationCenter() {
     [items],
   )
   const names = useUsernames(actorIds)
+  const currentUserId = useCurrentUserId()
+  const viewerId = currentUserId === null ? null : String(currentUserId)
 
   // The rows as the viewer should see them: a row whose read PATCH is
   // still in flight — or committed after this page's snapshot was
@@ -558,6 +572,7 @@ export function NotificationCenter() {
               key={notification.id}
               notification={notification}
               names={names}
+              viewerId={viewerId}
               now={now}
               onClick={() => handleRowClick(notification)}
             />
@@ -584,17 +599,22 @@ export function NotificationCenter() {
 function NotificationRow({
   notification,
   names,
+  viewerId,
   now,
   onClick,
 }: {
   notification: NotificationDto
   names: ReadonlyMap<string, string>
+  viewerId: string | null
   now: Date
   onClick: () => void
 }) {
-  const { icon, title } = notificationMessage(notification, names)
+  const { icon, title } = notificationMessage(notification, names, viewerId)
   const time = relativeTime(notification.occurredAt, now)
   const requestId = requestIdOf(notification.payload)
+  const opens = isCreditEvent(notification.eventType)
+    ? 'your credits'
+    : 'the request'
 
   // A row that references a request navigates to it, read or not (an
   // unread one is also marked read on the way). A row without a request
@@ -603,8 +623,8 @@ function NotificationRow({
   const label =
     requestId !== null
       ? notification.read
-        ? `${title} — select to open the request`
-        : `${title} — unread, select to open the request`
+        ? `${title} — select to open ${opens}`
+        : `${title} — unread, select to open ${opens}`
       : notification.read
         ? title
         : `${title} — unread, select to mark read`

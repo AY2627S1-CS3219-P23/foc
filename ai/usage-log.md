@@ -56,8 +56,9 @@
   entry below.
   Author review: Leong Wei Zhi to review via pull request.
   2026-11-08, Claude Code (Opus 5.5): prepended the Credit NFR1.1
-  push-triggered balance refresh entry below. Author review: Ryan Ang,
-  pending pull request review.
+  entry below (PR #313), then rewrote it for the credit-change
+  notification rework. Author review: Ryan Ang, pending pull request
+  review.
 -->
 
 # AI Usage Log
@@ -78,13 +79,12 @@ Entry template:
 ```
 
 ---
-## 2026-11-08 — Ryan Ang (Credit NFR1.1: balance refresh on a pushed request event)
+## 2026-11-08 — Ryan Ang (Credit NFR1.1: credit-change notification and balance refresh, PR #313)
 - **Tool:** Claude Code (Opus 5.5)
-- **Mode:** generate
-- **Scope:** `web/src/features/credit/CreditBalanceProvider.tsx`: when the Notification Service pushes `request.submitted`, `request.completed`, `request.cancelled`, `request.expired` or `request.dispute-resolved`, the balance is fetched at once and again 2 s later (`PUSH_RECHECK_MS`), since the push and the Credit Service read the same event in parallel and the push can arrive before the change commits; a burst moves the second fetch to 2 s after its last frame; a hidden tab leaves it to the existing fetch on being shown; outside a `NotificationProvider` nothing changes. The 30 s poll stays. `web/src/features/credit/balanceEvents.ts` (new): the event list, in its own file for react-refresh. `web/src/test/credits.test.tsx`: tests for the immediate and the second fetch, each event, the events that change no balance, a burst, and a hidden tab.
-- **Prompt(s):** checked the credit FRs and NFRs of the D1 backlog against the code; the gap found was NFR1.1 (balances shown within 5 s), as the page only polls every 30 s. Asked for the balance to refresh when a credit-affecting notification arrives. The tool pointed out that `request.created` comes before the reserve and that the other events race the Credit Service; the event list (every balance-changing event) and the second fetch 2 s later are team decisions from a neutral options round.
-- **Author review:** `vitest run` (446 tests pass; the new tests fail with the refresh disabled), `tsc -b`, `eslint .`, Prettier on the changed files. Ryan Ang reviews via pull request.
-
+- **Mode:** generate, docs
+- **Scope:** First version (superseded within the PR): `CreditBalanceProvider` fetched the balance on pushed balance-changing request events and again 2 s later, since the push could arrive before the Credit Service committed. Reworked after review into the credit-change notification: `foc-contracts` gains `CreditTransferred`, `CreditReleased`, `CreditDisputeSettled` (records, registry entries, fixtures, registry count test). `credit-service`: `RequestEventHandler` enqueues the matching event to the outbox when a transfer, release or dispute split settles, reading the parties and amount from the settled record; none for an amount-0 release; both shares for a split, 0 included; unit tests and two Postgres-backed handler tests. `notification-service`: a `notification-service.credit-events` trio bound on the three exact keys, the listener's queue list and retry map, `RecipientResolver` rules (transferred and dispute-settled: requester and courier; released: requester), resolver tests. `web`: `eventMessage.ts` copy per viewer (signed amount first), `NotificationCenter` passes the viewer id and opens `/credits` for a credit row, `CreditBalanceProvider` fetches once on a credit-change push (the request-event trigger, the 2 s recheck and `balanceEvents.ts` removed); tests for each. Docs: notification D35, credit D15, the recipient table, both services' and foc-contracts' AGENTS.md, the foc-contracts README record list.
+- **Prompt(s):** checked the D1 backlog's credit FRs and NFRs against the code; the gap was NFR1.1, as the web polled the balance every 30 s. Asked for a refresh when a credit-affecting notification arrives; the tool pointed out that `request.created` precedes the reserve and that the other request events race the Credit Service, and the team chose every balance-changing event plus a second fetch 2 s later. On review the approach was judged not robust, and the team chose a visible credit-change notification instead. The tool noted that the Credit Service publishes no event for a transfer, release or split, so new contracts were needed. Every design choice came from neutral options rounds and is the team's: notify on transfer, release and dispute split but not reserve; leave `credit.reserved` unbound; one event per operation named `credit.transferred` / `credit.released` / `credit.dispute-settled`; tell both parties of a split even for a 0 share; replace the request-event refresh; open `/credits` on click; signed-amount-first wording. The tool chose no fields beyond those offered and skipped the event for an amount-0 release, where no balance moved.
+- **Author review:** foc-contracts `./mvnw install` (tests pass); notification-service `./mvnw test` 115 pass (Docker integration tests included); credit-service `./mvnw test` 364 pass (Postgres-backed tests included); order-service `./mvnw test` passes (it binds only the saga replies, so the new events do not reach it); web `vitest run` 450 pass, `tsc -b`, `eslint .`, Prettier on the changed files. No end-to-end run. Ryan Ang reviews via pull request.
 ---
 ## 2026-11-08 — Leong Wei Zhi (N5 cloud deployment, issue #48: HTTPS with an ACM certificate on a load balancer)
 - **Tool:** Claude Code (Fable 5.1)

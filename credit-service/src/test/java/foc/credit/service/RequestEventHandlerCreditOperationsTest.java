@@ -15,6 +15,10 @@
  * decision via options Q&A): the parties argument/assertions removed —
  * events carry no recipient list; RequestExpired gains a nullable
  * courierId. Author review: Leong Wei Zhi, pending pull request review.
+ * 2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): a
+ * completion and a cancellation enqueue their credit event with the
+ * parties and amount read back from the settled record. Author review:
+ * Ryan Ang, pending pull request review.
  */
 package foc.credit.service;
 
@@ -23,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.time.Instant;
@@ -39,7 +44,9 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import foc.contracts.events.core.DomainEvent;
+import foc.contracts.events.credit.CreditReleased;
 import foc.contracts.events.credit.CreditReserved;
+import foc.contracts.events.credit.CreditTransferred;
 import foc.contracts.events.request.RequestCancelled;
 import foc.contracts.events.request.RequestCompleted;
 import foc.contracts.events.request.RequestExpired;
@@ -119,6 +126,37 @@ class RequestEventHandlerCreditOperationsTest extends PostgresTestContainer {
         assertBalance(requester, 2, 0);
         assertBalance(courier, 8, 0);
         assertThat(statusOf(request)).isEqualTo(ReservationStatus.TRANSFERRED);
+    }
+
+    @Test
+    void aCompletionCommitsCreditTransferredWithTheRecordsParties() {
+        handler.handle(submitted(3));
+        handler.handle(completed(courier));
+        // redelivered: settled already, so no second event
+        handler.handle(completed(courier));
+
+        ArgumentCaptor<DomainEvent> events = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(outbox, times(2)).enqueue(events.capture());
+        assertThat(events.getAllValues().get(1)).isInstanceOfSatisfying(CreditTransferred.class, transferred -> {
+            assertThat(transferred.requestId()).isEqualTo(request);
+            assertThat(transferred.requesterId()).isEqualTo(requester);
+            assertThat(transferred.courierId()).isEqualTo(courier);
+            assertThat(transferred.amount()).isEqualTo(3);
+        });
+    }
+
+    @Test
+    void aCancellationCommitsCreditReleased() {
+        handler.handle(submitted(3));
+        handler.handle(new RequestCancelled("evt-cancelled", SENT_AT, "order-service", "corr-1",
+            request, requester, null, "UTown", "PGP", null));
+
+        ArgumentCaptor<DomainEvent> events = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(outbox, times(2)).enqueue(events.capture());
+        assertThat(events.getAllValues().get(1)).isInstanceOfSatisfying(CreditReleased.class, released -> {
+            assertThat(released.requesterId()).isEqualTo(requester);
+            assertThat(released.amount()).isEqualTo(3);
+        });
     }
 
     @Test

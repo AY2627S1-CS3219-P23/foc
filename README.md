@@ -318,8 +318,9 @@
   the rater's review readback (issue #284) by Claude Code (Opus 5).
   Author review: Leong Wei Zhi, pending pull request review.
   2026-11-08: AI Use Summary extended for the push-triggered credit
-  balance refresh (Credit NFR1.1) by Claude Code (Opus 5.5). Author
-  review: Ryan Ang, pending pull request review.
+  balance refresh (Credit NFR1.1) by Claude Code (Opus 5.5), then
+  rewritten for its rework into the credit-change notification (PR
+  #313). Author review: Ryan Ang, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1557,11 +1558,15 @@ section's first load to settle before asserting on it, after one case
 flaked in CI on an unrelated branch. Test-only. Recorded in
 `ai/usage-log.md`.
 
-The credit balance refresh on a pushed request event (Credit NFR1.1):
-Claude Code (Opus 5.5) made `CreditBalanceProvider` fetch the balance
-when a balance-changing request event is pushed, and again 2 s later in
-case the push arrived before the Credit Service committed, with tests.
-Which events count and the second fetch were team decisions. Recorded in
+The credit-change notification (Credit NFR1.1, PR #313): Claude Code
+(Opus 5.5) added the `credit.transferred`, `credit.released` and
+`credit.dispute-settled` contracts, had credit-service write them to its
+outbox when a transfer, release or dispute split settles,
+notification-service bind them and tell each party, and the web show the
+viewer's side of the change, open `/credits` on click and refresh the
+balance on the push, with tests and the design docs' D35 (notification)
+and D15 (credit). Which movements notify, the contract names and
+fields, the recipients and the wording were team decisions. Recorded in
 `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through

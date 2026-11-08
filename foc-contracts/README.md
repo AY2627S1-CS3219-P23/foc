@@ -35,6 +35,9 @@
   (UserEvent, UserCreated, UserPurged, user-events) in the exchange,
   record, package and topology lists (team decision USR-1); author
   review: Ryan Ang, pending pull request review.
+  2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): record list updated for the
+  three credit-change events (team decision).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # foc-contracts
@@ -57,7 +60,8 @@ Only things that are a *contract between services* belong here:
   `RequestCancelled`, `RequestDropped`, `RequestExpired`,
   `CourierArrived`, `RequestSubmitted`, `RequestRejected`,
   `RequestDisputed`, `RequestDisputeResolved`, `CreditReserved`,
-  `CreditReservationRejected`, `RatingSubmitted`, `UserCreated`,
+  `CreditReservationRejected`, `CreditTransferred`, `CreditReleased`,
+  `CreditDisputeSettled`, `RatingSubmitted`, `UserCreated`,
   `UserPurged`. Where a field takes a
   fixed set of values, the field is a `String` and the record holds
   each value as a `String` constant plus one `Set` of them all

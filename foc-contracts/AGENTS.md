@@ -21,6 +21,9 @@
   2026-10-28, Claude Code (Opus 5.5), issue #267: module map updated
   for the user domain (team decision USR-1); author review: Ryan Ang,
   pending pull request review.
+  2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): module map updated for
+  the three credit-change events (team decision).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # foc-contracts/ — Agent Guide
@@ -40,7 +43,7 @@ design authority is
 | --- | --- |
 | `events/core/` | `DomainEvent` (base interface; `eventType()` derives the identity from the registry), `EventContracts` (shared names: `REQUEST_EVENTS_EXCHANGE`, `CREDIT_EVENTS_EXCHANGE`, `RATING_EVENTS_EXCHANGE`, `USER_EVENTS_EXCHANGE`), `EventTypeRegistry` (single class↔identity source, D18), `Nullable` (marks optional wire fields) |
 | `events/request/` | `RequestEvent` (domain marker) + the twelve records: `RequestCreated`, `RequestAccepted`, `RequestCollected`, `RequestCompleted`, `RequestCancelled`, `RequestDropped`, `RequestExpired`, `CourierArrived`, `RequestSubmitted`, `RequestRejected`, `RequestDisputed`, `RequestDisputeResolved` |
-| `events/credit/` | `CreditEvent` (domain marker) + the two records: `CreditReserved`, `CreditReservationRejected` |
+| `events/credit/` | `CreditEvent` (domain marker) + the five records: the saga replies `CreditReserved`, `CreditReservationRejected`, and the credit-change events `CreditTransferred`, `CreditReleased`, `CreditDisputeSettled` (credit D15) |
 | `events/rating/` | `RatingEvent` (domain marker) + the one record: `RatingSubmitted` |
 | `events/user/` | `UserEvent` (domain marker, `userId()`) + the two records: `UserCreated`, `UserPurged` (envelope and `userId` only) |
 | `src/main/resources/contracts/` | One canonical fixture per event, `<identity dots→hyphens>.example.json` (e.g. `request-courier-arrived.example.json`) — shipped on the jar's classpath |
