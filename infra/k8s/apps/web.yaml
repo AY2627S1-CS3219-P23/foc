@@ -5,6 +5,9 @@
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
 # docs/deployment.md); values mirror compose.yaml's defaults.
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-08, Claude Code (Fable 5.1), PR #302 review (Sinnez1): the pod
+# template carries the foc-config hash as an annotation (set by deploy.sh).
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1
 kind: Service
@@ -31,6 +34,10 @@ spec:
     metadata:
       labels:
         app: web
+      annotations:
+        # the rendered foc-config, hashed by deploy.sh: a config change
+        # rolls the pods too
+        foc/config-hash: "__CONFIG_HASH__"
     spec:
       imagePullSecrets:
         - name: ghcr-pull

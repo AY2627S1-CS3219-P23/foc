@@ -9,7 +9,8 @@
 # 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7): IMDS hop limit 1
 # (PR #289 review: with 2, any pod could use the instance role) and no
 # External Secrets chart in cloud-init. Author review: Leong Wei Zhi,
-# pending pull request review.
+# pending pull request review. Second round (Sinnez1): the host waits for
+# the secret values and the read policy.
 
 data "aws_ssm_parameter" "al2023" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
@@ -63,6 +64,14 @@ resource "aws_instance" "host" {
   }
 
   tags = { Name = "foc-k3s" }
+
+  # cloud-init's secrets.sh needs the secret values and the read policy to
+  # exist before the host boots (PR #302 review)
+  depends_on = [
+    aws_secretsmanager_secret_version.app,
+    aws_secretsmanager_secret_version.ghcr,
+    aws_iam_role_policy.host_secrets,
+  ]
 }
 
 resource "aws_eip" "host" {

@@ -81,7 +81,7 @@ sequenceDiagram
   participant G as GHCR
   participant S as SSM
   participant H as host (deploy.sh)
-  A->>G: build + push the 9 images tagged with the sha (web has the public URL baked in)
+  A->>G: build + push the 9 images, tagged commit-runid (web has the public URL baked in)
   A->>S: send-command with the OIDC role
   S->>H: checkout the sha, run deploy.sh
   H->>H: secrets.sh copies Secrets Manager into k8s Secrets
@@ -121,6 +121,10 @@ the pod templates, so the Deployments roll with the new values.
 - `CHAT_INTERNAL_TOKEN`: order and chat both read the new value after that rollout.
 - DB and RabbitMQ passwords: Postgres and RabbitMQ set them on an **empty volume only**. A later change breaks that service's login until its volume is deleted.
 - `MAIL_*`: used on the next OTP email.
+
+Non-secret config (`foc-config`, for example the public origin) and a
+rebuilt image at the same commit roll too: the pod templates carry a hash
+of the ConfigMap, and the image tag carries the workflow run id.
 
 ## Operating
 

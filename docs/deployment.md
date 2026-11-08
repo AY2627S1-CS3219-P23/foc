@@ -64,9 +64,9 @@ The AI tool presented facts and prices only.
 | DP5 | Public access | Elastic IP, plain HTTP on port 80, no domain. Only port 80 open; shell through SSM Session Manager |
 | DP6 | IaC | Terraform, state in S3 (`use_lockfile`), a bootstrap stack for the bucket |
 | DP7 | Secrets | AWS Secrets Manager (`foc/app`, `foc/ghcr`). `secrets.sh` on the host copies them into k8s Secrets at first boot and on every deploy, through the instance role. IMDS hop limit 1, so pods cannot use that role |
-| DP8 | Images, rollout | GHCR, pushed by GitHub Actions; rollout by SSM Run Command from an OIDC role trusted for `main` only |
+| DP8 | Images, rollout | GHCR, pushed by GitHub Actions and tagged `<commit>-<run id>`; rollout by SSM Run Command from an OIDC role trusted for `main` only. A pod rolls when its image tag, the Secret version or the ConfigMap hash changed |
 | DP9 | Replicas | 1 per Deployment at rest, HPA min 1 / max 2 on CPU 70 % (N5.4), except chat and notification, which run exactly one replica (DP10) |
-| DP10 | Backends at 2 replicas | No multi-replica hardening in the services. chat and notification run one replica, no HPA: a STOMP push reaches only the replica that holds the socket, which the team rates unsafe (issue #305 tracks cross-replica delivery). The other services scale to 2; their scheduled jobs then run on both replicas per tick, accepted because the jobs are idempotent (Leong Wei Zhi, 2026-11-08, on review) |
+| DP10 | Backends at 2 replicas | No multi-replica hardening in the services. chat and notification run one replica, no HPA, and a Recreate strategy so a deploy never overlaps two pods: a STOMP push reaches only the replica that holds the socket, which the team rates unsafe (issue #305 tracks cross-replica delivery). The other services scale to 2; their scheduled jobs then run on both replicas per tick, accepted because the jobs are idempotent (Leong Wei Zhi, 2026-11-08, on review) |
 | DP11 | Demo data | Seed on in the cloud; realistic usernames everywhere, same passwords and counts |
 | DP12 | Lifetime | Up to about 2026-11-19, then `terraform destroy`, nothing kept |
 | DP13 | Repo layout | `infra/` (Terraform + manifests), the second non-service top-level folder |

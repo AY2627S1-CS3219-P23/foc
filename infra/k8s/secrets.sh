@@ -7,7 +7,8 @@
 # Operator, so only host processes can use the instance role).
 # Author review: Leong Wei Zhi, pending pull request review.
 # PR #302 review: foc-secrets is built as a Secret document, so a value
-# may hold newlines; a non-string value stops the script.
+# may hold newlines; a non-string value stops the script. Second round
+# (Sinnez1): reads retried for a minute, foc/ghcr validated too.
 #
 # Usage (as root on the host): secrets.sh
 # Reads foc/app and foc/ghcr with the instance role and writes them as the
@@ -29,9 +30,20 @@ if [ -z "${AWS_DEFAULT_REGION:-}" ]; then
     export AWS_DEFAULT_REGION
 fi
 
+# IAM is eventually consistent and cloud-init runs this right after the
+# first apply, so a failed read is retried for about a minute
 secret() {
-    aws secretsmanager get-secret-value --secret-id "$1" \
-        --query SecretString --output text
+    local out
+    for _ in $(seq 1 10); do
+        if out="$(aws secretsmanager get-secret-value --secret-id "$1" \
+                --query SecretString --output text 2>&1)"; then
+            printf '%s\n' "$out"
+            return 0
+        fi
+        sleep 6
+    done
+    printf '%s\n' "$out" >&2
+    return 1
 }
 
 work="$(mktemp -d)"
@@ -52,9 +64,13 @@ secret foc/app | jq '
        type: "Opaque", data: from_entries}' \
     | kubectl apply -f -
 
-# foc/ghcr: {username, token} -> dockerconfigjson (the token never hits argv)
-secret foc/ghcr \
-    | jq '{auths: {"ghcr.io": {auth: ("\(.username):\(.token)" | @base64)}}}' \
+# foc/ghcr: {username, token} -> dockerconfigjson (the token never hits
+# argv); a missing or non-string field stops here instead of surfacing
+# later as ImagePullBackOff
+secret foc/ghcr | jq '
+    if (.username | type) != "string" or (.token | type) != "string"
+    then error("foc/ghcr needs string username and token")
+    else {auths: {"ghcr.io": {auth: ("\(.username):\(.token)" | @base64)}}} end' \
     > "$work/config.json"
 kubectl -n foc create secret generic ghcr-pull \
     --type=kubernetes.io/dockerconfigjson \

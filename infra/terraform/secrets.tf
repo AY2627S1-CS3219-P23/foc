@@ -43,8 +43,8 @@ resource "random_password" "chat_internal" {
   special = false
 }
 
-# One JSON secret with every app value; ExternalSecret foc-secrets
-# extracts all keys into the Kubernetes Secret of the same name.
+# One JSON secret with every app value; infra/k8s/secrets.sh copies all
+# keys into the Kubernetes Secret foc-secrets.
 resource "aws_secretsmanager_secret" "app" {
   name                    = "foc/app"
   recovery_window_in_days = 0

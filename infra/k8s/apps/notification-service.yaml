@@ -7,7 +7,8 @@
 # docs/deployment.md); values mirror compose.yaml's defaults.
 # Author review: Leong Wei Zhi, pending pull request review.
 # 2026-11-08, Claude Code (Fable 5.1), PR #302 review: the pod template
-# carries the foc-secrets version as an annotation (set by deploy.sh).
+# carries the foc-secrets version as an annotation (set by deploy.sh);
+# second round (Sinnez1): the foc-config hash too.
 # Author review: Leong Wei Zhi, pending pull request review.
 # Same day, review follow-up: replicas pinned to 1 (DP10, issue #305).
 ---
@@ -31,6 +32,10 @@ metadata:
   namespace: foc
 spec:
   replicas: 1
+  # a deploy must not overlap two pods either (DP10: one socket-holding
+  # replica), so the old pod stops before the new one starts
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: notification-service
@@ -42,6 +47,9 @@ spec:
         # set by deploy.sh to the foc-secrets resourceVersion: changed
         # values roll the pods together with a new image tag
         foc/secrets-version: "__SECRETS_VERSION__"
+        # the rendered foc-config, hashed by deploy.sh: a config change
+        # rolls the pods too
+        foc/config-hash: "__CONFIG_HASH__"
     spec:
       imagePullSecrets:
         - name: ghcr-pull
