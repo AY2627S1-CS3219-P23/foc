@@ -13,6 +13,12 @@
   #258, the new docs/rating-service.md + .mmd and the doc updates it
   touches).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-06, Claude Code (Opus 5.5), issue #48 (DP11): AI Use Summary
+  extended for the realistic demo usernames. Author review: Leong Wei
+  Zhi, pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1), issue #48 (DP17): the DP11 paragraph
+  notes this change ships as its own PR off main. Author review: Leong Wei
+  Zhi, pending pull request review.
   2026-11-08, Claude Code (Fable 5.1): AI Use Summary extended for the
   admin-test flake fix. Author review: Leong Wei Zhi, pending pull request
   review.
@@ -1501,6 +1507,14 @@ pattern, with its Maven test dependencies. The tool compared the H2 and
 Testcontainers options as facts and the author chose Testcontainers; the
 NFR bounds are the team's. Recorded in `ai/usage-log.md`.
 
+Claude Code (Opus 5.5) gave the user-service demo seed realistic,
+fictional usernames (issue #48, DP11): fixed lists of `firstname_lastname`
+names for the owner, 3 admins and 100 users, with the emails, passwords
+and counts unchanged, plus the seeder test and the docs that name the
+accounts. Realistic names everywhere was Leong Wei Zhi's decision; the
+tool picked the names and wrote the change. First opened as PR #295 on
+the closed issue-#48 stack, it ships as its own PR off `main` (DP17,
+2026-11-08). Recorded in `ai/usage-log.md`.
 2026-11-08: Claude Code (Fable 5.1) made the Admin Dashboard tests wait for a
 section's first load to settle before asserting on it, after one case
 flaked in CI on an unrelated branch. Test-only. Recorded in
