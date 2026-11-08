@@ -32,6 +32,8 @@
   2026-11-06, Claude Code (Opus 5.5): prepended the issue #48 realistic
   demo usernames (DP11) entry below. Author review: Leong Wei Zhi,
   pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1): the DP11 entry below notes the
+  stand-alone PR (DP17) and drops its infra/README.md item.
   PR #269's main merge: this file merged cleanly (main appends at the
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
@@ -75,9 +77,11 @@ Entry template:
   counts and the race handling unchanged. `DemoAccountsSeederTest` names
   the new usernames and also checks they are unique ignoring case. Docs:
   `user-service/README.md` demo-account table (all 100 in a collapsed
-  table) + the existing-volume note, `infra/README.md` seeded-accounts
-  table, `.env.example` comment, `docs/postman/` README + environment.
-  Sixth PR of the issue-#48 stack, on `feat/48-notification-replicas`.
+  table) + the existing-volume note, `.env.example` comment,
+  `docs/postman/` README + environment. First opened as PR #295 on the
+  closed issue-#48 stack, where it also touched `infra/README.md`; on
+  2026-11-08 it became its own PR off `main` (DP17): Claude Code (Fable
+  5.1) cherry-picked it and dropped the `infra/README.md` hunk.
 - **Prompt(s):** this PR's brief: per Leong Wei Zhi's DP11 decision
   (options Q&A), realistic usernames everywhere with the same counts,
   emails and public passwords; a deterministic list of fictional, diverse
