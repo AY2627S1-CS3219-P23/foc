@@ -10,6 +10,8 @@
 # checks out the target commit before deploy.sh runs (the stale copy used
 # to run), and the poll covers the whole 60 min executionTimeout. Author
 # review: Leong Wei Zhi, pending pull request review.
+# PR #302 review: a poll error other than the transient
+# InvocationDoesNotExist fails the job at once.
 #
 # Manual trigger only, from main (the OIDC role trusts main alone). Needs
 # the repo variables AWS_ROLE_ARN, AWS_REGION, INSTANCE_ID and PUBLIC_HOST
@@ -121,10 +123,21 @@ jobs:
             --query Command.CommandId --output text)
           echo "SSM command $id"
           # the built-in waiter gives up after ~100 s; a cold rollout of
-          # seven JVMs takes longer. 360 x 10 s matches executionTimeout
-          for _ in $(seq 1 360); do
-            status=$(aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" \
-              --query Status --output text 2>/dev/null || echo Pending)
+          # seven JVMs takes longer. 360 x 10 s matches executionTimeout.
+          # The invocation record appears a few seconds after send-command
+          # (InvocationDoesNotExist until then); any other error, such as a
+          # missing permission or a stopped instance, fails the job at once
+          status=Pending
+          for i in $(seq 1 360); do
+            if out=$(aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" \
+                --query Status --output text 2>&1); then
+              status=$out
+            elif [ "$i" -le 12 ] && grep -q InvocationDoesNotExist <<<"$out"; then
+              status=Pending
+            else
+              echo "$out" >&2
+              exit 1
+            fi
             case "$status" in
               Pending|InProgress|Delayed) sleep 10 ;;
               *) break ;;

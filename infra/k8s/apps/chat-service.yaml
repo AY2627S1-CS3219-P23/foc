@@ -6,6 +6,9 @@
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
 # docs/deployment.md); values mirror compose.yaml's defaults.
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-08, Claude Code (Fable 5.1), PR #302 review: the pod template
+# carries the foc-secrets version as an annotation (set by deploy.sh).
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1
 kind: Service
@@ -32,6 +35,10 @@ spec:
     metadata:
       labels:
         app: chat-service
+      annotations:
+        # set by deploy.sh to the foc-secrets resourceVersion: changed
+        # values roll the pods together with a new image tag
+        foc/secrets-version: "__SECRETS_VERSION__"
     spec:
       imagePullSecrets:
         - name: ghcr-pull

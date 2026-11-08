@@ -114,11 +114,11 @@ In the browser at `http://<public_host>`:
 Values live in Secrets Manager. Edit `secrets.auto.tfvars` and
 `terraform apply`, or `terraform apply -replace=random_password.<name>`
 for a generated value. The cluster picks it up on the next Deploy run:
-`deploy.sh` re-runs `secrets.sh` and restarts the Deployments when the
-values changed.
+`deploy.sh` re-runs `secrets.sh` and stamps the Secret's version into
+the pod templates, so the Deployments roll with the new values.
 
 - `JWT_SECRET`: every user is logged out.
-- `CHAT_INTERNAL_TOKEN`: order and chat both read the new value after the restart.
+- `CHAT_INTERNAL_TOKEN`: order and chat both read the new value after that rollout.
 - DB and RabbitMQ passwords: Postgres and RabbitMQ set them on an **empty volume only**. A later change breaks that service's login until its volume is deleted.
 - `MAIL_*`: used on the next OTP email.
 

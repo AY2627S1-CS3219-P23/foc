@@ -6,6 +6,8 @@
 # 2026-11-08, options Q&A: IMDS hop limit 1 and no External Secrets
 # Operator, so only host processes can use the instance role).
 # Author review: Leong Wei Zhi, pending pull request review.
+# PR #302 review: foc-secrets is built as a Secret document, so a value
+# may hold newlines; a non-string value stops the script.
 #
 # Usage (as root on the host): secrets.sh
 # Reads foc/app and foc/ghcr with the instance role and writes them as the
@@ -37,10 +39,17 @@ trap 'rm -rf "$work"' EXIT
 
 kubectl apply -f "$here/namespace.yaml"
 
-# foc/app: flat JSON of KEY: value -> one env line each
-secret foc/app | jq -r 'to_entries[] | "\(.key)=\(.value)"' > "$work/app.env"
-kubectl -n foc create secret generic foc-secrets \
-    --from-env-file="$work/app.env" --dry-run=client -o yaml \
+# foc/app: flat JSON of KEY: value, written as a Secret document. A value
+# may hold newlines or '='; a non-string value is a mistake and stops here
+secret foc/app | jq '
+    if type != "object" then error("foc/app is not a JSON object") else . end
+    | to_entries
+    | map(if (.value | type) != "string"
+          then error("foc/app." + .key + " is not a string")
+          else {key, value: (.value | @base64)} end)
+    | {apiVersion: "v1", kind: "Secret",
+       metadata: {name: "foc-secrets", namespace: "foc"},
+       type: "Opaque", data: from_entries}' \
     | kubectl apply -f -
 
 # foc/ghcr: {username, token} -> dockerconfigjson (the token never hits argv)
