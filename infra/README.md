@@ -10,7 +10,8 @@
   2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform):
   rewritten for the EKS cluster, RDS and the NAT instance (DP2 to DP5,
   DP7, DP8, DP15, DP16, Leong Wei Zhi, options Q&A). Author review: Leong
-  Wei Zhi, pending pull request review.
+  Wei Zhi, pending pull request review.  Same day, on request: the Spot row spells out the replacement sequence.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # infra: cloud deployment runbook
@@ -207,7 +208,7 @@ one that ran the apply, and the deploy role): `aws eks update-kubeconfig
 | Restart one service | `kubectl -n foc rollout restart deploy/<name>` |
 | Database shell | `kubectl -n foc run psql --rm -it --restart=Never --image=postgres:17 -- psql "host=<rds_endpoint> user=<svc> dbname=<svc> sslmode=require"` (password from `foc/app`) |
 | Third node | `aws eks update-nodegroup-config --cluster-name foc --nodegroup-name foc-spot --scaling-config desiredSize=3` (back to 2 the same way; Terraform ignores the desired size) |
-| Spot took a node | nothing to redeploy: the node group replaces it, pods reschedule. A RabbitMQ or Redis pod waits for a node in its volume's zone. Open WebSockets drop and the browsers reconnect once chat/notification are back (1 to 2 min) |
+| Spot took a node | nothing to redeploy: the pods are recreated on the other node as soon as the drain evicts them, and the group launches a replacement that joins in 2 to 3 min (on a rebalance recommendation the replacement comes first). A RabbitMQ or Redis pod waits for a node in its volume's zone. Open WebSockets drop and the browsers reconnect once chat/notification are back (1 to 2 min). Both nodes at once: 5 to 10 min of 503; see `docs/deployment.md`, Spot behaviour |
 | NAT instance shell | `aws ssm start-session --target <id of the foc-nat instance>` |
 | An HPA shows 2 replicas | expected under load for every service but chat and notification, which have no HPA (one replica, issue #305). The doubled scheduled runs are idempotent (DP10). It goes back to 1 about five minutes after CPU drops below 70 %. With two nodes, the second replica may stay `Pending` on memory until the third node is added |
 

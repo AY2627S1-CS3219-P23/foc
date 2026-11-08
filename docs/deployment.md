@@ -17,6 +17,9 @@
   deadline 2026-12-11); prices come from the ap-southeast-1 price files
   of 2026-11-09. Reasons are quoted where Leong Wei Zhi gave them.
   Author review: Leong Wei Zhi, pending pull request review.
+  Same day, on request: the "Spot behaviour" section and the price
+  ceiling note in the cost table (facts only; no decision changed).
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # Cloud deployment (N5, issue #48)
@@ -286,6 +289,29 @@ by a CNAME record under that name. The sandbox SCP denies
 | Volumes | RabbitMQ and Redis on gp3 EBS, bound to the zone they were created in | the pod lands only on a node in that zone; a two-zone group always has one unless Spot takes it |
 | Load balancer | one target group on the node group's Auto Scaling group | new nodes register themselves |
 
+## Spot behaviour
+
+The nodes are Spot capacity: AWS may reclaim one with a two-minute
+notice, and the hourly price floats with the market up to the on-demand
+rate ($0.0528/h for t3.medium; $0.022/h was the sample of 2026-11-09).
+Interruptions come per capacity pool (one instance type in one zone); the
+node group spreads its two nodes over two zones, so they normally sit in
+two pools.
+
+| Event | What happens | Gap seen by users |
+| --- | --- | --- |
+| Rebalance recommendation (AWS warns that a pool is tightening) | the node group launches a replacement node first, then drains the old one once the new one is Ready (capacity rebalancing is on for managed node groups) | none beyond the pod restart below |
+| Interruption notice (two minutes) | EKS cordons and drains the node: its pods are evicted and recreated at once on any node with room; the instance terminates; the group, now below its minimum of 2, launches a replacement, which joins after about 2 to 3 minutes and takes the pods still `Pending` | chat, notification and whatever else was on that node restart elsewhere: 1 to 2 minutes until the JVMs pass their startup probe; open WebSockets drop and the browsers reconnect (DP14) |
+| Both nodes reclaimed together (two pools tightening in the same hour) | the group launches two replacements as capacity allows; pods wait for them, then pull their images through the NAT instance | about 5 to 10 minutes of 503 from the load balancer; RDS is untouched, the RabbitMQ and Redis volumes reattach, orders and chats resume from the databases |
+| No Spot capacity for t3.medium in either zone | the group stays at zero nodes until capacity returns; AWS gives no bound | down until then, or until `node_instance_type` is changed and applied |
+
+The interruption frequency for t3.medium here is visible only in the
+console's Spot Instance Advisor, not from the CLI. Ways to widen the odds,
+none taken: several instance types in the node group (t3.medium,
+t3a.medium, t2.medium: more pools, no cost), a third zone with a third
+private subnet (no cost while two nodes run), or one on-demand node
+alongside the Spot ones (about $41 for 32 days).
+
 ## Behaviour at 2 replicas (DP10)
 
 chat and notification do not scale out: one replica each, no HPA, until
@@ -310,7 +336,7 @@ this occurs.
 | Item | ~USD |
 | --- | --- |
 | EKS control plane ($0.10/h) | 77 |
-| 2 x t3.medium Spot (~$0.022/h each, floats) | 34 |
+| 2 x t3.medium Spot (~$0.022/h each on 2026-11-09; floats, never above the $0.0528/h on-demand rate) | 34 |
 | NAT instance t4g.nano on-demand ($0.0053/h) + its Elastic IP ($0.005/h) | 8 |
 | Application Load Balancer ($0.0252/h plus LCU; demo traffic stays under one LCU) | 21 |
 | RDS db.t4g.micro ($0.025/h) + 20 GB gp3 ($0.138/GB-month) | 22 |
