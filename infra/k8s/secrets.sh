@@ -12,12 +12,16 @@
 # role, against the kubeconfig deploy.sh wrote; the k3s kubeconfig and the
 # IMDS region lookup are gone. Author review: Leong Wei Zhi, pending pull
 # request review.
+# PR #316 review (Copilot): the RDS master credentials are written to
+# their own Secret, foc-db-admin, so a read of foc-secrets is not
+# database-admin access.
 #
 # Usage: secrets.sh
 # Needs AWS credentials that may read foc/* (the deploy role) and a
 # kubeconfig whose current context is the cluster (deploy.sh runs
 # `aws eks update-kubeconfig` first). Reads foc/app and foc/ghcr and writes
-# them as the Secrets foc-secrets and ghcr-pull in namespace foc.
+# them as the Secrets foc-secrets, foc-db-admin and ghcr-pull in namespace
+# foc.
 # Idempotent: unchanged values leave the Secrets untouched. Run by
 # deploy.sh on every deploy.
 set -euo pipefail
@@ -51,17 +55,25 @@ trap 'rm -rf "$work"' EXIT
 
 kubectl apply -f "$here/namespace.yaml"
 
-# foc/app: flat JSON of KEY: value, written as a Secret document. A value
-# may hold newlines or '='; a non-string value is a mistake and stops here
+# foc/app: flat JSON of KEY: value, written as two Secret documents. The
+# RDS_MASTER_* keys go to foc-db-admin, which only the db-init Job mounts
+# (DP16); everything else to foc-secrets, which the services read key by
+# key. A value may hold newlines or '='; a non-string value is a mistake
+# and stops here
 secret foc/app | jq '
     if type != "object" then error("foc/app is not a JSON object") else . end
     | to_entries
     | map(if (.value | type) != "string"
           then error("foc/app." + .key + " is not a string")
           else {key, value: (.value | @base64)} end)
-    | {apiVersion: "v1", kind: "Secret",
-       metadata: {name: "foc-secrets", namespace: "foc"},
-       type: "Opaque", data: from_entries}' \
+    | (map(select(.key | startswith("RDS_MASTER_")))) as $admin
+    | (map(select(.key | startswith("RDS_MASTER_") | not))) as $app
+    | if ($admin | length) == 0 then error("foc/app has no RDS_MASTER_* keys") else . end
+    | {apiVersion: "v1", kind: "List", items:
+        [{name: "foc-secrets", entries: $app}, {name: "foc-db-admin", entries: $admin}]
+        | map({apiVersion: "v1", kind: "Secret",
+               metadata: {name: .name, namespace: "foc"},
+               type: "Opaque", data: (.entries | from_entries)})}' \
     | kubectl apply -f -
 
 # foc/ghcr: {username, token} -> dockerconfigjson (the token never hits

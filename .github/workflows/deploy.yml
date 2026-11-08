@@ -119,8 +119,8 @@ jobs:
   rollout:
     needs: images
     runs-on: ubuntu-latest
-    # deploy.sh shares a 45-min deadline across the rollouts; the Helm
-    # install and the db-init Job have their own 10-min waits
+    # deploy.sh shares one 50-min deadline across the Helm install, the
+    # db-init Job and every rollout, so it fails by itself before this
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5

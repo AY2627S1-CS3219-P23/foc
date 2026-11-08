@@ -15,6 +15,8 @@
 # over SSM: writes the kubeconfig, installs Traefik's Helm chart, runs the
 # db-init Job before the kustomization, and waits as before. Author
 # review: Leong Wei Zhi, pending pull request review.
+# PR #316 review (Copilot): Helm, the Job and the rollouts share one
+# 50-min deadline.
 #
 # Usage: deploy.sh <image-tag> <public-host> <cluster-name>
 # <public-host> is the hostname the load balancer serves over https; the
@@ -32,6 +34,17 @@ repo="$(cd "$(dirname "$0")/../.." && pwd)"
 # pinned with infra/helm/traefik-values.yaml; bump both together
 traefik_chart_version="42.3.1"
 
+# one deadline for everything that waits (Helm, the db-init Job, every
+# rollout): 50 min, inside the workflow job's 60 (PR #316 review). A
+# single slow phase then fails here, with its name, instead of the job
+# being killed from outside
+deadline=$((SECONDS + 3000))
+remaining() {
+    local r=$((deadline - SECONDS))
+    [ "$r" -gt 0 ] || { echo "deploy exceeded 50 min at: $1" >&2; exit 1; }
+    echo "$r"
+}
+
 export KUBECONFIG="${KUBECONFIG:-$(mktemp)}"
 aws eks update-kubeconfig --name "$cluster_name" >/dev/null
 
@@ -39,7 +52,7 @@ aws eks update-kubeconfig --name "$cluster_name" >/dev/null
 helm upgrade --install traefik traefik \
     --repo https://traefik.github.io/charts --version "$traefik_chart_version" \
     --namespace traefik --create-namespace \
-    -f "$repo/infra/helm/traefik-values.yaml" --wait --timeout 10m
+    -f "$repo/infra/helm/traefik-values.yaml" --wait --timeout "$(remaining helm)s"
 
 bash "$repo/infra/k8s/secrets.sh"
 # stamped into the pod templates (foc/secrets-version annotation): changed
@@ -64,7 +77,7 @@ fill __CONFIG_HASH__ "$(sha256sum "$work/config.yaml" | cut -c1-16)"
 # immutable, so the previous run's object goes before the new one
 kubectl -n foc delete job db-init --ignore-not-found --wait
 kubectl apply -f "$work/data/db-init.yaml"
-if ! kubectl -n foc wait --for=condition=complete --timeout=600s job/db-init; then
+if ! kubectl -n foc wait --for=condition=complete --timeout="$(remaining db-init)s" job/db-init; then
     kubectl -n foc logs job/db-init --all-containers --tail=50 >&2 || true
     echo "db-init did not complete" >&2
     exit 1
@@ -72,14 +85,9 @@ fi
 
 kubectl apply -k "$work"
 
-# one deadline for every rollout together: the job dies at 60 min, and a
-# timeout there would hide which rollout was the slow one
-deadline=$((SECONDS + 2700))
 for kind in statefulset deployment; do
     for name in $(kubectl -n foc get "$kind" -o name); do
-        remaining=$((deadline - SECONDS))
-        [ "$remaining" -gt 0 ] || { echo "rollouts exceeded 45 min" >&2; exit 1; }
-        kubectl -n foc rollout status "$name" --timeout="${remaining}s"
+        kubectl -n foc rollout status "$name" --timeout="$(remaining "$name")s"
     done
 done
 kubectl -n foc get pods -o wide

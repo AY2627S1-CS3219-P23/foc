@@ -9,6 +9,9 @@
 # is an EBS gp3 PersistentVolume through the EBS CSI driver (DP4); zone-bound,
 # so the pod follows it.
 # Author review: Leong Wei Zhi, pending pull request review.
+# PR #316 review (Claude reviewer, zone-bound volume): the pod selects the
+# on-demand node in zone a (team decision, Leong Wei Zhi, 2026-11-09).
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1
 kind: Service
@@ -39,6 +42,10 @@ spec:
       labels:
         app: rabbitmq
     spec:
+      # the on-demand node in zone a (DP3): its EBS volume is bound to that
+      # zone, and a Spot squeeze must not take this pod
+      nodeSelector:
+        foc.dev/pool: stable
       containers:
         - name: rabbitmq
           image: rabbitmq:4-management

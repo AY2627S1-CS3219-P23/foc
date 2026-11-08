@@ -4,7 +4,7 @@
 # one RDS instance (team decision DP16, Leong Wei Zhi, 2026-11-09, options
 # Q&A, recorded in docs/deployment.md: database-per-service kept as seven
 # roles with the foc/app passwords; the master credentials reach this Job
-# only). Idempotent: roles and databases are created once, the password is
+# only, from the foc-db-admin Secret secrets.sh writes). Idempotent: roles and databases are created once, the password is
 # re-applied every run, so a changed value no longer locks a service out.
 # deploy.sh deletes the previous Job and applies this one before the
 # kustomization, then waits for it, so the services find their databases.
@@ -40,12 +40,12 @@ spec:
             - name: RDS_MASTER_USER
               valueFrom:
                 secretKeyRef:
-                  name: foc-secrets
+                  name: foc-db-admin
                   key: RDS_MASTER_USER
             - name: RDS_MASTER_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: foc-secrets
+                  name: foc-db-admin
                   key: RDS_MASTER_PASSWORD
             - name: USER_DB_PASSWORD
               valueFrom:

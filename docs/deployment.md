@@ -20,14 +20,23 @@
   Same day, on request: the "Spot behaviour" section and the price
   ceiling note in the cost table (facts only; no decision changed).
   Author review: Leong Wei Zhi, pending pull request review.
+  PR #316 review (Copilot, Claude reviewer): DP9, DP10, the 2-replica
+  table and DP14 restored to the state issue #305 (PR #306) left on main
+  (chat and notification scale; the first draft of this page had reverted
+  them); DP7 and DP16 name the separate `foc-db-admin` Secret. The
+  zone-bound volume finding led to a further options round: DP3 gains the
+  on-demand node (shared, not tainted), DP4 and the tables follow; SQS
+  recorded as an option considered, by Leong Wei Zhi's choice. Author
+  review: Leong Wei Zhi, pending pull request review.
 -->
 
 # Cloud deployment (N5, issue #48)
 
 FoC runs in the cloud on an Amazon EKS cluster in the NUS Innovation
-Sandbox account: two Spot nodes in private subnets, one RDS PostgreSQL
-instance holding the seven service databases, RabbitMQ and Redis in the
-cluster on EBS volumes, and an Application Load Balancer that serves
+Sandbox account: two Spot nodes and one on-demand node in private
+subnets, one RDS PostgreSQL instance holding the seven service databases,
+RabbitMQ and Redis on the on-demand node with EBS volumes, and an
+Application Load Balancer that serves
 `https://foc23.ddnsfree.com` with an AWS Certificate Manager certificate.
 The same images as `docker compose` run there. It stays up until
 2026-12-11 and is then destroyed with nothing kept. The runbook is
@@ -46,12 +55,12 @@ flowchart LR
       nat["NAT instance<br/>t4g.nano, Elastic IP"]
     end
     subgraph priv["private subnets (2 zones)"]
-      subgraph eks["EKS node group: t3.medium Spot x2 (max 3)"]
+      subgraph eks["EKS: t3.medium Spot x2 (max 3, two zones) + t3.medium on-demand x1 (zone a)"]
         traefik["Traefik<br/>NodePort 30080"] -->|"/api"| gateway
         traefik -->|"/"| web["web (nginx SPA)"]
         gateway --> svc["7 backend Deployments<br/>(HPA 1 to 2)"]
-        svc --> mq[("RabbitMQ<br/>EBS gp3")]
-        gateway --> redis[("Redis AOF<br/>EBS gp3")]
+        svc --> mq[("RabbitMQ<br/>EBS gp3, on-demand node")]
+        gateway --> redis[("Redis AOF<br/>EBS gp3, on-demand node")]
         svc --> redis
       end
       svc --> rds[("RDS PostgreSQL 17<br/>db.t4g.micro<br/>7 databases")]
@@ -86,20 +95,20 @@ on 2026-11-09). The AI tool presented facts and prices only.
 | --- | --- | --- |
 | DP1 | Account, region | NUS Innovation Sandbox account, `ap-southeast-1` (its SCPs allow writes there and in `us-east-1` only) |
 | DP2 | Platform | **Amazon EKS**, Kubernetes 1.37, authentication by access entries (`API` mode); vpc-cni, kube-proxy and CoreDNS as EKS installs them; add-ons: metrics-server, EBS CSI driver, Pod Identity agent |
-| DP3 | Nodes | One managed node group of **t3.medium Spot**: 2 running, maximum 3 (the third added by hand); x86, since the images are built for `linux/amd64`; IMDS hop limit 1 so pods cannot use the node role |
-| DP4 | Network and data stores | Nodes and the database in **private subnets** (two zones); egress through a **NAT instance** (fck-nat on an on-demand `t4g.nano`, one Elastic IP). **One RDS PostgreSQL 17 `db.t4g.micro`** with the seven service databases. RabbitMQ and Redis (AOF, G7 unchanged) stay StatefulSets on **EBS gp3** volumes |
+| DP3 | Nodes | Two managed node groups of **t3.medium**: **Spot, 2 running, maximum 3** (the third added by hand) across two zones, and **one on-demand node in zone a** labelled `foc.dev/pool: stable`, which RabbitMQ and Redis select and application pods may also use (not tainted). x86, since the images are built for `linux/amd64`; IMDS hop limit 1 so pods cannot use the node role. The on-demand node was added on 2026-11-09 after review: the EBS volumes are zone-bound, and a Spot replacement in the other zone would have left the broker or Redis `Pending` |
+| DP4 | Network and data stores | Nodes and the database in **private subnets** (two zones); egress through a **NAT instance** (fck-nat on an on-demand `t4g.nano`, one Elastic IP). **One RDS PostgreSQL 17 `db.t4g.micro`** with the seven service databases. RabbitMQ and Redis (AOF, G7 unchanged) stay StatefulSets on **EBS gp3** volumes, on the on-demand node (DP3) |
 | DP5 | Public access | `https://foc23.ddnsfree.com` through the load balancer (DP17, DP18). No node has a public address; the cluster API endpoint is public for GitHub Actions and private for the nodes |
 | DP6 | IaC | Terraform, state in S3 (`use_lockfile`), a bootstrap stack for the bucket |
-| DP7 | Secrets | AWS Secrets Manager (`foc/app`, `foc/ghcr`); `secrets.sh` copies them into k8s Secrets **from the Deploy job**, with the deploy role, on every deploy. `foc/app` also carries the database address and the RDS master credentials |
+| DP7 | Secrets | AWS Secrets Manager (`foc/app`, `foc/ghcr`); `secrets.sh` copies them into k8s Secrets **from the Deploy job**, with the deploy role, on every deploy. `foc/app` also carries the database address and the RDS master credentials; the script writes the master credentials to their own Secret (`foc-db-admin`), which only the db-init Job mounts |
 | DP8 | Images, rollout, cluster access | GHCR, pushed by GitHub Actions and tagged `<commit>-<run id>`; the Deploy job runs `deploy.sh` itself: `kubectl` and `helm` against the EKS API under an **access entry with cluster-admin** for the OIDC role trusted for `main` only. The job installs Traefik's chart, runs `secrets.sh` and the db-init Job, applies the kustomization and waits. A pod rolls when its image tag, the Secret version or the ConfigMap hash changed |
-| DP9 | Replicas | 1 per Deployment at rest, HPA min 1 / max 2 on CPU 70 % (N5.4) from the metrics-server add-on, except chat and notification, which run exactly one replica (DP10) |
-| DP10 | Backends at 2 replicas | No multi-replica hardening in the services. chat and notification run one replica, no HPA, and a Recreate strategy so a deploy never overlaps two pods: a STOMP push reaches only the replica that holds the socket, which the team rates unsafe (issue #305 tracks cross-replica delivery). The other services scale to 2; their scheduled jobs then run on both replicas per tick, accepted because the jobs are idempotent (Leong Wei Zhi, 2026-11-08, on review) |
+| DP9 | Replicas | 1 per Deployment at rest, HPA min 1 / max 2 on CPU 70 % (N5.4) on every Deployment, from the metrics-server add-on |
+| DP10 | Backends at 2 replicas | Scheduled jobs run on both replicas per tick, accepted because the jobs are idempotent (Leong Wei Zhi, 2026-11-08, on review). chat and notification were first pinned to one replica because a STOMP push reached only the replica holding the socket; issue #305 (same day, options Q&A) lifted the pin with the smallest change: pushes fan out over an AMQP exchange per service, notification acks a concurrent duplicate on its `processed_events` key and moves to a Flyway baseline. No ShedLock, no single active consumer |
 | DP11 | Demo data | Seed on in the cloud; realistic usernames everywhere, same passwords and counts |
 | DP12 | Lifetime | Up to **2026-12-11**, then `terraform destroy`, nothing kept (revised from about 2026-11-19 on 2026-11-09) |
 | DP13 | Repo layout | `infra/` (Terraform, manifests, Helm values), the second non-service top-level folder |
-| DP14 | Spot on the WebSocket path | **All nodes stay Spot.** A Spot interruption drops the STOMP sockets for the 1 to 2 minutes the chat or notification pod takes to start elsewhere; the web clients reconnect (1 s exponential back-off, 10 s heartbeats) and refetch, and nothing is lost server-side |
+| DP14 | Spot on the WebSocket path | **All nodes stay Spot.** A Spot interruption drops the STOMP sockets held by the pods on that node (chat, notification, gateway or Traefik; one replica each at rest) for the 1 to 2 minutes a replacement pod takes to start elsewhere; the web clients reconnect (1 s exponential back-off, 10 s heartbeats) and refetch, and nothing is lost server-side |
 | DP15 | Ingress path | The Terraform-owned load balancer targets the node group's Auto Scaling group on **NodePort 30080**; **Traefik from its Helm chart** (42.3.1) is the ingress controller, same class name and routes as before |
-| DP16 | Database credentials | **Seven roles, one per service**, each owning its database, with the `foc/app` passwords; a `db-init` Job creates them with the master credentials on every deploy and re-applies the passwords. The master credentials reach that Job only |
+| DP16 | Database credentials | **Seven roles, one per service**, each owning its database, with the `foc/app` passwords; a `db-init` Job creates them with the master credentials on every deploy and re-applies the passwords. The master credentials sit in their own Secret (`foc-db-admin`) that only this Job mounts; the services read single keys of `foc-secrets` |
 | DP17 | Domain | `foc23.ddnsfree.com`, a free Dynu hostname (records added by hand in Dynu's panel). The sandbox SCP denies Route 53 domain registration. First `foc23.mooo.com` on FreeDNS, revised when FreeDNS refused CNAME records on its shared domains |
 | DP18 | TLS endpoint | Application Load Balancer in `ap-southeast-1` with a free ACM certificate (DNS validation); its port 80 answers **301** to https; plain HTTP to Traefik behind it |
 | DP19 | Connection pool | Hikari capped at **5 connections per service** (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`): `db.t4g.micro` allows about 110 connections, and 7 services x 10 (the default) x 2 replicas would exceed it |
@@ -137,12 +146,21 @@ about 0.15 vCPU / 0.3 GB. The images are `linux/amd64`, so x86 types only.
 | --- | --- | --- | --- | --- |
 | 2 x t3.large Spot | 4 vCPU / 16 GB | ~$57 | 35 | first choice |
 | 3 x t3.large Spot | 6 vCPU / 24 GB | ~$85 | 35 | |
-| **t3.medium Spot, 2 running, max 3** | 4 vCPU / 8 GB (6 / 12 with the third) | ~$34, the third ~$17 while it runs | 17 (about 11 used) | DP3 |
+| t3.medium Spot, 2 running, max 3 | 4 vCPU / 8 GB (6 / 12 with the third) | ~$34, the third ~$17 while it runs | 17 (about 11 used) | second choice |
 | 1 x t3.xlarge Spot | 4 vCPU / 16 GB on one node | ~$58 | 58 | |
+| **t3.medium Spot x2 (max 3) + t3.medium on-demand x1 in zone a, shared** | 6 vCPU / 12 GB | ~$34 + ~$41 | 17 | DP3 |
 
-With two t3.medium nodes the JVM memory limits (5.4 GB) plus RabbitMQ,
-Redis and Traefik leave HPA max 2 only partly schedulable until the third
-node joins; see Scaling.
+Chosen after the PR #316 review of the zone-bound volumes (facts given:
+document a PVC-delete recovery, a single-zone node group, no volumes, or
+a node that is never reclaimed). Fit on the chosen layout, per t3.medium
+about 1.9 vCPU / 3.3 GB allocatable and 0.3 vCPU / 0.5 GB of system pods:
+RabbitMQ and Redis take 0.12 vCPU / 0.29 GB of the on-demand node; the
+apps at one replica request 1.5 vCPU / 2.9 GB and fit on the Spot pair;
+at HPA max 2 they request 2.9 vCPU / 5.6 GB, which fits across the three
+nodes with about 1.8 GB spare, while their memory limits (11.2 GB) exceed
+the total, so under real load pods are killed before every service holds
+two replicas. On-demand node exclusive (tainted) was the other sub-option:
+about 2.5 GB idle and HPA max 2 only just fitting on the Spot pair.
 
 ### Host purchase model
 
@@ -206,10 +224,17 @@ dead-letter arguments; the gateway reaches Redis over plain TCP with
 | --- | --- | --- | --- |
 | Amazon MQ for RabbitMQ, `mq.t3.micro` | ~$26 | priced in the price file but **not orderable** here: the API offers m5 and m7g types only | first choice, dropped |
 | Amazon MQ for RabbitMQ, `mq.m7g.medium` | ~$131 | AMQPS 5671 only (`SPRING_RABBITMQ_SSL_ENABLED=true`) | |
-| **RabbitMQ in the cluster on an EBS gp3 volume** | ~$0.1 | EBS CSI add-on; the volume is zone-bound, the pod follows it | DP4 |
+| **RabbitMQ in the cluster on an EBS gp3 volume** | ~$0.1 (+ the on-demand node, DP3) | EBS CSI add-on; the volume is zone-bound, so the pod selects the on-demand node in that zone | DP4 |
 | RabbitMQ in the cluster without a volume | 0 | queued, unconsumed messages lost on restart | |
+| Amazon SQS (+ SNS for one-to-many) | ~0 (first million requests a month free) | a different model, so a code change in all six AMQP services and `foc-contracts`: queues instead of exchanges and routing keys, redrive policies instead of TTL + dead-letter arguments, pull instead of push, at-least-once and unordered on standard queues, a per-replica queue created at start-up for the STOMP fan-out, IAM per pod, ElasticMQ or LocalStack for compose; its own design record under the AI policy | asked 2026-11-09, recorded only |
 | ElastiCache Valkey `cache.t4g.micro` | ~$15 (Redis OSS ~$18) | plain 6379 in the VPC | first choice, dropped for budget |
-| **Redis in the cluster on an EBS gp3 volume** | ~$0.1 | unchanged StatefulSet, AOF | DP4 |
+| **Redis in the cluster on an EBS gp3 volume** | ~$0.1 (+ the on-demand node, DP3) | unchanged StatefulSet, AOF, on the on-demand node | DP4 |
+
+Layouts compared on 2026-11-09 for the zone-bound volumes (32 days):
+Amazon MQ + ElastiCache with two Spot nodes ~$313 (over the budget unless
+teardown moves to about 2026-12-05); one on-demand node holding both
+~$208 (DP3); two Spot nodes with a documented PVC-delete recovery ~$167;
+ElastiCache plus RabbitMQ on an on-demand node ~$223.
 
 ### Ingress path and controller
 
@@ -281,29 +306,30 @@ by a CNAME record under that name. The sandbox SCP denies
 
 | Lever | Today | What it takes |
 | --- | --- | --- |
-| Replicas | HPA 1 to 2 at CPU 70 % on every Deployment except chat and notification (one replica, issue #305) | nothing; `kubectl -n foc get hpa` shows it |
-| Headroom | 2 x t3.medium = 4 vCPU / 8 GB; CPU requests at every HPA max about 3.0 vCPU; memory limits at HPA max about 5.4 GB for the JVMs alone | the third node |
-| Third node | node group maximum 3, desired 2 | `aws eks update-nodegroup-config --cluster-name foc --nodegroup-name foc-spot --scaling-config desiredSize=3` (Terraform ignores the desired size); ~$0.022/h while it runs |
+| Replicas | HPA 1 to 2 at CPU 70 % on every Deployment | nothing; `kubectl -n foc get hpa` shows it |
+| Headroom | 3 x t3.medium = 6 vCPU / 12 GB (about 5.7 vCPU / 9.9 GB allocatable); requests at every HPA max about 3.0 vCPU / 5.9 GB incl. RabbitMQ and Redis; JVM memory limits at HPA max about 10.8 GB | the third Spot node |
+| Third Spot node | Spot node group maximum 3, desired 2 | `aws eks update-nodegroup-config --cluster-name foc --nodegroup-name foc-spot --scaling-config desiredSize=3` (Terraform ignores the desired size); ~$0.022/h while it runs |
 | More or bigger nodes | `node_count`, `node_max`, `node_instance_type` variables | `terraform apply`; a type change replaces the nodes one at a time |
 | Database | `db.t4g.micro`, 20 GB gp3 | `db_instance_class`; RDS resizes with a short outage |
-| Volumes | RabbitMQ and Redis on gp3 EBS, bound to the zone they were created in | the pod lands only on a node in that zone; a two-zone group always has one unless Spot takes it |
-| Load balancer | one target group on the node group's Auto Scaling group | new nodes register themselves |
+| Volumes | RabbitMQ and Redis on gp3 EBS in zone a, on the on-demand node (`foc.dev/pool: stable`) | the node group replaces that node in the same zone, so the volume always has a node; while it is being replaced both pods are down (minutes) |
+| Load balancer | one target group on both node groups' Auto Scaling groups | new nodes register themselves |
 
 ## Spot behaviour
 
-The nodes are Spot capacity: AWS may reclaim one with a two-minute
-notice, and the hourly price floats with the market up to the on-demand
-rate ($0.0528/h for t3.medium; $0.022/h was the sample of 2026-11-09).
-Interruptions come per capacity pool (one instance type in one zone); the
-node group spreads its two nodes over two zones, so they normally sit in
-two pools.
+The two application nodes are Spot capacity: AWS may reclaim one with a
+two-minute notice, and the hourly price floats with the market up to the
+on-demand rate ($0.0528/h for t3.medium; $0.022/h was the sample of
+2026-11-09). Interruptions come per capacity pool (one instance type in
+one zone); the Spot node group spreads its two nodes over two zones, so
+they normally sit in two pools. The on-demand node (RabbitMQ, Redis and
+whatever apps the scheduler put there) is never reclaimed.
 
 | Event | What happens | Gap seen by users |
 | --- | --- | --- |
 | Rebalance recommendation (AWS warns that a pool is tightening) | the node group launches a replacement node first, then drains the old one once the new one is Ready (capacity rebalancing is on for managed node groups) | none beyond the pod restart below |
 | Interruption notice (two minutes) | EKS cordons and drains the node: its pods are evicted and recreated at once on any node with room; the instance terminates; the group, now below its minimum of 2, launches a replacement, which joins after about 2 to 3 minutes and takes the pods still `Pending` | chat, notification and whatever else was on that node restart elsewhere: 1 to 2 minutes until the JVMs pass their startup probe; open WebSockets drop and the browsers reconnect (DP14) |
-| Both nodes reclaimed together (two pools tightening in the same hour) | the group launches two replacements as capacity allows; pods wait for them, then pull their images through the NAT instance | about 5 to 10 minutes of 503 from the load balancer; RDS is untouched, the RabbitMQ and Redis volumes reattach, orders and chats resume from the databases |
-| No Spot capacity for t3.medium in either zone | the group stays at zero nodes until capacity returns; AWS gives no bound | down until then, or until `node_instance_type` is changed and applied |
+| Both Spot nodes reclaimed together (two pools tightening in the same hour) | the group launches two replacements as capacity allows; the evicted apps are recreated on the on-demand node as far as its memory allows (about 2.5 GB free), the rest wait, then pull their images through the NAT instance | services that fit on the on-demand node keep answering; the others return after about 5 to 10 minutes; RabbitMQ, Redis and RDS are untouched |
+| No Spot capacity for t3.medium in either zone | the Spot group stays at zero nodes until capacity returns; AWS gives no bound | only what fits on the on-demand node runs, until capacity returns or `node_instance_type` is changed and applied |
 
 The interruption frequency for t3.medium here is visible only in the
 console's Spot Instance Advisor, not from the CLI. Ways to widen the odds,
@@ -314,18 +340,16 @@ alongside the Spot ones (about $41 for 32 days).
 
 ## Behaviour at 2 replicas (DP10)
 
-chat and notification do not scale out: one replica each, no HPA, until
-issue #305 delivers pushes across replicas. The other services may reach
-2 replicas; their scheduled jobs then run twice per tick, which the team
-accepts because the jobs are idempotent. The HPA only adds the second
-replica while CPU stays above 70 %, and removes it about five minutes
-after CPU drops.
+Every Deployment may reach 2 replicas; scheduled jobs then run twice
+per tick, which the team accepts because the jobs are idempotent. The
+HPA only adds the second replica while CPU stays above 70 %, and removes
+it about five minutes after CPU drops.
 
 | Services | At 2 replicas | What would change it |
 | --- | --- | --- |
-| user, order, credit, rating | each scheduled job runs on both replicas per tick; accepted, the jobs are idempotent | a scheduler lock (ShedLock) |
-| notification, chat | a STOMP push reaches only the replica that holds the browser's socket; not accepted, so both stay at one replica | fanning pushes out over AMQP (issue #305) |
-| notification | the same event could be processed twice (read-then-insert dedupe); not reached at one replica | insert-first dedupe and a single active consumer (issue #305) |
+| user, order, credit, rating, chat, notification | each scheduled job runs on both replicas per tick; accepted, the jobs are idempotent | a scheduler lock (ShedLock) |
+| notification, chat | a STOMP push is published to the service's fanout exchange (`notification.push`, `chat.push`); every replica delivers it to its own sockets, so the browser gets it once wherever it is connected (issue #305) | — |
+| notification | a concurrent duplicate loses on the `processed_events` primary key, rolls back whole and is acked (issue #305); the schema is Flyway-managed, so two replicas can start on an empty database | — |
 | supplier | `ddl-auto: update` and the seeder race only when two replicas start against an empty database. The HPA starts at 1, so first boot is one replica | a Flyway baseline and an advisory lock on the seed |
 
 Below the CPU threshold every Deployment runs one replica and none of
@@ -337,12 +361,13 @@ this occurs.
 | --- | --- |
 | EKS control plane ($0.10/h) | 77 |
 | 2 x t3.medium Spot (~$0.022/h each on 2026-11-09; floats, never above the $0.0528/h on-demand rate) | 34 |
+| 1 x t3.medium on-demand ($0.0528/h), zone a, RabbitMQ and Redis | 41 |
 | NAT instance t4g.nano on-demand ($0.0053/h) + its Elastic IP ($0.005/h) | 8 |
 | Application Load Balancer ($0.0252/h plus LCU; demo traffic stays under one LCU) | 21 |
 | RDS db.t4g.micro ($0.025/h) + 20 GB gp3 ($0.138/GB-month) | 22 |
-| EBS gp3 for RabbitMQ and Redis (2 GB) + node root volumes (2 x 20 GB, $0.096/GB-month) | 4 |
+| EBS gp3 for RabbitMQ and Redis (2 GB) + node root volumes (3 x 20 GB, $0.096/GB-month) | 6 |
 | Secrets Manager (2 secrets), ACM certificate | 1 |
-| **Total** | **~167** |
+| **Total** | **~210** |
 
 Plus about $0.022/h whenever the third node runs. About $3 was spent on
 the k3s host before the re-platform.

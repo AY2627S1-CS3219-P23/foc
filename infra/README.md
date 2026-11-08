@@ -12,15 +12,21 @@
   DP7, DP8, DP15, DP16, Leong Wei Zhi, options Q&A). Author review: Leong
   Wei Zhi, pending pull request review.  Same day, on request: the Spot row spells out the replacement sequence.
   Author review: Leong Wei Zhi, pending pull request review.
+  PR #316 review: the HPA row and the smoke counts match issue #305 (nine
+  HPAs, chat and notification scale); `foc-db-admin` named; the on-demand
+  node for RabbitMQ and Redis (DP3) in the intro, checks, operating and
+  troubleshooting rows. Author review: Leong Wei Zhi, pending pull request
+  review.
 -->
 
 # infra: cloud deployment runbook
 
 Design and decisions: [`docs/deployment.md`](../docs/deployment.md).
-An EKS cluster (two t3.medium Spot nodes in private subnets, a NAT
-instance for egress), one RDS PostgreSQL instance with the seven service
-databases, RabbitMQ and Redis in the cluster on EBS, behind a load
-balancer that serves `https://foc23.ddnsfree.com`.
+An EKS cluster (two t3.medium Spot nodes plus one on-demand node in
+private subnets, a NAT instance for egress), one RDS PostgreSQL instance
+with the seven service databases, RabbitMQ and Redis on the on-demand
+node with EBS volumes, behind a load balancer that serves
+`https://foc23.ddnsfree.com`.
 
 ```mermaid
 flowchart TD
@@ -35,9 +41,9 @@ flowchart TD
 | Path | What |
 | --- | --- |
 | `terraform/bootstrap/` | S3 state bucket (local state, applied once) |
-| `terraform/` | network (`network.tf`: two public + two private subnets), NAT instance (`nat.tf`), EKS cluster, node group, add-ons and the deploy role's access entry (`eks.tf`), RDS (`rds.tf`), ACM certificate + Application Load Balancer (`tls.tf`), GitHub OIDC deploy role (`iam.tf`), Secrets Manager (`secrets.tf`) |
+| `terraform/` | network (`network.tf`: two public + two private subnets), NAT instance (`nat.tf`), EKS cluster, the Spot and on-demand node groups, add-ons and the deploy role's access entry (`eks.tf`), RDS (`rds.tf`), ACM certificate + Application Load Balancer (`tls.tf`), GitHub OIDC deploy role (`iam.tf`), Secrets Manager (`secrets.tf`) |
 | `k8s/` | kustomization applied by the Deploy job: gp3 StorageClass, RabbitMQ and Redis StatefulSets, app Deployments, Traefik Ingress, HPAs; `data/db-init.yaml` is the Job that creates the seven database roles |
-| `k8s/secrets.sh` | copies `foc/app` and `foc/ghcr` from Secrets Manager into the k8s Secrets (every deploy, from the Deploy job) |
+| `k8s/secrets.sh` | copies `foc/app` and `foc/ghcr` from Secrets Manager into the k8s Secrets `foc-secrets`, `foc-db-admin` (the RDS master credentials, mounted by db-init only) and `ghcr-pull` (every deploy, from the Deploy job) |
 | `k8s/deploy.sh` | run by the Deploy workflow: kubeconfig, Traefik chart, secrets, db-init, apply, rollouts |
 | `helm/traefik-values.yaml` | the ingress controller's chart values (NodePort 30080, WebSocket timeouts) |
 
@@ -45,7 +51,7 @@ flowchart TD
 
 - **Lease:** the ISB lease must outlast 2026-12-11; the budget is $250.
   Check both in the ISB portal. The estimate for the 32 days is about
-  $167 (`docs/deployment.md`, Cost).
+  $210 (`docs/deployment.md`, Cost).
 - **Tools:** Terraform 1.10 or newer, AWS CLI v2; `kubectl` and `helm`
   for operating the cluster from a laptop (the Deploy job brings its own).
 - **Credentials:** `export AWS_PROFILE=nusisb_IsbUsersPS-555552813604`, then `aws sso login`.
@@ -109,7 +115,7 @@ cluster admin):
 
 ```sh
 aws eks update-kubeconfig --name "$(terraform output -raw cluster_name)"
-kubectl get nodes                                  # 2 Ready, t3.medium
+kubectl get nodes -L foc.dev/pool                  # 3 Ready, t3.medium: 2 spot, 1 stable
 kubectl -n kube-system get pods                    # aws-node, kube-proxy, coredns, metrics-server, ebs-csi-*, eks-pod-identity-agent
 ```
 
@@ -155,7 +161,7 @@ curl -sI http://<public_host>/ | head -3                          # 301, Locatio
 curl -s https://<public_host>/api/user/actuator/health           # {"status":"UP"}
 openssl s_client -connect <public_host>:443 -servername <public_host> </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer
 aws elbv2 describe-target-health --target-group-arn "$(aws elbv2 describe-target-groups --names foc-traefik-np --query 'TargetGroups[0].TargetGroupArn' --output text)"   # 2 healthy
-kubectl -n foc get pods,hpa,pvc                                  # 11 pods Running, 7 HPAs at 1, 2 PVCs Bound
+kubectl -n foc get pods,hpa,pvc                                  # 11 pods Running, 9 HPAs at 1, 2 PVCs Bound
 kubectl -n foc logs job/db-init | tail -1                        # db-init: chat ready
 ```
 
@@ -203,14 +209,15 @@ one that ran the apply, and the deploy role): `aws eks update-kubeconfig
 
 | Task | Command |
 | --- | --- |
-| Pods, HPAs, volumes | `kubectl -n foc get pods,hpa,pvc -o wide` |
+| Pods, HPAs, volumes | `kubectl -n foc get pods,hpa,pvc -o wide` (rabbitmq-0 and redis-0 sit on the `stable` node) |
 | Logs | `kubectl -n foc logs deploy/<name>` |
 | Restart one service | `kubectl -n foc rollout restart deploy/<name>` |
 | Database shell | `kubectl -n foc run psql --rm -it --restart=Never --image=postgres:17 -- psql "host=<rds_endpoint> user=<svc> dbname=<svc> sslmode=require"` (password from `foc/app`) |
-| Third node | `aws eks update-nodegroup-config --cluster-name foc --nodegroup-name foc-spot --scaling-config desiredSize=3` (back to 2 the same way; Terraform ignores the desired size) |
-| Spot took a node | nothing to redeploy: the pods are recreated on the other node as soon as the drain evicts them, and the group launches a replacement that joins in 2 to 3 min (on a rebalance recommendation the replacement comes first). A RabbitMQ or Redis pod waits for a node in its volume's zone. Open WebSockets drop and the browsers reconnect once chat/notification are back (1 to 2 min). Both nodes at once: 5 to 10 min of 503; see `docs/deployment.md`, Spot behaviour |
+| Third Spot node | `aws eks update-nodegroup-config --cluster-name foc --nodegroup-name foc-spot --scaling-config desiredSize=3` (back to 2 the same way; Terraform ignores the desired size) |
+| Spot took a node | nothing to redeploy: the pods are recreated on the other nodes as soon as the drain evicts them, and the group launches a replacement that joins in 2 to 3 min (on a rebalance recommendation the replacement comes first). RabbitMQ and Redis are on the on-demand node and unaffected. Open WebSockets drop and the browsers reconnect once chat/notification are back (1 to 2 min). Both Spot nodes at once: what fits on the on-demand node keeps running, the rest returns in 5 to 10 min; see `docs/deployment.md`, Spot behaviour |
+| The on-demand node is replaced (hardware failure, node group update) | `kubectl get nodes -L foc.dev/pool` | RabbitMQ and Redis are down for the minutes it takes; the new node comes up in zone a and their volumes reattach by themselves |
 | NAT instance shell | `aws ssm start-session --target <id of the foc-nat instance>` |
-| An HPA shows 2 replicas | expected under load for every service but chat and notification, which have no HPA (one replica, issue #305). The doubled scheduled runs are idempotent (DP10). It goes back to 1 about five minutes after CPU drops below 70 %. With two nodes, the second replica may stay `Pending` on memory until the third node is added |
+| An HPA shows 2 replicas | expected under load for every service (chat and notification fan their STOMP pushes out over AMQP, issue #305). The doubled scheduled runs are idempotent (DP10). It goes back to 1 about five minutes after CPU drops below 70 %. With two nodes, the second replica may stay `Pending` on memory until the third node is added |
 
 ## Troubleshooting
 
@@ -226,11 +233,11 @@ one that ran the apply, and the deploy role): `aws eks update-kubeconfig
 | `db-init` Job fails | `kubectl -n foc logs job/db-init` | RDS still creating or `DB_HOST` stale in `foc/app` (apply, then redeploy); `password authentication failed` means `RDS_MASTER_PASSWORD` in `foc/app` differs from the instance (apply again) |
 | Backend `CrashLoopBackOff` with `FATAL: too many connections` | `kubectl -n foc logs <pod> -p` | the pool cap (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`, 5) was raised or removed; db.t4g.micro allows about 110 |
 | Backend `CrashLoopBackOff` with `password authentication failed` | `kubectl -n foc logs job/db-init` | the Job did not run after the password changed; re-run Deploy |
-| `foc-secrets` or `ghcr-pull` missing | the Deploy job's `secrets.sh` output | the deploy role was denied `secretsmanager:GetSecretValue`, or the secret is not in `ap-southeast-1` |
+| `foc-secrets`, `foc-db-admin` or `ghcr-pull` missing | the Deploy job's `secrets.sh` output | the deploy role was denied `secretsmanager:GetSecretValue`, or the secret is not in `ap-southeast-1` |
 | `ImagePullBackOff` on every pod | `aws ec2 describe-instances --filters Name=tag:Name,Values=foc-nat --query 'Reservations[].Instances[].State.Name'` | the NAT instance is stopped (start it), its interface has source/destination checking on, or the private route table lost its default route |
 | `ImagePullBackOff` on one pod | `kubectl -n foc describe pod <pod>` | GHCR token wrong or without `read:packages`; no image pushed for that sha |
 | Nodes `NotReady` or none join | EC2 console, the node group's health in the EKS console | Spot capacity (`InsufficientInstanceCapacity`: wait or change `node_instance_type`), or no egress (NAT instance, as above) |
-| Pod `Pending` | `describe pod` events | `Insufficient memory` or `cpu`: add the third node. `volume node affinity conflict`: the PVC's zone has no node; wait for the node group or delete the PVC (RabbitMQ: queued messages lost; Redis: logout denylist lost) |
+| Pod `Pending` | `describe pod` events | `Insufficient memory` or `cpu`: add the third Spot node. `didn't match Pod's node affinity/selector` on rabbitmq-0 or redis-0: the `stable` node is missing (node group `foc-stable` in the EKS console). `volume node affinity conflict`: the volume's zone (a) has no node; wait for the on-demand node, or as a last resort delete the PVC (RabbitMQ: queued messages lost; Redis: logout denylist lost) |
 | Add-on `DEGRADED` | `aws eks describe-addon --cluster-name foc --addon-name <name>` | usually a pod `Pending` for the reasons above; `ebs-csi-controller` also needs its Pod Identity association |
 | 502 / 504 on `/api/<svc>` | `kubectl -n foc get pods` | the backend is not ready yet (the startup probe allows 5 min) |
 | Live updates or chat drop after about 60 s | `helm get values traefik -n traefik` | the two `respondingTimeouts` values from `helm/traefik-values.yaml` are missing |

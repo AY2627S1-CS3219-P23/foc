@@ -1572,7 +1572,12 @@ four questions on private subnets and NAT with facts only. The tool wrote
 the Terraform, manifests, chart values, scripts and workflow, tested the
 init script against a local Postgres, planned against the live state, and
 replaced `docs/deployment.md` and `infra/README.md`, quoting the reasons
-Leong Wei Zhi gave. Recorded in `ai/usage-log.md`.
+Leong Wei Zhi gave. The PR #316 review round (same day) added a third,
+on-demand node that RabbitMQ and Redis select (chosen by Leong Wei Zhi
+after the reviewers' zone-bound-volume finding, from options incl. Amazon
+MQ + ElastiCache and SQS, recorded as facts), a separate Secret for the
+RDS master credentials, a pinned RDS minor and one deploy deadline, and
+restored the issue #305 state of DP9/DP10. Recorded in `ai/usage-log.md`.
 
 2026-11-08: Claude Code (Fable 5.1) made the Admin Dashboard tests wait for a
 section's first load to settle before asserting on it, after one case

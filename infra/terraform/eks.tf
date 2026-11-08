@@ -2,8 +2,9 @@
 # Tool: Claude Code (Fable 5.1), 2026-11-09, issue #48 (EKS re-platform).
 # Scope: the EKS cluster and its Spot node group per the team's decisions
 # (Leong Wei Zhi, 2026-11-09, options Q&A, recorded in docs/deployment.md):
-# DP2 EKS, DP3 t3.medium Spot nodes (2 running, max 3) in the private
-# subnets, DP8 cluster-admin access entry for the GitHub deploy role, DP9
+# DP2 EKS, DP3 t3.medium nodes in the private subnets: two Spot (max 3) in
+# two zones plus one on-demand in zone a that RabbitMQ and Redis select
+# (PR #316 review, re-decided 2026-11-09), DP8 cluster-admin access entry for the GitHub deploy role, DP9
 # metrics-server for the HPAs, the EBS CSI driver for the RabbitMQ and
 # Redis volumes (the only workload holding an AWS role, through Pod
 # Identity). IMDS hop limit 1 on the nodes carries DP7's posture: pods
@@ -123,6 +124,7 @@ resource "aws_eks_node_group" "main" {
   subnet_ids      = local.private_subnet_ids
   capacity_type   = "SPOT"
   instance_types  = [var.node_instance_type]
+  labels          = { "foc.dev/pool" = "spot" }
 
   scaling_config {
     desired_size = var.node_count
@@ -156,6 +158,43 @@ resource "aws_eks_node_group" "main" {
   ]
 }
 
+# One on-demand node in zone a (DP3, 2026-11-09): RabbitMQ and Redis select
+# it by label, so their EBS volumes, bound to that zone, always have a node
+# to attach to, and a Spot squeeze never takes the broker or the logout
+# denylist. Not tainted: application pods may land here too
+resource "aws_eks_node_group" "stable" {
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = "foc-stable"
+  node_role_arn   = aws_iam_role.node.arn
+  subnet_ids      = [aws_subnet.private.id]
+  capacity_type   = "ON_DEMAND"
+  instance_types  = [var.stable_node_instance_type]
+  labels          = { "foc.dev/pool" = "stable" }
+
+  scaling_config {
+    desired_size = 1
+    min_size     = 1
+    max_size     = 1
+  }
+
+  update_config {
+    max_unavailable = 1
+  }
+
+  launch_template {
+    id      = aws_launch_template.node.id
+    version = aws_launch_template.node.latest_version
+  }
+
+  tags = { Name = "foc-stable" }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.node,
+    aws_route_table_association.private,
+    aws_instance.nat,
+  ]
+}
+
 # --- add-ons ----------------------------------------------------------------
 
 data "aws_eks_addon_version" "pod_identity" {
@@ -181,7 +220,7 @@ resource "aws_eks_addon" "pod_identity" {
   addon_name                  = "eks-pod-identity-agent"
   addon_version               = data.aws_eks_addon_version.pod_identity.version
   resolve_conflicts_on_update = "OVERWRITE"
-  depends_on                  = [aws_eks_node_group.main]
+  depends_on                  = [aws_eks_node_group.main, aws_eks_node_group.stable]
 }
 
 # the HorizontalPodAutoscalers read CPU from it (k3s shipped it built in)

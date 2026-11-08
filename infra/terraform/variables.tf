@@ -59,7 +59,7 @@ variable "node_instance_type" {
 }
 
 variable "node_count" {
-  description = "nodes running at rest (the node group's minimum and initial desired size)"
+  description = "Spot nodes running at rest (the Spot node group's minimum and initial desired size); one on-demand node comes on top"
   type        = number
   default     = 2
 }
@@ -68,6 +68,12 @@ variable "node_max" {
   description = "the node group's maximum; the third node is added by raising the desired size (infra/README.md)"
   type        = number
   default     = 3
+}
+
+variable "stable_node_instance_type" {
+  description = "the one on-demand node in zone a that RabbitMQ and Redis select"
+  type        = string
+  default     = "t3.medium"
 }
 
 variable "nat_instance_type" {
@@ -82,6 +88,12 @@ variable "db_instance_class" {
   description = "RDS PostgreSQL instance class holding the seven service databases"
   type        = string
   default     = "db.t4g.micro"
+}
+
+variable "db_engine_version" {
+  description = "RDS PostgreSQL version, a concrete minor (the region's default 17.x on 2026-11-09: `aws rds describe-db-engine-versions --engine postgres --engine-version 17 --default-only`)"
+  type        = string
+  default     = "17.9"
 }
 
 # --- GitHub ------------------------------------------------------------------

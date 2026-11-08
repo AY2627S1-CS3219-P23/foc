@@ -7,6 +7,9 @@
 # db-init Job in infra/k8s with the master credentials from foc/app).
 # Nothing is kept at teardown (DP12): no final snapshot.
 # Author review: Leong Wei Zhi, pending pull request review.
+# PR #316 review (Copilot): the engine version is a concrete minor
+# (variables.tf, the region's default 17.9 on 2026-11-09) rather than the
+# bare major, and later minor upgrades are ignored.
 
 resource "random_password" "rds_master" {
   length  = 32
@@ -43,7 +46,7 @@ resource "aws_security_group" "rds" {
 resource "aws_db_instance" "main" {
   identifier     = "foc"
   engine         = "postgres"
-  engine_version = "17"
+  engine_version = var.db_engine_version
   instance_class = var.db_instance_class
 
   allocated_storage = 20
@@ -66,6 +69,12 @@ resource "aws_db_instance" "main" {
   skip_final_snapshot        = true
   deletion_protection        = false
   apply_immediately          = true
+
+  # RDS applies minor upgrades itself; the pinned minor must not be
+  # "downgraded" back by the next apply
+  lifecycle {
+    ignore_changes = [engine_version]
+  }
 
   tags = { Name = "foc" }
 }

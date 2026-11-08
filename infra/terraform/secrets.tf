@@ -49,9 +49,9 @@ resource "random_password" "chat_internal" {
 }
 
 # One JSON secret with every app value; infra/k8s/secrets.sh copies all
-# keys into the Kubernetes Secret foc-secrets. DB_HOST is the RDS address
-# every service connects to; the master credentials are read by the
-# db-init Job only (DP16).
+# keys into Kubernetes Secrets: the RDS_MASTER_* keys into foc-db-admin,
+# mounted by the db-init Job only (DP16), the rest into foc-secrets.
+# DB_HOST is the RDS address every service connects to.
 resource "aws_secretsmanager_secret" "app" {
   name                    = "foc/app"
   recovery_window_in_days = 0

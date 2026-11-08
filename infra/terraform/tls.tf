@@ -59,8 +59,8 @@ resource "aws_lb" "site" {
   tags         = { Name = "foc" }
 }
 
-# Every node answers Traefik's NodePort; the node group's Auto Scaling
-# group registers and deregisters nodes as Spot replaces them
+# Every node answers Traefik's NodePort; both node groups' Auto Scaling
+# groups register and deregister nodes as they are replaced
 resource "aws_lb_target_group" "traefik" {
   name        = "foc-traefik-np"
   port        = local.traefik_node_port
@@ -90,6 +90,11 @@ resource "aws_lb_target_group" "traefik" {
 
 resource "aws_autoscaling_attachment" "nodes" {
   autoscaling_group_name = aws_eks_node_group.main.resources[0].autoscaling_groups[0].name
+  lb_target_group_arn    = aws_lb_target_group.traefik.arn
+}
+
+resource "aws_autoscaling_attachment" "stable_nodes" {
+  autoscaling_group_name = aws_eks_node_group.stable.resources[0].autoscaling_groups[0].name
   lb_target_group_arn    = aws_lb_target_group.traefik.arn
 }
 
