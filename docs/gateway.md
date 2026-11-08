@@ -57,6 +57,9 @@
   compose unchanged; the deployment decisions are Leong Wei Zhi's
   (docs/deployment.md). No new gateway decision.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-11-08, Claude Code (Fable 5.1), issue #305: the D10 scale-out
+  bullet closed (D35, AMQP fanout). Author review: Leong Wei Zhi,
+  pending pull request review.
 -->
 
 # FoC API Gateway — Design
@@ -210,8 +213,8 @@ compose) and `REDIS_HOST` is fully qualified (issue #48,
   (PR #176 review) for whoever first designs one that does.
 - `docs/notification-service.md` D10 ("no Redis") predates this: Redis
   now exists as platform infrastructure for the denylist. D10's
-  scale-out question (Redis pub/sub vs broker relay) remains open and
-  unrelated.
+  scale-out question was settled by D35 (issue #305): pushes fan out
+  over AMQP, not Redis, so the gateway is unaffected.
 
 ## Container
 

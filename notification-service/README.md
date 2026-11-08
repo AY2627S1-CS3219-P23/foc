@@ -22,6 +22,14 @@
   Status line note the processed_events sweep (author decision via
   options Q&A: same window, no new env var).
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-11-08, Claude Code (Fable 5.1), issue #305: Troubleshooting updated
+  for the Flyway-owned schema (D36); PR #306 Copilot review: the legacy
+  columns' symptom described as it is (baseline does not compare, validate
+  ignores extra columns, inserts fail). Author review: Leong Wei Zhi,
+  pending pull request review.
+  Same day, PR #306 review (Sinnez1): V2 drops the legacy columns, so the
+  schema needs no reset any more. Author review: Leong Wei Zhi, pending
+  pull request review.
 -->
 
 # Notification Service
@@ -89,18 +97,23 @@ prefix, every one scoped to the token's user — the full contract
 
 ## Troubleshooting
 
-Dev volumes created before the typed-contracts refactor or the
+Broker volumes created before the typed-contracts refactor or the
 retry/DLQ topology (#65) fail at startup: the old fanout exchange and
 the pre-#65 work queue carry incompatible declarations
-(`PRECONDITION_FAILED`), and a DB schema with the removed NOT NULL
-`entity_type`/`entity_id` columns rejects inserts (`ddl-auto: update`
-never drops columns). Reset both volumes once:
+(`PRECONDITION_FAILED`). Reset the broker volume once:
 
 ```sh
-docker compose down rabbitmq notification-db
-docker volume rm foc_rabbitmq-data foc_notification-db-data
-docker compose up -d rabbitmq notification-db
+docker compose down rabbitmq
+docker volume rm foc_rabbitmq-data
+docker compose up -d rabbitmq
 ```
+
+The database volume needs no reset. Since #305 Flyway owns the schema:
+`baseline-on-migrate` records an existing `ddl-auto: update` schema as
+V1 without comparing it, and `V2__drop_legacy_entity_columns.sql` then
+drops the NOT NULL `entity_type`/`entity_id` columns and the
+`entity_sequences` table a pre-typed-contracts volume still carries
+(no-ops elsewhere), so such a volume stores notifications again.
 
 Separately, after the order→request rename the old `order-events`
 exchange and `notification-service.order-events*` queues are harmless

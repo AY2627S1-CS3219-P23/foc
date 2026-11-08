@@ -8,9 +8,21 @@
  * Same day, Method-B refactor (D16-D19): the generic Jackson
  * converter is replaced by the registry-driven DomainEventMessageConverter.
  * Reviewed by: Leong Wei Zhi (via pull request).
+ * 2026-11-08, Claude Code (Fable 5.1), issue #305 (D35): a second listener
+ * container factory for the push fanout queue — plain converter, auto ack
+ * — because the push envelope is not a domain event. Author review: Leong
+ * Wei Zhi, pending pull request review.
+ * Same day, PR #306 review (Sinnez1): one consumer and no retry advice set
+ * on the push factory itself, not inherited from the work queues' yaml.
+ * Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.notification.messaging.rabbitmq;
 
+import org.springframework.amqp.core.AcknowledgeMode;
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.support.converter.SimpleMessageConverter;
+import org.springframework.boot.amqp.autoconfigure.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import tools.jackson.databind.json.JsonMapper;
@@ -25,12 +37,39 @@ import tools.jackson.databind.json.JsonMapper;
  * factory and {@code RabbitTemplate}; the record class is resolved
  * from the body's {@code eventType}, so publishers never set type
  * headers (D11, D18).
+ *
+ * <p>The push fanout queue (D35) carries {@code UserPush} envelopes, not
+ * events, so its listener runs on {@link #pushFanoutContainerFactory} —
+ * the same yaml-configured container (auto-startup) but with the plain
+ * converter, which leaves the body to the listener, and automatic acks (the
+ * manual mode is for the work queues' commit-then-ack). Its consumer count
+ * and retry are fixed here rather than taken from the
+ * {@code spring.rabbitmq.listener.simple} settings meant for the work
+ * queues: a single consumer keeps one user's pushes in order, and a push
+ * is never retried. A rejected push is dropped, never requeued: a push is
+ * best-effort.
  */
 @Configuration
 class RabbitMqMessageConverterConfig {
 
+	static final String PUSH_FANOUT_CONTAINER_FACTORY = "pushFanoutContainerFactory";
+
 	@Bean
 	DomainEventMessageConverter rabbitJsonMessageConverter(JsonMapper jsonMapper) {
 		return new DomainEventMessageConverter(jsonMapper);
+	}
+
+	@Bean(PUSH_FANOUT_CONTAINER_FACTORY)
+	SimpleRabbitListenerContainerFactory pushFanoutContainerFactory(
+			SimpleRabbitListenerContainerFactoryConfigurer configurer, ConnectionFactory connectionFactory) {
+		SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+		configurer.configure(factory, connectionFactory);
+		factory.setMessageConverter(new SimpleMessageConverter());
+		factory.setAcknowledgeMode(AcknowledgeMode.AUTO);
+		factory.setDefaultRequeueRejected(false);
+		factory.setConcurrentConsumers(1);
+		factory.setMaxConcurrentConsumers(1);
+		factory.setAdviceChain();
+		return factory;
 	}
 }

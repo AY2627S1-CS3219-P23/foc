@@ -317,6 +317,9 @@
   2026-11-01: AI Use Summary extended for the own-profile entry link and
   the rater's review readback (issue #284) by Claude Code (Opus 5).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-08: AI Use Summary extended for issue #305 (cross-replica push,
+  duplicate-key ack, Flyway baseline) by Claude Code (Fable 5.1).
+  Author review: Leong Wei Zhi, pending pull request review.
   2026-11-08: AI Use Summary extended for the push-triggered credit
   balance refresh (Credit NFR1.1) by Claude Code (Opus 5.5), then
   rewritten for its rework into the credit-change notification (PR
@@ -1564,10 +1567,25 @@ The credit-change notification (Credit NFR1.1, PR #313): Claude Code
 outbox when a transfer, release or dispute split settles,
 notification-service bind them and tell each party, and the web show the
 viewer's side of the change, open `/credits` on click and refresh the
-balance on the push, with tests and the design docs' D35 (notification)
+balance on the push, with tests and the design docs' D37 (notification)
 and D15 (credit). Which movements notify, the contract names and
 fields, the recipients and the wording were team decisions. Recorded in
 `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
+
+Issue #305 (chat and notification safe at two replicas, 2026-11-08) —
+Claude Code (Fable 5.1) implemented the team's decisions (Leong Wei Zhi,
+neutral options Q&A): STOMP pushes fan out over a per-service AMQP
+exchange so the replica holding the browser's socket delivers them
+(notification D35, chat), notification-service acks a concurrent
+duplicate on its `processed_events` key and moves to a Flyway baseline
+(D36), the two HPAs return and the one-replica pins go (DP9/DP10); unit
+and Testcontainers tests, compose and k8s wiring, and the docs. The
+alternatives (STOMP broker relay, insert-first dedupe, single active
+consumer, ShedLock) were declined by the author and are recorded in
+`ai/usage-log.md`. The PR #306 review rounds (Sinnez1, the Claude
+reviewer) added a 5 s broker connect timeout, an ack scoped to the
+`processed_events_pkey` constraint with a real-Postgres race test, a V2
+migration for legacy volumes and smaller hardening.
