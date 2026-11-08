@@ -6,6 +6,8 @@
 # in docs/deployment.md). DNS lives at FreeDNS, outside Terraform: the
 # validation CNAME and the site CNAME are added by hand from the outputs.
 # Author review: Leong Wei Zhi, pending pull request review.
+# PR #310 review (Copilot): the validation resource names the record FQDNs
+# it expects, taken from the certificate itself.
 
 # --- certificate -----------------------------------------------------------
 
@@ -21,11 +23,13 @@ resource "aws_acm_certificate" "site" {
 }
 
 # Waits until ACM has seen the validation CNAME (output acm_validation_record)
-# at FreeDNS and issued the certificate. No validation_record_fqdns: the
-# record is not managed here. The runbook requests the certificate alone
-# first (-target), so the CNAME exists before this resource starts waiting.
+# at FreeDNS and issued the certificate. The record is not managed here, so
+# the expected FQDNs come from the certificate's own validation options.
+# The runbook requests the certificate alone first (-target), so the CNAME
+# exists before this resource starts waiting.
 resource "aws_acm_certificate_validation" "site" {
-  certificate_arn = aws_acm_certificate.site.arn
+  certificate_arn         = aws_acm_certificate.site.arn
+  validation_record_fqdns = [for o in aws_acm_certificate.site.domain_validation_options : o.resource_record_name]
 
   timeouts {
     create = "60m"

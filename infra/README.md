@@ -60,10 +60,11 @@ terraform apply -target=aws_acm_certificate.site
 terraform output acm_validation_record
 ```
 
-In FreeDNS, **Subdomains, Add**: type `CNAME`, subdomain = the output's
-`name` without the trailing `.mooo.com`, domain `mooo.com`, destination =
-the output's `value` without its trailing dot. ACM issues the certificate
-within minutes of the record resolving:
+The output holds one record per certificate name (today just
+`foc23.mooo.com`). In FreeDNS, **Subdomains, Add**: type `CNAME`,
+subdomain = its `name` without the trailing `.mooo.com`, domain
+`mooo.com`, destination = its `value` without the trailing dot. ACM issues
+the certificate within minutes of the record resolving:
 
 ```sh
 aws acm list-certificates --query 'CertificateSummaryList[?DomainName==`foc23.mooo.com`].Status'
