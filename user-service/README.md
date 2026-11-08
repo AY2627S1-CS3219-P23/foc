@@ -102,6 +102,10 @@
   2026-11-09, PR #309 bot re-review: the note states that the gateway
   does not rate-limit the routes either. Author review: Leong Wei Zhi,
   pending pull request review.
+  2026-11-09, PR #309 review (@Sinnez1): the accepted-risk note is
+  replaced. The gate code is now checked before the token (Leong Wei
+  Zhi's decision via options Q&A), and the 403 row is updated to match.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # User Service
@@ -334,23 +338,25 @@ email-change verify had just replaced (PR #157 review).
   `currentPassword` — the gate code is the authentication.
 - `POST /users/me/owner` `{ ownerKey, otp }` → **200** with the account,
   now `OWNER` (#308): the owner setup token (`OWNER_SETUP_TOKEN`, the
-  one `/register-owner` uses) plus the gate code. The token is checked
-  **before** the code, so a wrong or blank token is a **403**
-  (`owner-setup-token-invalid`) that leaves the code usable for the
-  retry; an unconfigured token is the same **503** as
-  `/auth/signup-owner`. On success every session of the account is
+  one `/register-owner` uses) plus the gate code. The code is checked
+  **before** the token (PR #309 review, Leong Wei Zhi's decision), so
+  every token guess needs a requested code. A wrong code answers like any
+  gate-code refusal and says nothing about the token. A wrong or blank
+  token with the right code is a **403** (`owner-setup-token-invalid`)
+  that spends the code: the row is kept spent, so its `Retry-After` and
+  the resend cooldown hold back the next code, which allows at most one
+  guess per cooldown. An unconfigured token is the same **503** as
+  `/auth/signup-owner`, answered before the code is read, so the code
+  stays usable. On success every session of the account is
   revoked after the commit (#178's per-user stamp), so the caller signs
   in again and the new token carries `OWNER`; one log line records the
   upgrade. An `OWNER` caller gets **200** with the account unchanged —
   nothing consumed or revoked.
-  **Accepted risk (PR #309 review, Leong Wei Zhi):** wrong tokens are
-  not throttled — a wrong token costs no gate-code attempt, so any
-  signed-in user can keep guessing (as anyone can on
-  `/auth/signup-owner`), and the gateway rate-limits neither route
-  (`gateway/nginx.conf` has no `limit_req`). The defence is the token itself: set
-  `OWNER_SETUP_TOKEN` to a long random value (the cloud deployment
+  Set `OWNER_SETUP_TOKEN` to a long random value (the cloud deployment
   generates 32 random alphanumerics), and unset it when no more owners
-  are needed — the routes then answer 503.
+  are needed — the routes then answer 503. `/auth/signup-owner` reveals
+  the token's result only inside the OTP email, behind the per-email
+  resend cooldown.
 
 OTP-flavoured errors carry a stable problem+json `type` URI, so clients
 can match failures by machine instead of by `detail` wording (the SPA's
@@ -367,7 +373,7 @@ may change). The sign-up OTP errors carry them too:
 | `urn:foc:user:email-change-none` | nothing pending to verify/resend (400) |
 | `urn:foc:user:email-taken` | email already registered (400) |
 | `urn:foc:user:username-taken` | username already taken (400) |
-| `urn:foc:user:owner-setup-token-invalid` | owner upgrade: wrong or blank setup token; the gate code is kept (403) |
+| `urn:foc:user:owner-setup-token-invalid` | owner upgrade: wrong or blank setup token with the right gate code; the code is spent, `Retry-After` until the next (403) |
 | `urn:foc:user:owner-setup-token-missing` | no owner setup token configured on the server (503) |
 
 ## Password reset & account recovery (#94)

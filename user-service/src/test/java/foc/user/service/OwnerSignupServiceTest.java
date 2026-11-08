@@ -28,6 +28,9 @@ comment put on its own line. Author review: Ryan Ang, pending pull
 request review.
 2026-11-08 (Claude Code, Opus 5.5), issue #308: the unconfigured-token
 case sets the key on the service's OwnerSetupToken, where the check moved.
+2026-11-09 (Claude Code, Opus 5.5), PR #309 review: the services are built
+with an OwnerSetupToken; the unconfigured case builds its own service
+with a blank one instead of using reflection.
 */
 
 package foc.user.service;
@@ -133,7 +136,7 @@ class OwnerSignupServiceTest {
             new OtpService(PLAIN_ENCODER, OTP_TTL, OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN);
 
         ownerSignupService = new OwnerSignupService(userRepository, pendingSignupRepository, PLAIN_ENCODER,
-            otpService, otpEmailSender, Clock.fixed(NOW, ZoneOffset.UTC), VALID_SETUP_KEY,
+            otpService, otpEmailSender, Clock.fixed(NOW, ZoneOffset.UTC), new OwnerSetupToken(VALID_SETUP_KEY),
             new UserCreation(userRepository, eventOutbox));
 
         reset(pendingSignupRepository);
@@ -274,8 +277,9 @@ class OwnerSignupServiceTest {
     @Test
     @DisplayName("Should throw 503 when OWNER_SETUP_KEY is not configured")
     void signupOwner_throwsServiceUnavailableWhenKeyNotConfigured() {
-        ReflectionTestUtils.setField(
-            ReflectionTestUtils.getField(ownerSignupService, "ownerSetupToken"), "expectedOwnerKey", "");
+        ownerSignupService = new OwnerSignupService(userRepository, pendingSignupRepository, PLAIN_ENCODER,
+            otpService, otpEmailSender, Clock.fixed(NOW, ZoneOffset.UTC), new OwnerSetupToken(""),
+            new UserCreation(userRepository, eventOutbox));
 
         SignupOwnerRequest signRequest = new SignupOwnerRequest(
             "e1234567@u.nus.edu", "owner_user", PASSWORD, "wrongKey");

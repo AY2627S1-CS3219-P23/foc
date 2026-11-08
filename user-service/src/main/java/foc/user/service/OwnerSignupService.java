@@ -33,6 +33,9 @@ pending pull request review.
 2026-11-08 (Claude Code, Opus 5.5), issue #308: checkOwnerKey moved,
 unchanged, to OwnerSetupToken, shared with the profile upgrade
 (POST /users/me/owner). Author review: Leong Wei Zhi via the PR.
+2026-11-09 (Claude Code, Opus 5.5), PR #309 review (@Sinnez1): the
+constructor overload that took the token as a String is gone; tests pass
+an OwnerSetupToken.
 */
 
 package foc.user.service;
@@ -102,19 +105,6 @@ public class OwnerSignupService {
             UserCreation userCreation) {
         this(userRepository, pendingSignupRepository, passwordEncoder,
             otpService, otpEmailSender, Clock.systemUTC(), ownerSetupToken, userCreation);
-    }
-
-    OwnerSignupService(
-            UserRepository userRepository,
-            PendingSignupRepository pendingSignupRepository,
-            PasswordEncoder passwordEncoder,
-            OtpService otpService,
-            OtpEmailSender otpEmailSender,
-            Clock clock,
-            String expectedOwnerKey,
-            UserCreation userCreation) {
-        this(userRepository, pendingSignupRepository, passwordEncoder,
-            otpService, otpEmailSender, clock, new OwnerSetupToken(expectedOwnerKey), userCreation);
     }
 
     OwnerSignupService(

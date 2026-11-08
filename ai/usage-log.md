@@ -58,6 +58,8 @@
   below.
   2026-11-08, Claude Code (Opus 5.5): prepended the issue #308 owner
   upgrade entry below.
+  2026-11-09, Claude Code (Opus 5.5): PR #309 review round 2 added to
+  the issue #308 entry.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -120,6 +122,33 @@ Entry template:
   fields); the other three comments were answered with the code that
   disproves them (Boot 4 import package, `gate.request()` never throws,
   the stored session is the JSON string `"null"`).
+- **PR #309 review round 2 (2026-11-09, @Sinnez1, CHANGES_REQUESTED):**
+  prompt "address pr comments on
+  https://github.com/AY2627S1-CS3219-P23/foc/pull/309". Sinnez1 showed
+  that the separate wrong-token 403 answered each guess instantly. The
+  tool put the fix to Leong Wei Zhi as neutral options (code first, same
+  answer as a wrong code, per-user token cap, keep and fix the note), and
+  Leong Wei Zhi chose code first. Implemented: `upgradeToOwner` checks
+  the configured token (503, code kept), then the gate code
+  (`matchGateOtp`, split from `consumeGateOtp`), then the token. A wrong
+  token keeps the row spent (`AccountUpdateOtp.spend`), not deleted, so
+  the resend cooldown still applies (PR #157's rule), and the 403 carries
+  `Retry-After` (new `OwnerSetupTokenException`; the
+  `ResponseStatusException` passthrough in `ProblemDetailAdvice` now
+  keeps headers). The README's accepted-risk note is replaced. Web: the
+  wrong token is a `restart` in `problemTypes.ts`, `OwnerUpgradeCard`
+  copy follows, and `ProfileSection` signs out with `endSession()` plus
+  an explicit `navigate('/login')` instead of `logout()` (the race
+  Sinnez1 described). Cleanups: `OwnerSetupToken`'s field is final again,
+  tests use the pinned token, and the 503 cases run in the new
+  `OwnerSetupUnconfiguredTest` (own context, `@DirtiesContext`). The
+  String-key `OwnerSignupService` constructor and the hand-built 403/503
+  are gone. Verification: `./mvnw clean test` 418 tests, 1 error, the
+  known "too many clients already" `OutboxPublisherIntegrationTest`
+  flake, which passes when rerun with the owner and account-update
+  classes; web `vitest run` 442/442, tsc, eslint, prettier clean; the new
+  race test fails against the old `logout()` code. Leong Wei Zhi reviews
+  via pull request.
 
 ---
 ## 2026-11-08 — Leong Wei Zhi (issue #305: chat and notification safe at 2 replicas)

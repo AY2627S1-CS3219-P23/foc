@@ -28,6 +28,10 @@
 // 2026-11-08, Claude Code (Opus 5.5), issue #308: the owner upgrade's two
 // token refusals, both `amend` — the token is checked before the gate
 // code, so the code survives them (decision via options Q&A).
+// 2026-11-09, Claude Code (Opus 5.5), PR #309 review: the code is now
+// checked first (decision via options Q&A), so a wrong token spends it and
+// is a `restart` whose Retry-After holds back the next code. The 503 still
+// comes before the code is read, so it stays `amend`.
 
 import { ApiError } from '@/lib/api/http'
 
@@ -97,8 +101,8 @@ export function resendWait(error: unknown): number | null {
  *              a wrong guess, or a failure that never judged the values (a
  *              500, a mail 502, a network blip).
  * - `restart`— no usable code any more, so the card returns to its fields
- *              and asks for a new one: expired, spent (429), or never
- *              requested.
+ *              and asks for a new one: expired, spent (429, or the owner
+ *              upgrade's wrong token), or never requested.
  * - `wait`   — refused for now, with the wait quoted in Retry-After: the
  *              gate code is untouched (the 429 rolls its consumption back
  *              with everything else), so the card holds code and fields
@@ -119,11 +123,11 @@ export function gateFailure(error: unknown): GateFailure {
     case OTP_EXPIRED:
     case OTP_REQUIRED:
     case OTP_ATTEMPTS_EXCEEDED:
+    case OWNER_SETUP_TOKEN_INVALID: // #308: the code is read first, then spent
       return 'restart'
     case USERNAME_TAKEN:
     case EMAIL_TAKEN:
-    case OWNER_SETUP_TOKEN_INVALID: // #308: token checked before the code
-    case OWNER_SETUP_TOKEN_MISSING:
+    case OWNER_SETUP_TOKEN_MISSING: // #308: refused before the code is read
       return 'amend'
     case OTP_RESEND_COOLDOWN:
       return 'wait'

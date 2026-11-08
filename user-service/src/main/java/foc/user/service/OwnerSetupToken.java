@@ -7,9 +7,11 @@ Scope: issue #308: the owner setup token check moved here unchanged from
        way. Endpoint decisions by Leong Wei Zhi via options Q&A
        (2026-11-08); no design decision was made by AI.
 Author review: Leong Wei Zhi to review via the PR.
-PR #309 Copilot review: expectedOwnerKey is not final, because tests
-swap it on the shared bean by reflection and JDK 26 warns when
-reflection changes a final field (JEP 500).
+2026-11-09 (Claude Code, Opus 5.5), PR #309 review (@Sinnez1): the field
+is final again; tests use the pinned property, or their own context,
+instead of changing the shared bean by reflection. requireConfigured lets
+the upgrade answer 503 before it spends the gate code. The 503 comes from
+OwnerSetupTokenException.
 */
 
 package foc.user.service;
@@ -19,34 +21,31 @@ import java.security.MessageDigest;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
-import org.springframework.web.server.ResponseStatusException;
 
-import foc.user.controller.ProblemTypes;
+import foc.user.exception.OwnerSetupTokenException;
 
 @Component
 public class OwnerSetupToken {
 
-    // not final: tests swap it on the shared bean by reflection
-    private String expectedOwnerKey;
+    private final String expectedOwnerKey;
 
     @Autowired
     public OwnerSetupToken(@Value("${owner.setup.token:}") String expectedOwnerKey) {
         this.expectedOwnerKey = expectedOwnerKey;
     }
 
-    // constant-time compare; 503 when no token is configured, which every
-    // caller answers the same way, whatever was provided
-    public boolean matches(String providedOwnerKey) {
+    // 503 when no token is configured, which every caller answers the
+    // same way, whatever was provided
+    public void requireConfigured() {
         if (expectedOwnerKey == null || expectedOwnerKey.isBlank()) {
-            ResponseStatusException e =  new ResponseStatusException(
-                HttpStatus.SERVICE_UNAVAILABLE,
-                "Owner setup is unavailable"
-            );
-            e.getBody().setType(ProblemTypes.OWNER_SETUP_TOKEN_MISSING);
-            throw e;
+            throw OwnerSetupTokenException.missing();
         }
+    }
+
+    // constant-time compare, after requireConfigured
+    public boolean matches(String providedOwnerKey) {
+        requireConfigured();
 
         byte[] expected = expectedOwnerKey.getBytes(StandardCharsets.UTF_8);
         byte[] provided = (providedOwnerKey == null ? "" : providedOwnerKey).getBytes(StandardCharsets.UTF_8);
