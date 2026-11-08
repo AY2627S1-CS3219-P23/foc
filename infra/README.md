@@ -16,6 +16,9 @@
   DP21). Author review: Leong Wei Zhi, pending pull request review.
   Same day: the DNS provider is Dynu (DP18 revised). Author review: Leong
   Wei Zhi, pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1), issue #305: the HPA row covers
+  every service (chat and notification now scale). Author review: Leong
+  Wei Zhi, pending pull request review.
 -->
 
 # infra: cloud deployment runbook
@@ -188,7 +191,7 @@ of the ConfigMap, and the image tag carries the workflow run id.
 | Restart one service | `kubectl -n foc rollout restart deploy/<name>` |
 | Database shell | `kubectl -n foc exec -it user-db-0 -- psql -U user user` |
 | Spot stopped the host | nothing to redeploy. It restarts when capacity returns, same EIP, same data |
-| An HPA shows 2 replicas | expected under load for every service but chat and notification, which have no HPA (one replica, issue #305). The doubled scheduled runs are idempotent (DP10). It goes back to 1 about five minutes after CPU drops below 70 % |
+| An HPA shows 2 replicas | expected under load for every service (chat and notification fan their STOMP pushes out over AMQP, issue #305). The doubled scheduled runs are idempotent (DP10). It goes back to 1 about five minutes after CPU drops below 70 % |
 
 ## Troubleshooting
 

@@ -54,6 +54,8 @@
   entry below.
   2026-11-08, Claude Code (Fable 5.1): prepended the web admin-test flake
   entry below.
+  2026-11-08, Claude Code (Fable 5.1): prepended the issue #305 entry
+  below.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -73,6 +75,76 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-08 — Leong Wei Zhi (issue #305: chat and notification safe at 2 replicas)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** plan, generate, docs
+- **Scope:** branch `feat/305-replica-push` on PR #302's
+  `feat/48-cloud-deploy`. notification-service: `UserPush`,
+  `UserPushFanout`, `LocalUserPushDelivery` (messaging.stomp),
+  `RabbitMqUserPushFanout` + the `pushFanoutContainerFactory` bean
+  (messaging.rabbitmq), `NotificationPushListener` publishes to the port;
+  `DomainEventsListener` acks a SQLSTATE 23505 failure as a duplicate;
+  Flyway (`V1__baseline.sql`, `ddl-auto: validate`, baseline-on-migrate)
+  with `PostgresTestContainer` + `NotificationFlywayMigrationTest`; unit
+  tests for the fanout halves and the listener branches;
+  `StompPushIntegrationTest` now runs a Testcontainers RabbitMQ.
+  chat-service: `spring-boot-starter-amqp`, `ChatPush`,
+  `ChatPushFanoutConfig` (AMQP JSON converter, `chat.push`),
+  `StompChatPublisher` publishes, `ChatPushListener` delivers; unit tests
+  and the STOMP integration test through a Testcontainers RabbitMQ.
+  `compose.yaml` chat RabbitMQ env; `infra/k8s` (the two HPAs back, the
+  `replicas: 1` pins and Recreate strategy removed, chat's
+  `RABBITMQ_PASSWORD`); `docs/deployment.md` DP9/DP10 and the 2-replica
+  tables; `docs/notification-service.md` D35/D36 + section;
+  `docs/chat-service.md`, `docs/gateway.md`, `infra/README.md`, both
+  services' AGENTS.md and the notification README; this log and the
+  README summary.
+- **Decisions (Leong Wei Zhi, neutral options Q&A, 2026-11-08):** AMQP
+  fanout over a STOMP broker relay; ack the duplicate-key failure rather
+  than keep the retry hop or rewrite to insert-first; no
+  `x-single-active-consumer`; a Flyway baseline rather than documenting
+  the first-boot race; chat keeps Boot's RabbitMQ health indicator; one
+  PR stacked on #302. The closed PRs #291/#294 were the reference, not
+  reused.
+- **Prompt(s):** "make a plan to resolve …/issues/305 the implementation
+  should focus on simplicity"; "client only has one persistent websocket
+  connection with one replica, so only that replica should send the
+  notification?" (answered: the fanout reaches every replica and only the
+  socket holder's user-destination resolution delivers).
+- **PR #306 review round (same day):** Copilot — chat's k8s Deployment
+  gets `RABBITMQ_PASSWORD` from `foc-secrets` (missed in the first cut;
+  the cloud chat pods could not have logged in to the broker), and the
+  notification README's legacy-columns symptom corrected (baseline does
+  not compare the schema, Hibernate validate ignores extra columns, so
+  inserts fail rather than startup). Claude reviewer — the AFTER_COMMIT
+  listener already catches `publish` failures (unit-tested); a comment on
+  `publish` now says so.
+- **PR #306 review round 2 (same day, Sinnez1 non-blocking + the
+  blocking connect-timeout item, Claude reviewer):** "address the latest
+  comment from sinnez1 and claude bot". `spring.rabbitmq.connection-timeout:
+  5s` in both services (the after-commit publish on chat's request thread
+  no longer waits amqp-client's 60 s); the test yamls point at
+  `rabbitmq.invalid` with a 200 ms timeout so broker-less suites never
+  publish into a developer's compose RabbitMQ. `DomainEventsListener`
+  acks only a Hibernate `ConstraintViolationException` naming
+  `processed_events_pkey`; `ConcurrentDuplicateIntegrationTest` races
+  one event id on Testcontainers Postgres. `LocalUserPushDelivery` drops
+  a push with a null recipient or notification. The push container
+  factory pins one consumer and no advice chain. `V2__drop_legacy_entity_columns.sql`
+  (drop `entity_type`/`entity_id`/`entity_sequences` if they exist) with
+  a migration test; README/AGENTS/design doc updated, processor Javadoc
+  corrected. Not changed here, pending the team's call: the accept/drop
+  race across replicas, SockJS session affinity, an async chat publish,
+  and chat's readiness including the RabbitMQ indicator.
+- **Author review:** notification-service `./mvnw verify` with Docker
+  (Testcontainers RabbitMQ + Postgres), chat-service `./mvnw test`; the
+  compose `--scale 2` acceptance (both services at 2 replicas, fanout
+  queues delivered on every replica, a concurrent duplicate acked on
+  23505, the existing notification-db volume baselined) ran on the local
+  stack; the cloud HPA check is the author's after #302 deploys. Leong
+  Wei Zhi reviews via pull request.
 
 ---
 ## 2026-11-08 — Leong Wei Zhi (N5 cloud deployment, issue #48: HTTPS with an ACM certificate on a load balancer)

@@ -8,6 +8,11 @@
  * 2026-10-31: the receiver's own queue gets the unread frame (C16-C19),
  * without being subscribed to the chat.
  * Author review: Ko-Khan, pending pull request review.
+ * 2026-11-08, Claude Code (Fable 5.1), issue #305: pushes now cross the
+ * chat.push fanout, so the context also runs a Testcontainers RabbitMQ with
+ * the listener started; the four cases are unchanged and now prove send →
+ * fanout → local delivery. Author review: Leong Wei Zhi, pending pull
+ * request review.
  */
 package foc.chat.stomp;
 
@@ -29,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
 import org.springframework.messaging.simp.stomp.StompHeaders;
@@ -37,9 +43,19 @@ import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
+import org.testcontainers.utility.DockerImageName;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        // the push fanout listener must run for a frame to reach a session
+        properties = "spring.rabbitmq.listener.simple.auto-startup=true")
 class ChatStompIntegrationTest extends PostgresTestContainer {
+
+    @Container
+    @ServiceConnection
+    static RabbitMQContainer rabbitMq =
+            new RabbitMQContainer(DockerImageName.parse("rabbitmq:4-management"));
 
     private static final long REQUESTER = 11;
     private static final long COURIER = 22;

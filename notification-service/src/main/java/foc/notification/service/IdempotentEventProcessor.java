@@ -47,6 +47,9 @@
  * PR #287 review (@Sinnez1): recipients are resolved before the first
  * write, so a missing rule or courier throws with nothing to roll back
  * and the message stays replayable through the retry/DLQ path.
+ * 2026-11-08, Claude Code (Fable 5.1), PR #306 review (Sinnez1): the
+ * concurrent-duplicate note updated for two replicas (issue #305). Author
+ * review: Leong Wei Zhi, pending pull request review.
  */
 package foc.notification.service;
 
@@ -75,9 +78,10 @@ import tools.jackson.databind.ObjectMapper;
  * a type without a rule or a missing required courier throws here,
  * before any write, so the listener's retry/DLQ path keeps the message
  * replayable (PR #287 review); (2) the event ID is recorded — its primary key is the backstop for
- * a concurrent duplicate, whose losing transaction rolls back at
- * commit and resolves via broker redelivery into case 1 (only
- * reachable with listener concurrency &gt; 1; the default is 1);
+ * a concurrent duplicate (two replicas consuming the same event, issue
+ * #305), whose losing transaction rolls back at commit on
+ * {@code processed_events_pkey}; the listener acks that failure as
+ * already processed;
  * (3) the event's business fields (everything outside
  * {@link DomainEvent#METADATA_FIELDS}) are serialized with Boot's
  * auto-configured Jackson mapper — the same mapper the AMQP converter

@@ -7,6 +7,11 @@
 # (C12), the retention window and purge cron (C10) and the message
 # limits (C7). The values are Ko-Khan's.
 # Author review: Ko-Khan, pending pull request review.
+# 2026-11-08, Claude Code (Fable 5.1), issue #305 (team decision via options
+# Q&A): spring.rabbitmq connection for the chat.push fanout, the same
+# RABBITMQ_* variables as notification-service. Author review: Leong Wei
+# Zhi, pending pull request review.
+# Same day, PR #306 review: a 5 s broker connect timeout.
 
 spring:
   application:
@@ -21,6 +26,17 @@ spring:
       # entities against it at startup and never changes it
       ddl-auto: validate
     open-in-view: false
+  rabbitmq:
+    # The platform broker carries each STOMP push to every replica
+    # (issue #305); this is the service's only AMQP use.
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:foc}
+    password: ${RABBITMQ_PASSWORD:}
+    # The publish runs on the request thread after commit: a hung broker
+    # costs a send at most this long instead of amqp-client's 60 s
+    # (PR #306 review)
+    connection-timeout: 5s
   data:
     redis:
       # Platform Redis holding the token denylist, read once per STOMP
