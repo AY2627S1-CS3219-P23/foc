@@ -41,7 +41,7 @@ variable "availability_zone_b" {
 variable "domain_name" {
   description = "the site's hostname: the ACM certificate's name and the PUBLIC_HOST repo variable; its DNS records live at Dynu (DP18)"
   type        = string
-  default     = "foc.dynu.net"
+  default     = "foc23.ddnsfree.com"
 }
 
 variable "instance_type" {

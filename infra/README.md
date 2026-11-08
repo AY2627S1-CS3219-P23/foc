@@ -22,7 +22,7 @@
 
 Design and decisions: [`docs/deployment.md`](../docs/deployment.md).
 One EC2 Spot instance running k3s behind a load balancer that serves
-`https://foc.dynu.net`; everything else runs in the cluster.
+`https://foc23.ddnsfree.com`; everything else runs in the cluster.
 
 ```mermaid
 flowchart TD
@@ -49,7 +49,7 @@ flowchart TD
 - **Credentials:** `export AWS_PROFILE=nusisb_IsbUsersPS-555552813604`, then `aws sso login`.
 - **Team values:** a Gmail app password and a GHCR token with `read:packages`, for `secrets.auto.tfvars`.
 - **DNS:** a Dynu account (dynu.com) holding the hostname in the
-  `domain_name` variable (`foc.dynu.net`) under **DDNS Services**. Two
+  `domain_name` variable (`foc23.ddnsfree.com`) under **DDNS Services**. Two
   CNAME records are added there by hand during step 2; Terraform prints
   both. (FreeDNS was tried first and refuses CNAME records on its shared
   domains.)
@@ -65,14 +65,14 @@ terraform output acm_validation_record
 ```
 
 The output holds one record per certificate name (today just
-`foc.dynu.net`). In Dynu, **DDNS Services**, the hostname, **DNS
+`foc23.ddnsfree.com`). In Dynu, **DDNS Services**, the hostname, **DNS
 Records**, add one: type `CNAME`, node name = its `name` with the
-trailing `.foc.dynu.net` removed (the part starting with `_`), host name
+trailing `.foc23.ddnsfree.com` removed (the part starting with `_`), host name
 = its `value` without the trailing dot. ACM issues the certificate
 within minutes of the record resolving:
 
 ```sh
-aws acm list-certificates --query 'CertificateSummaryList[?DomainName==`foc.dynu.net`].Status'
+aws acm list-certificates --query 'CertificateSummaryList[?DomainName==`foc23.ddnsfree.com`].Status'
 # ISSUED
 ```
 
@@ -85,7 +85,7 @@ terraform output -raw owner_setup_token
 ```
 
 The apply waits for the certificate if it is still pending (up to 60
-min), then creates the load balancer. In Dynu, make `foc.dynu.net` itself
+min), then creates the load balancer. In Dynu, make `foc23.ddnsfree.com` itself
 a `CNAME` to `alb_dns_name`: remove the hostname's IPv4 address first (a
 CNAME cannot sit next to an A record of the same name), then add a CNAME
 record with an empty node name. From this apply on, the host
@@ -193,7 +193,7 @@ of the ConfigMap, and the image tag carries the workflow run id.
 
 | Symptom | Check | Usual cause, fix |
 | --- | --- | --- |
-| `https://<public_host>` times out or the name does not resolve | `dig CNAME <public_host>` | the `foc.dynu.net` record is missing, still an `A` record, or not yet pushed to Dynu's name servers (minutes) |
+| `https://<public_host>` times out or the name does not resolve | `dig CNAME <public_host>` | the `foc23.ddnsfree.com` record is missing, still an `A` record, or not yet pushed to Dynu's name servers (minutes) |
 | Browser shows a certificate warning | the URL | the load balancer's own `*.elb.amazonaws.com` name was opened; the certificate covers `<public_host>` only. Expected |
 | Certificate stays `PENDING_VALIDATION` | `aws acm list-certificates`, `dig CNAME <name from acm_validation_record>` | the validation CNAME is missing, mistyped, or Dynu did not accept the underscore name (then the domain decision DP18 must be revisited again); ACM gives up after 72 h |
 | 503 from the load balancer | `aws elbv2 describe-target-health`, EC2 console: instance state | the target is unhealthy: Spot stopped the host (wait; it comes back and re-registers by instance id), still booting (`cloud-init status`), or Traefik/web not ready yet |

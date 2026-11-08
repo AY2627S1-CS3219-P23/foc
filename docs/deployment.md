@@ -27,7 +27,7 @@
 
 FoC runs in the cloud as one EC2 Spot instance in the NUS Innovation
 Sandbox account, running k3s, behind an Application Load Balancer that
-serves `https://foc.dynu.net` with an AWS Certificate Manager
+serves `https://foc23.ddnsfree.com` with an AWS Certificate Manager
 certificate. The same images as `docker compose` run there. It stays up
 until about 2026-11-19 and is then destroyed with nothing kept. The
 runbook is [`infra/README.md`](../infra/README.md).
@@ -37,7 +37,7 @@ Local `docker compose` stays the development stack and the demo fallback.
 
 ```mermaid
 flowchart LR
-  browser["Browser"] -->|"HTTPS :443<br/>(:80 answers 301)"| alb["ALB<br/>ACM certificate<br/>foc.dynu.net"]
+  browser["Browser"] -->|"HTTPS :443<br/>(:80 answers 301)"| alb["ALB<br/>ACM certificate<br/>foc23.ddnsfree.com"]
   dns["Dynu<br/>2 CNAME records"] -.-> alb
   alb -->|"HTTP :80"| traefik
   subgraph ec2["EC2 t3.xlarge Spot, k3s single node"]
@@ -76,7 +76,7 @@ not on this page.
 | DP2 | Host | One EC2 **t3.xlarge Spot** (4 vCPU, 16 GB), persistent request, **stop** on interruption, CPU credits `standard` |
 | DP3 | Runtime | **k3s** single node: Traefik ingress, local-path volumes, metrics-server |
 | DP4 | Data stores | In-cluster StatefulSets: 7 Postgres (supplier `postgres:16`, the rest `17`), RabbitMQ, Redis with AOF (G7 unchanged) |
-| DP5 | Public access | `https://foc.dynu.net` through the load balancer (DP18 to DP20). The host has no public listener; shell through SSM Session Manager. Replaced plain HTTP on an Elastic IP on 2026-11-08 |
+| DP5 | Public access | `https://foc23.ddnsfree.com` through the load balancer (DP18 to DP20). The host has no public listener; shell through SSM Session Manager. Replaced plain HTTP on an Elastic IP on 2026-11-08 |
 | DP6 | IaC | Terraform, state in S3 (`use_lockfile`), a bootstrap stack for the bucket |
 | DP7 | Secrets | AWS Secrets Manager (`foc/app`, `foc/ghcr`). `secrets.sh` on the host copies them into k8s Secrets at first boot and on every deploy, through the instance role. IMDS hop limit 1, so pods cannot use that role |
 | DP8 | Images, rollout | GHCR, pushed by GitHub Actions and tagged `<commit>-<run id>`; rollout by SSM Run Command from an OIDC role trusted for `main` only. A pod rolls when its image tag, the Secret version or the ConfigMap hash changed |
@@ -85,7 +85,7 @@ not on this page.
 | DP11 | Demo data | Seed on in the cloud; realistic usernames everywhere, same passwords and counts |
 | DP12 | Lifetime | Up to about 2026-11-19, then `terraform destroy`, nothing kept |
 | DP13 | Repo layout | `infra/` (Terraform + manifests), the second non-service top-level folder |
-| DP18 | Domain | `foc.dynu.net`, a free Dynu hostname (records added by hand in Dynu's panel). The sandbox SCP denies Route 53 domain registration. First chosen as `foc23.mooo.com` on FreeDNS, revised the same day when FreeDNS refused CNAME records on its shared domains |
+| DP18 | Domain | `foc23.ddnsfree.com`, a free Dynu hostname (records added by hand in Dynu's panel). The sandbox SCP denies Route 53 domain registration. First chosen as `foc23.mooo.com` on FreeDNS, revised the same day when FreeDNS refused CNAME records on its shared domains |
 | DP19 | TLS endpoint | Application Load Balancer in `ap-southeast-1` with a free ACM certificate (DNS validation); its port 80 answers **301** to https. The balancer forwards plain HTTP to Traefik |
 | DP20 | Host exposure | The host's port 80 accepts the load balancer's security group only; the Elastic IP is gone. The instance keeps an auto-assigned public IPv4 for egress and SSM |
 | DP21 | Public URL in the pipeline | The `PUBLIC_HOST` repo variable holds the hostname; `https://` is written at the four places that build the origin (web build args, `WEB_ALLOWED_ORIGIN`, the two WebSocket origin lists) |
@@ -197,12 +197,12 @@ hosted zones and ACM are allowed.
 | A domain a team member already owns | the member | validation CNAME + site CNAME at their DNS | none | |
 | A domain bought at an external registrar | whoever pays | same, at the registrar | about US$2 to 12 a year by TLD | |
 | Free subdomain on FreeDNS's shared `mooo.com` | FreeDNS account | FreeDNS refuses CNAME records on its shared ("dynamic DNS") domains for free accounts: "contact an admin to have it enabled" (tried 2026-11-08) | none | first DP18, dropped |
-| Free Dynu hostname (`foc.dynu.net`) | Dynu account | same two CNAMEs, by hand in Dynu's DNS Records page; 4 hostnames on a free account | none | DP18 |
+| Free Dynu hostname (`foc23.ddnsfree.com`) | Dynu account | same two CNAMEs, by hand in Dynu's DNS Records page; 4 hostnames on a free account | none | DP18 |
 | Free dynv6 zone (`<name>.dynv6.net`) | dynv6 account | same, by hand or API; record types A, AAAA, CAA, CNAME, MX, SPF, SRV, TXT | none | |
 | No domain: CloudFront's default `*.cloudfront.net` certificate | AWS | none | none | |
 
 Whether Dynu accepts the underscore-prefixed validation record name
-(`_<token>.foc.dynu.net`) was not confirmed from its documentation; the
+(`_<token>.foc23.ddnsfree.com`) was not confirmed from its documentation; the
 runbook requests the certificate on its own first, so this is learned
 before anything else changes.
 
