@@ -14,6 +14,9 @@
 // idles after a chime and wakes for the next, unlockChime resumes
 // inside a gesture.
 // Author review: Leong Wei Zhi to review via the PR.
+// 2026-11-09, Claude Code (Opus 5.5), notification sound preview (no
+// issue): a gesture call plays through a suspended (not idled) context —
+// the toggle's click unlocks it — where a push call stays silent.
 
 class FakeGainParam {
   setValueAtTime = vi.fn()
@@ -166,6 +169,21 @@ describe('playChime', () => {
     // the next real arrival chimes normally
     playChime()
     await flush()
+    expect(ctx.oscillators).toHaveLength(2)
+  })
+
+  test('a gesture call resumes a suspended context and plays through', async () => {
+    // the toggle click may be the page's first gesture: the context is
+    // still suspended, but this click is what unlocks it
+    FakeAudioContext.initialState = 'suspended'
+    FakeAudioContext.resumesTo = 'running'
+    const { playChime } = await importChime()
+
+    playChime({ gesture: true })
+    await flush()
+
+    const ctx = FakeAudioContext.instances[0]
+    expect(ctx.resume).toHaveBeenCalled()
     expect(ctx.oscillators).toHaveLength(2)
   })
 

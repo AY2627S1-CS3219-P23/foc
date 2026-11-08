@@ -48,6 +48,10 @@
 // 2026-11-08, Claude Code (Opus 5.5), issue #308: the owner upgrade card —
 // hidden for an OWNER, success signs out to the login page with its own
 // notice, and a refused token returns to the field with the code kept.
+// 2026-11-09, Claude Code (Opus 5.5), notification sound preview (no
+// issue): the chime module is mocked, so the Preferences cases assert
+// switching the sound on previews it once and switching it off stays
+// silent. Author review: Leong Wei Zhi, pending pull request review.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -69,6 +73,11 @@ import type { PendingEmailChange } from '@/features/user/types'
 import type { AdminUser } from '@/features/user/types'
 import { ApiError } from '@/lib/api/http'
 import { routes } from '../routes'
+
+// the switch's preview is a side effect of the provider's setter; whether
+// it makes sound is chime.test.ts's problem
+const chime = vi.hoisted(() => ({ playChime: vi.fn(), unlockChime: vi.fn() }))
+vi.mock('@/features/notifications/chime', () => chime)
 
 const OTP = '000000'
 const NEW_EMAIL = 'e9999999@u.nus.edu'
@@ -1089,6 +1098,10 @@ describe('preferences', () => {
   // device-wide preference, two surfaces
   const SOUND_KEY = 'notificationSoundEnabled'
 
+  beforeEach(() => {
+    chime.playChime.mockClear()
+  })
+
   it('offers the notification sound switch, on by default', async () => {
     renderProfile()
     await screen.findByText('nus_courier_99')
@@ -1108,6 +1121,22 @@ describe('preferences', () => {
     await user.click(toggle)
     expect(toggle).toHaveAttribute('aria-checked', 'false')
     expect(localStorage.getItem(SOUND_KEY)).toBe('false')
+    // switching off is silent
+    expect(chime.playChime).not.toHaveBeenCalled()
+  })
+
+  it('previews the chime when the sound is switched on', async () => {
+    localStorage.setItem(SOUND_KEY, 'false')
+    const user = userEvent.setup()
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+
+    const toggle = screen.getByRole('switch', { name: 'Notification sound' })
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    expect(localStorage.getItem(SOUND_KEY)).toBe('true')
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+    expect(chime.playChime).toHaveBeenCalledWith({ gesture: true })
   })
 
   it('renders a stored "false" as off', async () => {

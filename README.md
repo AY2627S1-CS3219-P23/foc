@@ -31,6 +31,9 @@
   2026-11-08, Claude Code (Opus 5.5), issue #308: AI Use Summary extended
   for the owner upgrade from the profile page. Author review: Leong Wei
   Zhi, pending pull request review.
+  2026-11-09, Claude Code (Opus 5.5): AI Use Summary extended for the
+  notification sound preview. Author review: Leong Wei Zhi, pending pull
+  request review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
   public profile's joined date and deliveries-completed count (issue
   #280), and the #257 paragraph's deviation sentence updated to point
@@ -1568,6 +1571,12 @@ requirement, the token-before-code order, the 403/503 answers, the
 session revoke and re-login, the log-line audit, keeping `/register-owner`
 and the OWNER caller's unchanged 200 were Leong Wei Zhi's decisions via
 neutral options rounds; the tool implemented them. Recorded in
+`ai/usage-log.md`.
+
+Claude Code (Opus 5.5, 2026-11-09) made switching the notification sound
+on preview the chime once, from the Notification Center header and the
+profile's Preferences switch alike, plus tests. Both surfaces was Leong
+Wei Zhi's choice via a neutral options question. Recorded in
 `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through

@@ -58,6 +58,10 @@
 // page shows the pager alone, not a false "all caught up"; and a late
 // row PATCH no longer re-decrements a total mark-all's refill already
 // refreshed.
+// 2026-11-09, Claude Code (Opus 5.5), notification sound preview (no
+// issue): the header toggle case now expects switching the sound on to
+// preview the chime once, as a gesture call. Author review: Leong Wei
+// Zhi, pending pull request review.
 
 import {
   act,
@@ -1695,13 +1699,17 @@ describe('notification center page', () => {
     })
     expect(chime.playChime).not.toHaveBeenCalled()
 
+    // switching it on previews the chime, from inside the click
     await user.click(toggle)
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
     expect(localStorage.getItem('notificationSoundEnabled')).toBe('true')
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+    expect(chime.playChime).toHaveBeenLastCalledWith({ gesture: true })
+
     await act(async () => {
       onMessage(pushFrame(acceptedBy(100)))
     })
-    expect(chime.playChime).toHaveBeenCalledTimes(1)
+    expect(chime.playChime).toHaveBeenCalledTimes(2)
   })
 
   test('a stored "false" renders the sound toggle off', async () => {

@@ -63,6 +63,12 @@
 // because the provider outlives the route; ids stay in the set on
 // success (a fetch that raced the commit still renders the row read)
 // and leave it on failure, so the next fetch shows the truth.
+// 2026-11-09, Claude Code (Opus 5.5), notification sound preview (no
+// issue): switching the sound on plays the chime once as confirmation,
+// on both toggle surfaces (author decision via options Q&A) — done in
+// the shared setter, so the Center header and the Profile switch get it
+// alike. A change synced in from another tab bypasses the setter and
+// stays silent.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet } from 'react-router'
@@ -145,6 +151,18 @@ export const NotificationProvider = () => {
     { sync: true },
   )
   const soundEnabled = storedSound !== false
+  // Switching the sound on previews the chime. Only the toggles call
+  // this, from their click — a user gesture, so the chime may unlock
+  // the audio context itself (the click can be the page's first
+  // pointerdown). A change synced in from another tab writes the stored
+  // value directly and stays silent.
+  const setSoundEnabled = useCallback(
+    (enabled: boolean) => {
+      setStoredSound(enabled)
+      if (enabled) playChime({ gesture: true })
+    },
+    [setStoredSound],
+  )
 
   // Live frames received, counted before the body parse — a frame that
   // fails JSON.parse bumps the badge, so it must chime too (PR #215
@@ -401,7 +419,7 @@ export const NotificationProvider = () => {
       markReadPending,
       refreshUnreadCount,
       soundEnabled,
-      setSoundEnabled: setStoredSound,
+      setSoundEnabled,
     }),
     [
       unreadCount,
@@ -412,7 +430,7 @@ export const NotificationProvider = () => {
       markReadPending,
       refreshUnreadCount,
       soundEnabled,
-      setStoredSound,
+      setSoundEnabled,
     ],
   )
 

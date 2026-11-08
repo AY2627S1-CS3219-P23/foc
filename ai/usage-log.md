@@ -58,6 +58,8 @@
   below.
   2026-11-08, Claude Code (Opus 5.5): prepended the issue #308 owner
   upgrade entry below.
+  2026-11-09, Claude Code (Opus 5.5): prepended the notification sound
+  preview entry below.
   Author review: Leong Wei Zhi to review via pull request.
 -->
 
@@ -77,6 +79,27 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-09 — Leong Wei Zhi (notification sound preview, no issue; stacked on PR #309)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** web: `NotificationProvider.tsx` (the context's
+  `setSoundEnabled` wraps the stored setter and plays the chime when
+  switching on), `chime.ts` (`playChime({ gesture: true })` resumes and
+  plays through a suspended context, for a toggle click that is the
+  page's first gesture). Tests: one case in `chime.test.ts`, the header
+  toggle case in `notification-center.test.tsx` updated, the chime
+  mocked in `profile.test.tsx` with a switch-on case and a silent
+  switch-off assertion. Docs: `web/AGENTS.md` notification-center row,
+  README AI Use Summary.
+- **Prompt(s):** "create a pr which plays sound when sound is toggled on
+  via click of notification toggle button", then "stack the pr on top of
+  pr 309" and plan approval. One neutral options question: Leong Wei Zhi
+  chose both toggle surfaces (Center header and Profile switch) over the
+  header only.
+- **Author review:** web `npm test` (443/443), lint, Prettier and build green; Leong Wei Zhi
+  to review via the pull request.
 
 ---
 ## 2026-11-08 — Leong Wei Zhi (issue #308: owner upgrade from the profile page)

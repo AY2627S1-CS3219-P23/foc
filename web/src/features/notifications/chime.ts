@@ -15,6 +15,13 @@
 // audio thread can idle, with a flag so that self-suspension is woken
 // by the next chime rather than mistaken for an autoplay block.
 // Author review: Leong Wei Zhi to review via the PR.
+// 2026-11-09, Claude Code (Opus 5.5), notification sound preview (no
+// issue): playChime({ gesture: true }) for the toggle's own click — a
+// suspended context is resumed and awaited there, since inside a gesture
+// the resume settles (the click may be the page's first pointerdown, so
+// unlockChime's resume is still in flight). Author decision via options
+// Q&A: switching the sound on previews the chime on both surfaces.
+// Author review: Leong Wei Zhi to review via the PR.
 
 // One context for the page's lifetime: browsers cap concurrent
 // AudioContexts (~6), so per-chime construction would eventually fail.
@@ -82,17 +89,20 @@ export const unlockChime = (): void => {
 // all when audio is unavailable (no Web Audio support), blocked by the
 // autoplay policy (context stuck suspended), or muted by the tab/OS —
 // the OS mute case needs no handling, the graph just plays into
-// silence.
-export const playChime = (): void => {
+// silence. `gesture`: called from inside a user gesture (the sound
+// toggle's click), where a suspended context is unlockable — so it is
+// resumed and played through rather than taken for an autoplay block.
+export const playChime = ({ gesture = false } = {}): void => {
   void (async () => {
     try {
       const c = liveContext()
       if (!c) return
       clearTimeout(idleTimer)
       if (c.state === 'suspended') {
-        if (idled) {
-          // our own post-chime suspension: the context is already
-          // unlocked, so this resume settles promptly
+        if (idled || gesture) {
+          // our own post-chime suspension (the context is already
+          // unlocked), or a gesture that unlocks it: this resume settles
+          // promptly
           await c.resume()
           idled = false
         } else {
