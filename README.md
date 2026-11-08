@@ -314,6 +314,9 @@
   2026-11-01: AI Use Summary extended for the own-profile entry link and
   the rater's review readback (issue #284) by Claude Code (Opus 5).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-08: AI Use Summary extended for the push-triggered credit
+  balance refresh (Credit NFR1.1) by Claude Code (Opus 5.5). Author
+  review: Ryan Ang, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1545,6 +1548,13 @@ port-80 redirect, the host's exposure and the pipeline variable were
 Leong Wei Zhi's choices from neutral options rounds; the tool wrote the
 Terraform, flipped the four baked origins to https and extended the two
 documents. Recorded in `ai/usage-log.md`.
+
+The credit balance refresh on a pushed request event (Credit NFR1.1):
+Claude Code (Opus 5.5) made `CreditBalanceProvider` fetch the balance
+when a balance-changing request event is pushed, and again 2 s later in
+case the push arrived before the Credit Service committed, with tests.
+Which events count and the second fetch were team decisions. Recorded in
+`ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

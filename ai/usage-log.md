@@ -53,6 +53,9 @@
   2026-11-08, Claude Code (Fable 5.1): prepended the HTTPS (ACM on an ALB)
   entry below.
   Author review: Leong Wei Zhi to review via pull request.
+  2026-11-08, Claude Code (Opus 5.5): prepended the Credit NFR1.1
+  push-triggered balance refresh entry below. Author review: Ryan Ang,
+  pending pull request review.
 -->
 
 # AI Usage Log
@@ -71,6 +74,14 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-08 — Ryan Ang (Credit NFR1.1: balance refresh on a pushed request event)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `web/src/features/credit/CreditBalanceProvider.tsx`: when the Notification Service pushes `request.submitted`, `request.completed`, `request.cancelled`, `request.expired` or `request.dispute-resolved`, the balance is fetched at once and again 2 s later (`PUSH_RECHECK_MS`), since the push and the Credit Service read the same event in parallel and the push can arrive before the change commits; a burst moves the second fetch to 2 s after its last frame; a hidden tab leaves it to the existing fetch on being shown; outside a `NotificationProvider` nothing changes. The 30 s poll stays. `web/src/features/credit/balanceEvents.ts` (new): the event list, in its own file for react-refresh. `web/src/test/credits.test.tsx`: tests for the immediate and the second fetch, each event, the events that change no balance, a burst, and a hidden tab.
+- **Prompt(s):** checked the credit FRs and NFRs of the D1 backlog against the code; the gap found was NFR1.1 (balances shown within 5 s), as the page only polls every 30 s. Asked for the balance to refresh when a credit-affecting notification arrives. The tool pointed out that `request.created` comes before the reserve and that the other events race the Credit Service; the event list (every balance-changing event) and the second fetch 2 s later are team decisions from a neutral options round.
+- **Author review:** `vitest run` (446 tests pass; the new tests fail with the refresh disabled), `tsc -b`, `eslint .`, Prettier on the changed files. Ryan Ang reviews via pull request.
 
 ---
 ## 2026-11-08 — Leong Wei Zhi (N5 cloud deployment, issue #48: HTTPS with an ACM certificate on a load balancer)
