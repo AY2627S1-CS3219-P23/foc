@@ -10,7 +10,9 @@
   2026-11-08, Claude Code (Fable 5.1): rewritten as a stand-alone page.
   DP7 and DP10 were re-decided that day through further options rounds;
   the options-considered tables list the alternatives as facts only,
-  with no reasons, by Leong Wei Zhi's choice.
+  with no reasons, by Leong Wei Zhi's choice. Same day: the platform
+  reason added, as stated by Leong Wei Zhi; the tool added only the
+  facts of what a second node takes.
   Author review: Leong Wei Zhi, pending pull request review.
 -->
 
@@ -73,7 +75,7 @@ The AI tool presented facts and prices only.
 
 Rows are the options, columns their properties as checked on the day.
 The chosen row names its decision. No reasons are recorded, by Leong Wei
-Zhi's choice.
+Zhi's choice, except where a reason is quoted.
 
 ### Platform, against the $50 budget
 
@@ -81,6 +83,10 @@ Zhi's choice.
 | --- | --- | --- | --- |
 | EKS + 7 RDS + Amazon MQ + ElastiCache | all | ~$280 to 350 | |
 | One EC2 Spot host + k3s, everything in-cluster | none | ~$30 | DP2 to DP4 |
+
+Reason, as stated by Leong Wei Zhi (2026-11-08): the budget is $50, and
+k3s is Kubernetes, so the single node can grow into more nodes later
+instead of moving to a new platform.
 
 ### Runtime on the host
 
@@ -138,7 +144,7 @@ STOMP from a per-JVM simple broker; supplier and notification use
 | Replicas | HPA 1 to 2 per Deployment at CPU 70 % | nothing; `kubectl -n foc get hpa` shows it |
 | Headroom | CPU requests at every HPA max are about 3.4 of 4 vCPU | an HPA max above 2 needs a bigger host |
 | Vertical | t3.xlarge | the `instance_type` variable and `terraform apply` (the host restarts) |
-| Horizontal | one node | a second instance joining with `k3s agent` (not provisioned) |
+| Horizontal | one node | a second instance running `k3s agent` with the server's URL and join token (not provisioned). Between the nodes: 6443/tcp to the server, 8472/udp for flannel, 10250/tcp for metrics. Local-path volumes stay on the node that created them, so the StatefulSets keep running on the first node |
 
 ## Behaviour at 2 replicas (DP10)
 
