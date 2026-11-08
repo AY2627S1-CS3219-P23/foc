@@ -1501,9 +1501,9 @@ pattern, with its Maven test dependencies. The tool compared the H2 and
 Testcontainers options as facts and the author chose Testcontainers; the
 NFR bounds are the team's. Recorded in `ai/usage-log.md`.
 
-2026-11-08: Claude Code (Fable 5.1) made one Admin Dashboard test wait for
-the Stuck Orders fetch instead of asserting it synchronously, after it
-flaked once in CI on an unrelated branch. Test-only. Recorded in
+2026-11-08: Claude Code (Fable 5.1) made the Admin Dashboard tests wait for a
+section's first load to settle before asserting on it, after one case
+flaked in CI on an unrelated branch. Test-only. Recorded in
 `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
