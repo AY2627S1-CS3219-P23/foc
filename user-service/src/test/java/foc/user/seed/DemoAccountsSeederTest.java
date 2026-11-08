@@ -25,6 +25,9 @@ Ryan Ang, pending pull request review.
 new realistic usernames, and the rules case also checks that no username
 repeats (ignoring case). Author review: Leong Wei Zhi, pending pull
 request review.
+2026-11-08 (Claude Code, Fable 5.1), PR #303 review: a case pins the list
+sizes (3 admins, 100 users, 104 accounts). Author review: Leong Wei Zhi,
+pending pull request review.
 */
 
 package foc.user.seed;
@@ -260,6 +263,17 @@ class DemoAccountsSeederTest extends PostgresTestContainer {
 
         assertThatThrownBy(() -> new DemoAccountsSeeder(broken, new UserCreation(broken, eventOutbox), passwordEncoder, transactionManager).run())
             .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("The fixed name lists keep the documented counts: 1 owner, 3 admins, 100 users")
+    void fixedListsKeepTheDocumentedCounts() {
+        // the README table and the e9000001..e9000104 email range depend on
+        // these sizes; ADMINS/USERS are derived from the lists, so a short
+        // list would otherwise shrink the seed without failing any test
+        assertThat(DemoAccountsSeeder.ADMINS).isEqualTo(3);
+        assertThat(DemoAccountsSeeder.USERS).isEqualTo(100);
+        assertThat(DemoAccountsSeeder.accounts()).hasSize(104);
     }
 
     @Test

@@ -504,9 +504,8 @@ that already exist, so restarts are safe:
 
 </details>
 
-The names are fictional, fixed in `DemoAccountsSeeder` (DP11 in
-[`docs/deployment.md`](../docs/deployment.md)). Login takes the username
-or the email.
+The names are fictional, fixed in `DemoAccountsSeeder` (team decision
+DP11 under issue #48). Login takes the username or the email.
 
 **Existing `user-db` volumes keep the old names.** Earlier seeds used
 `demo_owner`, `demo_admin_1..3` and `demo_user_001..100` on the same

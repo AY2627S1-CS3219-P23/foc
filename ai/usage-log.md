@@ -90,7 +90,11 @@ Entry template:
 - **Author review:** `./mvnw verify` 405 tests, 404 green; the one error
   was the known "too many clients already" Testcontainers flake in
   `OutboxPublisherIntegrationTest`, green when rerun alone
-  (`DemoAccountsSeederTest` 10/10). Leong Wei Zhi reviews via pull
+  (`DemoAccountsSeederTest` 10/10). Re-run off `main` on 2026-11-08: 399
+  tests (the stack's ShedLock tests are gone), the same single flake,
+  green alone. PR #303 review: the `docs/deployment.md` link replaced by
+  plain text (the file is not on `main`), and a test pins the counts
+  (3 admins, 100 users, 104 accounts). Leong Wei Zhi reviews via pull
   request.
 
 ---
