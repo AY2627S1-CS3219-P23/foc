@@ -10,6 +10,9 @@
   2026-11-01: PR review: the Interface note that the gateway 404s
   /api/chat/internal (reviewer's request, the issue #225 pattern).
   Author review: Ko-Khan, pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1), issue #305: STOMP bullet on the
+  chat.push fanout across replicas (team decision, Leong Wei Zhi via
+  options Q&A). Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # Chat Service — requester–courier chat (nice-to-have N6)

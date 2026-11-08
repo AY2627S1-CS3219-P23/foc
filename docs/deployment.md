@@ -14,6 +14,10 @@
   reason added, as stated by Leong Wei Zhi; the tool added only the
   facts of what a second node takes.
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1), issue #305: DP9/DP10, the options,
+  scaling and 2-replica tables updated for the AMQP push fanout and the
+  notification Flyway baseline (team decisions, Leong Wei Zhi via options
+  Q&A). Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # Cloud deployment (N5, issue #48)

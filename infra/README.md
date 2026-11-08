@@ -8,6 +8,9 @@
   replaced by secrets.sh (DP7); deploy sequence, secret-change notes,
   operating and troubleshooting tables added (short runbook).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1), issue #305: the HPA row covers
+  every service (chat and notification now scale). Author review: Leong
+  Wei Zhi, pending pull request review.
 -->
 
 # infra: cloud deployment runbook

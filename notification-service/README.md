@@ -22,6 +22,9 @@
   Status line note the processed_events sweep (author decision via
   options Q&A: same window, no new env var).
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-11-08, Claude Code (Fable 5.1), issue #305: Troubleshooting updated
+  for the Flyway-owned schema (D36). Author review: Leong Wei Zhi, pending
+  pull request review.
 -->
 
 # Notification Service

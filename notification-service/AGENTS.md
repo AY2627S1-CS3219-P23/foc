@@ -12,6 +12,9 @@
   packages, security chain, D24-D29); stale D1-D22 range fixed.
   2026-10-17, Claude Code (Fable 5), PR #198 Codex review: the config/
   row records the CORS registration's /notifications/** scope.
+  2026-11-08, Claude Code (Fable 5.1), issue #305: package map, invariants
+  and test list for the D35 push fanout, the duplicate-key ack and the D36
+  Flyway schema. Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # notification-service/ — Agent Guide

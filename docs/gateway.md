@@ -57,6 +57,9 @@
   compose unchanged; the deployment decisions are Leong Wei Zhi's
   (docs/deployment.md). No new gateway decision.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-11-08, Claude Code (Fable 5.1), issue #305: the D10 scale-out
+  bullet closed (D35, AMQP fanout). Author review: Leong Wei Zhi,
+  pending pull request review.
 -->
 
 # FoC API Gateway — Design

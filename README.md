@@ -311,6 +311,9 @@
   2026-11-01: AI Use Summary extended for the own-profile entry link and
   the rater's review readback (issue #284) by Claude Code (Opus 5).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-08: AI Use Summary extended for issue #305 (cross-replica push,
+  duplicate-key ack, Flyway baseline) by Claude Code (Fable 5.1).
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
