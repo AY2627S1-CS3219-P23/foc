@@ -5,7 +5,7 @@
 # docs/deployment.md). Secret values go in the git-ignored
 # secrets.auto.tfvars (see secrets.auto.tfvars.example).
 # Author review: Leong Wei Zhi, pending pull request review.
-# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP20): the External
+# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7): the External
 # Secrets Operator chart version is gone with the operator. Author review:
 # Leong Wei Zhi, pending pull request review.
 

@@ -5,7 +5,7 @@
 # SSM Run Command (team decision: GHCR images, deploy via SSM, k3s API
 # private — Leong Wei Zhi, 2026-11-05, options Q&A).
 # Author review: Leong Wei Zhi, pending pull request review.
-# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP20): the External
+# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7): the External
 # Secrets Operator waits are gone; secrets.sh refreshes the Secrets before
 # the apply, and Deployments restart when the values changed. Author
 # review: Leong Wei Zhi, pending pull request review.

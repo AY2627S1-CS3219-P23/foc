@@ -13,7 +13,7 @@
   #258, the new docs/rating-service.md + .mmd and the doc updates it
   touches).
   Author review: Leong Wei Zhi, pending pull request review.
-  2026-11-08, Claude Code (Fable 5.1), issue #48 (DP14 to DP20): the cloud
+  2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7, DP10): the cloud
   deployment paragraph extended for the simplified re-plan. Author review:
   Leong Wei Zhi, pending pull request review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
@@ -1513,10 +1513,11 @@ with the single Spot + k3s host to fit the team's $50 budget. On
 ran three more options rounds; Leong Wei Zhi kept the infra design,
 dropped the five backend multi-replica PRs, chose fresh PRs, a decision
 page plus a short runbook, and the host-side secrets copy with IMDS hop
-limit 1 (DP14–DP20), and chose to record the alternatives as facts
-without reasons. The tool then rebuilt the branch, removed External
-Secrets Operator, fixed the two review findings in the Deploy workflow
-and rewrote the two documents. Recorded in `ai/usage-log.md`.
+limit 1 (DP7 and DP10 re-decided), and chose to record the alternatives
+as facts without reasons. The tool then rebuilt the branch, removed
+External Secrets Operator, fixed the two review findings in the Deploy
+workflow and rewrote the two documents; `docs/deployment.md` carries no
+PR history, by request. Recorded in `ai/usage-log.md`.
 
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.

@@ -2,7 +2,7 @@
 # AI-assisted (CS3219 AI Usage Policy disclosure):
 # Tool: Claude Code (Fable 5.1), 2026-11-08, issue #48 (N5 cloud deployment).
 # Scope: copies the two Secrets Manager secrets into the k3s Secrets the
-# manifests reference, from the host (team decision DP20, Leong Wei Zhi,
+# manifests reference, from the host (team decision DP7, Leong Wei Zhi,
 # 2026-11-08, options Q&A: IMDS hop limit 1 and no External Secrets
 # Operator, so only host processes can use the instance role).
 # Author review: Leong Wei Zhi, pending pull request review.

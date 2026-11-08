@@ -7,10 +7,10 @@
   recommended nothing); this document records them. Implementation and
   this write-up by the tool, per the allowed-use rules.
   Author review: Leong Wei Zhi, pending pull request review.
-  2026-11-08, Claude Code (Fable 5.1): rewritten after the seven-PR stack
-  (#289 to #297) was closed. DP14 to DP20 come from three further options
-  rounds the same day; the options-considered tables list the
-  alternatives as facts only, with no reasons, by Leong Wei Zhi's choice.
+  2026-11-08, Claude Code (Fable 5.1): rewritten as a stand-alone page.
+  DP7 and DP10 were re-decided that day through further options rounds;
+  the options-considered tables list the alternatives as facts only,
+  with no reasons, by Leong Wei Zhi's choice.
   Author review: Leong Wei Zhi, pending pull request review.
 -->
 
@@ -43,12 +43,15 @@ flowchart LR
   ec2 -->|"pull"| ghcr
 ```
 
+Traefik is the reverse proxy k3s ships with. It owns port 80 on the
+host and routes by path: `/api` to the gateway, everything else to the
+web container. The gateway stays the only route to the backend services,
+as in compose. The web container serves static files only.
+
 ## Decisions
 
-Decider: Leong Wei Zhi, by options Q&A. The AI tool presented facts and
-prices only. DP1 to DP13 date from 2026-11-05. DP14 to DP20 date from
-2026-11-08, after the first PR stack (#289 to #297) was closed as too
-heavy to land before D4.
+Decider: Leong Wei Zhi, by options Q&A, on 2026-11-05 and 2026-11-08.
+The AI tool presented facts and prices only.
 
 | # | Topic | Choice |
 | --- | --- | --- |
@@ -58,43 +61,36 @@ heavy to land before D4.
 | DP4 | Data stores | In-cluster StatefulSets: 7 Postgres (supplier `postgres:16`, the rest `17`), RabbitMQ, Redis with AOF (G7 unchanged) |
 | DP5 | Public access | Elastic IP, plain HTTP on port 80, no domain. Only port 80 open; shell through SSM Session Manager |
 | DP6 | IaC | Terraform, state in S3 (`use_lockfile`), a bootstrap stack for the bucket |
-| DP7 | Secrets | AWS Secrets Manager (`foc/app`, `foc/ghcr`). The reader changed with DP20 |
+| DP7 | Secrets | AWS Secrets Manager (`foc/app`, `foc/ghcr`). `secrets.sh` on the host copies them into k8s Secrets at first boot and on every deploy, through the instance role. IMDS hop limit 1, so pods cannot use that role |
 | DP8 | Images, rollout | GHCR, pushed by GitHub Actions; rollout by SSM Run Command from an OIDC role trusted for `main` only |
 | DP9 | Replicas | 1 per Deployment at rest, HPA min 1 / max 2 on CPU 70 % for every Deployment (N5.4) |
-| DP10 | Multi-replica backends | Superseded by DP15 (was: ShedLock, STOMP fanout, Flyway, seed lock, dedupe) |
+| DP10 | Backends at 2 replicas | No multi-replica hardening in the services. The behaviour at 2 replicas is listed below and accepted for this deployment |
 | DP11 | Demo data | Seed on in the cloud; realistic usernames everywhere, same passwords and counts |
 | DP12 | Lifetime | Up to about 2026-11-19, then `terraform destroy`, nothing kept |
 | DP13 | Repo layout | `infra/` (Terraform + manifests), the second non-service top-level folder |
-| DP14 | Design after the stack was closed | DP1 to DP9, DP12 and DP13 kept as built in #289 |
-| DP15 | Multi-replica hardening | Dropped (#290 to #294 stay closed). HPA 1 to 2 stays on every Deployment; the behaviour at 2 replicas is listed below |
-| DP16 | PR split | One infra PR (infra, gateway, deploy workflow, docs) plus independent PRs off `main` |
-| DP17 | Demo names | Kept, as its own PR off `main` |
-| DP18 | Documentation | This decision page plus a short runbook (`infra/README.md`) |
-| DP19 | PR numbers | Fresh PRs; the closed ones get a pointer comment |
-| DP20 | IMDS finding (#289 review) | Hop limit 1; External Secrets Operator dropped. `secrets.sh` on the host copies `foc/app` and `foc/ghcr` into k8s Secrets at first boot and on every deploy |
 
 ## Options considered
 
 Rows are the options, columns their properties as checked on the day.
 The chosen row names its decision. No reasons are recorded, by Leong Wei
-Zhi's choice (2026-11-08).
+Zhi's choice.
 
-### Platform, against the $50 budget (2026-11-05)
+### Platform, against the $50 budget
 
 | Option | Managed pieces | 2-week cost | Chosen |
 | --- | --- | --- | --- |
 | EKS + 7 RDS + Amazon MQ + ElastiCache | all | ~$280 to 350 | |
 | One EC2 Spot host + k3s, everything in-cluster | none | ~$30 | DP2 to DP4 |
 
-### Runtime on the host (DP14)
+### Runtime on the host
 
 | Option | New files | Scaling path | N5.4 wording ("Kubernetes") | Chosen |
 | --- | --- | --- | --- | --- |
 | Docker Compose + a cloud override file | ~2 | `--scale` on one host, gateway DNS round-robin, no autoscaler | not met | |
-| k3s, trimmed (plain Secret, no ESO, no Terraform) | ~20 manifests | HPA on the node; `k3s agent` join later | met | |
-| #289 design as built | ~35 | HPA on the node; `k3s agent` join later | met | DP14 |
+| k3s with plain manifests only (no Terraform, secrets by hand) | ~20 manifests | HPA on the node; `k3s agent` join later | met | |
+| k3s with Terraform, Secrets Manager and the SSM deploy path | ~35 | HPA on the node; `k3s agent` join later | met | DP3, DP6 to DP8 |
 
-### Provisioning (DP14)
+### Provisioning
 
 | Option | Tooling | State | Teardown | Chosen |
 | --- | --- | --- | --- | --- |
@@ -103,17 +99,17 @@ Zhi's choice (2026-11-08).
 | Terraform | Terraform (not installed locally; run from its Docker image) | S3 bucket from a bootstrap stack | `destroy` twice | DP6 |
 | Console, documented | none | none | manual | |
 
-### Secrets (DP14, DP20)
+### Secrets
 
 | Option | Where the values sit | Reader | New value reaches pods | Chosen |
 | --- | --- | --- | --- | --- |
 | Env file on the host | host disk, plaintext | compose, or `kubectl create secret --from-env-file` | edit + restart | |
-| Secrets Manager + External Secrets Operator | AWS | ESO pod through the instance role; IMDS hop limit 2, so any pod can use the role | hourly sync | built in #289 |
+| Secrets Manager + External Secrets Operator | AWS | ESO pod through the instance role; IMDS hop limit 2, so any pod can use the role | hourly sync | |
 | Secrets Manager + a static IAM key for ESO | AWS; the key in Terraform state | ESO pod | hourly sync | |
-| Secrets Manager, copied by the host at deploy | AWS | `secrets.sh` on the host; IMDS hop limit 1 | next Deploy run | DP7 + DP20 |
+| Secrets Manager, copied by the host at deploy | AWS | `secrets.sh` on the host; IMDS hop limit 1 | next Deploy run | DP7 |
 | GitHub Actions secrets | GitHub | the deploy workflow writes the file | next Deploy run | |
 
-### Deploy path (DP14)
+### Deploy path
 
 | Option | Inbound port | Credentials held in GitHub | N5.3.3 | Chosen |
 | --- | --- | --- | --- | --- |
@@ -122,27 +118,18 @@ Zhi's choice (2026-11-08).
 | Actions, GHCR, SSM over OIDC | none | none (OIDC role) | met | DP8 |
 | Pull-based timer on the host | none | none | met; outcome visible on the host only | |
 
-### Multi-replica hardening (DP15)
+### Backends at 2 replicas
 
-Facts on 2026-11-08: 6 of 7 services run `@Scheduled` jobs; notification
-and chat push STOMP from a per-JVM simple broker; supplier and
-notification use `ddl-auto: update`; supplier and user seed at startup.
+Facts: 6 of 7 services run `@Scheduled` jobs; notification and chat push
+STOMP from a per-JVM simple broker; supplier and notification use
+`ddl-auto: update`; supplier and user seed at startup.
 
-| Option | Backend code changed | Behaviour at 2 replicas | Chosen |
+| Option | Service code changed | Behaviour at 2 replicas | Chosen |
 | --- | --- | --- | --- |
-| Drop all; HPA on gateway + web only | none | backends never reach 2 | |
-| Drop all; HPA 1 to 2 everywhere | none | the table below | DP15 |
-| Keep #290 + #291 (ShedLock, STOMP fanout) | 70 files | jobs once, pushes everywhere; notification dedupe and first-boot races remain | |
-| Keep all five (#290 to #294) | 146 files, all 7 services | all covered | |
-
-### PR split, demo names, docs, PR numbers (DP16 to DP19)
-
-| Question | Options | Chosen |
-| --- | --- | --- |
-| Split | one infra PR + independent PRs; infra then docs; stacked chain; one PR for everything | one infra PR + independent PRs |
-| #295 demo names | keep as its own PR; drop | keep |
-| Docs | decision page + short runbook; decision page + the full #297 runbook; single page | decision page + short runbook |
-| PR numbers | reopen #289 and #295; fresh PRs | fresh PRs |
+| HPA on gateway + web only | none | backends never reach 2 | |
+| HPA 1 to 2 everywhere, no hardening | none | the table below | DP10 |
+| ShedLock on the jobs + STOMP fanout over AMQP | user, order, credit, rating, chat, notification | jobs once, pushes everywhere; notification dedupe and first-boot races remain | |
+| Full hardening: ShedLock, fanout, Flyway baselines + seed lock, insert-first dedupe + single active consumer | all 7 services | all covered | |
 
 ## Scaling
 
@@ -153,14 +140,14 @@ notification use `ddl-auto: update`; supplier and user seed at startup.
 | Vertical | t3.xlarge | the `instance_type` variable and `terraform apply` (the host restarts) |
 | Horizontal | one node | a second instance joining with `k3s agent` (not provisioned) |
 
-## Behaviour at 2 replicas (DP15)
+## Behaviour at 2 replicas (DP10)
 
-| Services | At 2 replicas | The dropped fix |
+| Services | At 2 replicas | What would change it |
 | --- | --- | --- |
-| user, order, credit, rating, chat, notification | each scheduled job runs on both replicas per tick | #290 ShedLock |
-| notification, chat | a STOMP push reaches only the replica that holds the browser's socket | #291 fanout over AMQP |
-| notification | the same event can be processed twice (read-then-insert dedupe) | #294 insert-first dedupe, single active consumer |
-| supplier, notification | `ddl-auto: update` and the seeders race only when two replicas start against an empty database. The HPA starts at 1, so first boot is one replica | #292, #294 Flyway + advisory lock |
+| user, order, credit, rating, chat, notification | each scheduled job runs on both replicas per tick | a scheduler lock (ShedLock) |
+| notification, chat | a STOMP push reaches only the replica that holds the browser's socket | fanning pushes out over AMQP |
+| notification | the same event can be processed twice (read-then-insert dedupe) | insert-first dedupe and a single active consumer |
+| supplier, notification | `ddl-auto: update` and the seeders race only when two replicas start against an empty database. The HPA starts at 1, so first boot is one replica | Flyway baselines and an advisory lock on the seed |
 
 Below the CPU threshold every Deployment runs one replica and none of
 this occurs.

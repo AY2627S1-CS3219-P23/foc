@@ -5,7 +5,7 @@
 # for the host's secrets.sh), and the GitHub Actions OIDC role that
 # may only run commands on this instance through SSM.
 # Author review: Leong Wei Zhi, pending pull request review.
-# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP20): the Secrets
+# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7): the Secrets
 # Manager reader is the host's secrets.sh, not External Secrets Operator;
 # the policies are unchanged. Author review: Leong Wei Zhi, pending pull
 # request review.
@@ -32,7 +32,7 @@ resource "aws_iam_role_policy_attachment" "host_ssm" {
 }
 
 # secrets.sh and deploy.sh run on the host and read foc/* through IMDS;
-# pods cannot (hop limit 1 in instance.tf, DP20)
+# pods cannot (hop limit 1 in instance.tf, DP7)
 resource "aws_iam_role_policy" "host_secrets" {
   name = "read-foc-secrets"
   role = aws_iam_role.host.id

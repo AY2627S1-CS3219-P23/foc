@@ -2,13 +2,13 @@
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
 # Scope: the platform secrets in AWS Secrets Manager, copied into k3s
 # Secrets by infra/k8s/secrets.sh on the host (team decision: Secrets
-# Manager — Leong Wei Zhi, 2026-11-05, options Q&A; DP20 on 2026-11-08
-# replaced the External Secrets Operator with the host-side copy). Passwords and tokens are
+# Manager — Leong Wei Zhi, 2026-11-05, options Q&A; DP7 as re-decided on
+# 2026-11-08: the host copies them, no External Secrets Operator). Passwords and tokens are
 # generated here; the Gmail and GHCR values come from secrets.auto.tfvars.
 # recovery_window_in_days = 0 so destroy deletes them at once (teardown
 # decision: nothing kept).
 # Author review: Leong Wei Zhi, pending pull request review.
-# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP20): header updated
+# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7): header updated
 # for the host-side copy; no resource changed. Author review: Leong Wei
 # Zhi, pending pull request review.
 

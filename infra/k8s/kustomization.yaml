@@ -4,7 +4,7 @@
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
 # docs/deployment.md); values mirror compose.yaml's defaults.
 # Author review: Leong Wei Zhi, pending pull request review.
-# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP20): secrets.yaml
+# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7): secrets.yaml
 # (External Secrets Operator) removed; secrets.sh writes the two Secrets.
 # Author review: Leong Wei Zhi, pending pull request review.
 apiVersion: kustomize.config.k8s.io/v1beta1

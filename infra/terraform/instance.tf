@@ -6,7 +6,7 @@
 # and cluster data survive), Elastic IP for a stable URL (the web bundle
 # has it baked in).
 # Author review: Leong Wei Zhi, pending pull request review.
-# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP20): IMDS hop limit 1
+# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7): IMDS hop limit 1
 # (PR #289 review: with 2, any pod could use the instance role) and no
 # External Secrets chart in cloud-init. Author review: Leong Wei Zhi,
 # pending pull request review.
@@ -41,7 +41,7 @@ resource "aws_instance" "host" {
   metadata_options {
     http_tokens = "required"
     # host processes only: pods sit one hop behind the node and must not
-    # reach the instance role (DP20; secrets.sh runs on the host)
+    # reach the instance role (DP7; secrets.sh runs on the host)
     http_put_response_hop_limit = 1
   }
 

@@ -7,7 +7,7 @@
 # deploy.sh runs from. Runs once; later changes go through the deploy
 # workflow.
 # Author review: Leong Wei Zhi, pending pull request review.
-# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP20): the External
+# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7): the External
 # Secrets Operator chart is gone; first boot runs infra/k8s/secrets.sh,
 # which copies the Secrets Manager values into k3s Secrets from the host.
 # Author review: Leong Wei Zhi, pending pull request review.
@@ -41,6 +41,6 @@ runcmd:
     for i in $(seq 1 60); do
     k3s kubectl get --raw=/readyz >/dev/null 2>&1 && break; sleep 5;
     done
-  # namespace + the two Secrets, so the first deploy finds them (DP20);
+  # namespace + the two Secrets, so the first deploy finds them (DP7);
   # deploy.sh runs the same script on every deploy
   - bash /opt/foc/infra/k8s/secrets.sh
