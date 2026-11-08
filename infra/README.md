@@ -67,8 +67,9 @@ terraform output acm_validation_record
 The output holds one record per certificate name (today just
 `foc23.ddnsfree.com`). In Dynu, **DDNS Services**, the hostname, **DNS
 Records**, add one: type `CNAME`, node name = its `name` with the
-trailing `.foc23.ddnsfree.com` removed (the part starting with `_`), host name
-= its `value` without the trailing dot. ACM issues the certificate
+trailing `.foc23.ddnsfree.com.` removed, trailing dot included (the part
+starting with `_`), host name = its `value` without the trailing dot. ACM
+issues the certificate
 within minutes of the record resolving:
 
 ```sh
