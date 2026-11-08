@@ -7,6 +7,9 @@ Scope: issue #308: the owner setup token check moved here unchanged from
        way. Endpoint decisions by Leong Wei Zhi via options Q&A
        (2026-11-08); no design decision was made by AI.
 Author review: Leong Wei Zhi to review via the PR.
+PR #309 Copilot review: expectedOwnerKey is not final, because tests
+swap it on the shared bean by reflection and JDK 26 warns when
+reflection changes a final field (JEP 500).
 */
 
 package foc.user.service;
@@ -25,7 +28,8 @@ import foc.user.controller.ProblemTypes;
 @Component
 public class OwnerSetupToken {
 
-    private final String expectedOwnerKey;
+    // not final: tests swap it on the shared bean by reflection
+    private String expectedOwnerKey;
 
     @Autowired
     public OwnerSetupToken(@Value("${owner.setup.token:}") String expectedOwnerKey) {

@@ -103,6 +103,15 @@ Entry template:
   9/9, `AccountUpdateServiceTest` 23/23. Web: `npx vitest run` 441/441,
   `tsc -b`, eslint and prettier clean. Leong Wei Zhi reviews via pull
   request.
+- **PR #309 review round (same day):** the bot review's unthrottled
+  token-guessing finding was put to Leong Wei Zhi as neutral options
+  (count against the OTP budget, per-user lockout, gateway rate limit,
+  accept and document); Leong Wei Zhi chose to accept the risk, now
+  recorded in `user-service/README.md`. Copilot: `OwnerSetupToken`'s
+  field made non-final (JDK 26 warns on reflective writes to final
+  fields); the other three comments were answered with the code that
+  disproves them (Boot 4 import package, `gate.request()` never throws,
+  the stored session is the JSON string `"null"`).
 ## 2026-11-06 — Leong Wei Zhi (issue #48, DP11: realistic demo usernames)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs

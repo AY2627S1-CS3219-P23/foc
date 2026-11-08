@@ -97,7 +97,8 @@
   2026-11-08, Claude Code (Opus 5.5), issue #308: POST /users/me/owner
   (owner upgrade) in the status and the account-update section, plus
   its two token types. Author review: Leong Wei Zhi, pending pull
-  request review.
+  request review. PR #309 review: the accepted risk of unthrottled
+  token guesses recorded (Leong Wei Zhi's decision via options Q&A).
 -->
 
 # User Service
@@ -339,6 +340,13 @@ email-change verify had just replaced (PR #157 review).
   in again and the new token carries `OWNER`; one log line records the
   upgrade. An `OWNER` caller gets **200** with the account unchanged —
   nothing consumed or revoked.
+  **Accepted risk (PR #309 review, Leong Wei Zhi):** wrong tokens are
+  not throttled — a wrong token costs no gate-code attempt, so any
+  signed-in user can keep guessing (as anyone can on
+  `/auth/signup-owner`). The defence is the token itself: set
+  `OWNER_SETUP_TOKEN` to a long random value (the cloud deployment
+  generates 32 random alphanumerics), and unset it when no more owners
+  are needed — the routes then answer 503.
 
 OTP-flavoured errors carry a stable problem+json `type` URI, so clients
 can match failures by machine instead of by `detail` wording (the SPA's
