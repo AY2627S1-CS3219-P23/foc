@@ -21,6 +21,10 @@
   review. Same day: DP18 revised to Dynu after FreeDNS refused the CNAME
   records; the FreeDNS row stays as a fact. Author review: Leong Wei Zhi,
   pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1), issue #305: DP9/DP10, the options,
+  scaling and 2-replica tables updated for the AMQP push fanout and the
+  notification Flyway baseline (team decisions, Leong Wei Zhi via options
+  Q&A). Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # Cloud deployment (N5, issue #48)
@@ -80,8 +84,8 @@ not on this page.
 | DP6 | IaC | Terraform, state in S3 (`use_lockfile`), a bootstrap stack for the bucket |
 | DP7 | Secrets | AWS Secrets Manager (`foc/app`, `foc/ghcr`). `secrets.sh` on the host copies them into k8s Secrets at first boot and on every deploy, through the instance role. IMDS hop limit 1, so pods cannot use that role |
 | DP8 | Images, rollout | GHCR, pushed by GitHub Actions and tagged `<commit>-<run id>`; rollout by SSM Run Command from an OIDC role trusted for `main` only. A pod rolls when its image tag, the Secret version or the ConfigMap hash changed |
-| DP9 | Replicas | 1 per Deployment at rest, HPA min 1 / max 2 on CPU 70 % (N5.4), except chat and notification, which run exactly one replica (DP10) |
-| DP10 | Backends at 2 replicas | No multi-replica hardening in the services. chat and notification run one replica, no HPA, and a Recreate strategy so a deploy never overlaps two pods: a STOMP push reaches only the replica that holds the socket, which the team rates unsafe (issue #305 tracks cross-replica delivery). The other services scale to 2; their scheduled jobs then run on both replicas per tick, accepted because the jobs are idempotent (Leong Wei Zhi, 2026-11-08, on review) |
+| DP9 | Replicas | 1 per Deployment at rest, HPA min 1 / max 2 on CPU 70 % (N5.4) on every Deployment |
+| DP10 | Backends at 2 replicas | Scheduled jobs run on both replicas per tick, accepted because the jobs are idempotent (Leong Wei Zhi, 2026-11-08, on review). chat and notification were first pinned to one replica because a STOMP push reached only the replica holding the socket; issue #305 (same day, options Q&A) lifted the pin with the smallest change: pushes fan out over an AMQP exchange per service, notification acks a concurrent duplicate on its `processed_events` key and moves to a Flyway baseline. No ShedLock, no single active consumer |
 | DP11 | Demo data | Seed on in the cloud; realistic usernames everywhere, same passwords and counts |
 | DP12 | Lifetime | Up to about 2026-11-19, then `terraform destroy`, nothing kept |
 | DP13 | Repo layout | `infra/` (Terraform + manifests), the second non-service top-level folder |
@@ -145,15 +149,18 @@ instead of moving to a new platform.
 
 ### Backends at 2 replicas
 
-Facts: 6 of 7 services run `@Scheduled` jobs; notification and chat push
-STOMP from a per-JVM simple broker; supplier and notification use
-`ddl-auto: update`; supplier and user seed at startup.
+Facts at decision time: 6 of 7 services run `@Scheduled` jobs;
+notification and chat pushed STOMP from a per-JVM simple broker; supplier
+and notification used `ddl-auto: update`; supplier and user seed at
+startup. Issue #305 since moved both pushes onto an AMQP fanout and
+notification onto Flyway.
 
 | Option | Service code changed | Behaviour at 2 replicas | Chosen |
 | --- | --- | --- | --- |
 | HPA on gateway + web only | none | backends never reach 2 | |
 | HPA 1 to 2 everywhere, no hardening | none | the table below, split STOMP sockets included | |
-| HPA 1 to 2 except chat and notification at one replica, no hardening | none | scheduled jobs run twice (accepted as idempotent); no split sockets | DP10 |
+| HPA 1 to 2 except chat and notification at one replica, no hardening | none | scheduled jobs run twice (accepted as idempotent); no split sockets | DP10, first cut |
+| STOMP fanout over AMQP + duplicate-key ack + Flyway baseline on notification | chat, notification | pushes everywhere, each event once, no first-boot race; jobs still run twice (accepted) | DP10, issue #305 |
 | ShedLock on the jobs + STOMP fanout over AMQP | user, order, credit, rating, chat, notification | jobs once, pushes everywhere; notification dedupe and first-boot races remain | |
 | Full hardening: ShedLock, fanout, Flyway baselines + seed lock, insert-first dedupe + single active consumer | all 7 services | all covered | |
 
@@ -161,25 +168,23 @@ STOMP from a per-JVM simple broker; supplier and notification use
 
 | Lever | Today | What it takes |
 | --- | --- | --- |
-| Replicas | HPA 1 to 2 at CPU 70 % on every Deployment except chat and notification (one replica, issue #305) | nothing; `kubectl -n foc get hpa` shows it |
+| Replicas | HPA 1 to 2 at CPU 70 % on every Deployment | nothing; `kubectl -n foc get hpa` shows it |
 | Headroom | CPU requests at every HPA max are about 3.0 of 4 vCPU | an HPA max above 2 needs a bigger host |
 | Vertical | t3.xlarge | the `instance_type` variable and `terraform apply` (the host restarts) |
 | Horizontal | one node | a second instance running `k3s agent` with the server's URL and join token (not provisioned). Between the nodes: 6443/tcp to the server, 8472/udp for flannel, 10250/tcp for metrics. Local-path volumes stay on the node that created them, so the StatefulSets keep running on the first node |
 
 ## Behaviour at 2 replicas (DP10)
 
-chat and notification do not scale out: one replica each, no HPA, until
-issue #305 delivers pushes across replicas. The other services may reach
-2 replicas; their scheduled jobs then run twice per tick, which the team
-accepts because the jobs are idempotent. The HPA only adds the second
-replica while CPU stays above 70 %, and removes it about five minutes
-after CPU drops.
+Every Deployment may reach 2 replicas; scheduled jobs then run twice
+per tick, which the team accepts because the jobs are idempotent. The
+HPA only adds the second replica while CPU stays above 70 %, and removes
+it about five minutes after CPU drops.
 
 | Services | At 2 replicas | What would change it |
 | --- | --- | --- |
-| user, order, credit, rating | each scheduled job runs on both replicas per tick; accepted, the jobs are idempotent | a scheduler lock (ShedLock) |
-| notification, chat | a STOMP push reaches only the replica that holds the browser's socket; not accepted, so both stay at one replica | fanning pushes out over AMQP (issue #305) |
-| notification | the same event could be processed twice (read-then-insert dedupe); not reached at one replica | insert-first dedupe and a single active consumer (issue #305) |
+| user, order, credit, rating, chat, notification | each scheduled job runs on both replicas per tick; accepted, the jobs are idempotent | a scheduler lock (ShedLock) |
+| notification, chat | a STOMP push is published to the service's fanout exchange (`notification.push`, `chat.push`); every replica delivers it to its own sockets, so the browser gets it once wherever it is connected (issue #305) | — |
+| notification | a concurrent duplicate loses on the `processed_events` primary key, rolls back whole and is acked (issue #305); the schema is Flyway-managed, so two replicas can start on an empty database | — |
 | supplier | `ddl-auto: update` and the seeder race only when two replicas start against an empty database. The HPA starts at 1, so first boot is one replica | a Flyway baseline and an advisory lock on the seed |
 
 Below the CPU threshold every Deployment runs one replica and none of

@@ -33,6 +33,11 @@
 # 2026-10-19, Claude Code (Fable 5), issue #221: notification.user-service
 # bindings removed — D32 (options Q&A) supersedes D30/D31; the web
 # hydrates names at read time, so the service makes no user-service calls.
+# 2026-11-08, Claude Code (Fable 5.1), issue #305 (D36, team decision via
+# options Q&A): Flyway builds the schema (V1 baseline, baseline-on-migrate
+# as in user-service) and Hibernate only validates. Author review: Leong
+# Wei Zhi, pending pull request review.
+# Same day, PR #306 review: a 5 s broker connect timeout.
 
 spring:
   application:
@@ -42,16 +47,26 @@ spring:
     username: ${NOTIFICATION_DB_USER:notification}
     password: ${NOTIFICATION_DB_PASSWORD:}
   jpa:
-    # Schema is created/evolved from the JPA entities (issue #61:
-    # "Schema present via JPA/DDL").
     hibernate:
-      ddl-auto: update
+      # Flyway owns the schema (db/migration, D36, issue #305): two
+      # replicas starting together must not both run ddl-auto against
+      # one database. Hibernate checks the entities against it.
+      ddl-auto: validate
     open-in-view: false
+  flyway:
+    # A database ddl-auto built before Flyway has the tables but no
+    # history: record it as V1 (the baseline script's schema) and apply
+    # later migrations only.
+    baseline-on-migrate: true
+    baseline-version: 1
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:foc}
     password: ${RABBITMQ_PASSWORD:}
+    # Bounds a connect to a hung broker (amqp-client's default is 60 s),
+    # e.g. the push fanout publish after commit (PR #306 review)
+    connection-timeout: 5s
     listener:
       simple:
         # The listener acks/nacks explicitly, after the processor's

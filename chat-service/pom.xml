@@ -9,6 +9,12 @@
   as notification-service has. No AMQP or foc-contracts: chat-service
   neither publishes nor consumes events (C11: order-service calls it).
   Author review: Ko-Khan, pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1), issue #305 (team decision, Leong Wei
+  Zhi via options Q&A): spring-boot-starter-amqp for the chat.push fanout
+  that carries STOMP pushes to every replica — still no events and no
+  foc-contracts; test-scope testcontainers-rabbitmq for the STOMP
+  integration test. Author review: Leong Wei Zhi, pending pull request
+  review.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -67,6 +73,11 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-websocket</artifactId>
+		</dependency>
+		<!-- the push fanout across replicas (issue #305): the only AMQP use -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-amqp</artifactId>
 		</dependency>
 		<!-- the platform denylist read at STOMP CONNECT (C15) -->
 		<dependency>
@@ -152,6 +163,12 @@
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers-postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- the STOMP integration test pushes through a real broker (issue #305) -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-rabbitmq</artifactId>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
