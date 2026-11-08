@@ -22,7 +22,7 @@
 # infra: cloud deployment runbook
 
 Design and decisions: [`docs/deployment.md`](../docs/deployment.md).
-An EKS cluster (two t3.medium Spot nodes plus one on-demand node in
+An EKS cluster (two t3a.medium Spot nodes plus one on-demand node in
 private subnets, a NAT instance for egress), one RDS PostgreSQL instance
 with the seven service databases, RabbitMQ and Redis on the on-demand
 node with EBS volumes, behind a load balancer that serves
@@ -51,7 +51,7 @@ flowchart TD
 
 - **Lease:** the ISB lease must outlast 2026-12-11; the budget is $250.
   Check both in the ISB portal. The estimate for the 32 days is about
-  $210 (`docs/deployment.md`, Cost).
+  $208 (`docs/deployment.md`, Cost).
 - **Tools:** Terraform 1.10 or newer, AWS CLI v2; `kubectl` and `helm`
   for operating the cluster from a laptop (the Deploy job brings its own).
 - **Credentials:** `export AWS_PROFILE=nusisb_IsbUsersPS-555552813604`, then `aws sso login`.
@@ -115,7 +115,7 @@ cluster admin):
 
 ```sh
 aws eks update-kubeconfig --name "$(terraform output -raw cluster_name)"
-kubectl get nodes -L foc.dev/pool                  # 3 Ready, t3.medium: 2 spot, 1 stable
+kubectl get nodes -L foc.dev/pool                  # 3 Ready, t3a.medium: 2 spot, 1 stable
 kubectl -n kube-system get pods                    # aws-node, kube-proxy, coredns, metrics-server, ebs-csi-*, eks-pod-identity-agent
 ```
 

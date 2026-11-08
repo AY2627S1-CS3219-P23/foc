@@ -53,9 +53,9 @@ variable "kubernetes_version" {
 }
 
 variable "node_instance_type" {
-  description = "Spot node type; x86 because the images are built for linux/amd64 only"
+  description = "Spot node type; x86 because the images are built for linux/amd64 only (t3a = AMD, 2026-11-09)"
   type        = string
-  default     = "t3.medium"
+  default     = "t3a.medium"
 }
 
 variable "node_count" {
@@ -73,7 +73,7 @@ variable "node_max" {
 variable "stable_node_instance_type" {
   description = "the one on-demand node in zone a that RabbitMQ and Redis select"
   type        = string
-  default     = "t3.medium"
+  default     = "t3a.medium"
 }
 
 variable "nat_instance_type" {

@@ -2,7 +2,7 @@
 # Tool: Claude Code (Fable 5.1), 2026-11-09, issue #48 (EKS re-platform).
 # Scope: the EKS cluster and its Spot node group per the team's decisions
 # (Leong Wei Zhi, 2026-11-09, options Q&A, recorded in docs/deployment.md):
-# DP2 EKS, DP3 t3.medium nodes in the private subnets: two Spot (max 3) in
+# DP2 EKS, DP3 t3a.medium nodes (AMD; t3.medium until 2026-11-09) in the private subnets: two Spot (max 3) in
 # two zones plus one on-demand in zone a that RabbitMQ and Redis select
 # (PR #316 review, re-decided 2026-11-09), DP8 cluster-admin access entry for the GitHub deploy role, DP9
 # metrics-server for the HPAs, the EBS CSI driver for the RabbitMQ and

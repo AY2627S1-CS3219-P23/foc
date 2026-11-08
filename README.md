@@ -1556,7 +1556,7 @@ Terraform, flipped the four baked origins to https and extended the two
 documents. Recorded in `ai/usage-log.md`.
 On 2026-11-09, with the budget known to be $250 and the deadline
 2026-12-11, Claude Code (Fable 5.1) re-platformed the cloud stack (issue
-#48): an EKS cluster with a t3.medium Spot node group in private subnets
+#48): an EKS cluster with a t3a.medium Spot node group in private subnets
 behind a fck-nat NAT instance, one RDS PostgreSQL 17 instance holding the
 seven service databases (a `db-init` Job creates the roles), RabbitMQ and
 Redis on EBS volumes, Traefik from its Helm chart on a NodePort behind the
@@ -1577,7 +1577,8 @@ on-demand node that RabbitMQ and Redis select (chosen by Leong Wei Zhi
 after the reviewers' zone-bound-volume finding, from options incl. Amazon
 MQ + ElastiCache and SQS, recorded as facts), a separate Secret for the
 RDS master credentials, a pinned RDS minor and one deploy deadline, and
-restored the issue #305 state of DP9/DP10. Recorded in `ai/usage-log.md`.
+restored the issue #305 state of DP9/DP10; both node groups then moved to
+t3a.medium on request. Recorded in `ai/usage-log.md`.
 
 2026-11-08: Claude Code (Fable 5.1) made the Admin Dashboard tests wait for a
 section's first load to settle before asserting on it, after one case

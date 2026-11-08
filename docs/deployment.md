@@ -26,8 +26,10 @@
   them); DP7 and DP16 name the separate `foc-db-admin` Secret. The
   zone-bound volume finding led to a further options round: DP3 gains the
   on-demand node (shared, not tainted), DP4 and the tables follow; SQS
-  recorded as an option considered, by Leong Wei Zhi's choice. Author
-  review: Leong Wei Zhi, pending pull request review.
+  recorded as an option considered, by Leong Wei Zhi's choice. Then, on
+  request, both node groups moved to t3a.medium (facts given on the
+  t3/t3a/t2 medium types). Author review: Leong Wei Zhi, pending pull
+  request review.
 -->
 
 # Cloud deployment (N5, issue #48)
@@ -55,7 +57,7 @@ flowchart LR
       nat["NAT instance<br/>t4g.nano, Elastic IP"]
     end
     subgraph priv["private subnets (2 zones)"]
-      subgraph eks["EKS: t3.medium Spot x2 (max 3, two zones) + t3.medium on-demand x1 (zone a)"]
+      subgraph eks["EKS: t3a.medium Spot x2 (max 3, two zones) + t3a.medium on-demand x1 (zone a)"]
         traefik["Traefik<br/>NodePort 30080"] -->|"/api"| gateway
         traefik -->|"/"| web["web (nginx SPA)"]
         gateway --> svc["7 backend Deployments<br/>(HPA 1 to 2)"]
@@ -95,7 +97,7 @@ on 2026-11-09). The AI tool presented facts and prices only.
 | --- | --- | --- |
 | DP1 | Account, region | NUS Innovation Sandbox account, `ap-southeast-1` (its SCPs allow writes there and in `us-east-1` only) |
 | DP2 | Platform | **Amazon EKS**, Kubernetes 1.37, authentication by access entries (`API` mode); vpc-cni, kube-proxy and CoreDNS as EKS installs them; add-ons: metrics-server, EBS CSI driver, Pod Identity agent |
-| DP3 | Nodes | Two managed node groups of **t3.medium**: **Spot, 2 running, maximum 3** (the third added by hand) across two zones, and **one on-demand node in zone a** labelled `foc.dev/pool: stable`, which RabbitMQ and Redis select and application pods may also use (not tainted). x86, since the images are built for `linux/amd64`; IMDS hop limit 1 so pods cannot use the node role. The on-demand node was added on 2026-11-09 after review: the EBS volumes are zone-bound, and a Spot replacement in the other zone would have left the broker or Redis `Pending` |
+| DP3 | Nodes | Two managed node groups of **t3a.medium** (AMD; same 2 vCPU / 4 GB shape as t3.medium, chosen 2026-11-09 for its lower on-demand rate): **Spot, 2 running, maximum 3** (the third added by hand) across two zones, and **one on-demand node in zone a** labelled `foc.dev/pool: stable`, which RabbitMQ and Redis select and application pods may also use (not tainted). x86, since the images are built for `linux/amd64`; IMDS hop limit 1 so pods cannot use the node role. The on-demand node was added on 2026-11-09 after review: the EBS volumes are zone-bound, and a Spot replacement in the other zone would have left the broker or Redis `Pending` |
 | DP4 | Network and data stores | Nodes and the database in **private subnets** (two zones); egress through a **NAT instance** (fck-nat on an on-demand `t4g.nano`, one Elastic IP). **One RDS PostgreSQL 17 `db.t4g.micro`** with the seven service databases. RabbitMQ and Redis (AOF, G7 unchanged) stay StatefulSets on **EBS gp3** volumes, on the on-demand node (DP3) |
 | DP5 | Public access | `https://foc23.ddnsfree.com` through the load balancer (DP17, DP18). No node has a public address; the cluster API endpoint is public for GitHub Actions and private for the nodes |
 | DP6 | IaC | Terraform, state in S3 (`use_lockfile`), a bootstrap stack for the bucket |
@@ -148,11 +150,12 @@ about 0.15 vCPU / 0.3 GB. The images are `linux/amd64`, so x86 types only.
 | 3 x t3.large Spot | 6 vCPU / 24 GB | ~$85 | 35 | |
 | t3.medium Spot, 2 running, max 3 | 4 vCPU / 8 GB (6 / 12 with the third) | ~$34, the third ~$17 while it runs | 17 (about 11 used) | second choice |
 | 1 x t3.xlarge Spot | 4 vCPU / 16 GB on one node | ~$58 | 58 | |
-| **t3.medium Spot x2 (max 3) + t3.medium on-demand x1 in zone a, shared** | 6 vCPU / 12 GB | ~$34 + ~$41 | 17 | DP3 |
+| t3.medium Spot x2 (max 3) + t3.medium on-demand x1 in zone a, shared | 6 vCPU / 12 GB | ~$34 + ~$41 | 17 | third choice |
+| **t3a.medium Spot x2 (max 3) + t3a.medium on-demand x1 in zone a, shared** | 6 vCPU / 12 GB | ~$37 + ~$36 (Spot ~$0.024/h, on-demand $0.0472/h) | 17 | DP3 |
 
 Chosen after the PR #316 review of the zone-bound volumes (facts given:
 document a PVC-delete recovery, a single-zone node group, no volumes, or
-a node that is never reclaimed). Fit on the chosen layout, per t3.medium
+a node that is never reclaimed). Fit on the chosen layout, per medium node
 about 1.9 vCPU / 3.3 GB allocatable and 0.3 vCPU / 0.5 GB of system pods:
 RabbitMQ and Redis take 0.12 vCPU / 0.29 GB of the on-demand node; the
 apps at one replica request 1.5 vCPU / 2.9 GB and fit on the Spot pair;
@@ -166,13 +169,13 @@ about 2.5 GB idle and HPA max 2 only just fitting on the Spot pair.
 
 | Option | 32-day cost | On interruption | Chosen |
 | --- | --- | --- | --- |
-| **Spot** | ~$34 (two t3.medium) | the node group drains and replaces the node; pods reschedule | DP3 |
+| **Spot** | ~$37 (two t3a.medium) | the node group drains and replaces the node; pods reschedule | DP3 |
 | On-demand | ~$81 | none | |
 | Spot nodes + one on-demand node for Traefik, gateway, chat, notification | ~$34 + $41 | sockets stay up; the other services move | |
 
 The WebSocket question was asked on its own after the network round
 (DP14): the clients reconnect and catch up by themselves, and the
-interruption frequency for t3.medium here is not visible from the CLI.
+interruption frequency for the medium types here is not visible from the CLI.
 
 ### Network
 
@@ -307,8 +310,8 @@ by a CNAME record under that name. The sandbox SCP denies
 | Lever | Today | What it takes |
 | --- | --- | --- |
 | Replicas | HPA 1 to 2 at CPU 70 % on every Deployment | nothing; `kubectl -n foc get hpa` shows it |
-| Headroom | 3 x t3.medium = 6 vCPU / 12 GB (about 5.7 vCPU / 9.9 GB allocatable); requests at every HPA max about 3.0 vCPU / 5.9 GB incl. RabbitMQ and Redis; JVM memory limits at HPA max about 10.8 GB | the third Spot node |
-| Third Spot node | Spot node group maximum 3, desired 2 | `aws eks update-nodegroup-config --cluster-name foc --nodegroup-name foc-spot --scaling-config desiredSize=3` (Terraform ignores the desired size); ~$0.022/h while it runs |
+| Headroom | 3 x t3a.medium = 6 vCPU / 12 GB (about 5.7 vCPU / 9.9 GB allocatable); requests at every HPA max about 3.0 vCPU / 5.9 GB incl. RabbitMQ and Redis; JVM memory limits at HPA max about 10.8 GB | the third Spot node |
+| Third Spot node | Spot node group maximum 3, desired 2 | `aws eks update-nodegroup-config --cluster-name foc --nodegroup-name foc-spot --scaling-config desiredSize=3` (Terraform ignores the desired size); ~$0.024/h while it runs |
 | More or bigger nodes | `node_count`, `node_max`, `node_instance_type` variables | `terraform apply`; a type change replaces the nodes one at a time |
 | Database | `db.t4g.micro`, 20 GB gp3 | `db_instance_class`; RDS resizes with a short outage |
 | Volumes | RabbitMQ and Redis on gp3 EBS in zone a, on the on-demand node (`foc.dev/pool: stable`) | the node group replaces that node in the same zone, so the volume always has a node; while it is being replaced both pods are down (minutes) |
@@ -318,7 +321,7 @@ by a CNAME record under that name. The sandbox SCP denies
 
 The two application nodes are Spot capacity: AWS may reclaim one with a
 two-minute notice, and the hourly price floats with the market up to the
-on-demand rate ($0.0528/h for t3.medium; $0.022/h was the sample of
+on-demand rate ($0.0472/h for t3a.medium; $0.024/h was the sample of
 2026-11-09). Interruptions come per capacity pool (one instance type in
 one zone); the Spot node group spreads its two nodes over two zones, so
 they normally sit in two pools. The on-demand node (RabbitMQ, Redis and
@@ -329,12 +332,12 @@ whatever apps the scheduler put there) is never reclaimed.
 | Rebalance recommendation (AWS warns that a pool is tightening) | the node group launches a replacement node first, then drains the old one once the new one is Ready (capacity rebalancing is on for managed node groups) | none beyond the pod restart below |
 | Interruption notice (two minutes) | EKS cordons and drains the node: its pods are evicted and recreated at once on any node with room; the instance terminates; the group, now below its minimum of 2, launches a replacement, which joins after about 2 to 3 minutes and takes the pods still `Pending` | chat, notification and whatever else was on that node restart elsewhere: 1 to 2 minutes until the JVMs pass their startup probe; open WebSockets drop and the browsers reconnect (DP14) |
 | Both Spot nodes reclaimed together (two pools tightening in the same hour) | the group launches two replacements as capacity allows; the evicted apps are recreated on the on-demand node as far as its memory allows (about 2.5 GB free), the rest wait, then pull their images through the NAT instance | services that fit on the on-demand node keep answering; the others return after about 5 to 10 minutes; RabbitMQ, Redis and RDS are untouched |
-| No Spot capacity for t3.medium in either zone | the Spot group stays at zero nodes until capacity returns; AWS gives no bound | only what fits on the on-demand node runs, until capacity returns or `node_instance_type` is changed and applied |
+| No Spot capacity for t3a.medium in either zone | the Spot group stays at zero nodes until capacity returns; AWS gives no bound | only what fits on the on-demand node runs, until capacity returns or `node_instance_type` is changed and applied |
 
-The interruption frequency for t3.medium here is visible only in the
+The interruption frequency for t3a.medium here is visible only in the
 console's Spot Instance Advisor, not from the CLI. Ways to widen the odds,
-none taken: several instance types in the node group (t3.medium,
-t3a.medium, t2.medium: more pools, no cost), a third zone with a third
+none taken: several instance types in the node group (t3a.medium,
+t3.medium, t2.medium: more pools, no cost), a third zone with a third
 private subnet (no cost while two nodes run), or one on-demand node
 alongside the Spot ones (about $41 for 32 days).
 
@@ -360,16 +363,16 @@ this occurs.
 | Item | ~USD |
 | --- | --- |
 | EKS control plane ($0.10/h) | 77 |
-| 2 x t3.medium Spot (~$0.022/h each on 2026-11-09; floats, never above the $0.0528/h on-demand rate) | 34 |
-| 1 x t3.medium on-demand ($0.0528/h), zone a, RabbitMQ and Redis | 41 |
+| 2 x t3a.medium Spot (~$0.024/h each on 2026-11-09; floats, never above the $0.0472/h on-demand rate) | 37 |
+| 1 x t3a.medium on-demand ($0.0472/h), zone a, RabbitMQ and Redis | 36 |
 | NAT instance t4g.nano on-demand ($0.0053/h) + its Elastic IP ($0.005/h) | 8 |
 | Application Load Balancer ($0.0252/h plus LCU; demo traffic stays under one LCU) | 21 |
 | RDS db.t4g.micro ($0.025/h) + 20 GB gp3 ($0.138/GB-month) | 22 |
 | EBS gp3 for RabbitMQ and Redis (2 GB) + node root volumes (3 x 20 GB, $0.096/GB-month) | 6 |
 | Secrets Manager (2 secrets), ACM certificate | 1 |
-| **Total** | **~210** |
+| **Total** | **~208** |
 
-Plus about $0.022/h whenever the third node runs. About $3 was spent on
+Plus about $0.024/h whenever the third node runs. About $3 was spent on
 the k3s host before the re-platform.
 
 ## Lifetime
