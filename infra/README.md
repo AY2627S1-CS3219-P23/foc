@@ -213,11 +213,10 @@ one that ran the apply, and the deploy role): `aws eks update-kubeconfig
 | Logs | `kubectl -n foc logs deploy/<name>` |
 | Restart one service | `kubectl -n foc rollout restart deploy/<name>` |
 | Database shell | `kubectl -n foc run psql --rm -it --restart=Never --image=postgres:17 -- psql "host=<rds_endpoint> user=<svc> dbname=<svc> sslmode=require"` (password from `foc/app`) |
-| Third Spot node | `aws eks update-nodegroup-config --cluster-name foc --nodegroup-name foc-spot --scaling-config desiredSize=3` (back to 2 the same way; Terraform ignores the desired size) |
 | Spot took a node | nothing to redeploy: the pods are recreated on the other nodes as soon as the drain evicts them, and the group launches a replacement that joins in 2 to 3 min (on a rebalance recommendation the replacement comes first). RabbitMQ and Redis are on the on-demand node and unaffected. Open WebSockets drop and the browsers reconnect once chat/notification are back (1 to 2 min). Both Spot nodes at once: what fits on the on-demand node keeps running, the rest returns in 5 to 10 min; see `docs/deployment.md`, Spot behaviour |
 | The on-demand node is replaced (hardware failure, node group update) | `kubectl get nodes -L foc.dev/pool` | RabbitMQ and Redis are down for the minutes it takes; the new node comes up in zone a and their volumes reattach by themselves |
 | NAT instance shell | `aws ssm start-session --target <id of the foc-nat instance>` |
-| An HPA shows 2 replicas | expected under load for every service (chat and notification fan their STOMP pushes out over AMQP, issue #305). The doubled scheduled runs are idempotent (DP10). It goes back to 1 about five minutes after CPU drops below 70 %. With two nodes, the second replica may stay `Pending` on memory until the third node is added |
+| An HPA shows 2 replicas | expected under load for every service (chat and notification fan their STOMP pushes out over AMQP, issue #305). The doubled scheduled runs are idempotent (DP10). It goes back to 1 about five minutes after CPU drops below 70 %. With two Spot nodes, the second replica may stay `Pending` on memory unless `node_count` is raised and applied |
 
 ## Troubleshooting
 
@@ -237,7 +236,7 @@ one that ran the apply, and the deploy role): `aws eks update-kubeconfig
 | `ImagePullBackOff` on every pod | `aws ec2 describe-instances --filters Name=tag:Name,Values=foc-nat --query 'Reservations[].Instances[].State.Name'` | the NAT instance is stopped (start it), its interface has source/destination checking on, or the private route table lost its default route |
 | `ImagePullBackOff` on one pod | `kubectl -n foc describe pod <pod>` | GHCR token wrong or without `read:packages`; no image pushed for that sha |
 | Nodes `NotReady` or none join | EC2 console, the node group's health in the EKS console | Spot capacity (`InsufficientInstanceCapacity`: wait or change `node_instance_type`), or no egress (NAT instance, as above) |
-| Pod `Pending` | `describe pod` events | `Insufficient memory` or `cpu`: add the third Spot node. `didn't match Pod's node affinity/selector` on rabbitmq-0 or redis-0: the `stable` node is missing (node group `foc-stable` in the EKS console). `volume node affinity conflict`: the volume's zone (a) has no node; wait for the on-demand node, or as a last resort delete the PVC (RabbitMQ: queued messages lost; Redis: logout denylist lost) |
+| Pod `Pending` | `describe pod` events | `Insufficient memory` or `cpu`: raise `node_count` in `variables.tf` and apply. `didn't match Pod's node affinity/selector` on rabbitmq-0 or redis-0: the `stable` node is missing (node group `foc-stable` in the EKS console). `volume node affinity conflict`: the volume's zone (a) has no node; wait for the on-demand node, or as a last resort delete the PVC (RabbitMQ: queued messages lost; Redis: logout denylist lost) |
 | Add-on `DEGRADED` | `aws eks describe-addon --cluster-name foc --addon-name <name>` | usually a pod `Pending` for the reasons above; `ebs-csi-controller` also needs its Pod Identity association |
 | 502 / 504 on `/api/<svc>` | `kubectl -n foc get pods` | the backend is not ready yet (the startup probe allows 5 min) |
 | Live updates or chat drop after about 60 s | `helm get values traefik -n traefik` | the two `respondingTimeouts` values from `helm/traefik-values.yaml` are missing |

@@ -59,15 +59,9 @@ variable "node_instance_type" {
 }
 
 variable "node_count" {
-  description = "Spot nodes running at rest (the Spot node group's minimum and initial desired size); one on-demand node comes on top"
+  description = "Spot nodes (the Spot node group's minimum, desired and maximum size); one on-demand node comes on top"
   type        = number
   default     = 2
-}
-
-variable "node_max" {
-  description = "the node group's maximum; the third node is added by raising the desired size (infra/README.md)"
-  type        = number
-  default     = 3
 }
 
 variable "stable_node_instance_type" {

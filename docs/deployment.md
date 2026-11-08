@@ -28,8 +28,9 @@
   on-demand node (shared, not tainted), DP4 and the tables follow; SQS
   recorded as an option considered, by Leong Wei Zhi's choice. Then, on
   request, both node groups moved to t3a.medium (facts given on the
-  t3/t3a/t2 medium types). Author review: Leong Wei Zhi, pending pull
-  request review.
+  t3/t3a/t2 medium types), and the Spot group's headroom slot (maximum 3)
+  was removed: it is fixed at node_count. Author review: Leong Wei Zhi,
+  pending pull request review.
 -->
 
 # Cloud deployment (N5, issue #48)
@@ -57,7 +58,7 @@ flowchart LR
       nat["NAT instance<br/>t4g.nano, Elastic IP"]
     end
     subgraph priv["private subnets (2 zones)"]
-      subgraph eks["EKS: t3a.medium Spot x2 (max 3, two zones) + t3a.medium on-demand x1 (zone a)"]
+      subgraph eks["EKS: t3a.medium Spot x2 (two zones) + t3a.medium on-demand x1 (zone a)"]
         traefik["Traefik<br/>NodePort 30080"] -->|"/api"| gateway
         traefik -->|"/"| web["web (nginx SPA)"]
         gateway --> svc["7 backend Deployments<br/>(HPA 1 to 2)"]
@@ -97,7 +98,7 @@ on 2026-11-09). The AI tool presented facts and prices only.
 | --- | --- | --- |
 | DP1 | Account, region | NUS Innovation Sandbox account, `ap-southeast-1` (its SCPs allow writes there and in `us-east-1` only) |
 | DP2 | Platform | **Amazon EKS**, Kubernetes 1.37, authentication by access entries (`API` mode); vpc-cni, kube-proxy and CoreDNS as EKS installs them; add-ons: metrics-server, EBS CSI driver, Pod Identity agent |
-| DP3 | Nodes | Two managed node groups of **t3a.medium** (AMD; same 2 vCPU / 4 GB shape as t3.medium, chosen 2026-11-09 for its lower on-demand rate): **Spot, 2 running, maximum 3** (the third added by hand) across two zones, and **one on-demand node in zone a** labelled `foc.dev/pool: stable`, which RabbitMQ and Redis select and application pods may also use (not tainted). x86, since the images are built for `linux/amd64`; IMDS hop limit 1 so pods cannot use the node role. The on-demand node was added on 2026-11-09 after review: the EBS volumes are zone-bound, and a Spot replacement in the other zone would have left the broker or Redis `Pending` |
+| DP3 | Nodes | Two managed node groups of **t3a.medium** (AMD; same 2 vCPU / 4 GB shape as t3.medium, chosen 2026-11-09 for its lower on-demand rate): **Spot, exactly 2** (minimum, desired and maximum; the earlier headroom slot for a third node was removed on 2026-11-09) across two zones, and **one on-demand node in zone a** labelled `foc.dev/pool: stable`, which RabbitMQ and Redis select and application pods may also use (not tainted). x86, since the images are built for `linux/amd64`; IMDS hop limit 1 so pods cannot use the node role. The on-demand node was added on 2026-11-09 after review: the EBS volumes are zone-bound, and a Spot replacement in the other zone would have left the broker or Redis `Pending` |
 | DP4 | Network and data stores | Nodes and the database in **private subnets** (two zones); egress through a **NAT instance** (fck-nat on an on-demand `t4g.nano`, one Elastic IP). **One RDS PostgreSQL 17 `db.t4g.micro`** with the seven service databases. RabbitMQ and Redis (AOF, G7 unchanged) stay StatefulSets on **EBS gp3** volumes, on the on-demand node (DP3) |
 | DP5 | Public access | `https://foc23.ddnsfree.com` through the load balancer (DP17, DP18). No node has a public address; the cluster API endpoint is public for GitHub Actions and private for the nodes |
 | DP6 | IaC | Terraform, state in S3 (`use_lockfile`), a bootstrap stack for the bucket |
@@ -151,7 +152,7 @@ about 0.15 vCPU / 0.3 GB. The images are `linux/amd64`, so x86 types only.
 | t3.medium Spot, 2 running, max 3 | 4 vCPU / 8 GB (6 / 12 with the third) | ~$34, the third ~$17 while it runs | 17 (about 11 used) | second choice |
 | 1 x t3.xlarge Spot | 4 vCPU / 16 GB on one node | ~$58 | 58 | |
 | t3.medium Spot x2 (max 3) + t3.medium on-demand x1 in zone a, shared | 6 vCPU / 12 GB | ~$34 + ~$41 | 17 | third choice |
-| **t3a.medium Spot x2 (max 3) + t3a.medium on-demand x1 in zone a, shared** | 6 vCPU / 12 GB | ~$37 + ~$36 (Spot ~$0.024/h, on-demand $0.0472/h) | 17 | DP3 |
+| **t3a.medium Spot x2 + t3a.medium on-demand x1 in zone a, shared** | 6 vCPU / 12 GB | ~$37 + ~$36 (Spot ~$0.024/h, on-demand $0.0472/h) | 17 | DP3 |
 
 Chosen after the PR #316 review of the zone-bound volumes (facts given:
 document a PVC-delete recovery, a single-zone node group, no volumes, or
@@ -310,9 +311,8 @@ by a CNAME record under that name. The sandbox SCP denies
 | Lever | Today | What it takes |
 | --- | --- | --- |
 | Replicas | HPA 1 to 2 at CPU 70 % on every Deployment | nothing; `kubectl -n foc get hpa` shows it |
-| Headroom | 3 x t3a.medium = 6 vCPU / 12 GB (about 5.7 vCPU / 9.9 GB allocatable); requests at every HPA max about 3.0 vCPU / 5.9 GB incl. RabbitMQ and Redis; JVM memory limits at HPA max about 10.8 GB | the third Spot node |
-| Third Spot node | Spot node group maximum 3, desired 2 | `aws eks update-nodegroup-config --cluster-name foc --nodegroup-name foc-spot --scaling-config desiredSize=3` (Terraform ignores the desired size); ~$0.024/h while it runs |
-| More or bigger nodes | `node_count`, `node_max`, `node_instance_type` variables | `terraform apply`; a type change replaces the nodes one at a time |
+| Headroom | 3 x t3a.medium = 6 vCPU / 12 GB (about 5.7 vCPU / 9.9 GB allocatable); requests at every HPA max about 3.0 vCPU / 5.9 GB incl. RabbitMQ and Redis; JVM memory limits at HPA max about 10.8 GB | a higher `node_count` |
+| More or bigger nodes | `node_count`, `node_instance_type`, `stable_node_instance_type` variables | `terraform apply`; the Spot group's minimum, desired and maximum all follow `node_count`; a type change replaces the nodes one at a time |
 | Database | `db.t4g.micro`, 20 GB gp3 | `db_instance_class`; RDS resizes with a short outage |
 | Volumes | RabbitMQ and Redis on gp3 EBS in zone a, on the on-demand node (`foc.dev/pool: stable`) | the node group replaces that node in the same zone, so the volume always has a node; while it is being replaced both pods are down (minutes) |
 | Load balancer | one target group on both node groups' Auto Scaling groups | new nodes register themselves |
@@ -372,7 +372,7 @@ this occurs.
 | Secrets Manager (2 secrets), ACM certificate | 1 |
 | **Total** | **~208** |
 
-Plus about $0.024/h whenever the third node runs. About $3 was spent on
+About $3 was spent on
 the k3s host before the re-platform.
 
 ## Lifetime

@@ -2,9 +2,10 @@
 # Tool: Claude Code (Fable 5.1), 2026-11-09, issue #48 (EKS re-platform).
 # Scope: the EKS cluster and its Spot node group per the team's decisions
 # (Leong Wei Zhi, 2026-11-09, options Q&A, recorded in docs/deployment.md):
-# DP2 EKS, DP3 t3a.medium nodes (AMD; t3.medium until 2026-11-09) in the private subnets: two Spot (max 3) in
+# DP2 EKS, DP3 t3a.medium nodes (AMD; t3.medium until 2026-11-09) in the private subnets: two Spot in
 # two zones plus one on-demand in zone a that RabbitMQ and Redis select
-# (PR #316 review, re-decided 2026-11-09), DP8 cluster-admin access entry for the GitHub deploy role, DP9
+# (PR #316 review, re-decided 2026-11-09; the Spot group is fixed at
+# node_count, no headroom slot), DP8 cluster-admin access entry for the GitHub deploy role, DP9
 # metrics-server for the HPAs, the EBS CSI driver for the RabbitMQ and
 # Redis volumes (the only workload holding an AWS role, through Pod
 # Identity). IMDS hop limit 1 on the nodes carries DP7's posture: pods
@@ -129,7 +130,7 @@ resource "aws_eks_node_group" "main" {
   scaling_config {
     desired_size = var.node_count
     min_size     = var.node_count
-    max_size     = var.node_max
+    max_size     = var.node_count
   }
 
   update_config {
@@ -139,12 +140,6 @@ resource "aws_eks_node_group" "main" {
   launch_template {
     id      = aws_launch_template.node.id
     version = aws_launch_template.node.latest_version
-  }
-
-  lifecycle {
-    # the third node is added by raising the desired size outside Terraform
-    # (infra/README.md, scaling); an apply must not undo that
-    ignore_changes = [scaling_config[0].desired_size]
   }
 
   tags = { Name = "foc-spot" }
