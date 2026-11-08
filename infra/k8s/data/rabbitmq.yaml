@@ -1,9 +1,13 @@
 # AI-assisted (CS3219 AI Usage Policy disclosure):
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
 # Scope: the RabbitMQ broker (rabbitmq:4-management as in compose), plain AMQP
-# 5672 inside the cluster, data on a local-path volume.
+# 5672 inside the cluster, data on an EBS volume.
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
 # docs/deployment.md); values mirror compose.yaml's defaults.
+# Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform): the volume
+# is an EBS gp3 PersistentVolume through the EBS CSI driver (DP4); zone-bound,
+# so the pod follows it.
 # Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1
@@ -67,6 +71,7 @@ spec:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
         resources:
           requests:
             storage: 1Gi

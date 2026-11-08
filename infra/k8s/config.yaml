@@ -8,6 +8,10 @@
 # 2026-11-08, Claude Code (Fable 5.1), issue #48 (HTTPS): the origin is
 # https (DP19, DP21). Author review: Leong Wei Zhi, pending pull request
 # review.
+# 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform): the
+# HTTPS decisions cited above are DP17 and DP18 since docs/deployment.md was
+# renumbered; no value changed here.
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1
 kind: ConfigMap

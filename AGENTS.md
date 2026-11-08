@@ -47,6 +47,9 @@
   pending pull request review.
   All decisions documented here were made by the team.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-11-09, Claude Code (Fable 5.1), issue #48: the deployment line
+  names the EKS cluster and RDS instead of the k3s host. Transcription
+  only. Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # Favours on Campus (FoC) — Agent Guide
@@ -66,8 +69,9 @@ credit economy (credits cannot be bought or cashed out).
   build
 - **Deployment:** Docker per service (`Dockerfile` in each service folder),
   orchestrated via root `compose.yaml`; the cloud deployment (N5, issue
-  #48) runs the same images on a single k3s host in AWS, provisioned by
-  `infra/` — design in `docs/deployment.md`, runbook in `infra/README.md`
+  #48) runs the same images on an EKS cluster in AWS with one RDS
+  PostgreSQL instance, provisioned by `infra/` — design in
+  `docs/deployment.md`, runbook in `infra/README.md`
 
 ## Architecture
 

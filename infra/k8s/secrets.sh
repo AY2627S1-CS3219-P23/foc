@@ -1,37 +1,37 @@
 #!/usr/bin/env bash
 # AI-assisted (CS3219 AI Usage Policy disclosure):
 # Tool: Claude Code (Fable 5.1), 2026-11-08, issue #48 (N5 cloud deployment).
-# Scope: copies the two Secrets Manager secrets into the k3s Secrets the
-# manifests reference, from the host (team decision DP7, Leong Wei Zhi,
-# 2026-11-08, options Q&A: IMDS hop limit 1 and no External Secrets
-# Operator, so only host processes can use the instance role).
+# Scope: copies the two Secrets Manager secrets into the Kubernetes Secrets
+# the manifests reference (team decision DP7, Leong Wei Zhi, options Q&A).
 # Author review: Leong Wei Zhi, pending pull request review.
 # PR #302 review: foc-secrets is built as a Secret document, so a value
 # may hold newlines; a non-string value stops the script. Second round
 # (Sinnez1): reads retried for a minute, foc/ghcr validated too.
+# 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform, DP7
+# re-decided): the script runs in the Deploy job with the GitHub deploy
+# role, against the kubeconfig deploy.sh wrote; the k3s kubeconfig and the
+# IMDS region lookup are gone. Author review: Leong Wei Zhi, pending pull
+# request review.
 #
-# Usage (as root on the host): secrets.sh
-# Reads foc/app and foc/ghcr with the instance role and writes them as the
-# Secrets foc-secrets and ghcr-pull in namespace foc. Idempotent: unchanged
-# values leave the Secrets untouched. Run by cloud-init once and by
+# Usage: secrets.sh
+# Needs AWS credentials that may read foc/* (the deploy role) and a
+# kubeconfig whose current context is the cluster (deploy.sh runs
+# `aws eks update-kubeconfig` first). Reads foc/app and foc/ghcr and writes
+# them as the Secrets foc-secrets and ghcr-pull in namespace foc.
+# Idempotent: unchanged values leave the Secrets untouched. Run by
 # deploy.sh on every deploy.
 set -euo pipefail
 umask 077
 
-export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 here="$(cd "$(dirname "$0")" && pwd)"
 
-# the AWS CLI needs a region; the host knows its own
-if [ -z "${AWS_DEFAULT_REGION:-}" ]; then
-    token="$(curl -sf -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' \
-        http://169.254.169.254/latest/api/token)"
-    AWS_DEFAULT_REGION="$(curl -sf -H "X-aws-ec2-metadata-token: $token" \
-        http://169.254.169.254/latest/meta-data/placement/region)"
-    export AWS_DEFAULT_REGION
-fi
+: "${AWS_REGION:=${AWS_DEFAULT_REGION:-}}"
+[ -n "$AWS_REGION" ] || { echo "AWS_REGION is not set" >&2; exit 1; }
+export AWS_REGION
+kubectl config current-context >/dev/null
 
-# IAM is eventually consistent and cloud-init runs this right after the
-# first apply, so a failed read is retried for about a minute
+# a fresh role session can be refused for a few seconds (IAM is eventually
+# consistent), so a failed read is retried for about a minute
 secret() {
     local out
     for _ in $(seq 1 10); do

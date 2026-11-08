@@ -1,0 +1,50 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5.1), 2026-11-09, issue #48 (EKS re-platform).
+# Scope: values for the Traefik Helm chart (traefik/traefik 42.3.1) that
+# deploy.sh installs as the ingress controller (team decision DP15, Leong
+# Wei Zhi, 2026-11-09, options Q&A, recorded in docs/deployment.md): a
+# NodePort Service the load balancer's target group points at, and the
+# timeouts that keep the STOMP WebSockets open (the cloud-init values of
+# the k3s host, docs/gateway.md). The Ingress in infra/k8s/ingress.yaml
+# keeps ingressClassName traefik.
+# Author review: Leong Wei Zhi, pending pull request review.
+deployment:
+  replicas: 1
+
+# every node answers this port; infra/terraform (local.traefik_node_port)
+# and the cluster security group rule use the same number
+service:
+  spec:
+    type: NodePort
+
+ports:
+  web:
+    nodePort: 30080
+    # Traefik's 60 s read timeout would cut the long-lived STOMP sockets
+    # the gateway holds open for 3600 s (docs/gateway.md); the load
+    # balancer closes idle connections at 3500 s, before this does
+    transport:
+      respondingTimeouts:
+        readTimeout: 0s
+        idleTimeout: 3600s
+  # TLS ends at the load balancer: no https entry point is published
+  websecure:
+    expose:
+      default: false
+
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+
+providers:
+  kubernetesIngress:
+    # the Ingress status is not written back (no LoadBalancer Service here)
+    publishedService:
+      enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 128Mi

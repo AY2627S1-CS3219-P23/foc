@@ -14,6 +14,11 @@
 # each, issue #305).
 # 2026-11-08, Claude Code (Fable 5.1), issue #305 (team decision, Leong Wei
 # Zhi via options Q&A): the chat and notification HPAs back, same values.
+# 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform): CPU
+# metrics come from the EKS metrics-server add-on; two t3.medium nodes fit HPA
+# max 2 only in part until the third node is added (docs/deployment.md,
+# scaling).
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler

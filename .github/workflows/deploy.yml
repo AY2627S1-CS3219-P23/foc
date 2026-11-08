@@ -2,9 +2,9 @@
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5.3.3 automated
 # deployment).
 # Scope: build the nine images for linux/amd64, push them to GHCR, and roll
-# them out on the k3s host through SSM Run Command (team decisions: GHCR +
-# SSM, OIDC role in the sandbox account, k3s API private — Leong Wei Zhi,
-# 2026-11-05, options Q&A; infra/README.md has the runbook).
+# them out on the cluster (team decisions: GHCR, OIDC role in the sandbox
+# account — Leong Wei Zhi, 2026-11-05, options Q&A; infra/README.md has the
+# runbook).
 # Author review: Leong Wei Zhi, pending pull request review.
 # 2026-11-08, Claude Code (Fable 5.1), PR #289 review findings: the host
 # checks out the target commit before deploy.sh runs (the stale copy used
@@ -15,11 +15,16 @@
 # image tags carry the run id, and the poll keeps stderr apart from the
 # status.
 # 2026-11-08, Claude Code (Fable 5.1), issue #48 (HTTPS): the web bundle's
-# URLs are https; PUBLIC_HOST is the site's hostname (DP18, DP21). Author
+# URLs are https; PUBLIC_HOST is the site's hostname (DP17, DP18). Author
 # review: Leong Wei Zhi, pending pull request review.
+# 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform, DP8): the
+# rollout job runs deploy.sh itself against the EKS cluster (kubectl under
+# an access entry) instead of sending it to a host over SSM; CLUSTER_NAME
+# replaces INSTANCE_ID. Author review: Leong Wei Zhi, pending pull request
+# review.
 #
 # Manual trigger only, from main (the OIDC role trusts main alone). Needs
-# the repo variables AWS_ROLE_ARN, AWS_REGION, INSTANCE_ID and PUBLIC_HOST
+# the repo variables AWS_ROLE_ARN, AWS_REGION, CLUSTER_NAME and PUBLIC_HOST
 # (the hostname, served over https by the load balancer) from
 # `terraform output`.
 name: Deploy
@@ -114,49 +119,23 @@ jobs:
   rollout:
     needs: images
     runs-on: ubuntu-latest
+    # deploy.sh shares a 45-min deadline across the rollouts; the Helm
+    # install and the db-init Job have their own 10-min waits
+    timeout-minutes: 60
     steps:
+      - uses: actions/checkout@v5
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
-      - name: Run deploy.sh on the host
+      # kubectl and helm are preinstalled on ubuntu-latest; the deploy role
+      # is cluster admin through an EKS access entry (infra/terraform/eks.tf)
+      - name: Run deploy.sh against the cluster
         env:
-          INSTANCE_ID: ${{ vars.INSTANCE_ID }}
+          CLUSTER_NAME: ${{ vars.CLUSTER_NAME }}
           PUBLIC_HOST: ${{ vars.PUBLIC_HOST }}
         run: |
           set -euo pipefail
-          id=$(aws ssm send-command \
-            --instance-ids "$INSTANCE_ID" \
-            --document-name AWS-RunShellScript \
-            --comment "foc deploy $GITHUB_SHA" \
-            --parameters "commands=[\"git -C /opt/foc fetch --quiet origin && git -C /opt/foc checkout --quiet --detach $GITHUB_SHA && bash /opt/foc/infra/k8s/deploy.sh $IMAGE_TAG $PUBLIC_HOST\"],executionTimeout=[\"3600\"]" \
-            --query Command.CommandId --output text)
-          echo "SSM command $id"
-          # the built-in waiter gives up after ~100 s; a cold rollout of
-          # seven JVMs takes longer. 360 x 10 s matches executionTimeout.
-          # The invocation record appears a few seconds after send-command
-          # (InvocationDoesNotExist until then); any other error, such as a
-          # missing permission or a stopped instance, fails the job at once
-          # stderr is kept apart from the status: a CLI warning on a successful
-          # call must not end up in $status
-          status=Pending
-          errf=$(mktemp)
-          for i in $(seq 1 360); do
-            if status=$(aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" \
-                --query Status --output text 2>"$errf"); then
-              :
-            elif [ "$i" -le 12 ] && grep -q InvocationDoesNotExist "$errf"; then
-              status=Pending
-            else
-              cat "$errf" >&2
-              exit 1
-            fi
-            case "$status" in
-              Pending|InProgress|Delayed) sleep 10 ;;
-              *) break ;;
-            esac
-          done
-          aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" \
-            --query '[StandardOutputContent,StandardErrorContent]' --output text
-          echo "status: $status"
-          test "$status" = "Success"
+          test -n "$CLUSTER_NAME" || { echo "CLUSTER_NAME repo variable is not set"; exit 1; }
+          test -n "$PUBLIC_HOST" || { echo "PUBLIC_HOST repo variable is not set"; exit 1; }
+          bash infra/k8s/deploy.sh "$IMAGE_TAG" "$PUBLIC_HOST" "$CLUSTER_NAME"
