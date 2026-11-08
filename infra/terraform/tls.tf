@@ -7,7 +7,8 @@
 # validation CNAME and the site CNAME are added by hand from the outputs.
 # Author review: Leong Wei Zhi, pending pull request review.
 # PR #310 review (Copilot): the validation resource names the record FQDNs
-# it expects, taken from the certificate itself.
+# it expects, taken from the certificate itself. Second comment (Claude
+# reviewer): the balancer's idle timeout sits below Traefik's.
 
 # --- certificate -----------------------------------------------------------
 
@@ -43,9 +44,11 @@ resource "aws_lb" "site" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
   subnets            = [aws_subnet.public.id, aws_subnet.public_b.id]
-  # matches Traefik's idle timeout from cloud-init: the STOMP sockets the
-  # gateway holds open must not be cut by the balancer
-  idle_timeout = 3600
+  # below Traefik's 3600 s idle timeout from cloud-init, so the balancer
+  # closes an idle keep-alive connection before the backend does (AWS
+  # guidance; PR #310 review). The STOMP sockets the gateway holds open are
+  # kept alive by heartbeats, well inside this
+  idle_timeout = 3500
   tags         = { Name = "foc" }
 }
 
