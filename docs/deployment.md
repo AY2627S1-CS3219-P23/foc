@@ -66,7 +66,7 @@ The AI tool presented facts and prices only.
 | DP7 | Secrets | AWS Secrets Manager (`foc/app`, `foc/ghcr`). `secrets.sh` on the host copies them into k8s Secrets at first boot and on every deploy, through the instance role. IMDS hop limit 1, so pods cannot use that role |
 | DP8 | Images, rollout | GHCR, pushed by GitHub Actions; rollout by SSM Run Command from an OIDC role trusted for `main` only |
 | DP9 | Replicas | 1 per Deployment at rest, HPA min 1 / max 2 on CPU 70 % for every Deployment (N5.4) |
-| DP10 | Backends at 2 replicas | No multi-replica hardening in the services. The behaviour at 2 replicas is listed below and accepted for this deployment |
+| DP10 | Backends at 2 replicas | No multi-replica hardening in the services. Scale-out of order, credit, chat, notification, user and rating is unsafe: a second replica runs their scheduled jobs twice per tick (credit expiry and closure, order sweeps and outbox) and a STOMP push reaches one replica only. Accepted for this two-week deployment rather than pinning them to one replica (Leong Wei Zhi, 2026-11-08, on review). web, gateway and supplier scale without side effects |
 | DP11 | Demo data | Seed on in the cloud; realistic usernames everywhere, same passwords and counts |
 | DP12 | Lifetime | Up to about 2026-11-19, then `terraform destroy`, nothing kept |
 | DP13 | Repo layout | `infra/` (Terraform + manifests), the second non-service top-level folder |
@@ -147,6 +147,11 @@ STOMP from a per-JVM simple broker; supplier and notification use
 | Horizontal | one node | a second instance running `k3s agent` with the server's URL and join token (not provisioned). Between the nodes: 6443/tcp to the server, 8472/udp for flannel, 10250/tcp for metrics. Local-path volumes stay on the node that created them, so the StatefulSets keep running on the first node |
 
 ## Behaviour at 2 replicas (DP10)
+
+Scale-out is unsafe for the six services below. The team accepted that
+for the two-week deployment instead of pinning them to one replica. The
+HPA only adds the second replica while CPU stays above 70 %, and removes
+it about five minutes after CPU drops.
 
 | Services | At 2 replicas | What would change it |
 | --- | --- | --- |

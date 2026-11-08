@@ -134,6 +134,7 @@ the pod templates, so the Deployments roll with the new values.
 | Restart one service | `kubectl -n foc rollout restart deploy/<name>` |
 | Database shell | `kubectl -n foc exec -it user-db-0 -- psql -U user user` |
 | Spot stopped the host | nothing to redeploy. It restarts when capacity returns, same EIP, same data |
+| An HPA shows 2 replicas | expected under load. Unsafe for order, credit, chat, notification, user and rating (duplicate job runs, pushes reach one replica), accepted by DP10; it goes back to 1 about five minutes after CPU drops below 70 % |
 
 ## Troubleshooting
 

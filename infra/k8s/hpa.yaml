@@ -2,8 +2,9 @@
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
 # Scope: HPA min 1 / max 2 on CPU for every Deployment (team decision;
 # k3s ships metrics-server). The services have no multi-replica
-# hardening; the behaviour at 2 replicas is listed and accepted in
-# docs/deployment.md (DP10).
+# hardening: scale-out is unsafe for order, credit, chat, notification,
+# user and rating (duplicate job runs, pushes reach one replica), and
+# accepted for this deployment in docs/deployment.md (DP10).
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
 # docs/deployment.md); values mirror compose.yaml's defaults.
 # Author review: Leong Wei Zhi, pending pull request review.
