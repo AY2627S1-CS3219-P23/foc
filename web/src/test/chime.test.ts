@@ -14,6 +14,14 @@
 // idles after a chime and wakes for the next, unlockChime resumes
 // inside a gesture.
 // Author review: Leong Wei Zhi to review via the PR.
+// 2026-11-09, Claude Code (Opus 5.5), notification sound preview (no
+// issue), PR #314 review (@Sinnez1): the fake's resume() and suspend()
+// can land after a delay, and the cases cover a chime waiting on an
+// in-flight unlock — one that lands, one that never settles (bounded,
+// nothing fires late), one that rejects — a switch-off while it waits,
+// a second call joining the wait, and a pending idle suspend waited out.
+// Re-review: an idle suspend or idle resume that never settles is given
+// up on after the bound, and the next chime still plays.
 
 class FakeGainParam {
   setValueAtTime = vi.fn()
@@ -43,6 +51,15 @@ class FakeAudioContext {
   // a policy-blocked resume(): the promise never settles until a user
   // gesture — which a test simulates by setting `state` directly
   static resumeNeverSettles = false
+  // a resume()/suspend() that lands after this many ms, not at once —
+  // iOS Safari's slow resume, a suspend still in flight
+  static resumeAfterMs: number | null = null
+  static suspendAfterMs: number | null = null
+  // a resume()/suspend() that never settles at all, while the context
+  // still reports its old state — a hung audio thread (PR #314
+  // re-review)
+  static idleResumeNeverSettles = false
+  static suspendNeverSettles = false
 
   state = FakeAudioContext.initialState
   currentTime = 1
@@ -56,14 +73,38 @@ class FakeAudioContext {
 
   resume = vi.fn(() => {
     if (FakeAudioContext.resumeNeverSettles) return new Promise<void>(() => {})
+    if (FakeAudioContext.idleResumeNeverSettles && this.state === 'suspended')
+      return new Promise<void>(() => {})
     if (FakeAudioContext.resumeRejects) return Promise.reject(new Error('no'))
-    if (FakeAudioContext.resumesTo) this.state = FakeAudioContext.resumesTo
-    return Promise.resolve()
+    const land = () => {
+      if (FakeAudioContext.resumesTo) this.state = FakeAudioContext.resumesTo
+    }
+    const after = FakeAudioContext.resumeAfterMs
+    if (after === null) {
+      land()
+      return Promise.resolve()
+    }
+    return new Promise<void>((resolve) =>
+      setTimeout(() => {
+        land()
+        resolve()
+      }, after),
+    )
   })
 
   suspend = vi.fn(() => {
-    this.state = 'suspended'
-    return Promise.resolve()
+    if (FakeAudioContext.suspendNeverSettles) return new Promise<void>(() => {})
+    const after = FakeAudioContext.suspendAfterMs
+    if (after === null) {
+      this.state = 'suspended'
+      return Promise.resolve()
+    }
+    return new Promise<void>((resolve) =>
+      setTimeout(() => {
+        this.state = 'suspended'
+        resolve()
+      }, after),
+    )
   })
 
   createOscillator() {
@@ -96,6 +137,10 @@ beforeEach(() => {
   FakeAudioContext.resumesTo = null
   FakeAudioContext.resumeRejects = false
   FakeAudioContext.resumeNeverSettles = false
+  FakeAudioContext.resumeAfterMs = null
+  FakeAudioContext.suspendAfterMs = null
+  FakeAudioContext.idleResumeNeverSettles = false
+  FakeAudioContext.suspendNeverSettles = false
   vi.stubGlobal('AudioContext', FakeAudioContext)
 })
 
@@ -255,6 +300,178 @@ describe('playChime', () => {
 
     expect(() => playChime()).not.toThrow()
     await flush()
+  })
+})
+
+// a chime waiting on unlockChime's in-flight resume (the sound toggle's
+// own click, or a push just after the first pointerdown) — PR #314
+// review: bounded, re-checked, never stacked
+describe('playChime after an unlock', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    FakeAudioContext.initialState = 'suspended'
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  test('waits for an in-flight unlock and plays once it lands', async () => {
+    FakeAudioContext.resumesTo = 'running'
+    FakeAudioContext.resumeAfterMs = 300
+    const { unlockChime, playChime } = await importChime()
+
+    unlockChime()
+    playChime()
+    await vi.advanceTimersByTimeAsync(0)
+    const ctx = FakeAudioContext.instances[0]
+    expect(ctx.oscillators).toHaveLength(0)
+
+    await vi.advanceTimersByTimeAsync(300)
+    expect(ctx.oscillators).toHaveLength(2)
+  })
+
+  test('gives up on an unlock that never settles, and nothing fires late', async () => {
+    // a synthetic click: no user activation, so the resume stays pending
+    FakeAudioContext.resumeNeverSettles = true
+    const { unlockChime, playChime } = await importChime()
+
+    unlockChime()
+    playChime()
+    await vi.advanceTimersByTimeAsync(1_000)
+    const ctx = FakeAudioContext.instances[0]
+    expect(ctx.oscillators).toHaveLength(0)
+
+    // a real gesture later starts the context: the given-up chime must
+    // not ring out then
+    ctx.state = 'running'
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(ctx.oscillators).toHaveLength(0)
+  })
+
+  test('stays silent on an unlock that rejects', async () => {
+    FakeAudioContext.resumeRejects = true
+    const { unlockChime, playChime } = await importChime()
+
+    unlockChime()
+    playChime()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(FakeAudioContext.instances[0].oscillators).toHaveLength(0)
+  })
+
+  test('drops a chime whose sound was switched off while it waited', async () => {
+    FakeAudioContext.resumesTo = 'running'
+    FakeAudioContext.resumeAfterMs = 300
+    const { unlockChime, playChime } = await importChime()
+    let on = true
+
+    unlockChime()
+    playChime({ enabled: () => on })
+    await vi.advanceTimersByTimeAsync(100)
+    on = false
+    await vi.advanceTimersByTimeAsync(200)
+
+    expect(FakeAudioContext.instances[0].oscillators).toHaveLength(0)
+  })
+
+  test('a call made while one waits joins it instead of stacking', async () => {
+    FakeAudioContext.resumesTo = 'running'
+    FakeAudioContext.resumeAfterMs = 300
+    const { unlockChime, playChime } = await importChime()
+
+    unlockChime()
+    playChime()
+    playChime()
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(FakeAudioContext.instances[0].oscillators).toHaveLength(2)
+  })
+
+  test('waits out a pending idle suspend before deciding', async () => {
+    FakeAudioContext.initialState = 'running'
+    FakeAudioContext.suspendAfterMs = 100
+    const { playChime } = await importChime()
+
+    playChime()
+    await vi.advanceTimersByTimeAsync(0)
+    const ctx = FakeAudioContext.instances[0]
+    expect(ctx.oscillators).toHaveLength(2)
+
+    // the idle timer fires; its suspend is still in flight, so the
+    // context reports running
+    await vi.advanceTimersByTimeAsync(650)
+    expect(ctx.suspend).toHaveBeenCalled()
+    expect(ctx.state).toBe('running')
+
+    FakeAudioContext.resumesTo = 'running'
+    playChime()
+    await vi.advanceTimersByTimeAsync(0)
+    // nothing scheduled into a context about to suspend
+    expect(ctx.oscillators).toHaveLength(2)
+
+    // the suspend lands, the chime wakes the context and plays
+    await vi.advanceTimersByTimeAsync(100)
+    expect(ctx.resume).toHaveBeenCalled()
+    expect(ctx.state).toBe('running')
+    expect(ctx.oscillators).toHaveLength(4)
+  })
+})
+
+// PR #314 re-review: a wait that never settles must not keep the
+// one-at-a-time latch set, or every later chime is silenced
+describe('playChime with a wait that never settles', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  test('gives up on an idle suspend that never lands, and the next chime plays', async () => {
+    FakeAudioContext.suspendNeverSettles = true
+    const { playChime } = await importChime()
+
+    playChime()
+    await vi.advanceTimersByTimeAsync(650)
+    const ctx = FakeAudioContext.instances[0]
+    expect(ctx.oscillators).toHaveLength(2)
+    expect(ctx.suspend).toHaveBeenCalled()
+
+    // waits on the stuck suspend for the bound, then plays into the
+    // still-running context
+    playChime()
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(ctx.oscillators).toHaveLength(4)
+
+    // and the latch is free again
+    await vi.advanceTimersByTimeAsync(650)
+    playChime()
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(ctx.oscillators).toHaveLength(6)
+  })
+
+  test('gives up on an idle resume that never settles, and a later chime still plays', async () => {
+    FakeAudioContext.idleResumeNeverSettles = true
+    const { playChime } = await importChime()
+
+    playChime()
+    await vi.advanceTimersByTimeAsync(650)
+    const ctx = FakeAudioContext.instances[0]
+    expect(ctx.state).toBe('suspended')
+
+    playChime()
+    await vi.advanceTimersByTimeAsync(1_000)
+    // the resume hung: silent, but not stuck
+    expect(ctx.oscillators).toHaveLength(2)
+
+    // the audio thread recovers; the next chime is not locked out
+    FakeAudioContext.idleResumeNeverSettles = false
+    FakeAudioContext.resumesTo = 'running'
+    playChime()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ctx.oscillators).toHaveLength(4)
   })
 })
 

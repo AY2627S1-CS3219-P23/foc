@@ -22,32 +22,38 @@
 // raises the flag when the user ends up at the login form (a gated page
 // or /login itself). Nothing else changes here.
 // Author review: Leong Wei Zhi; Ryan Ang to re-review via PR #182.
+// 2026-11-08, Claude Code (Opus 5.5), issue #308: the flag carries the
+// notice's text, so the owner upgrade's sign-out can say why (decision
+// via options Q&A); a plain 401 keeps the default sentence.
 
-let sessionEnded = false
-const listeners = new Set<() => void>()
+export const SESSION_ENDED_MESSAGE =
+  'Your session has ended. Please sign in again.'
+
+let sessionEnded: string | null = null
+const listeners = new Set<(message: string) => void>()
 
 // AuthProvider: a 401 on a token-bearing request ended the session
-export function flagSessionEnded() {
-  sessionEnded = true
+export function flagSessionEnded(message: string = SESSION_ENDED_MESSAGE) {
+  sessionEnded = message
   // the login page may already be open, in which case nothing is about
   // to read the flag on a first render — tell it instead
-  for (const listener of [...listeners]) listener()
+  for (const listener of [...listeners]) listener(message)
 }
 
-// login page, in render: should the notice show?
-export function sessionEndedFlag() {
+// login page, in render: the notice to show, or null for none
+export function sessionEndedFlag(): string | null {
   return sessionEnded
 }
 
 // login page: the notice has been taken, so it can't surface again on
 // some later visit. Deliberately silent — nothing reacts to a clear.
 export function clearSessionEnded() {
-  sessionEnded = false
+  sessionEnded = null
 }
 
 // login page: be told about a sign-out that happens while it is open.
 // Returns the unsubscribe function.
-export function subscribeSessionEnded(listener: () => void) {
+export function subscribeSessionEnded(listener: (message: string) => void) {
   listeners.add(listener)
   return () => {
     listeners.delete(listener)

@@ -31,6 +31,12 @@ Author review: Ryan validated correctness and naming.
 2026-10-02 (Claude Code, Opus 5.5), issue #154: the wrong-token 403 is
        checked for a problem+json body.
 2026-10-19: Parts copied from AuthControllerTest, which was AI-assisted
+2026-11-08 (Claude Code, Opus 5.5), issue #308: the token now lives in the
+shared OwnerSetupToken bean, so the test sets it there, and puts the
+pinned value back after each test (the bean also serves /users/me/owner).
+2026-11-09 (Claude Code, Opus 5.5), PR #309 review: no reflection; the
+test uses the pinned token, and the unconfigured-token 503 moved to
+OwnerSetupUnconfiguredTest, which runs in its own context.
 */
 
 
@@ -63,7 +69,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import static org.hamcrest.Matchers.allOf;
@@ -83,7 +88,6 @@ import foc.user.entity.User;
 import foc.user.repository.PendingSignupRepository;
 import foc.user.repository.UserRepository;
 import foc.user.service.OtpEmailSender;
-import foc.user.service.OwnerSignupService;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -91,7 +95,8 @@ import tools.jackson.databind.json.JsonMapper;
 @AutoConfigureMockMvc
 class OwnerSignupControllerTest extends PostgresTestContainer {
 
-    private static final String CORRECT_SETUP_TOKEN = "test-value";
+    // PostgresTestContainer's pin
+    private static final String CORRECT_SETUP_TOKEN = "test-owner-setup-token";
     private static final String PASSWORD = "ValidPassword123";
     
     @Autowired
@@ -103,9 +108,6 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
     @Autowired
     private PendingSignupRepository pendingSignupRepository;
 
-    @Autowired
-    private OwnerSignupService ownerSignupService;
-
     // captures the plain code instead of speaking SMTP; reset per test
     @MockitoBean
     private OtpEmailSender otpEmailSender;
@@ -116,7 +118,6 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
     void cleanDatabase() {
         pendingSignupRepository.deleteAll();
         userRepository.deleteAll();
-        ReflectionTestUtils.setField(ownerSignupService, "expectedOwnerKey", "test-value");
     }
 
     private ResultActions postJson(String path, Map<String, String> body) throws Exception {
@@ -209,16 +210,6 @@ class OwnerSignupControllerTest extends PostgresTestContainer {
             .getRole()).isEqualTo(Role.OWNER);
     }
     
-    @Test
-    @DisplayName("No server-side owner key should throw 503")
-    void setupOwner_noSetupKey() throws Exception {
-        ReflectionTestUtils.setField(ownerSignupService, "expectedOwnerKey", "");
-        signup("e1234567@u.nus.edu", "student_alex", PASSWORD, CORRECT_SETUP_TOKEN)
-            .andExpect(status().isServiceUnavailable())
-            .andExpect(jsonPath("$.type").value("urn:foc:user:owner-setup-token-missing"))
-            .andExpect(jsonPath("$.detail").value("Owner setup is unavailable"));
-    }
-
     @Test
     @DisplayName("No signup token creates regular user instead, notified by email")
     void setupOwner_missingSetupToken() throws Exception {

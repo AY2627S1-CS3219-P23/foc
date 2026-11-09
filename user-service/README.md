@@ -94,6 +94,18 @@
   2026-11-06, Claude Code (Opus 5.5), issue #48 DP11: demo-account table
   lists the new realistic usernames, plus the note on existing user-db
   volumes. Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-08, Claude Code (Opus 5.5), issue #308: POST /users/me/owner
+  (owner upgrade) in the status and the account-update section, plus
+  its two token types. Author review: Leong Wei Zhi, pending pull
+  request review. PR #309 review: the accepted risk of unthrottled
+  token guesses recorded (Leong Wei Zhi's decision via options Q&A).
+  2026-11-09, PR #309 bot re-review: the note states that the gateway
+  does not rate-limit the routes either. Author review: Leong Wei Zhi,
+  pending pull request review.
+  2026-11-09, PR #309 review (@Sinnez1): the accepted-risk note is
+  replaced. The gate code is now checked before the token (Leong Wei
+  Zhi's decision via options Q&A), and the 403 row is updated to match.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # User Service
@@ -114,7 +126,8 @@ answers `username` and `joinedAt`, #280), `DELETE /users/me`
 (self-deletion, #93), the account-update flows `POST /users/me/otp` /
 `PATCH /users/me` / `POST /users/me/email/verify` /
 `POST /users/me/email/resend` / `POST /users/me/password` (#92 — see
-below), and the admin endpoints
+below), the owner upgrade `POST /users/me/owner` (#308, below), and the
+admin endpoints
 `GET /users` (list, search, role filter, sort, 20/50/100 page sizes,
 `includeDeleted=true` to list removed accounts with their `deletedAt`),
 `PATCH /users/{id}` (promote/demote) and `DELETE /users/{id}` (soft
@@ -323,6 +336,27 @@ email-change verify had just replaced (PR #157 review).
   **204**. Both entries must match (checked server-side, F2.1.4) and the
   new password passes sign-up's policy (F2.1.5); there is no
   `currentPassword` — the gate code is the authentication.
+- `POST /users/me/owner` `{ ownerKey, otp }` → **200** with the account,
+  now `OWNER` (#308): the owner setup token (`OWNER_SETUP_TOKEN`, the
+  one `/register-owner` uses) plus the gate code. The code is checked
+  **before** the token (PR #309 review, Leong Wei Zhi's decision), so
+  every token guess needs a requested code. A wrong code answers like any
+  gate-code refusal and says nothing about the token. A wrong or blank
+  token with the right code is a **403** (`owner-setup-token-invalid`)
+  that spends the code: the row is kept spent, so its `Retry-After` and
+  the resend cooldown hold back the next code, which allows at most one
+  guess per cooldown. An unconfigured token is the same **503** as
+  `/auth/signup-owner`, answered before the code is read, so the code
+  stays usable. On success every session of the account is
+  revoked after the commit (#178's per-user stamp), so the caller signs
+  in again and the new token carries `OWNER`; one log line records the
+  upgrade. An `OWNER` caller gets **200** with the account unchanged —
+  nothing consumed or revoked.
+  Set `OWNER_SETUP_TOKEN` to a long random value (the cloud deployment
+  generates 32 random alphanumerics), and unset it when no more owners
+  are needed — the routes then answer 503. `/auth/signup-owner` reveals
+  the token's result only inside the OTP email, behind the per-email
+  resend cooldown.
 
 OTP-flavoured errors carry a stable problem+json `type` URI, so clients
 can match failures by machine instead of by `detail` wording (the SPA's
@@ -339,6 +373,8 @@ may change). The sign-up OTP errors carry them too:
 | `urn:foc:user:email-change-none` | nothing pending to verify/resend (400) |
 | `urn:foc:user:email-taken` | email already registered (400) |
 | `urn:foc:user:username-taken` | username already taken (400) |
+| `urn:foc:user:owner-setup-token-invalid` | owner upgrade: wrong or blank setup token with the right gate code; the code is spent, `Retry-After` until the next (403) |
+| `urn:foc:user:owner-setup-token-missing` | no owner setup token configured on the server (503) |
 
 ## Password reset & account recovery (#94)
 
