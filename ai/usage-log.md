@@ -72,6 +72,9 @@
   notification rework, then extended it with the credit-trio broker
   integration test. Author review: Ryan Ang, pending pull request
   review.
+  2026-11-09, Claude Code (Opus 5.5): prepended the balance refresh on
+  request.created entry below. Author review: Ryan Ang, pending pull
+  request review.
 -->
 
 # AI Usage Log
@@ -92,6 +95,13 @@ Entry template:
 ```
 
 ---
+## 2026-11-09 — Ryan Ang (credit balance refresh on request.created)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug, generate
+- **Scope:** `web/src/features/credit/CreditBalanceProvider.tsx`: a pushed `request.created` now fetches the balance at once, alongside the three credit-change notifications, so the reserve a new request makes shows without waiting for the 30 s poll. `web/src/test/credits.test.tsx`: `request.created` added to the fetch cases; the other request events are still ignored.
+- **Prompt(s):** asked why the balance took a while to update after creating a request. The tool traced the saga on `main`: a reserve publishes no credit-change notification (team decision in PR #313), so only the poll picked it up; and order-service publishes `request.created` only after credit-service's `credit.reserved` reply, which credit-service sends after the reserve commits. The team chose to refresh on `request.created`.
+- **Author review:** web `vitest run src/test/credits.test.tsx` 51 pass; `tsc -b`, eslint and Prettier clean on the changed files. Ryan Ang reviews via pull request.
+
 ## 2026-11-09 — Leong Wei Zhi (issue #48: continuous deployment, DP20)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs

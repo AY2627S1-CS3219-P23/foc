@@ -23,6 +23,9 @@
 // credit-change notification fetches the balance at once, inside a stub
 // NotificationsContext as request-refetch.test.tsx feeds it.
 // Author review: Ryan Ang, pending pull request review.
+// 2026-11-09, Claude Code (Opus 5.5): request.created fetches too; the
+// other request events still do not.
+// Author review: Ryan Ang, pending pull request review.
 
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -1035,22 +1038,24 @@ describe('balance refresh on a credit-change notification', () => {
     await screen.findByRole('link', { name: 'Credits: 42' })
   }
 
-  it.each(['credit.transferred', 'credit.released', 'credit.dispute-settled'])(
-    'fetches the balance at once on %s',
-    async (eventType) => {
-      await renderBadge()
+  it.each([
+    'credit.transferred',
+    'credit.released',
+    'credit.dispute-settled',
+    'request.created',
+  ])('fetches the balance at once on %s', async (eventType) => {
+    await renderBadge()
 
-      balance = { available: 37, reserved: 13, total: 50 }
-      await push(eventType)
+    balance = { available: 37, reserved: 13, total: 50 }
+    await push(eventType)
 
-      expect(
-        await screen.findByRole('link', { name: 'Credits: 37' }),
-      ).toBeInTheDocument()
-      expect(creditApi.getBalance).toHaveBeenCalledTimes(2)
-    },
-  )
+    expect(
+      await screen.findByRole('link', { name: 'Credits: 37' }),
+    ).toBeInTheDocument()
+    expect(creditApi.getBalance).toHaveBeenCalledTimes(2)
+  })
 
-  it('ignores request events, the saga replies and other notifications', async () => {
+  it('ignores the other request events, the saga replies and other notifications', async () => {
     await renderBadge()
 
     await push(
