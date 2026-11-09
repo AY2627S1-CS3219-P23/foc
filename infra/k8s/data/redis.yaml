@@ -12,6 +12,10 @@
 # PR #316 review (Claude reviewer, zone-bound volume): the pod selects the
 # on-demand node in zone a (team decision, Leong Wei Zhi, 2026-11-09).
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-09, Claude Code (Opus 5.5), issue #48 (first deploy): fsGroup so
+# the redis user can write the fresh EBS volume (CrashLoopBackOff on
+# "Can't open or create append-only dir: Permission denied").
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1
 kind: Service
@@ -45,6 +49,13 @@ spec:
       # zone, and a Spot squeeze must not take this pod
       nodeSelector:
         foc.dev/pool: stable
+      # a fresh ext4 volume holds lost+found, so the image's entrypoint
+      # leaves /data root-owned ("Unknown file ... Permissions will not be
+      # modified") and redis (uid 999, gid 1000) cannot create its AOF dir;
+      # the kubelet hands the volume to the redis group instead
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: redis
           image: redis:8.8-alpine

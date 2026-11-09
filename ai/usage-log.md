@@ -8180,3 +8180,20 @@ Entry template:
   saved as `eks.tfplan`. Apply owed by the author; whether the SCP allows
   web identity for the cluster issuer is only shown by the apply. The
   author reviews via pull request.
+
+## 2026-11-09 — Leong Wei Zhi (N5 cloud deployment, issue #48: Redis volume permissions on first deploy)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debugging
+- **Scope:** `infra/k8s/data/redis.yaml` (pod `securityContext.fsGroup:
+  1000`, `fsGroupChangePolicy: OnRootMismatch`).
+- **Prompt(s):** "check the deploy rollout status". The first Deploy hung
+  on `redis-0` in `CrashLoopBackOff`: "Can't open or create append-only
+  dir appendonlydir: Permission denied". The fresh ext4 EBS volume holds
+  `lost+found`, so the redis:8.8-alpine entrypoint skips its ownership
+  fix ("Unknown file './lost+found' ... Permissions will not be
+  modified") and redis (uid 999, gid 1000) cannot write the root-owned
+  `/data`.
+- **Author review:** reproduced with Docker (root-owned volume with
+  `lost+found`: the same error; with group 1000, mode 2775 as fsGroup
+  applies: "Ready to accept connections"); `kubectl kustomize infra/k8s`
+  renders. The author reviews via pull request.
