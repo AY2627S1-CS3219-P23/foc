@@ -14,6 +14,9 @@
 # SUPPLIER_DB_HOST comes from foc-secrets (the one RDS instance, DP4) and the
 # Hikari pool is capped at 5 (DP19).
 # Author review: Leong Wei Zhi, pending pull request review.
+# PR #316 review (Claude reviewer): Hikari keeps one idle connection
+# (team decision DP19, Leong Wei Zhi). Author review: Leong Wei Zhi,
+# pending pull request review.
 ---
 apiVersion: v1
 kind: Service
@@ -76,9 +79,13 @@ spec:
                   name: foc-secrets
                   key: SUPPLIER_DB_PASSWORD
             # seven services share one db.t4g.micro (max_connections about
-            # 110): 7 x 5 x 2 replicas stays under it (DP19)
+            # 110): 7 x 5 x 2 replicas stays under it, and one idle
+            # connection per pod keeps a deploy's surge pods (a third
+            # replica each) from opening 5 apiece (DP19)
             - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
               value: "5"
+            - name: SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE
+              value: "1"
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:

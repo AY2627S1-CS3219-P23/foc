@@ -18,8 +18,9 @@
   troubleshooting rows. Author review: Leong Wei Zhi, pending pull request
   review.
   Later round (Sinnez1): three public subnets (the balancer in zone c);
-  the psql image pinned to 17.9. Author review: Leong Wei Zhi, pending
-  pull request review.
+  the psql image pinned to 17.9; Hikari's minimum idle in the
+  too-many-connections row. Author review: Leong Wei Zhi, pending pull
+  request review.
 -->
 
 # infra: cloud deployment runbook
@@ -233,7 +234,7 @@ one that ran the apply, and the deploy role): `aws eks update-kubeconfig
 | Deploy job: `kubectl` gets `Unauthorized` or `403` | `aws eks list-access-entries --cluster-name foc` | the deploy role's access entry or its `AmazonEKSClusterAdminPolicy` association is missing (`eks.tf`); `terraform apply` |
 | Deploy job: `helm` cannot reach `traefik.github.io` | the runner's network | GitHub-side; re-run the job |
 | `db-init` Job fails | `kubectl -n foc logs job/db-init` | RDS still creating or `DB_HOST` stale in `foc/app` (apply, then redeploy); `password authentication failed` means `RDS_MASTER_PASSWORD` in `foc/app` differs from the instance (apply again) |
-| Backend `CrashLoopBackOff` with `FATAL: too many connections` | `kubectl -n foc logs <pod> -p` | the pool cap (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`, 5) was raised or removed; db.t4g.micro allows about 110 |
+| Backend `CrashLoopBackOff` with `FATAL: too many connections` | `kubectl -n foc logs <pod> -p` | the pool cap (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`, 5) was raised or removed, or `SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE` (1) dropped, so a deploy's surge pods open 5 each; db.t4g.micro allows about 110 |
 | Backend `CrashLoopBackOff` with `password authentication failed` | `kubectl -n foc logs job/db-init` | the Job did not run after the password changed; re-run Deploy |
 | `foc-secrets`, `foc-db-admin` or `ghcr-pull` missing | the Deploy job's `secrets.sh` output | the deploy role was denied `secretsmanager:GetSecretValue`, or the secret is not in `ap-southeast-1` |
 | `ImagePullBackOff` on every pod | `aws ec2 describe-instances --filters Name=tag:Name,Values=foc-nat --query 'Reservations[].Instances[].State.Name'` | the NAT instance is stopped (start it), its interface has source/destination checking on, or the private route table lost its default route |
