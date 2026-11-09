@@ -21,15 +21,29 @@
  * rating-events exchange on the exact rating.submitted key via the
  * registry (D13/D16; recipient scope decided on #44). Author review:
  * Leong Wei Zhi, pending pull request review.
+ * 2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): credit-domain
+ * trio (notification-service.credit-events + .retry/.dlq) bound to the
+ * credit-events exchange on the exact credit.transferred, credit.released
+ * and credit.dispute-settled keys via the registry, for the credit-change
+ * notification (team decision; credit.reserved and
+ * credit.reservation-rejected stay unbound). Author review: Ryan Ang,
+ * pending pull request review.
  */
 package foc.notification.messaging.rabbitmq;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import foc.contracts.events.core.EventContracts;
 import foc.contracts.events.core.EventTypeRegistry;
+import foc.contracts.events.credit.CreditDisputeSettled;
+import foc.contracts.events.credit.CreditReleased;
+import foc.contracts.events.credit.CreditTransferred;
 import foc.contracts.events.rating.RatingSubmitted;
 
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.Declarable;
 import org.springframework.amqp.core.Declarables;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
@@ -39,7 +53,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Request- and rating-domain topology (D12, D13, D16): one durable
+ * Request-, rating- and credit-domain topology (D12, D13, D16): one durable
  * <strong>topic</strong> exchange per producing domain, published to
  * with routing keys from the shared {@code EventTypeRegistry} (D18),
  * and one consumer-private work-queue trio per exchange. The request
@@ -50,7 +64,9 @@ import org.springframework.context.annotation.Configuration;
  * {@code rating.submitted} key instead (issue #255): the rating domain
  * will grow events this service must not notify on, so it opts in
  * key by key (rating-service's own consumer style, no hand-written
- * strings).
+ * strings). The credit work queue opts in the same way, to the three
+ * events of {@link #CONSUMED_CREDIT_EVENTS}: the exchange also carries
+ * the saga's replies, which only order-service reads.
  *
  * <p>Failure topology (D6/D7, F2.2/F2.3), identical per trio: the work
  * queue dead-letters to the durable DLQ, and the durable retry queue
@@ -134,6 +150,27 @@ public class RabbitMqTopology {
 	public static final String RATING_EVENTS_DEAD_LETTER_QUEUE = RATING_EVENTS_QUEUE + ".dlq";
 
 	/**
+	 * This service's work queue for the credit domain (the credit-change
+	 * notification); consumer-prefixed and service-private like the
+	 * request trio (D13/D15).
+	 */
+	public static final String CREDIT_EVENTS_QUEUE = "notification-service.credit-events";
+
+	/** Credit-domain TTL/delay queue (D6, F2.2), same leg shape. */
+	public static final String CREDIT_EVENTS_RETRY_QUEUE = CREDIT_EVENTS_QUEUE + ".retry";
+
+	/** Credit-domain terminal queue (D7, F2.3). */
+	public static final String CREDIT_EVENTS_DEAD_LETTER_QUEUE = CREDIT_EVENTS_QUEUE + ".dlq";
+
+	/**
+	 * The credit events this service notifies on, bound one by one: the
+	 * saga's replies (credit.reserved, credit.reservation-rejected) share
+	 * the exchange and are order-service's alone.
+	 */
+	static final List<Class<?>> CONSUMED_CREDIT_EVENTS =
+			List.of(CreditTransferred.class, CreditReleased.class, CreditDisputeSettled.class);
+
+	/**
 	 * The broker's built-in default exchange: routes by queue name, so
 	 * a dead-letter leg needs no declared exchange or binding.
 	 */
@@ -182,6 +219,34 @@ public class RabbitMqTopology {
 		Binding binding = BindingBuilder.bind(workQueue).to(exchange)
 				.with(EventTypeRegistry.routingKeyFor(RatingSubmitted.class));
 		return new Declarables(exchange, workQueue, retryQueue, deadLetterQueue, binding);
+	}
+
+	/**
+	 * The exchange declaration must match credit-service's and
+	 * order-service's (durable topic, non-auto-delete), or the
+	 * redeclaration fails {@code PRECONDITION_FAILED}.
+	 */
+	@Bean
+	Declarables creditEventsTopology(
+			@Value("${notification.rabbitmq.retry.ttl-ms}") int retryTtlMs) {
+		TopicExchange exchange = new TopicExchange(EventContracts.CREDIT_EVENTS_EXCHANGE, true, false);
+		Queue workQueue = QueueBuilder.durable(CREDIT_EVENTS_QUEUE)
+				.deadLetterExchange(DEFAULT_EXCHANGE)
+				.deadLetterRoutingKey(CREDIT_EVENTS_DEAD_LETTER_QUEUE)
+				.build();
+		Queue retryQueue = QueueBuilder.durable(CREDIT_EVENTS_RETRY_QUEUE)
+				.ttl(retryTtlMs)
+				.deadLetterExchange(DEFAULT_EXCHANGE)
+				.deadLetterRoutingKey(CREDIT_EVENTS_QUEUE)
+				.build();
+		Queue deadLetterQueue = QueueBuilder.durable(CREDIT_EVENTS_DEAD_LETTER_QUEUE).build();
+		List<Declarable> declarables = new ArrayList<>(
+				List.of(exchange, workQueue, retryQueue, deadLetterQueue));
+		for (Class<?> event : CONSUMED_CREDIT_EVENTS) {
+			declarables.add(BindingBuilder.bind(workQueue).to(exchange)
+					.with(EventTypeRegistry.routingKeyFor(event)));
+		}
+		return new Declarables(declarables);
 	}
 
 }

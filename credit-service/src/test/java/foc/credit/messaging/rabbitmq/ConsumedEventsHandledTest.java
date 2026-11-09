@@ -5,6 +5,8 @@
  * topology binds to the events the handler acts on, placed and shaped
  * as the team decided (this package, since CONSUMED_EVENTS is
  * package-private; one instance per class against mocked operations).
+ * 2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): the
+ * handler's new ReservedRepository argument, mocked.
  * Author review: Ryan Ang, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
@@ -20,6 +22,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import foc.contracts.events.request.RequestEvent;
 import foc.credit.service.CreditOperations;
+import foc.credit.repository.ReservedRepository;
 import foc.credit.service.ReplyOutbox;
 import foc.credit.service.RequestEventHandler;
 import foc.credit.service.ReserveResult;
@@ -47,7 +50,8 @@ class ConsumedEventsHandledTest {
 			}
 			return returned == SettleResult.class ? SettleResult.DUPLICATE : null;
 		});
-		RequestEventHandler handler = new RequestEventHandler(operations, mock(ReplyOutbox.class));
+		RequestEventHandler handler = new RequestEventHandler(operations, mock(ReplyOutbox.class),
+				mock(ReservedRepository.class));
 
 		handler.handle((RequestEvent) mock(eventType));
 

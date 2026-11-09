@@ -19,14 +19,21 @@
 // stale empty state, and a past-distributions retry shown as loading.
 // PR #211 review: the same loading gate for an empty past-distributions
 // page.
+// 2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): a pushed
+// credit-change notification fetches the balance at once, inside a stub
+// NotificationsContext as request-refetch.test.tsx feeds it.
 // Author review: Ryan Ang, pending pull request review.
 
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { RouterProvider, createMemoryRouter } from 'react-router'
+import { useEffect, useState } from 'react'
+import { Outlet, RouterProvider, createMemoryRouter } from 'react-router'
 
 import { creditApi } from '@/features/credit/api'
-import { BALANCE_POLL_MS } from '@/features/credit/CreditBalanceProvider'
+import {
+  BALANCE_POLL_MS,
+  CreditBalanceProvider,
+} from '@/features/credit/CreditBalanceProvider'
 import { nextExpiry } from '@/features/credit/expiry'
 import { NO_FILTERS, parseFilters } from '@/features/credit/history'
 import type {
@@ -34,7 +41,14 @@ import type {
   CreditHistoryEntry,
   CreditPage,
 } from '@/features/credit/types'
+import type { NotificationDto } from '@/features/notifications/types'
+import {
+  NotificationsContext,
+  type NotificationsData,
+} from '@/features/notifications/useNotifications'
 import { adminUserApi } from '@/features/user/adminApi'
+import { AuthProvider } from '@/features/user/AuthProvider'
+import { CreditsBadge } from '@/shared/shell/CreditsBadge'
 import { ApiError } from '@/lib/api/http'
 import { routes } from '../routes'
 
@@ -954,5 +968,124 @@ describe('balance poll', () => {
     expect(
       screen.getByRole('link', { name: 'Credits: 45' }),
     ).toBeInTheDocument()
+  })
+})
+
+describe('balance refresh on a credit-change notification', () => {
+  // Stands in for NotificationProvider: the pushed array's reference
+  // changes once per render that appends frames.
+  let pushFrames: (dtos: NotificationDto[]) => void = () => {}
+  function PushProvider() {
+    const [pushed, setPushed] = useState<NotificationDto[]>([])
+    useEffect(() => {
+      pushFrames = (dtos) => setPushed((prev) => [...prev, ...dtos])
+    }, [])
+    const value: NotificationsData = {
+      unreadCount: 0,
+      pushStopped: false,
+      pushedNotifications: pushed,
+      pushReconnects: 0,
+      pendingReadIds: new Set<number>(),
+      markReadPending: () => {},
+      refreshUnreadCount: () => {},
+      soundEnabled: false,
+      setSoundEnabled: () => {},
+    }
+    return (
+      <NotificationsContext.Provider value={value}>
+        <Outlet />
+      </NotificationsContext.Provider>
+    )
+  }
+
+  let frameSeq = 0
+  const frame = (eventType: string): NotificationDto => ({
+    id: ++frameSeq,
+    eventType,
+    payload: { requestId: '7' },
+    occurredAt: new Date().toISOString(),
+    read: false,
+    createdAt: new Date().toISOString(),
+  })
+
+  const push = (...eventTypes: string[]) =>
+    act(() => pushFrames(eventTypes.map(frame)))
+
+  async function renderBadge() {
+    render(
+      <RouterProvider
+        router={createMemoryRouter([
+          {
+            Component: AuthProvider,
+            children: [
+              {
+                Component: PushProvider,
+                children: [
+                  {
+                    Component: CreditBalanceProvider,
+                    children: [{ index: true, element: <CreditsBadge /> }],
+                  },
+                ],
+              },
+            ],
+          },
+        ])}
+      />,
+    )
+    await screen.findByRole('link', { name: 'Credits: 42' })
+  }
+
+  it.each(['credit.transferred', 'credit.released', 'credit.dispute-settled'])(
+    'fetches the balance at once on %s',
+    async (eventType) => {
+      await renderBadge()
+
+      balance = { available: 37, reserved: 13, total: 50 }
+      await push(eventType)
+
+      expect(
+        await screen.findByRole('link', { name: 'Credits: 37' }),
+      ).toBeInTheDocument()
+      expect(creditApi.getBalance).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it('ignores request events, the saga replies and other notifications', async () => {
+    await renderBadge()
+
+    await push(
+      'request.submitted',
+      'request.completed',
+      'request.cancelled',
+      'request.dispute-resolved',
+      'credit.reserved',
+      'rating.submitted',
+    )
+
+    // give a wrongly triggered fetch the chance to start
+    await act(async () => {})
+    expect(creditApi.getBalance).toHaveBeenCalledTimes(1)
+  })
+
+  it('fetches once for a burst delivered in one render', async () => {
+    await renderBadge()
+
+    await push('credit.transferred', 'credit.released')
+
+    await waitFor(() => expect(creditApi.getBalance).toHaveBeenCalledTimes(2))
+    await act(async () => {})
+    expect(creditApi.getBalance).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaves a hidden tab to fetch when it is shown', async () => {
+    await renderBadge()
+
+    act(() => setVisibility('hidden'))
+    await push('credit.transferred')
+    await act(async () => {})
+    expect(creditApi.getBalance).toHaveBeenCalledTimes(1)
+
+    act(() => setVisibility('visible'))
+    await waitFor(() => expect(creditApi.getBalance).toHaveBeenCalledTimes(2))
   })
 })

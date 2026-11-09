@@ -96,6 +96,10 @@
   Same day, PR #306 review: D4 note names the constraint the duplicate ack
   checks; D36 notes V2. Author review: Leong Wei Zhi, pending pull request
   review.
+  2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): D37 added — the
+  credit-change notification, as the team decided via options Q&A —
+  with the credit events' catalog note and the recipient rows.
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # FoC Notification Service — Architecture Design
@@ -157,6 +161,7 @@ removed; gaps in the numbering are intentional.
 | D34 | Recipient resolution | **Events carry business facts only; this service derives who is told from each event's own id fields (`requesterId`, `courierId`, `rateeId`), one rule per event type** — the `parties` wire field is removed from every contract record, and `request.expired` gains a nullable `courierId` so the courier who had accepted stays reachable. Chosen (options Q&A) over a publisher-sent notification command and over keeping `parties` on the event — see [Recipient resolution](#recipient-resolution-d34) | Notif F1.1, F1.2; contract decoupling |
 | D35 | Cross-replica push (issue #305) | **Each push is published to the service-local fanout exchange `notification.push`; every replica consumes it on its own anonymous queue and delivers to its own sockets**, so a browser gets the frame once wherever its socket is. Chosen (options Q&A) over a STOMP broker relay through RabbitMQ's STOMP plugin (the `/user/queue` destinations would leave a durable queue per session, and it needs the plugin, a port and destination renames) — see [Cross-replica push](#cross-replica-push-d35) | N5.4; Order NFR1.1-1.2 at 2 replicas |
 | D36 | Schema management (issue #305) | **Flyway owns the schema** (`V1__baseline.sql`, the schema `ddl-auto: update` had generated; `baseline-on-migrate` records an existing volume as V1; `V2` drops the pre-typed-contracts columns and table such a volume may still hold, PR #306 review), Hibernate only validates — two replicas starting on an empty database cannot race table creation. Chosen (options Q&A) over keeping `ddl-auto: update` and documenting the race | N5.4 |
+| D37 | Credit-change notification (PR #313) | **This service binds `credit.transferred`, `credit.released` and `credit.dispute-settled` on the `credit-events` exchange (exact keys, its own queue trio) and notifies each party whose balance moved**: `credit.transferred` and `credit.dispute-settled` the requester and the courier (a dispute share of 0 included), `credit.released` the requester. `credit.reserved` and `credit.reservation-rejected` stay unbound: a reserve is not notified. The web shows the viewer's side of the change (signed amount first), opens `/credits` on click, and refreshes the balance on these pushes. Team decision (options Q&A), 2026-11-08 | Credit NFR1.1 |
 
 ## Components
 
@@ -251,7 +256,12 @@ party IDs as-is and the web resolves `courierId` to a username at read
 time — see [Display names](#display-names-d32). The credit domain's `credit.reserved` and
 `credit.reservation-rejected` carry `requestId`, `requesterId` and
 `amount` (plus `reason` and a nullable `reasonCode` on the rejection) and go to the separate
-`credit-events` exchange, which this service does not bind.
+`credit-events` exchange; this service does not bind them. It binds the
+three credit-change events on that exchange instead (D37):
+`credit.transferred` (`requestId`, `requesterId`, `courierId`,
+`amount`), `credit.released` (`requestId`, `requesterId`, `amount`) and
+`credit.dispute-settled` (`requestId`, `requesterId`, `courierId`,
+`courierAmount`, `requesterAmount`).
 
 The rating domain (N1, issue #255): `rating.submitted` carries
 `ratingId`, `requestId`, `raterId`, `rateeId` and `stars`; this service
@@ -412,11 +422,13 @@ every recipient is a field on the event once `request.expired` carries
 | `request.accepted`, `collected`, `completed`, `disputed`, `dispute-resolved` | requester and courier |
 | `request.expired` | requester, plus the courier who had accepted when `courierId` is set |
 | `rating.submitted` | ratee only (#44) |
-| `credit.*`, `user.*` | never bound here (D16); one that arrives anyway is refused like any type without a rule and dead-letters |
+| `credit.transferred`, `credit.dispute-settled` | requester and courier, a dispute share of 0 included (D37) |
+| `credit.released` | requester (D37) |
+| `credit.reserved`, `credit.reservation-rejected`, `user.*` | never bound here (D16, D37); one that arrives anyway is refused like any type without a rule and dead-letters |
 
 ```mermaid
 flowchart LR
-    Q["request-events /<br/>rating-events queue"] ==> C["converter:<br/>dispatch on eventType"]
+    Q["request-events /<br/>rating-events /<br/>credit-events queue"] ==> C["converter:<br/>dispatch on eventType"]
     C --> D{"eventId<br/>seen?"}
     D -->|yes| X["ack, nothing stored"]
     D -->|no| P["request.dropped?<br/>prune the courier's rows (D33)"]

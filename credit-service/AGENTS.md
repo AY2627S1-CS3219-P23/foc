@@ -57,6 +57,9 @@
   open-accounts query. PR #268 review: the redistribution lock-order
   invariant names findAllOpenForUpdate.
   Author review: Ryan Ang, pending pull request review.
+  2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): the credit-change events'
+  invariant (D15).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # credit-service/ — Agent Guide
@@ -95,6 +98,11 @@ IDs (D1–D13) when touching related code.
   only an index, V5 a CHECK and an index). With `ddl-auto: none` nothing validates the
   mappings at startup; `EntityMappingTest` saves and reads each one back.
   A new column needs a migration, the entity field and that test.
+- **A credit-change event is enqueued with the change it reports**
+  (D15). `RequestEventHandler` writes `credit.transferred`,
+  `credit.released` or `credit.dispute-settled` only on `SETTLED`, from
+  the settled record, and never for an amount-0 release; a duplicate
+  writes nothing, since the first delivery's event committed with it.
 - **A reply is enqueued inside the transaction that owes it.**
   `ReplyOutboxService.enqueue` is `MANDATORY`: it joins the caller's
   transaction and refuses a call outside one.

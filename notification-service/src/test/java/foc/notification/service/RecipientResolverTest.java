@@ -13,6 +13,10 @@
  * loudly too.
  * 2026-11-04, follow-up to PR #287 (author's call): credit and user
  * events are refused like any unmapped type, no longer ignored.
+ * 2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): the three
+ * credit-change events have rules (team decision); the saga's two
+ * replies and the user events are still refused. Author review: Ryan
+ * Ang, pending pull request review.
  */
 package foc.notification.service;
 
@@ -21,7 +25,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import foc.contracts.events.core.DomainEvent;
 import foc.contracts.events.core.EventTypeRegistry;
-import foc.contracts.events.credit.CreditEvent;
 import foc.contracts.events.rating.RatingSubmitted;
 import foc.contracts.events.request.RequestAccepted;
 import foc.contracts.events.request.RequestDropped;
@@ -47,13 +50,16 @@ class RecipientResolverTest {
 	private static final String REQUESTER = "usr-req-1001";
 	private static final String COURIER = "usr-cou-2002";
 
+	// the saga's credit replies, which this service does not bind
+	private static final List<String> SAGA_REPLIES = List.of("credit.reserved", "credit.reservation-rejected");
+
 	@Autowired
 	private ObjectMapper objectMapper;
 
 	@Test
 	void requesterOnlyEvents() throws IOException {
 		for (String type : List.of("request.submitted", "request.created", "request.rejected",
-				"request.cancelled", "request.courier-arrived", "request.dropped")) {
+				"request.cancelled", "request.courier-arrived", "request.dropped", "credit.released")) {
 			assertThat(RecipientResolver.recipientsOf(readFixture(type))).as(type)
 					.containsExactly(REQUESTER);
 		}
@@ -62,7 +68,8 @@ class RecipientResolverTest {
 	@Test
 	void requesterAndCourierEvents() throws IOException {
 		for (String type : List.of("request.accepted", "request.collected", "request.completed",
-				"request.disputed", "request.dispute-resolved")) {
+				"request.disputed", "request.dispute-resolved", "credit.transferred",
+				"credit.dispute-settled")) {
 			assertThat(RecipientResolver.recipientsOf(readFixture(type))).as(type)
 					.containsExactly(REQUESTER, COURIER);
 		}
@@ -158,7 +165,7 @@ class RecipientResolverTest {
 	// can only arrive by hand or by a rebinding: it is refused like any
 	// type without a rule and dead-letters where someone can see it.
 	@Test
-	void creditAndUserEventsAreRefusedLikeAnyUnmappedType() throws IOException {
+	void sagaRepliesAndUserEventsAreRefusedLikeAnyUnmappedType() throws IOException {
 		for (String type : List.of("credit.reserved", "credit.reservation-rejected",
 				"user.created", "user.purged")) {
 			DomainEvent event = readFixture(type);
@@ -176,7 +183,7 @@ class RecipientResolverTest {
 	void everyConsumedEventTypeHasARule() throws IOException {
 		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
 			DomainEvent event = readFixture(entry.eventType());
-			if (event instanceof CreditEvent || event instanceof UserEvent) {
+			if (SAGA_REPLIES.contains(entry.eventType()) || event instanceof UserEvent) {
 				continue;
 			}
 			assertThat(RecipientResolver.recipientsOf(event)).as(entry.eventType()).isNotEmpty();

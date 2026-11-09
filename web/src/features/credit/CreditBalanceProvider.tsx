@@ -5,17 +5,28 @@
 // while the tab is visible, pause while it is hidden, and fetch at once
 // when it is shown again. Follows NotificationProvider's
 // derive-by-token rule, so a logout or re-login starts over.
+// 2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): a pushed
+// credit-change notification (credit.transferred, .released,
+// .dispute-settled) fetches the balance at once. The Credit Service
+// publishes those events only after the change has committed, so one
+// fetch sees it (team decision, replacing a first version that fetched
+// on request events and again 2 s later).
 // Author review: Ryan Ang, pending pull request review.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet } from 'react-router'
 
 import { errorMessage } from '@/lib/api/http'
+import { isCreditEvent } from '../notifications/eventMessage'
+import { NotificationsContext } from '../notifications/useNotifications'
+import type { NotificationDto } from '../notifications/types'
 import { useAuth } from '../user/useAuth'
 import { creditApi } from './api'
 import { CreditBalanceContext, type BalanceState } from './useCreditBalance'
 
 export const BALANCE_POLL_MS = 30_000
+
+const NO_PUSHES: NotificationDto[] = []
 
 // the balance stamped with the session that fetched it
 interface SessionBalance {
@@ -36,6 +47,10 @@ export const CreditBalanceProvider = () => {
   const state: BalanceState | null =
     accessToken === null ? null : (current?.state ?? LOADING)
   const version = current?.version ?? 0
+
+  // The current session's fetch, for the push effect below; null while
+  // logged out.
+  const loadRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     if (!accessToken) return
@@ -96,16 +111,39 @@ export const CreditBalanceProvider = () => {
       }
     }
 
+    loadRef.current = () => void load()
     void load()
     if (document.visibilityState === 'visible') startPolling()
     document.addEventListener('visibilitychange', onVisibilityChange)
 
     return () => {
       disposed = true
+      loadRef.current = null
       clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [accessToken])
+
+  // Outside a NotificationProvider (bare renders in tests) there are no
+  // pushes, and the 30 s poll alone keeps the balance.
+  const pushedNotifications =
+    useContext(NotificationsContext)?.pushedNotifications ?? NO_PUSHES
+  // Seeded with the frames already there at mount: the first fetch is
+  // newer than any of them. The provider only appends, so the fresh
+  // frames are the new object references (as useRequestRefetch reads them).
+  const consumed = useRef(pushedNotifications)
+  useEffect(() => {
+    if (pushedNotifications === consumed.current) return
+    const fresh = pushedNotifications.filter(
+      (n) => !consumed.current.includes(n),
+    )
+    consumed.current = pushedNotifications
+    // a credit-change notification: the change it reports has committed
+    if (!fresh.some((n) => isCreditEvent(n.eventType ?? ''))) return
+    // a hidden tab fetches when it is shown again
+    if (document.visibilityState !== 'visible') return
+    loadRef.current?.()
+  }, [pushedNotifications])
 
   const value = useMemo(() => ({ state, version }), [state, version])
 
