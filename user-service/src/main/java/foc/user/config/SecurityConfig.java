@@ -43,6 +43,8 @@ of opening to the compose network.
 removed with its last caller — D32 (options Q&A) supersedes D30/D31; the
 web hydrates names at read time with the caller's own JWT, so
 GET /users/{id} keeps only its authenticated() rule.
+2026-11-08 (Claude Code, Opus 5.5), issue #308: POST /users/me/owner's
+authenticated() line, above the admin catch-all like the other #92 routes.
 */
 
 package foc.user.config;
@@ -137,6 +139,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/users/me/email/verify").authenticated()
                 .requestMatchers(HttpMethod.POST, "/users/me/email/resend").authenticated()
                 .requestMatchers(HttpMethod.POST, "/users/me/password").authenticated()
+                // the owner upgrade (#308)
+                .requestMatchers(HttpMethod.POST, "/users/me/owner").authenticated()
                 // the recovery restore (#94): must be reachable by a
                 // soft-deleted caller, whose JWT is valid like anyone's
                 .requestMatchers(HttpMethod.POST, "/users/me/recover").authenticated()

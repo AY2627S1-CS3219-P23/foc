@@ -27,6 +27,9 @@ for an unsupported method, with Spring's Allow header.
 attempts-exceeded 429 now carries Retry-After — the exhausted row
 survives as spent, so there is a real wait (the resend cooldown) to
 quote before a replacement code may be requested.
+2026-11-09 (Claude Code, Opus 5.5), PR #309 review: the
+ResponseStatusException passthrough keeps the exception's headers, so the
+owner upgrade's wrong-token 403 carries its Retry-After.
 */
 
 package foc.user.controller;
@@ -155,10 +158,11 @@ class ProblemDetailAdvice {
     // refusals the services raise with a status and reason (blocked admin
     // actions, invalid list parameters, a bad setup token, CallerId's 401,
     // the typed uniqueness refusals); returning the exception's own body
-    // keeps the type it was built with
+    // keeps the type it was built with, and any headers it carries (the
+    // owner upgrade's wrong-token Retry-After)
     @ExceptionHandler(ResponseStatusException.class)
-    ProblemDetail handleResponseStatus(ResponseStatusException e) {
-        return e.getBody();
+    ResponseEntity<ProblemDetail> handleResponseStatus(ResponseStatusException e) {
+        return ResponseEntity.status(e.getStatusCode()).headers(e.getHeaders()).body(e.getBody());
     }
 
     // a query or path parameter of the wrong type: an unknown role or
