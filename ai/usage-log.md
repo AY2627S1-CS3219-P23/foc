@@ -8268,3 +8268,16 @@ Entry template:
   `lost+found`: the same error; with group 1000, mode 2775 as fsGroup
   applies: "Ready to accept connections"); `kubectl kustomize infra/k8s`
   renders. The author reviews via pull request.
+
+## 2026-11-10 — Ko-Khan (infra: SUPPLIER_SERVICE_URL for order-service on EKS, Order F8.1 PR review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug
+- **Scope:** `infra/k8s/apps/order-service.yaml` — `SUPPLIER_SERVICE_URL`
+  set to `http://supplier-service:8080` next to `CHAT_SERVICE_URL`, the
+  value `user-service.yaml` already uses.
+- **Prompt(s):** PR review (blocking): the manifest did not set the
+  variable, so on EKS order-service fell back to `http://localhost:8080`
+  (itself) and every accept by a courier already holding a delivery
+  answered 503. The reviewer gave the fix; the tool applied it.
+- **Author review:** the manifest parses (js-yaml); not yet deployed to
+  the cluster. Ko-Khan reviews via pull request.

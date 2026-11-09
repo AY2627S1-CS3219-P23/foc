@@ -17,6 +17,11 @@
 # PR #316 review (Claude reviewer): Hikari keeps one idle connection
 # (team decision DP19, Leong Wei Zhi). Author review: Leong Wei Zhi,
 # pending pull request review.
+# 2026-11-10, Claude Code (Opus 5.5), Order F8.1 PR review:
+# SUPPLIER_SERVICE_URL, as compose.yaml and user-service.yaml set it —
+# without it accept's pickup check called order-service's own
+# localhost:8080 and answered 503. Author review: Ko-Khan, pending pull
+# request review.
 ---
 apiVersion: v1
 kind: Service
@@ -114,6 +119,9 @@ spec:
               value: "3600000"
             - name: CHAT_SERVICE_URL
               value: "http://chat-service:8080"
+            # supplier-service, for accept's 1 km pickup check (Order F8.1)
+            - name: SUPPLIER_SERVICE_URL
+              value: "http://supplier-service:8080"
             - name: CHAT_INTERNAL_TOKEN
               valueFrom:
                 secretKeyRef:
