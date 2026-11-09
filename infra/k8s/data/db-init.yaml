@@ -11,6 +11,10 @@
 # Author review: Leong Wei Zhi, pending pull request review.
 # PR #316 review (Claude reviewer, Sinnez1): the image is pinned to the
 # RDS minor (db_engine_version) instead of the moving `postgres:17`.
+# Next round (Claude reviewer): the GRANT guard asks for the SET privilege,
+# not MEMBER: on PostgreSQL 16+ the creating role holds an ADMIN-only
+# membership (no SET), which MEMBER counts, so the GRANT was skipped and
+# CREATE DATABASE ... OWNER failed.
 ---
 apiVersion: batch/v1
 kind: Job
@@ -95,14 +99,16 @@ spec:
               for _ in $(seq 1 30); do pg_isready -q && break; sleep 5; done
               for svc in user supplier order credit notification rating chat; do
                 pw="$(printenv "$(echo "$svc" | tr a-z A-Z)_DB_PASSWORD")"
-                # the RDS master user is not a superuser: it must hold the
-                # role to make it a database's owner (GRANT before CREATE)
+                # the RDS master user is not a superuser: it must be able to
+                # SET ROLE to make it a database's owner (GRANT before
+                # CREATE). PG 16+ gives the creator an ADMIN-only membership
+                # without SET, which a MEMBER check would count
                 psql -v ON_ERROR_STOP=1 -q -v svc="$svc" -v pw="$pw" <<'SQL'
               SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'svc', :'pw')
                 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'svc') \gexec
               ALTER ROLE :"svc" WITH LOGIN PASSWORD :'pw';
               SELECT format('GRANT %I TO CURRENT_USER', :'svc')
-                WHERE NOT pg_has_role(current_user, :'svc', 'MEMBER') \gexec
+                WHERE NOT pg_has_role(current_user, :'svc', 'SET') \gexec
               SELECT format('CREATE DATABASE %I OWNER %I', :'svc', :'svc')
                 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'svc') \gexec
               REVOKE CONNECT ON DATABASE :"svc" FROM PUBLIC;

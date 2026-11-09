@@ -36,7 +36,7 @@
   (DP18, over returning the Spot group to a and b); Redis without a
   password and no NetworkPolicies kept as they are, recorded below
   (Leong Wei Zhi). Author review: Leong Wei Zhi, pending pull request
-  review.
+  review. Then (Claude reviewer): DP19 gains Hikari's minimum idle of 1.
   2026-11-09, Claude Code (Opus 5.5), continuous deployment: DP20 and
   its options table, transcribed from a further options round (Leong Wei
   Zhi; facts only, including that reading the cluster costs nothing
@@ -132,7 +132,7 @@ on 2026-11-09). The AI tool presented facts and prices only.
 | DP16 | Database credentials | **Seven roles, one per service**, each owning its database, with the `foc/app` passwords; a `db-init` Job creates them with the master credentials on every deploy and re-applies the passwords. The master credentials sit in their own Secret (`foc-db-admin`) that only this Job mounts; the services read single keys of `foc-secrets` |
 | DP17 | Domain | `foc23.ddnsfree.com`, a free Dynu hostname (records added by hand in Dynu's panel). The sandbox SCP denies Route 53 domain registration. First `foc23.mooo.com` on FreeDNS, revised when FreeDNS refused CNAME records on its shared domains |
 | DP18 | TLS endpoint | Application Load Balancer in `ap-southeast-1`, enabled in **zones a, b and c** (c added on 2026-11-09 after review, since a balancer sends nothing to targets in a zone it is not enabled in and the Spot group spans c), with a free ACM certificate (DNS validation); its port 80 answers **301** to https; plain HTTP to Traefik behind it |
-| DP19 | Connection pool | Hikari capped at **5 connections per service** (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`): `db.t4g.micro` allows about 110 connections, and 7 services x 10 (the default) x 2 replicas would exceed it |
+| DP19 | Connection pool | Hikari capped at **5 connections per service** (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`): `db.t4g.micro` allows about 110 connections, and 7 services x 10 (the default) x 2 replicas would exceed it. **One idle connection per pod** (`SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=1`, added 2026-11-09 on review over `maxSurge: 0` or no change): a deploy rolls every Deployment at once, and a third surge replica per service with 5 open connections each would have reached about 105 |
 | DP20 | Continuous deployment | Deploy runs **by itself when CI succeeds on a push to `main`** (`workflow_run`), with **no approval gate**; changes touching only docs (`*.md`, `docs/`, `ai/`) **do not deploy**. Only the images whose sources changed since the commit **running in the cluster** (read with `kubectl` in a plan job) are built; the others are retagged. The manual run stays (always deploys; `rebuild_all` input). Each rollout is recorded as a deployment of **`production`** through the **Deployments API** (status and site link on the repo page) |
 
 ## Options considered
