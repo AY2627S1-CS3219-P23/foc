@@ -11,6 +11,10 @@
 # Identity). IMDS hop limit 1 on the nodes carries DP7's posture: pods
 # cannot use the node role.
 # Author review: Leong Wei Zhi, pending pull request review.
+# PR #316 review (Claude reviewer): the EBS CSI add-on is configured not to
+# need IMDS (the controller's region, the node plugin's metadata from the
+# Kubernetes API), since the hop limit blocks it for the driver's pods too.
+# Author review: Leong Wei Zhi, pending pull request review.
 
 locals {
   # cluster ENIs and the database subnet group: zones a and b
@@ -258,12 +262,21 @@ resource "aws_eks_pod_identity_association" "ebs_csi" {
   depends_on      = [aws_eks_addon.pod_identity]
 }
 
+# The nodes' IMDS hop limit of 1 (DP3) keeps the driver's pods (not on the
+# host network) from reading instance metadata too, so they are told where
+# they are instead: the controller gets the region, and the node plugin
+# reads its instance and zone from its Node object first (PR #316 review;
+# keys from the add-on's configuration schema)
 resource "aws_eks_addon" "ebs_csi" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "aws-ebs-csi-driver"
   addon_version               = data.aws_eks_addon_version.ebs_csi.version
   resolve_conflicts_on_update = "OVERWRITE"
-  depends_on                  = [aws_eks_pod_identity_association.ebs_csi]
+  configuration_values = jsonencode({
+    controller = { env = [{ name = "AWS_REGION", value = var.region }] }
+    node       = { metadataSources = "kubernetes,imds" }
+  })
+  depends_on = [aws_eks_pod_identity_association.ebs_csi]
 }
 
 # --- deploy access (DP8) -----------------------------------------------------
