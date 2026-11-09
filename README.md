@@ -25,6 +25,12 @@
   2026-11-08, Claude Code (Fable 5.1), issue #48 (DP18 to DP21): the cloud
   deployment paragraph extended for HTTPS. Author review: Leong Wei Zhi,
   pending pull request review.
+  2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform): a
+  cloud deployment paragraph added for the move to EKS and RDS. Author
+  review: Leong Wei Zhi, pending pull request review.
+  2026-11-09, Claude Code (Opus 5.5), issue #48 (DP20): AI Use Summary
+  extended for continuous deployment. Author review: Leong Wei Zhi,
+  pending pull request review.
   2026-11-08, Claude Code (Fable 5.1): AI Use Summary extended for the
   admin-test flake fix. Author review: Leong Wei Zhi, pending pull request
   review.
@@ -1568,6 +1574,31 @@ port-80 redirect, the host's exposure and the pipeline variable were
 Leong Wei Zhi's choices from neutral options rounds; the tool wrote the
 Terraform, flipped the four baked origins to https and extended the two
 documents. Recorded in `ai/usage-log.md`.
+On 2026-11-09, with the budget known to be $250 and the deadline
+2026-12-11, Claude Code (Fable 5.1) re-platformed the cloud stack (issue
+#48): an EKS cluster with a t3a.medium Spot node group in private subnets
+behind a fck-nat NAT instance, one RDS PostgreSQL 17 instance holding the
+seven service databases (a `db-init` Job creates the roles), RabbitMQ and
+Redis on EBS volumes, Traefik from its Helm chart on a NodePort behind the
+existing load balancer, `secrets.sh` and `deploy.sh` run from the Deploy
+job under an EKS access entry. Every choice was Leong Wei Zhi's, taken in
+five neutral options rounds with prices from the public price files
+(platform, nodes, purchase model, network, Postgres, RabbitMQ and Redis,
+ingress, secrets, deploy access, controller, credentials, lifetime, docs
+shape); Aurora Serverless v2 and Amazon MQ were chosen first and dropped
+after the tool reported the 0.5 ACU floor and the unavailable
+`mq.t3.micro`, and the network layout was settled after the tool answered
+four questions on private subnets and NAT with facts only. The tool wrote
+the Terraform, manifests, chart values, scripts and workflow, tested the
+init script against a local Postgres, planned against the live state, and
+replaced `docs/deployment.md` and `infra/README.md`, quoting the reasons
+Leong Wei Zhi gave. The PR #316 review round (same day) added a third,
+on-demand node that RabbitMQ and Redis select (chosen by Leong Wei Zhi
+after the reviewers' zone-bound-volume finding, from options incl. Amazon
+MQ + ElastiCache and SQS, recorded as facts), a separate Secret for the
+RDS master credentials, a pinned RDS minor and one deploy deadline, and
+restored the issue #305 state of DP9/DP10; both node groups then moved to
+t3a.medium on request. Recorded in `ai/usage-log.md`.
 
 2026-11-08: Claude Code (Fable 5.1) made the Admin Dashboard tests wait for a
 section's first load to settle before asserting on it, after one case
@@ -1622,3 +1653,11 @@ consumer, ShedLock) were declined by the author and are recorded in
 reviewer) added a 5 s broker connect timeout, an ack scoped to the
 `processed_events_pkey` constraint with a real-Postgres race test, a V2
 migration for legacy volumes and smaller hardening.
+
+Continuous deployment (issue #48, DP20, 2026-11-09) — Claude Code (Opus
+5.5) implemented the team's decisions (Leong Wei Zhi, neutral options
+Q&A): the Deploy workflow runs after CI succeeds on `main`, skips
+docs-only changes, builds only the images changed since the commit
+running in the cluster (read by a plan job, `infra/k8s/changed-images.sh`)
+and retags the rest; the runbook and `docs/deployment.md` follow.
+Recorded in `ai/usage-log.md`.

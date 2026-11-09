@@ -52,6 +52,10 @@
   trust fix entry below.
   2026-11-08, Claude Code (Fable 5.1): prepended the HTTPS (ACM on an ALB)
   entry below.
+  2026-11-09, Claude Code (Fable 5.1): prepended the EKS re-platform entry
+  below.
+  2026-11-09, Claude Code (Opus 5.5): prepended the continuous deployment
+  (DP20) entry below.
   2026-11-08, Claude Code (Fable 5.1): prepended the web admin-test flake
   entry below.
   2026-11-08, Claude Code (Fable 5.1): prepended the issue #305 entry
@@ -97,6 +101,56 @@ Entry template:
 - **Scope:** `web/src/features/credit/CreditBalanceProvider.tsx`: a pushed `request.created` now fetches the balance at once, alongside the three credit-change notifications, so the reserve a new request makes shows without waiting for the 30 s poll. `web/src/test/credits.test.tsx`: `request.created` added to the fetch cases; the other request events are still ignored.
 - **Prompt(s):** asked why the balance took a while to update after creating a request. The tool traced the saga on `main`: a reserve publishes no credit-change notification (team decision in PR #313), so only the poll picked it up; and order-service publishes `request.created` only after credit-service's `credit.reserved` reply, which credit-service sends after the reserve commits. The team chose to refresh on `request.created`.
 - **Author review:** web `vitest run src/test/credits.test.tsx` 51 pass; `tsc -b`, eslint and Prettier clean on the changed files. Ryan Ang reviews via pull request.
+
+## 2026-11-09 — Leong Wei Zhi (issue #48: continuous deployment, DP20)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** branch `feat/48-continuous-deploy` on PR #316's
+  `feat/48-eks-rds`. `.github/workflows/deploy.yml` (`workflow_run` on CI
+  for pushes to `main`, a plan job, a changed-images build matrix, a retag
+  job, `rebuild_all` dispatch input), new `infra/k8s/changed-images.sh`,
+  `docs/deployment.md` (DP20 + options table), `infra/README.md` (step 4,
+  rollback/retry), README AI Use Summary, this log.
+- **Prompt(s):** "on top of PR #316, create another PR to introduce
+  continuous deployment from GitHub Actions"; then "would reading from
+  the cluster incur AWS cost?" (answered with facts: EKS API calls,
+  `sts:AssumeRoleWithWebIdentity` and `eks:DescribeCluster` are not billed
+  per request; the transfer is a few KB) and "ok continue with the
+  cluster".
+- **Decisions (Leong Wei Zhi, neutral options Q&A, 2026-11-09):** trigger
+  after CI succeeds on `main` (over every push in parallel with CI); skip
+  docs-only pushes; no approval gate (over a GitHub Environment with
+  reviewers); rebuild changed images only (over all nine); the last
+  deployed tag read from the cluster (over a moving GHCR tag or the last
+  successful Deploy run). No reasons given; the tool recommended nothing.
+- **Author review:** `actionlint` 1.7.7 on the workflow (only the
+  pre-existing `tr a-z A-Z` infos), `shellcheck` and `bash -n` on the
+  script; the script run against a stub `kubectl` over real commits: an
+  infra-only diff (all retagged, deploy), a docs-only diff (no deploy), an
+  empty cluster and an unknown commit (built), a web-only diff (web
+  built, eight retagged), `rebuild_all`. Not yet run in Actions (needs the
+  cluster from PR #316). Leong Wei Zhi to review via pull request.
+- **PR #317 review round (2026-11-09, Claude reviewer + Copilot):** prompt
+  "address the latest mr comments!". The first attempt of an automatic run
+  whose commit is an ancestor of a live one deploys nothing (CI runs on
+  `main` can finish out of order); dispatches and re-runs (rollback) are
+  exempt. The root `.dockerignore` is a source of the seven root-context
+  images. Verified with the stub `kubectl`: older target skipped, same
+  target re-run proceeds, newer and equal targets proceed; the commit that
+  last changed `.dockerignore` rebuilds the seven backends and retags
+  web/gateway; `shellcheck` clean, `actionlint` unchanged.
+- **Deployment history (2026-11-09):** prompt "how to show a deployment
+  history and status for that environment on the repo's GitHub page";
+  the tool described two ways with facts (an `environment:` key changes
+  the OIDC subject and needs a trust-policy apply; Deployments API calls
+  need `deployments: write` only). Leong Wei Zhi chose the Deployments
+  API. The rollout job records a `production` deployment (in progress,
+  then success / failure / error with the run and site links); the deploy
+  step got a 55-min step timeout so the outcome step runs. `actionlint`
+  unchanged; the request body checked with `jq`; the API calls are first
+  exercised by the first real run.
+
+---
 ## 2026-11-09 — Leong Wei Zhi (notification sound preview, no issue; stacked on PR #309)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs
@@ -292,6 +346,19 @@ Entry template:
   stack; the cloud HPA check is the author's after #302 deploys. Leong
   Wei Zhi reviews via pull request.
 
+---
+## 2026-11-09 — Leong Wei Zhi (N5 cloud deployment, issue #48: re-platform to EKS and RDS, lifetime to 2026-12-11)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** generate, refactor, docs
+- **Scope:** `infra/terraform/`: `instance.tf` and `cloud-init.yaml.tftpl` removed; new `eks.tf` (cluster 1.37 in `API` access mode, node role and launch template with IMDS hop limit 1, managed node group t3.medium Spot 2/2/3 in the private subnets, add-ons eks-pod-identity-agent, metrics-server and aws-ebs-csi-driver with a Pod Identity role, cluster-admin access entry for the deploy role), `nat.tf` (fck-nat AMI lookup, interface with source/destination check off, Elastic IP, on-demand t4g.nano with an SSM-only role), `rds.tf` (subnet group, security group from the cluster SG, PostgreSQL 17 db.t4g.micro, 20 GB gp3, no final snapshot); `network.tf` (host SG removed, two private subnets with a route table to the NAT interface, cluster SG rule 30080 from the ALB SG), `iam.tf` (host role gone; deploy role: `eks:DescribeCluster` + `foc/*` reads instead of SSM), `secrets.tf` (`DB_HOST`, `DB_PORT`, `RDS_MASTER_USER`, `RDS_MASTER_PASSWORD` in `foc/app`), `tls.tf` (target group `foc-traefik-np` on NodePort 30080 with create_before_destroy, `aws_autoscaling_attachment` to the node group's ASG), `variables.tf`, `outputs.tf` (`cluster_name`, `rds_endpoint`, `nat_public_ip`). `infra/k8s/`: `data/postgres.yaml` removed; new `data/storageclass.yaml` (gp3) and `data/db-init.yaml` (Job: 7 roles + databases, idempotent, passwords re-applied); RabbitMQ and Redis claim `gp3`; the 7 app manifests take `<SVC>_DB_HOST` from the Secret and cap Hikari at 5; `secrets.sh` runs with the job's credentials and kubeconfig; `deploy.sh` writes the kubeconfig, installs the Traefik chart, runs secrets.sh and the Job before the kustomization. New `infra/helm/traefik-values.yaml` (chart 42.3.1: NodePort 30080, read 0 s / idle 3600 s, no websecure, default IngressClass). `.github/workflows/deploy.yml`: the rollout job runs `deploy.sh` itself; `CLUSTER_NAME` replaces `INSTANCE_ID`. `docs/deployment.md` replaced by a stand-alone EKS page (DP1 to DP19, options tables from the five rounds with 32-day prices, quoted reasons, scaling, cost, lifetime); `infra/README.md` rewritten; `AGENTS.md` deployment line, `docs/gateway.md` wording ("in the cluster"), README summary. No service code changed.
+- **Prompt(s):** "initially i thought budget is 50 dollars, turns out it is 250 dollars. Can we make our deployment more scalable? i was also thinking of using amazon's db provider instead of using stored state pods. We will need a partial rewrite for the deployment docs." then "we have until 11 december 2026". Under the AI policy the tool chose nothing: it fetched the ap-southeast-1 price files (RDS, EKS, MQ, ElastiCache, EC2, ELB), the Spot price history, the available EKS, RDS, Aurora, MQ and ElastiCache versions, and ran five neutral options rounds (compute shape, purchase model, Postgres, RabbitMQ + Redis; budget cuts, nodes, ingress, network; secrets, deploy access, controller, credentials; teardown, docs shape, reasons, PRs; then node size, NAT purchase model and Spot on the WebSocket path on request). Leong Wei Zhi chose EKS, Aurora Serverless v2 and Amazon MQ + ElastiCache first; the tool reported that Aurora's 0.5 ACU floor is never paused by the 1 s outbox pollers and that `mq.t3.micro` is not orderable here, and Leong Wei Zhi then chose RDS db.t4g.micro ("rds then"), RabbitMQ on EBS and Redis in-cluster. Four clarifying questions on the network ("what is the point of making node instances private subnet?", "why do we need it", "why cant the alb be the nat gateway?", "difference between nat instance and managed gateway?") were answered with facts; Leong Wei Zhi chose private subnets with an on-demand fck-nat instance, then "three t3.medium instances ... any two running at the same time" (node group 2/2/3), and all-Spot nodes after asking about the WebSocket services. Docs: replace the k3s page with a stand-alone EKS page and record the reasons given.
+- **Follow-up (same day, PR #316):** "is the spot pricing documented in this pr's documentation?" → the tool listed what was and was not on the page; "sure pls document them" → a "Spot behaviour" section in `docs/deployment.md` (price floats up to the on-demand rate, per-pool interruptions, the drain/recreate/replace sequence with capacity rebalancing, both nodes at once, no capacity, the three widening options as facts, none taken) and the runbook's Spot row. No decision changed.
+- **Review round (PR #316, Claude reviewer + Copilot, same day):** zone-bound EBS volumes vs a two-zone Spot group (both reviewers) → options round (document a PVC-delete recovery; single-zone node group; no volumes; one on-demand node); Leong Wei Zhi first asked for "one managed nodes and two spot nodes both of medium, message queue and redis are always in managed nodes, calculate capacity fit and costs", then "what if we switch to amazon mq and elasti cache instead" (≈ $313, over budget) and "what if instead of amazon mq, we use amazon sqs instead?" (a cross-service code change, facts given), and chose the **on-demand t3.medium node in zone a, shared (label only, no taint)**, with SQS recorded as an option considered: second node group `foc-stable`, label `foc.dev/pool`, `nodeSelector` on RabbitMQ and Redis, second ASG attachment, DP3/DP4, the nodes and RabbitMQ/Redis tables, Spot behaviour, scaling and cost (≈ $210) rewritten. Copilot: `engine_version = "17"` → a concrete minor (`db_engine_version`, default 17.9, minor upgrades ignored); the RDS master credentials leave `foc-secrets` for a separate `foc-db-admin` Secret that only the db-init Job mounts (secrets.sh emits a `List` of both; stub-tested); Helm, the Job and the rollouts share one 50-min deadline inside the job's 60; DP9/DP10, the 2-replica table and the runbook's HPA row restored to the state issue #305 left on `main` (the first draft had reverted them: chat and notification do scale, nine HPAs, no Recreate).
+- **Follow-up (same day):** "should we have more spot instances but with t3.micro instead" → facts: a micro's ~0.6 GiB allocatable cannot hold a backend's 768 Mi limit; "what is the best optimization strategy" → the tool declined to rank (AI policy) and listed the levers with measured effects; "what about this" (several Spot instance types) → the t3/t3a/t2 medium facts; "can we switch to t3a.medium for all" → both node groups default to `t3a.medium` (AMD, same shape; on-demand $0.0472/h vs $0.0528, Spot ~$0.024/h), DP3, tables and cost (≈ $208) updated. "i dont understand max 3?" → explained (a ceiling, no autoscaler, a third node only by hand); "remove max 3" → the Spot group's maximum equals `node_count` (2), `node_max` and the desired-size `ignore_changes` removed, the third-node rows dropped from the page and the runbook. "also why two zones, why not 3 zones? for spot" → facts (history: the ALB's two subnets; pools, cross-zone traffic, rebalancing), Leong Wei Zhi chose three zones: `aws_subnet.private_c`, `availability_zone_c`, the Spot group's subnet list; cluster ENIs, RDS and the on-demand node unchanged.
+- **Author review:** `terraform fmt`, `validate`; `terraform plan -out=eks.tfplan` against the live state: 39 to add, 1 to change, 10 to destroy (the k3s host, its SG, role and policies, the old target group and attachment; `foc/app` and the deploy policy replaced). `kubectl kustomize infra/k8s` renders 35 objects, no placeholder left after the fill; `helm template` of chart 42.3.1 with the values renders a NodePort 30080 Service, the two timeout arguments and the default IngressClass (a first draft put `type` at `service.type`; the chart's schema wants `service.spec.type`). The db-init script ran twice against a local `postgres:17` with a non-superuser CREATEROLE/CREATEDB master: 7 roles and databases created, a rotated password re-applied, the `order` role can create tables in `order` and is refused `CONNECT` on `credit`; the re-run's GRANT notices were silenced with a `pg_has_role` guard. `bash -n` on both scripts, YAML parsed. The apply (about 25 min, cutover downtime), the `CLUSTER_NAME` variable, the Deploy run and the smoke test are Leong Wei Zhi's to run; review via pull request.
+
+- **PR #316 review round (Sinnez1, CHANGES_REQUESTED, 2026-11-09), Claude Code (Opus 5.5):** prompt "address pr comments on PR #316". Options round (Leong Wei Zhi; facts only: subnets cost nothing, the ALB price does not depend on its zones, the subnets change in place): a third public subnet `public_c` (10.20.3.0/24) enabled on the load balancer, over returning the Spot group to zones a and b; Redis without a password and no NetworkPolicies kept as they are, recorded on `docs/deployment.md`. Mechanical fixes from the earlier Claude reviewer notes Sinnez1 repeated: `deploy.sh` polls the db-init Job for Complete or Failed (a failed Job stops the deploy with its log instead of waiting out the deadline), and `remaining` sets a variable from a plain call so the deadline exit ends the script, not a subshell; db-init's image pinned to `postgres:17.9` (the RDS minor). Verified: `terraform fmt -check`, `validate`, plan against the live state 45 to add / 2 to change / 10 to destroy (the balancer's subnets in place), saved as `eks.tfplan`; `shellcheck` clean; the poll loop against a stub `kubectl` (Complete, Failed, FailureTarget+Failed, SuccessCriteriaMet+Complete) and the deadline exit; `postgres:17.9` exists on Docker Hub.
+- **PR #316 review, next round (Claude reviewer, 2026-11-09), Claude Code (Opus 5.5):** prompt "address pr comments on PR #316". The db-init GRANT guard asked `pg_has_role(..., 'MEMBER')`, which is true for the ADMIN-only membership PostgreSQL 16+ gives a role's non-superuser creator (no SET), so the GRANT was skipped and `CREATE DATABASE ... OWNER` failed with "must be able to SET ROLE". Reproduced against a local `postgres:17.9` with a non-superuser CREATEROLE/CREATEDB master (MEMBER t, SET f, the error); the earlier claim in this entry that the script passed such a run did not hold for this path. Now `'SET'`: fresh and re-run both clean for two services, each role owns its database and is refused CONNECT on the other. Connection headroom: options round (Leong Wei Zhi; facts: 7 x 3 surge pods x 5 = 105 against about 110 at 2 replicas, Hikari opens `minimumIdle` = pool size by default): `SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=1` in the seven Deployments, beside the existing pool cap (over `maxSurge: 0` or no change); DP19 and the runbook row updated. `kubectl kustomize` renders the seven entries. The single Traefik replica and NAT instance noted by the reviewer stay as documented. Then (Claude reviewer, unverified finding): the nodes' IMDS hop limit of 1 also blocks the EBS CSI driver's pods, whose controller has failed without a region. `aws_eks_addon.ebs_csi` gains `configuration_values`: `controller.env` `AWS_REGION` and `node.metadataSources = "kubernetes,imds"`, both keys checked against `describe-addon-configuration` for the region's default add-on version (v1.67.2-eksbuild.1); the hop limit is unchanged. Runbook: a PVC `Pending` row with the two log commands. `terraform validate`, plan unchanged in counts (45 / 2 / 10), saved as `eks.tfplan`. Not verifiable before the first apply.
 ---
 ## 2026-11-08 — Leong Wei Zhi (N5 cloud deployment, issue #48: HTTPS with an ACM certificate on a load balancer)
 - **Tool:** Claude Code (Fable 5.1)

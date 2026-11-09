@@ -7,14 +7,21 @@
 # 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7): secrets.yaml
 # (External Secrets Operator) removed; secrets.sh writes the two Secrets.
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform): the seven
+# Postgres StatefulSets are gone (one RDS instance, DP4); the gp3
+# StorageClass joins the data layer. data/db-init.yaml is applied by
+# deploy.sh on its own, before this kustomization, so the roles exist when
+# the services start. Author review: Leong Wei Zhi, pending pull request
+# review.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 # namespaces are set per manifest; secrets.sh applies namespace.yaml on
-# its own first, so the Secrets it writes have somewhere to go
+# its own first, so the Secrets it writes have somewhere to go. Traefik
+# is not here: deploy.sh installs its Helm chart (infra/helm)
 resources:
   - namespace.yaml
   - config.yaml
-  - data/postgres.yaml
+  - data/storageclass.yaml
   - data/rabbitmq.yaml
   - data/redis.yaml
   - apps/user-service.yaml

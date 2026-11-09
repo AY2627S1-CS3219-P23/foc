@@ -60,6 +60,9 @@
   2026-11-08, Claude Code (Fable 5.1), issue #305: the D10 scale-out
   bullet closed (D35, AMQP fanout). Author review: Leong Wei Zhi,
   pending pull request review.
+  2026-11-09, Claude Code (Fable 5.1), issue #48: "k3s" wording replaced
+  by "the cluster" (the deployment moved to EKS); no gateway change.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # FoC API Gateway — Design
@@ -174,9 +177,9 @@ with `Access-Control-Allow-Origin`, so the SPA reads a status instead
 of a blocked response (PR #176 review).
 
 Upstream names resolve per request through the container's nameserver
-(`resolver local=on`: compose's DNS locally, the cluster DNS on k3s), so
+(`resolver local=on`: compose's DNS locally, the cluster DNS in Kubernetes), so
 the gateway starts and keeps routing while individual backends restart
-or are rebuilt. The nginx resolver ignores search domains, so on k3s each
+or are rebuilt. The nginx resolver ignores search domains, so in the cluster each
 upstream name gets `UPSTREAM_SUFFIX` (`.foc.svc.cluster.local`; empty in
 compose) and `REDIS_HOST` is fully qualified (issue #48,
 [`deployment.md`](deployment.md)).
@@ -223,5 +226,5 @@ compose) and `REDIS_HOST` is fully qualified (issue #48,
 | Image | `openresty/openresty:1.31.1.1-alpine-fat` + `opm get cdbattags/lua-resty-jwt=0.3.2` (both pinned) |
 | Host port | `${GATEWAY_PORT:-8090}` → 8080 |
 | Config | `gateway/nginx.conf` (routing) + `gateway/lua/auth.lua` (auth) |
-| Env | `JWT_SECRET` (shared platform secret), `WEB_ALLOWED_ORIGIN`; `UPSTREAM_SUFFIX` (default empty), `REDIS_HOST` / `REDIS_PORT` (default `redis` / 6379) — set on k3s only (issue #48) |
+| Env | `JWT_SECRET` (shared platform secret), `WEB_ALLOWED_ORIGIN`; `UPSTREAM_SUFFIX` (default empty), `REDIS_HOST` / `REDIS_PORT` (default `redis` / 6379) — set in the cloud cluster only (issue #48) |
 | Redis | `redis:8.8-alpine`, `--appendonly yes`, volume `redis-data`, loopback host port `${REDIS_HOST_PORT:-6379}` |

@@ -2,9 +2,9 @@
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5.3.3 automated
 # deployment).
 # Scope: build the nine images for linux/amd64, push them to GHCR, and roll
-# them out on the k3s host through SSM Run Command (team decisions: GHCR +
-# SSM, OIDC role in the sandbox account, k3s API private — Leong Wei Zhi,
-# 2026-11-05, options Q&A; infra/README.md has the runbook).
+# them out on the cluster (team decisions: GHCR, OIDC role in the sandbox
+# account — Leong Wei Zhi, 2026-11-05, options Q&A; infra/README.md has the
+# runbook).
 # Author review: Leong Wei Zhi, pending pull request review.
 # 2026-11-08, Claude Code (Fable 5.1), PR #289 review findings: the host
 # checks out the target commit before deploy.sh runs (the stale copy used
@@ -15,22 +15,50 @@
 # image tags carry the run id, and the poll keeps stderr apart from the
 # status.
 # 2026-11-08, Claude Code (Fable 5.1), issue #48 (HTTPS): the web bundle's
-# URLs are https; PUBLIC_HOST is the site's hostname (DP18, DP21). Author
+# URLs are https; PUBLIC_HOST is the site's hostname (DP17, DP18). Author
 # review: Leong Wei Zhi, pending pull request review.
+# 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform, DP8): the
+# rollout job runs deploy.sh itself against the EKS cluster (kubectl under
+# an access entry) instead of sending it to a host over SSM; CLUSTER_NAME
+# replaces INSTANCE_ID. Author review: Leong Wei Zhi, pending pull request
+# review.
+# 2026-11-09, Claude Code (Opus 5.5), issue #48 (continuous deployment,
+# DP20, team decisions Leong Wei Zhi, options Q&A): runs by itself once CI
+# succeeds on a push to main, skips docs-only changes, builds only the
+# images whose sources changed since the commit running in the cluster and
+# retags the others. Author review: Leong Wei Zhi, pending pull request
+# review.
+# PR #317 review (Claude reviewer, Copilot): an automatic run older than
+# the commit already live deploys nothing (out-of-order CI runs).
+# 2026-11-09, on request (Leong Wei Zhi chose the Deployments API over an
+# `environment:` key, which would change the OIDC subject): the rollout
+# records a deployment of `production` with its status, shown on the
+# repo page. Author review: Leong Wei Zhi, pending pull request review.
 #
-# Manual trigger only, from main (the OIDC role trusts main alone). Needs
-# the repo variables AWS_ROLE_ARN, AWS_REGION, INSTANCE_ID and PUBLIC_HOST
-# (the hostname, served over https by the load balancer) from
+# Runs after every successful CI run on a push to main, or by hand from
+# main (the OIDC role trusts main alone; a workflow_run job runs on main).
+# Needs the repo variables AWS_ROLE_ARN, AWS_REGION, CLUSTER_NAME and
+# PUBLIC_HOST (the hostname, served over https by the load balancer) from
 # `terraform output`.
 name: Deploy
 
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      rebuild_all:
+        description: Build all nine images (after PUBLIC_HOST changed, which the diff cannot see)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   packages: write
   id-token: write
+  deployments: write
 
 concurrency:
   group: deploy
@@ -38,31 +66,68 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io/ay2627s1-cs3219-p23
+  # the commit CI passed on, or main's head for a dispatch (github.sha of a
+  # workflow_run run is main's head when it starts, maybe a later commit)
+  TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
   # one tag per workflow run: a re-run of Deploy at the same commit still
   # rolls every Deployment and pulls a rebuilt image (same-commit tags
   # would be cached on the node)
-  IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}
+  IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}-${{ github.run_id }}
 
 jobs:
+  # which images changed since the commit the cluster runs (DP20)
+  plan:
+    # CI on a push to this repository's main, not a pull request whose
+    # branch happens to be called main
+    if: >-
+      github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.plan.outputs.build }}
+      retag: ${{ steps.plan.outputs.retag }}
+      # a dispatch always deploys (secrets and config roll with it)
+      deploy: ${{ github.event_name == 'workflow_dispatch' || steps.plan.outputs.relevant == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0 # the diff starts at the commit the cluster runs
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Compare with the cluster
+        id: plan
+        env:
+          CLUSTER_NAME: ${{ vars.CLUSTER_NAME }}
+          REBUILD_ALL: ${{ inputs.rebuild_all == true }}
+          # CI runs on main can finish out of order: a first automatic
+          # attempt older than the live commit must not roll it back. A
+          # dispatch or a re-run (rollback) may deploy an older commit
+          NEWER_ONLY: ${{ github.event_name == 'workflow_run' && github.run_attempt == 1 }}
+        run: |
+          set -euo pipefail
+          test -n "$CLUSTER_NAME" || { echo "CLUSTER_NAME repo variable is not set"; exit 1; }
+          export KUBECONFIG="$RUNNER_TEMP/kubeconfig"
+          aws eks update-kubeconfig --name "$CLUSTER_NAME" >/dev/null
+          bash infra/k8s/changed-images.sh "$TARGET_SHA" "$REBUILD_ALL" "$NEWER_ONLY" | tee -a "$GITHUB_OUTPUT"
+
   images:
-    if: github.ref == 'refs/heads/main'
+    needs: plan
+    if: needs.plan.outputs.deploy == 'true' && needs.plan.outputs.build != '[]'
     strategy:
       fail-fast: true
       matrix:
-        image:
-          - user-service
-          - supplier-service
-          - order-service
-          - credit-service
-          - notification-service
-          - rating-service
-          - chat-service
-          - gateway
-          - web
+        image: ${{ fromJSON(needs.plan.outputs.build) }}
     runs-on: ubuntu-latest
     name: image (${{ matrix.image }})
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.TARGET_SHA }}
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -111,52 +176,92 @@ jobs:
           cache-from: type=gha,scope=deploy-${{ matrix.image }}
           cache-to: type=gha,scope=deploy-${{ matrix.image }},mode=max
 
-  rollout:
-    needs: images
+  # unchanged images get this run's tag too, so deploy.sh still applies
+  # one tag to every Deployment
+  retag:
+    needs: plan
+    if: needs.plan.outputs.deploy == 'true' && needs.plan.outputs.retag != '[]'
     runs-on: ubuntu-latest
     steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Retag from the live tags
+        env:
+          RETAG: ${{ needs.plan.outputs.retag }}
+        run: |
+          set -euo pipefail
+          jq -r '.[] | "\(.image) \(.from)"' <<<"$RETAG" | while read -r image from; do
+            docker buildx imagetools create \
+              -t "$REGISTRY/foc-$image:$IMAGE_TAG" "$REGISTRY/foc-$image:$from"
+          done
+
+  rollout:
+    needs: [plan, images, retag]
+    # images or retag may be skipped (nothing to build, or nothing to retag)
+    if: >-
+      !cancelled() && needs.plan.outputs.deploy == 'true' &&
+      needs.images.result != 'failure' && needs.retag.result != 'failure'
+    runs-on: ubuntu-latest
+    # deploy.sh shares one 50-min deadline across the Helm install, the
+    # db-init Job and every rollout, so it fails by itself before this
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      LOG_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      # a deployment record through the API, not an `environment:` key: the
+      # key would change the OIDC subject the deploy role trusts (iam.tf).
+      # The repo page lists it under Deployments, with its status
+      - name: Record the deployment
+        id: record
+        run: |
+          set -euo pipefail
+          id="$(jq -n --arg ref "$TARGET_SHA" --arg tag "$IMAGE_TAG" '{
+              ref: $ref, environment: "production", production_environment: true,
+              auto_merge: false, required_contexts: [], description: $tag
+            }' | gh api "repos/$GITHUB_REPOSITORY/deployments" --input - --jq .id)"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" \
+            -f state=in_progress -f log_url="$LOG_URL" >/dev/null
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.TARGET_SHA }}
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
-      - name: Run deploy.sh on the host
+      # kubectl and helm are preinstalled on ubuntu-latest; the deploy role
+      # is cluster admin through an EKS access entry (infra/terraform/eks.tf)
+      - name: Run deploy.sh against the cluster
+        id: deploy
+        # below the job's 60, so the status step still runs on a hang
+        timeout-minutes: 55
         env:
-          INSTANCE_ID: ${{ vars.INSTANCE_ID }}
+          CLUSTER_NAME: ${{ vars.CLUSTER_NAME }}
           PUBLIC_HOST: ${{ vars.PUBLIC_HOST }}
         run: |
           set -euo pipefail
-          id=$(aws ssm send-command \
-            --instance-ids "$INSTANCE_ID" \
-            --document-name AWS-RunShellScript \
-            --comment "foc deploy $GITHUB_SHA" \
-            --parameters "commands=[\"git -C /opt/foc fetch --quiet origin && git -C /opt/foc checkout --quiet --detach $GITHUB_SHA && bash /opt/foc/infra/k8s/deploy.sh $IMAGE_TAG $PUBLIC_HOST\"],executionTimeout=[\"3600\"]" \
-            --query Command.CommandId --output text)
-          echo "SSM command $id"
-          # the built-in waiter gives up after ~100 s; a cold rollout of
-          # seven JVMs takes longer. 360 x 10 s matches executionTimeout.
-          # The invocation record appears a few seconds after send-command
-          # (InvocationDoesNotExist until then); any other error, such as a
-          # missing permission or a stopped instance, fails the job at once
-          # stderr is kept apart from the status: a CLI warning on a successful
-          # call must not end up in $status
-          status=Pending
-          errf=$(mktemp)
-          for i in $(seq 1 360); do
-            if status=$(aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" \
-                --query Status --output text 2>"$errf"); then
-              :
-            elif [ "$i" -le 12 ] && grep -q InvocationDoesNotExist "$errf"; then
-              status=Pending
-            else
-              cat "$errf" >&2
-              exit 1
-            fi
-            case "$status" in
-              Pending|InProgress|Delayed) sleep 10 ;;
-              *) break ;;
-            esac
-          done
-          aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" \
-            --query '[StandardOutputContent,StandardErrorContent]' --output text
-          echo "status: $status"
-          test "$status" = "Success"
+          test -n "$CLUSTER_NAME" || { echo "CLUSTER_NAME repo variable is not set"; exit 1; }
+          test -n "$PUBLIC_HOST" || { echo "PUBLIC_HOST repo variable is not set"; exit 1; }
+          bash infra/k8s/deploy.sh "$IMAGE_TAG" "$PUBLIC_HOST" "$CLUSTER_NAME"
+      # success marks the previous production deployments inactive
+      - name: Record the outcome
+        if: always() && steps.record.outputs.id != ''
+        env:
+          ID: ${{ steps.record.outputs.id }}
+          OUTCOME: ${{ steps.deploy.outcome }}
+          PUBLIC_HOST: ${{ vars.PUBLIC_HOST }}
+        run: |
+          set -euo pipefail
+          case "$OUTCOME" in
+            success) state=success ;;
+            cancelled) state=error ;;
+            *) state=failure ;;
+          esac
+          gh api "repos/$GITHUB_REPOSITORY/deployments/$ID/statuses" \
+            -f state="$state" -f log_url="$LOG_URL" \
+            -f environment_url="https://$PUBLIC_HOST" >/dev/null
