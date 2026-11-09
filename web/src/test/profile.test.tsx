@@ -45,6 +45,18 @@
 // to the account's own public profile, asserted on the href — the id has
 // to be the one GET /users/me names, since the public profile's gate
 // only accepts a canonical decimal id.
+// 2026-11-08, Claude Code (Opus 5.5), issue #308: the owner upgrade card —
+// hidden for an OWNER, success signs out to the login page with its own
+// notice, and a refused token returns to the field with the code kept.
+// 2026-11-09, Claude Code (Opus 5.5), PR #309 review: a refused token now
+// spends the code (code first, decision via options Q&A), so the card
+// returns to the field with no code and counts the wait down. Added: a
+// poll's 401 that ends the session before the upgrade answers still
+// lands on /login with the owner notice.
+// 2026-11-09, Claude Code (Opus 5.5), notification sound preview (no
+// issue): the chime module is mocked, so the Preferences cases assert
+// switching the sound on previews it once and switching it off stays
+// silent. Author review: Leong Wei Zhi, pending pull request review.
 
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -58,12 +70,20 @@ import {
   OTP_ATTEMPTS_EXCEEDED,
   OTP_INVALID,
   OTP_RESEND_COOLDOWN,
+  OWNER_SETUP_TOKEN_INVALID,
   USERNAME_TAKEN,
 } from '@/features/user/problemTypes'
+import { clearSessionEnded } from '@/features/user/sessionNotice'
 import type { PendingEmailChange } from '@/features/user/types'
 import type { AdminUser } from '@/features/user/types'
-import { ApiError } from '@/lib/api/http'
+import { serviceBaseUrls } from '@/lib/api/config'
+import { ApiError, apiFetch } from '@/lib/api/http'
 import { routes } from '../routes'
+
+// the switch's preview is a side effect of the provider's setter; whether
+// it makes sound is chime.test.ts's problem
+const chime = vi.hoisted(() => ({ playChime: vi.fn(), unlockChime: vi.fn() }))
+vi.mock('@/features/notifications/chime', () => chime)
 
 const OTP = '000000'
 const NEW_EMAIL = 'e9999999@u.nus.edu'
@@ -129,10 +149,15 @@ beforeEach(() => {
   })
   vi.spyOn(profileApi, 'changePassword').mockResolvedValue(undefined)
   vi.spyOn(profileApi, 'deleteAccount').mockResolvedValue(undefined)
+  vi.spyOn(profileApi, 'upgradeToOwner').mockImplementation(async () => ({
+    ...me,
+    role: 'OWNER',
+  }))
 })
 
 afterEach(() => {
   localStorage.clear()
+  clearSessionEnded()
 })
 
 // Both cards carry a "Verify & Continue" button and a set of code boxes,
@@ -746,6 +771,123 @@ describe('change password', () => {
   })
 })
 
+describe('owner upgrade', () => {
+  const ownerCard = () => card('Become an Owner')
+
+  async function submitToken(
+    user: ReturnType<typeof userEvent.setup>,
+    token: string,
+  ) {
+    await user.type(ownerCard().getByLabelText('Owner Setup Token'), token)
+    await user.click(
+      ownerCard().getByRole('button', { name: 'Verify & Continue' }),
+    )
+  }
+
+  it('is offered to an ADMIN', async () => {
+    me = { ...me, role: 'ADMIN' }
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+    expect(
+      screen.getByRole('heading', { name: 'Become an Owner' }),
+    ).toBeInTheDocument()
+  })
+
+  it('is hidden from an OWNER', async () => {
+    me = { ...me, role: 'OWNER' }
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+    expect(
+      screen.queryByRole('heading', { name: 'Become an Owner' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('upgrades with the token and code, then signs in again', async () => {
+    const user = userEvent.setup()
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+    await submitToken(user, 'the-token')
+    expect(profileApi.requestOtp).toHaveBeenCalled()
+
+    await typeCode(user, OTP, ownerCard())
+    await user.click(ownerCard().getByRole('button', { name: 'Become Owner' }))
+
+    // every session was revoked server-side: the page signs out and the
+    // login form says why
+    expect(
+      await screen.findByRole('heading', { name: 'Log In' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('You are now an owner. Please sign in again.'),
+    ).toBeInTheDocument()
+    expect(profileApi.upgradeToOwner).toHaveBeenCalledWith('the-token', OTP)
+    expect(JSON.parse(localStorage.getItem('user')!)).toBeNull()
+  })
+
+  it('returns to the token field without a code when the token is wrong', async () => {
+    const user = userEvent.setup()
+    vi.mocked(profileApi.upgradeToOwner).mockRejectedValueOnce(
+      refusal(
+        403,
+        'Owner setup token is incorrect; request a new code to try again',
+        OWNER_SETUP_TOKEN_INVALID,
+        30,
+      ),
+    )
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+    await submitToken(user, 'wrong')
+    await typeCode(user, OTP, ownerCard())
+    await user.click(ownerCard().getByRole('button', { name: 'Become Owner' }))
+
+    expect(await ownerCard().findByRole('alert')).toHaveTextContent(
+      'Owner setup token is incorrect',
+    )
+    expect(ownerCard().getByLabelText('Owner Setup Token')).toBeEnabled()
+    // the code was spent: none is offered for reuse, and the next one
+    // waits out the quoted Retry-After
+    expect(
+      ownerCard().queryByText(/continue to use it again/),
+    ).not.toBeInTheDocument()
+    expect(
+      ownerCard().getByRole('button', { name: /Try again in \d+s/ }),
+    ).toBeDisabled()
+    expect(profileApi.requestOtp).toHaveBeenCalledTimes(1)
+  })
+
+  it('lands on /login with the owner notice when a poll 401 ends the session first', async () => {
+    const user = userEvent.setup()
+    // the revoke lands before the 200 reaches the browser: a request in
+    // that window is refused, and AuthProvider ends the session
+    vi.mocked(profileApi.upgradeToOwner).mockImplementationOnce(async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(null, { status: 401 }),
+      )
+      // the suite configures no base URLs; apiFetch refuses without one
+      const urls = serviceBaseUrls as { user: string }
+      const base = urls.user
+      urls.user = 'http://user.test'
+      await apiFetch('user', '/users/me').catch(() => {})
+      urls.user = base
+      await screen.findByRole('heading', { name: 'Log In' })
+      return { ...me, role: 'OWNER' }
+    })
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+    await submitToken(user, 'the-token')
+    await typeCode(user, OTP, ownerCard())
+    await user.click(ownerCard().getByRole('button', { name: 'Become Owner' }))
+
+    expect(
+      await screen.findByText('You are now an owner. Please sign in again.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Log In' })).toBeInTheDocument()
+    expect(
+      screen.queryByText('Your session has ended. Please sign in again.'),
+    ).not.toBeInTheDocument()
+  })
+})
+
 // user-service keeps ONE account_update_otps row per account, and both
 // cards draw on it (issue #167). The page owns it, so what one card does
 // to the code the other sees.
@@ -994,6 +1136,11 @@ describe('preferences', () => {
   // device-wide preference, two surfaces
   const SOUND_KEY = 'notificationSoundEnabled'
 
+  beforeEach(() => {
+    chime.playChime.mockClear()
+    chime.unlockChime.mockClear()
+  })
+
   it('offers the notification sound switch, on by default', async () => {
     renderProfile()
     await screen.findByText('nus_courier_99')
@@ -1013,6 +1160,22 @@ describe('preferences', () => {
     await user.click(toggle)
     expect(toggle).toHaveAttribute('aria-checked', 'false')
     expect(localStorage.getItem(SOUND_KEY)).toBe('false')
+    // switching off is silent
+    expect(chime.playChime).not.toHaveBeenCalled()
+  })
+
+  it('previews the chime when the sound is switched on', async () => {
+    localStorage.setItem(SOUND_KEY, 'false')
+    const user = userEvent.setup()
+    renderProfile()
+    await screen.findByText('nus_courier_99')
+
+    const toggle = screen.getByRole('switch', { name: 'Notification sound' })
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    expect(localStorage.getItem(SOUND_KEY)).toBe('true')
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+    expect(chime.unlockChime).toHaveBeenCalled()
   })
 
   it('renders a stored "false" as off', async () => {

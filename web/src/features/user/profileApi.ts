@@ -20,6 +20,8 @@
 // AI-generated (edited by Codex; Leong Wei Zhi review pending).
 // Keep the existing recovery request alongside the other own-account calls.
 // Author review: Leong Wei Zhi to review via PR #180.
+// 2026-11-08, Claude Code (Opus 5.5), issue #308: upgradeToOwner, the
+// owner setup token plus the gate code (POST /users/me/owner).
 
 import { apiFetch } from '@/lib/api/http'
 import type { AdminUser, EmailChangeAccepted, OtpTimings } from './types'
@@ -107,6 +109,15 @@ export const profileApi = {
     return apiFetch<void>('user', '/users/me/password', {
       method: 'POST',
       body: JSON.stringify({ newPassword, confirmPassword, otp }),
+    })
+  },
+
+  // issue #308: the caller's own account becomes OWNER. Every session of
+  // the account is revoked on success, so the caller signs in again.
+  upgradeToOwner(ownerKey: string, otp: string): Promise<AdminUser> {
+    return apiFetch<AdminUser>('user', '/users/me/owner', {
+      method: 'POST',
+      body: JSON.stringify({ ownerKey, otp }),
     })
   },
 }

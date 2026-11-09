@@ -44,6 +44,9 @@
 // passwordReset. They are not mutually exclusive in markup, but the
 // reset page now ends the local session before it navigates here, so
 // a reset cannot also raise the session-ended flag on arrival.
+// 2026-11-08, Claude Code (Opus 5.5), issue #308: the session-ended
+// notice shows the flag's own text (the owner upgrade's sign-out names
+// why); a plain forced sign-out still reads the default sentence.
 
 import React, { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
@@ -87,8 +90,8 @@ export function Login() {
   useEffect(() => {
     // takes the flag the first render above already read
     clearSessionEnded()
-    return subscribeSessionEnded(() => {
-      setSessionEnded(true)
+    return subscribeSessionEnded((message) => {
+      setSessionEnded(message)
       clearSessionEnded()
     })
   }, [])
@@ -148,7 +151,7 @@ export function Login() {
           role="status"
           className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700"
         >
-          Your session has ended. Please sign in again.
+          {sessionEnded}
         </p>
       )}
       {accountCreated && !error && (

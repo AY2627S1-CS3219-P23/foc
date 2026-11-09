@@ -60,7 +60,18 @@
   entry below.
   2026-11-08, Claude Code (Fable 5.1): prepended the issue #305 entry
   below.
+  2026-11-08, Claude Code (Opus 5.5): prepended the issue #308 owner
+  upgrade entry below.
+  2026-11-09, Claude Code (Opus 5.5): PR #309 review round 2 added to
+  the issue #308 entry.
+  2026-11-09, Claude Code (Opus 5.5): prepended the notification sound
+  preview entry below, then its PR #314 review round.
   Author review: Leong Wei Zhi to review via pull request.
+  2026-11-08, Claude Code (Opus 5.5): prepended the Credit NFR1.1
+  entry below (PR #313), then rewrote it for the credit-change
+  notification rework, then extended it with the credit-trio broker
+  integration test. Author review: Ryan Ang, pending pull request
+  review.
 -->
 
 # AI Usage Log
@@ -130,6 +141,132 @@ Entry template:
   exercised by the first real run.
 
 ---
+## 2026-11-09 — Leong Wei Zhi (notification sound preview, no issue; stacked on PR #309)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** web: `NotificationProvider.tsx` (the context's
+  `setSoundEnabled` wraps the stored setter and plays the chime when
+  switching on), `chime.ts` (`playChime({ gesture: true })` resumes and
+  plays through a suspended context, for a toggle click that is the
+  page's first gesture). Tests: one case in `chime.test.ts`, the header
+  toggle case in `notification-center.test.tsx` updated, the chime
+  mocked in `profile.test.tsx` with a switch-on case and a silent
+  switch-off assertion. Docs: `web/AGENTS.md` notification-center row,
+  README AI Use Summary.
+- **Prompt(s):** "create a pr which plays sound when sound is toggled on
+  via click of notification toggle button", then "stack the pr on top of
+  pr 309" and plan approval. One neutral options question: Leong Wei Zhi
+  chose both toggle surfaces (Center header and Profile switch) over the
+  header only.
+- **Author review:** web `npm test` (443/443), lint, Prettier and build green; Leong Wei Zhi
+  to review via the pull request.
+- **PR #314 review round (@Sinnez1, CHANGES_REQUESTED), same tool:**
+  prompt "address the latest pr comments". The `gesture` flag is gone:
+  `unlockChime` keeps its in-flight resume and `playChime` waits on that
+  real unlock, at most `UNLOCK_WAIT_MS` (1 s), so a synthetic click's
+  never-settling resume holds nothing back. A pending idle suspend is
+  waited out first, one chime waits at a time, and an `enabled()` check
+  after the wait drops a preview switched off meanwhile. The provider
+  previews only on an off-to-on change (a ref holds the latest write,
+  ahead of the render), and calls `unlockChime` inside the click itself
+  so a keyboard toggle with no pointerdown still unlocks. Tests: the
+  fake's resume/suspend can land late; 6 `chime.test.ts` cases (unlock
+  lands / never settles / rejects, switch-off while waiting, joined
+  call, pending suspend) and 2 Center cases (one-batch double-click,
+  `enabled` follows a switch-off). Five of them fail on the previous
+  commit. `npm test` 450/450, lint, Prettier, build green.
+- **PR #314 re-review follow-ups (@Sinnez1, approved, two non-blocking)
+  and the base merge, 2026-11-09, same tool:** prompt "address pr
+  comments on PR #314 and fix merge conflict". `playChime` bounds its
+  other two waits as well (the idle resume and a pending suspend, each
+  `within(..., UNLOCK_WAIT_MS)`), so a hung one cannot keep the
+  one-at-a-time latch set; `idled` clears only once the context runs.
+  The push chime passes `enabled: () => soundRef.current` like the
+  preview. Tests: the fake's idle resume / suspend can hang; 2
+  `chime.test.ts` cases and 1 Center case, all three failing on the
+  previous code. The merge of `feat/308-owner-upgrade` (main after #313)
+  conflicted only in dated header lines (README, this log,
+  `profile.test.tsx`): both kept. `npm test` 467/467 (one earlier run
+  flaked once on #309's "poll 401" profile case, which passes alone and
+  on reruns), `tsc -b`, eslint, Prettier clean.
+
+---
+## 2026-11-08 — Leong Wei Zhi (issue #308: owner upgrade from the profile page)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, refactor, docs
+- **Scope:** user-service: `POST /users/me/owner`
+  (`AccountUpdateController`, `AccountUpdateService.upgradeToOwner`, new
+  `UpgradeOwnerRequest`), `ProblemTypes.OWNER_SETUP_TOKEN_INVALID`, the
+  `SecurityConfig` line, and `OwnerSignupService.checkOwnerKey` moved
+  unchanged into a new shared `OwnerSetupToken` bean. Tests: new
+  `OwnerUpgradeControllerTest` (9 cases), 4 cases in
+  `AccountUpdateServiceTest`, and the three tests that set the token by
+  reflection now set it on the bean. Web: `OwnerUpgradeCard.tsx`,
+  `ProfileSection.tsx` (card for USER/ADMIN only, sign-out on success),
+  `profileApi.upgradeToOwner`, the two token types in `problemTypes.ts`
+  (both `amend`), `sessionNotice.ts` and `login.tsx` (the flag carries
+  its notice text), 4 cases in `profile.test.tsx`. Docs:
+  `user-service/README.md`, `web/AGENTS.md`, README AI Use Summary.
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/308", then plan
+  approval. The issue left the design to the team, so the tool asked two
+  neutral options rounds and one follow-up; Leong Wei Zhi chose
+  `POST /users/me/owner`, token plus gate code, token checked before the
+  code (a wrong token keeps it), 403 with a new type for a wrong or blank
+  token and 503 when unconfigured, revoke every session and re-login,
+  sign out to `/login` with a notice, one log line as the audit, keep
+  `/register-owner`, and an unchanged 200 for an OWNER caller.
+- **Author review:** user-service `./mvnw clean test`: 413 tests, one
+  error, the known "too many clients already" flake in
+  `OutboxPublisherIntegrationTest`, which also fails on unmodified
+  `main` (400 tests) and passes when run alone; `OwnerUpgradeControllerTest`
+  9/9, `AccountUpdateServiceTest` 23/23. Web: `npx vitest run` 441/441,
+  `tsc -b`, eslint and prettier clean. Leong Wei Zhi reviews via pull
+  request.
+- **PR #309 review round (same day):** the bot review's unthrottled
+  token-guessing finding was put to Leong Wei Zhi as neutral options
+  (count against the OTP budget, per-user lockout, gateway rate limit,
+  accept and document); Leong Wei Zhi chose to accept the risk, now
+  recorded in `user-service/README.md`. Copilot: `OwnerSetupToken`'s
+  field made non-final (JDK 26 warns on reflective writes to final
+  fields); the other three comments were answered with the code that
+  disproves them (Boot 4 import package, `gate.request()` never throws,
+  the stored session is the JSON string `"null"`).
+- **PR #309 review round 2 (2026-11-09, @Sinnez1, CHANGES_REQUESTED):**
+  prompt "address pr comments on
+  https://github.com/AY2627S1-CS3219-P23/foc/pull/309". Sinnez1 showed
+  that the separate wrong-token 403 answered each guess instantly. The
+  tool put the fix to Leong Wei Zhi as neutral options (code first, same
+  answer as a wrong code, per-user token cap, keep and fix the note), and
+  Leong Wei Zhi chose code first. Implemented: `upgradeToOwner` checks
+  the configured token (503, code kept), then the gate code
+  (`matchGateOtp`, split from `consumeGateOtp`), then the token. A wrong
+  token keeps the row spent (`AccountUpdateOtp.spend`), not deleted, so
+  the resend cooldown still applies (PR #157's rule), and the 403 carries
+  `Retry-After` (new `OwnerSetupTokenException`; the
+  `ResponseStatusException` passthrough in `ProblemDetailAdvice` now
+  keeps headers). The README's accepted-risk note is replaced. Web: the
+  wrong token is a `restart` in `problemTypes.ts`, `OwnerUpgradeCard`
+  copy follows, and `ProfileSection` signs out with `endSession()` plus
+  an explicit `navigate('/login')` instead of `logout()` (the race
+  Sinnez1 described). Cleanups: `OwnerSetupToken`'s field is final again,
+  tests use the pinned token, and the 503 cases run in the new
+  `OwnerSetupUnconfiguredTest` (own context, `@DirtiesContext`). The
+  String-key `OwnerSignupService` constructor and the hand-built 403/503
+  are gone. Verification: `./mvnw clean test` 418 tests, 1 error, the
+  known "too many clients already" `OutboxPublisherIntegrationTest`
+  flake, which passes when rerun with the owner and account-update
+  classes; web `vitest run` 442/442, tsc, eslint, prettier clean; the new
+  race test fails against the old `logout()` code. Leong Wei Zhi reviews
+  via pull request.
+
+---
+## 2026-11-08 — Ryan Ang (Credit NFR1.1: credit-change notification and balance refresh, PR #313)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** First version (superseded within the PR): `CreditBalanceProvider` fetched the balance on pushed balance-changing request events and again 2 s later, since the push could arrive before the Credit Service committed. Reworked after review into the credit-change notification: `foc-contracts` gains `CreditTransferred`, `CreditReleased`, `CreditDisputeSettled` (records, registry entries, fixtures, registry count test). `credit-service`: `RequestEventHandler` enqueues the matching event to the outbox when a transfer, release or dispute split settles, reading the parties and amount from the settled record; none for an amount-0 release; both shares for a split, 0 included; unit tests and two Postgres-backed handler tests. `notification-service`: a `notification-service.credit-events` trio bound on the three exact keys, the listener's queue list and retry map, `RecipientResolver` rules (transferred and dispute-settled: requester and courier; released: requester), resolver tests, and (review follow-up) `CreditEventsRabbitMqIntegrationTest`, mirroring the rating one: the `credit.transferred` fixture stores one row per party and is deduped, `credit.reserved` and `credit.reservation-rejected` never reach the credit queue, and retry and dead-lettering run through the credit trio. `web`: `eventMessage.ts` copy per viewer (signed amount first), `NotificationCenter` passes the viewer id and opens `/credits` for a credit row, `CreditBalanceProvider` fetches once on a credit-change push (the request-event trigger, the 2 s recheck and `balanceEvents.ts` removed); tests for each. Docs: notification D37, credit D15, the recipient table, both services' and foc-contracts' AGENTS.md, the foc-contracts README record list.
+- **Prompt(s):** checked the D1 backlog's credit FRs and NFRs against the code; the gap was NFR1.1, as the web polled the balance every 30 s. Asked for a refresh when a credit-affecting notification arrives; the tool pointed out that `request.created` precedes the reserve and that the other request events race the Credit Service, and the team chose every balance-changing event plus a second fetch 2 s later. On review the approach was judged not robust, and the team chose a visible credit-change notification instead. The tool noted that the Credit Service publishes no event for a transfer, release or split, so new contracts were needed. Every design choice came from neutral options rounds and is the team's: notify on transfer, release and dispute split but not reserve; leave `credit.reserved` unbound; one event per operation named `credit.transferred` / `credit.released` / `credit.dispute-settled`; tell both parties of a split even for a 0 share; replace the request-event refresh; open `/credits` on click; signed-amount-first wording. The tool chose no fields beyond those offered and skipped the event for an amount-0 release, where no balance moved.
+- **Author review:** foc-contracts `./mvnw install` (tests pass); notification-service `./mvnw test` 115 pass (Docker integration tests included); credit-service `./mvnw test` 364 pass (Postgres-backed tests included); order-service `./mvnw test` passes (it binds only the saga replies, so the new events do not reach it); web `vitest run` 450 pass, `tsc -b`, `eslint .`, Prettier on the changed files. `CreditEventsRabbitMqIntegrationTest` 4 pass against a real broker, and its leak test fails when the binding is widened to `credit.#`. No end-to-end run. Ryan Ang reviews via pull request.
 ## 2026-11-08 — Leong Wei Zhi (issue #305: chat and notification safe at 2 replicas)
 - **Tool:** Claude Code (Fable 5.1)
 - **Mode:** plan, generate, docs

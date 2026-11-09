@@ -17,11 +17,15 @@
   Flyway schema. Author review: Leong Wei Zhi, pending pull request review.
   Same day, PR #306 review: V2 converges legacy volumes. Author review:
   Leong Wei Zhi, pending pull request review.
+  2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): the credit-change
+  events (D37) in the summary line.
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # notification-service/ — Agent Guide
 
-Java 21 + Spring Boot 4 service that consumes request events from
+Java 21 + Spring Boot 4 service that consumes request events (and the
+rating and credit-change events, issue #255 and D37) from
 RabbitMQ, stores notifications, and pushes them over STOMP. Read the
 root `AGENTS.md` first (architecture, course constraints, AI usage
 policy). The design authority is
