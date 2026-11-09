@@ -145,6 +145,11 @@
 # 2026-11-04, Claude Code (Opus 5.5), Order F8.1: order-service gets
 # SUPPLIER_SERVICE_URL for accept's pickup-distance check. Author review:
 # Ko-Khan, pending pull request review.
+# 2026-11-08, Claude Code (Fable 5.1), issue #305 (team decision, Leong Wei
+# Zhi via options Q&A): chat-service gets the RABBITMQ_* block and waits
+# for the broker — its STOMP pushes fan out over AMQP so both chat-service
+# and notification-service may run `--scale 2`. Author review: Leong Wei
+# Zhi, pending pull request review.
 
 name: foc
 
@@ -642,7 +647,9 @@ services:
   # order-service opens and closes chats over /internal/** with the
   # shared CHAT_INTERNAL_TOKEN, directly (the gateway 404s
   # /api/chat/internal). No depends_on redis: the CONNECT denylist
-  # check fails open (C15), as notification-service's does.
+  # check fails open (C15), as notification-service's does. RabbitMQ
+  # carries each STOMP push to every replica (issue #305) — the
+  # service's only AMQP use, so `--scale chat-service=2` is safe.
   chat-service:
     build:
       context: .
@@ -661,8 +668,14 @@ services:
       CHAT_PURGE_CRON: "${CHAT_PURGE_CRON:-0 0 3 * * *}"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-foc}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set in .env}
     depends_on:
       chat-db:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     restart: unless-stopped
 

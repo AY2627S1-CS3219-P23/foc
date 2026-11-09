@@ -40,6 +40,16 @@
  * guarded at ingest — a courier-party event landing after the drop
  * that covers it stores no courier row (author decision via options
  * Q&A, over a D33 accepted-limitation entry).
+ * 2026-11-04, Claude Code (Fable 5.1), D34 (author decision via options
+ * Q&A): the fan-out iterates RecipientResolver's per-type rule instead
+ * of the removed parties field — events carry business facts only.
+ * Author review: Leong Wei Zhi, pending pull request review.
+ * PR #287 review (@Sinnez1): recipients are resolved before the first
+ * write, so a missing rule or courier throws with nothing to roll back
+ * and the message stays replayable through the retry/DLQ path.
+ * 2026-11-08, Claude Code (Fable 5.1), PR #306 review (Sinnez1): the
+ * concurrent-duplicate note updated for two replicas (issue #305). Author
+ * review: Leong Wei Zhi, pending pull request review.
  */
 package foc.notification.service;
 
@@ -51,6 +61,7 @@ import foc.notification.entity.ProcessedEvent;
 import foc.notification.repository.NotificationRepository;
 import foc.notification.repository.ProcessedEventRepository;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -63,16 +74,21 @@ import tools.jackson.databind.ObjectMapper;
  * back together (D4).
  *
  * <p>Flow: (1) an already-seen event ID returns immediately (F2.1);
- * (2) the event ID is recorded — its primary key is the backstop for
- * a concurrent duplicate, whose losing transaction rolls back at
- * commit and resolves via broker redelivery into case 1 (only
- * reachable with listener concurrency &gt; 1; the default is 1);
+ * (1b) recipients are resolved from the event's own id fields (D34) —
+ * a type without a rule or a missing required courier throws here,
+ * before any write, so the listener's retry/DLQ path keeps the message
+ * replayable (PR #287 review); (2) the event ID is recorded — its primary key is the backstop for
+ * a concurrent duplicate (two replicas consuming the same event, issue
+ * #305), whose losing transaction rolls back at commit on
+ * {@code processed_events_pkey}; the listener acks that failure as
+ * already processed;
  * (3) the event's business fields (everything outside
  * {@link DomainEvent#METADATA_FIELDS}) are serialized with Boot's
  * auto-configured Jackson mapper — the same mapper the AMQP converter
  * uses (D15) — into the payload column, keeping the client-facing
  * shape free of transport metadata; (4) one notification row per
- * party (F1.2), each followed by a {@link NotificationStoredEvent}
+ * recipient the {@link RecipientResolver} names from the event's own
+ * id fields (F1.2, D34), each followed by a {@link NotificationStoredEvent}
  * published inside the transaction — transaction-bound listeners (the
  * STOMP push gateway) receive it only after the commit, and discarded
  * events publish nothing.
@@ -106,6 +122,11 @@ class IdempotentEventProcessor implements EventProcessor {
 		if (processedEvents.existsById(event.eventId())) {
 			return;
 		}
+		// Recipients first (PR #287 review): a throw here leaves nothing
+		// behind — no dedupe row recording a half-delivered event — so the
+		// message retries and dead-letters for replay once the rule or the
+		// producer is fixed.
+		List<String> recipients = RecipientResolver.recipientsOf(event);
 		// A drop removes the courier as a party (order-service nulls
 		// courierId), so every row they hold for this request now
 		// dead-ends on the detail 404 — delete them (D33, issue #266).
@@ -125,11 +146,11 @@ class IdempotentEventProcessor implements EventProcessor {
 		processedEvents.save(new ProcessedEvent(event.eventId()));
 		Map<String, Object> fields = businessFields(event);
 		String payloadJson = objectMapper.writeValueAsString(fields);
-		for (String party : event.parties()) {
-			if (droppedSince(fields, party, event.occurredAt())) {
+		for (String recipient : recipients) {
+			if (droppedSince(fields, recipient, event.occurredAt())) {
 				continue;
 			}
-			Notification saved = notifications.save(new Notification(party, event.eventId(),
+			Notification saved = notifications.save(new Notification(recipient, event.eventId(),
 					event.eventType(), payloadJson, event.occurredAt()));
 			eventPublisher.publishEvent(new NotificationStoredEvent(saved));
 		}
@@ -144,15 +165,15 @@ class IdempotentEventProcessor implements EventProcessor {
 	// row, whose payload carries both ids; ties go to the drop,
 	// mirroring the prune's <= bound. A re-accept is strictly newer
 	// than the drop it follows, so its rows store normally — as does
-	// every row of a party that is not the event's courier.
-	private boolean droppedSince(Map<String, Object> fields, String party, Instant occurredAt) {
+	// every row of a recipient that is not the event's courier.
+	private boolean droppedSince(Map<String, Object> fields, String recipient, Instant occurredAt) {
 		if (!(fields.get("requestId") instanceof String requestId)
-				|| !party.equals(fields.get("courierId"))) {
+				|| !recipient.equals(fields.get("courierId"))) {
 			return false;
 		}
 		return notifications.countByEventTypeSincePayloadMatchingBoth(
 				EventTypeRegistry.routingKeyFor(RequestDropped.class), occurredAt,
-				fieldPattern("requestId", requestId), fieldPattern("courierId", party)) > 0;
+				fieldPattern("requestId", requestId), fieldPattern("courierId", recipient)) > 0;
 	}
 
 	@SuppressWarnings("unchecked")

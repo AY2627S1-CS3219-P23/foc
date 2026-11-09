@@ -21,6 +21,11 @@
   2026-10-30, Claude Code (Fable 5), PR #274 review (claude[bot]): the
   no-duplicate/rate-limit known gap noted on POST /reports.
   Author review: [pending]
+  2026-11-02, Claude Code (Fable 5), issue #258: the intro's stale
+  remaining-features line replaced now that the N1 issues are merged;
+  Configuration, Events and Status sections added; pointer to the new
+  design doc (docs/rating-service.md). Transcription only.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # rating-service
@@ -34,8 +39,11 @@ admins to review (#254), and publishes `rating.submitted` to the
 `rating-events` exchange through a transactional outbox so the ratee
 can be notified (#255). Built on JWT security, a service-owned
 PostgreSQL (`rating-db`, schema owned by Flyway), the gateway route
-`/api/rating/**`, and compose wiring (#250). The remaining features
-land with the issues under #44 (#255–#258).
+`/api/rating/**`, and compose wiring (#250). The web halves are the
+Rate Your Experience modal on Request History (#256) and the public
+profile with reviews and Report User (#257). The design record is
+[`docs/rating-service.md`](../docs/rating-service.md) — every
+architectural choice is a numbered decision (D1–D17) there.
 
 ## Running
 
@@ -69,7 +77,42 @@ way; the service fails at startup without it.
 ```
 
 No external infrastructure needed: tests run against in-memory H2 with
-Flyway disabled (the migrations are PostgreSQL-flavored).
+Flyway disabled (the migrations are PostgreSQL-flavored). The
+Testcontainers suites (Flyway migrations, schema validation, the real
+RabbitMQ retry/DLQ path) auto-skip without Docker.
+
+## Configuration
+
+Set via `.env` (see `.env.example`, Rating Service section) or the
+environment; compose overrides the DB host/port to the `rating-db`
+container.
+
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `JWT_SECRET` | — (required) | shared platform secret (32+ bytes); startup fails without it |
+| `RATING_DB_HOST` / `RATING_DB_PORT` | `localhost` / `5432` | PostgreSQL as seen by the service |
+| `RATING_DB_NAME` / `RATING_DB_USER` / `RATING_DB_PASSWORD` | `rating` / `rating` / — | credentials for the service-owned DB |
+| `RATING_RETRY_TTL_MS` | `10000` | how long a failed `request.completed` parks in the retry queue (baked into the queue's arguments — changing it against an existing broker volume needs a queue delete/reset) |
+| `RATING_RETRY_MAX_ATTEMPTS` | `3` | deliveries per event before it dead-letters |
+| `RATING_RETRY_CONFIRM_TIMEOUT_MS` | `5000` | how long the retry republish waits for the broker's confirm |
+| `RABBITMQ_HOST` / `RABBITMQ_PORT` / `RABBITMQ_USER` / `RABBITMQ_PASSWORD` | compose's broker | the shared RabbitMQ |
+| `WEB_ALLOWED_ORIGIN` | `http://localhost:5173` | per-service CORS for the SPA (`GET`/`POST`/`OPTIONS` only) |
+
+## Events
+
+Consumes **`request.completed`** from the `request-events` exchange on
+its own work/retry/dead-letter queue trio (bound on the exact key — no
+other request event reaches the queue), idempotently via a
+`processed_events` inbox, into the `rateable_request` eligibility
+projection — no synchronous call to order-service.
+
+Publishes **`rating.submitted`** (ids + stars; the Notification Service
+tells the ratee only, notification D34) to the `rating-events` topic exchange through a transactional
+outbox: the rating row and its event commit together, a fixed-delay
+poller delivers at-least-once, and consumers dedupe on `eventId`. The
+notification-service consumes it to notify the ratee (#255). Details
+and the decision record:
+[`docs/rating-service.md`](../docs/rating-service.md) D2–D8.
 
 ## Endpoints
 
@@ -86,3 +129,13 @@ Flyway disabled (the migrations are PostgreSQL-flavored).
 Everything else is answered 401 by the service itself without a valid
 bearer token (the gateway does not require one, per G5) and 404 with
 one.
+
+## Status
+
+**Complete for N1's scope.** All feature issues under #44 are merged:
+contracts (#249), scaffold (#250), eligibility ingest (#251), submit
+API (#252), profile reads (#253), reports (#254), the ratee
+notification (#255) and the web halves (#256, #257). Open items —
+report-handling workflow, report dedupe/rate limiting, inbox/outbox
+retention — are listed in
+[`docs/rating-service.md`](../docs/rating-service.md#open-items-team-decisions-still-pending).

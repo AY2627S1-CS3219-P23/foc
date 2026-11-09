@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
@@ -131,8 +130,7 @@ class DomainEventMessageConverterTest {
 	@Test
 	void toMessageInjectsEventTypeAndRoundTrips() {
 		RequestAccepted event = new RequestAccepted("e-1", Instant.parse("2026-09-19T08:30:00Z"),
-				"order-service", "c-1", List.of("usr-req-1001", "usr-cou-2002"),
-				"req-1", "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "hi");
+				"order-service", "c-1", "req-1", "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "hi");
 
 		Message message = converter.toMessage(event, new MessageProperties());
 

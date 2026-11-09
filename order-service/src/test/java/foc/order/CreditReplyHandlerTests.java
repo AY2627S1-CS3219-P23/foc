@@ -20,6 +20,11 @@
  * sets close_reason; a null or unknown code rejects with none; every
  * contract code is mapped. Author review: Ryan Ang, pending pull request
  * review.
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.order;
 
@@ -34,7 +39,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -161,12 +165,12 @@ class CreditReplyHandlerTests extends PostgresTestContainer {
 
 	private static CreditReserved reserved(String requestId) {
 		return new CreditReserved(UUID.randomUUID().toString(), Instant.now(), "credit-service", requestId,
-				List.of(), requestId, "1", 3);
+				requestId, "1", 3);
 	}
 
 	// reason and reasonCode passed as a pair credit-service would publish
 	private static CreditReservationRejected rejected(String requestId, String reason, String reasonCode) {
 		return new CreditReservationRejected(UUID.randomUUID().toString(), Instant.now(), "credit-service",
-				requestId, List.of(), requestId, "1", 3, reason, reasonCode);
+				requestId, requestId, "1", 3, reason, reasonCode);
 	}
 }

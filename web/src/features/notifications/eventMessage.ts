@@ -33,6 +33,18 @@
 // actorIdOf (raterId ?? courierId) so D32's read-time hydration names
 // the rater too. Author review: Leong Wei Zhi, pending pull request
 // review.
+// 2026-11-04, Claude Code (Fable 5.1), PR #287 review (@Sinnez1): actorIdOf
+// takes the event type and answers null for templates that never name
+// the actor, so rows that merely carry a courierId (completed,
+// courier-arrived, disputes, and since notification D34 expired) cost
+// no username lookup. Author review: Leong Wei Zhi, pending pull request
+// review.
+// 2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): copy for the
+// credit-change notification's three events (credit.transferred,
+// credit.released, credit.dispute-settled). One row goes to each party,
+// so its copy depends on who is reading it: notificationMessage takes
+// the viewer's id. The signed-amount-first wording is a team decision.
+// Author review: Ryan Ang, pending pull request review.
 
 import { credits, disputeCategoryLabels } from '@/features/order/status'
 import type { DisputeCategory } from '@/features/order/types'
@@ -82,10 +94,17 @@ function requestLabel(payload: Record<string, unknown>): string {
   return /^\d+$/.test(id) ? `Request #${id}` : `Request ${id}`
 }
 
-// The acting party each template may name: the rater on a rating event,
-// the courier on a request event (requesterId rides on every request
-// event but no copy uses it). No payload carries both.
-export function actorIdOf(payload: Record<string, unknown>): string | null {
+// The acting party the row's template names: the rater on a rating
+// event, the courier on a request event (requesterId rides on every
+// request event but no copy uses it). No payload carries both. Null
+// when the template takes no actor, so a row that merely carries a
+// courierId (completed, courier-arrived, the disputes, expired since
+// notification D34) costs the Center no username lookup (PR #287 review).
+export function actorIdOf(
+  eventType: string,
+  payload: Record<string, unknown>,
+): string | null {
+  if (!ACTOR_NAMING_TYPES.has(eventType)) return null
   return text(payload, 'raterId') ?? text(payload, 'courierId')
 }
 
@@ -176,16 +195,107 @@ const templates: Record<
   }),
 }
 
+// The credit-change events, one row per party whose balance moved. The
+// payload names both parties, so the copy is the viewer's side: the
+// requester paid or was refunded, the courier earned. A viewer the
+// payload does not name (no session yet) gets the side-less copy.
+const creditTemplates: Record<
+  string,
+  (
+    payload: Record<string, unknown>,
+    viewerId: string | null,
+  ) => NotificationMessage
+> = {
+  'credit.transferred': (p, viewer) => {
+    const amount = count(p, 'amount')
+    if (amount === null) {
+      return { icon: '🪙', title: `Credits transferred for ${requestFor(p)}` }
+    }
+    if (viewer !== null && viewer === text(p, 'courierId')) {
+      return {
+        icon: '🪙',
+        title: `+${credits(amount)} earned for ${requestFor(p)}`,
+      }
+    }
+    if (viewer !== null && viewer === text(p, 'requesterId')) {
+      return {
+        icon: '🪙',
+        title: `−${credits(amount)} paid for ${requestFor(p)}`,
+      }
+    }
+    return {
+      icon: '🪙',
+      title: `${credits(amount)} transferred for ${requestFor(p)}`,
+    }
+  },
+  'credit.released': (p) => {
+    const amount = count(p, 'amount')
+    return {
+      icon: '🪙',
+      title:
+        amount === null
+          ? `Credits refunded for ${requestFor(p)}`
+          : `+${credits(amount)} refunded for ${requestFor(p)}`,
+    }
+  },
+  'credit.dispute-settled': (p, viewer) => {
+    const share =
+      viewer !== null && viewer === text(p, 'courierId')
+        ? count(p, 'courierAmount')
+        : viewer !== null && viewer === text(p, 'requesterId')
+          ? count(p, 'requesterAmount')
+          : null
+    return {
+      icon: '🪙',
+      title:
+        share === null
+          ? `Credits settled for the dispute on ${requestFor(p)}`
+          : share === 0
+            ? `No credits from the dispute on ${requestFor(p)}`
+            : `+${credits(share)} from the dispute on ${requestFor(p)}`,
+    }
+  },
+}
+
+// "Request #12" mid-sentence: requestLabel's fallback is sentence-initial
+function requestFor(payload: Record<string, unknown>): string {
+  return requestIdOf(payload) === null ? 'a request' : requestLabel(payload)
+}
+
+// The credit-change rows: they open /credits rather than the request,
+// and a push of one means a balance has changed.
+export function isCreditEvent(eventType: string): boolean {
+  return Object.hasOwn(creditTemplates, eventType)
+}
+
 // names: actor id → username, resolved at read time by the caller
 // (D32). A missing entry — still loading, lookup failed, user deleted —
 // falls through to the actor-less copy, exactly like D30's absent key.
+// The templates whose copy names the actor: the ones declaring a second
+// parameter. Read off the table itself so a template that starts naming
+// its actor is hydrated without a second list to keep in step.
+const ACTOR_NAMING_TYPES: ReadonlySet<string> = new Set(
+  Object.entries(templates)
+    .filter(([, template]) => template.length >= 2)
+    .map(([type]) => type),
+)
+
 export function notificationMessage(
   notification: NotificationDto,
   names: ReadonlyMap<string, string> = new Map(),
+  // the signed-in user, as the payload's decimal-string ids: the credit
+  // rows read differently to each party
+  viewerId: string | null = null,
 ): NotificationMessage {
+  if (isCreditEvent(notification.eventType)) {
+    return creditTemplates[notification.eventType](
+      notification.payload,
+      viewerId,
+    )
+  }
   const template = templates[notification.eventType]
   if (template) {
-    const actorId = actorIdOf(notification.payload)
+    const actorId = actorIdOf(notification.eventType, notification.payload)
     const actor = actorId === null ? null : (names.get(actorId) ?? null)
     return template(notification.payload, actor)
   }

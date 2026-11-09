@@ -27,11 +27,20 @@
  * 2026-10-25, issue #235: request.dispute-resolved settles through
  * resolve, with the outcomes of a completion (team decision, DSP-13).
  * Author review: Ryan Ang, pending pull request review.
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
+ * 2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): a settled
+ * transfer, release or dispute split also enqueues credit.transferred,
+ * credit.released or credit.dispute-settled, for the credit-change
+ * notification (team decision). Author review: Ryan Ang, pending pull
+ * request review.
  */
 package foc.credit.service;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -40,20 +49,26 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import foc.contracts.events.core.DomainEvent;
+import foc.contracts.events.credit.CreditDisputeSettled;
+import foc.contracts.events.credit.CreditReleased;
 import foc.contracts.events.credit.CreditReservationRejected;
 import foc.contracts.events.credit.CreditReserved;
+import foc.contracts.events.credit.CreditTransferred;
 import foc.contracts.events.request.RequestCancelled;
 import foc.contracts.events.request.RequestCompleted;
 import foc.contracts.events.request.RequestDisputeResolved;
 import foc.contracts.events.request.RequestEvent;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestSubmitted;
+import foc.credit.entity.Reserved;
+import foc.credit.repository.ReservedRepository;
 
 /**
  * Applies one request event in one transaction (docs/credit-service.md,
  * "How each event is handled"): the credit operation and, for a
  * reservation, its reply in the outbox commit together or not at all
- * (D10). The listener only converts the message, calls this and settles
+ * (D10). A settled transfer, release or dispute split commits its
+ * credit event the same way, for the notification of the change. The listener only converts the message, calls this and settles
  * the delivery on the outcome, so no broker type is imported here.
  */
 @Service
@@ -78,10 +93,13 @@ public class RequestEventHandler {
 
     private final CreditOperations operations;
     private final ReplyOutbox outbox;
+    private final ReservedRepository reservations;
 
-    public RequestEventHandler(CreditOperations operations, ReplyOutbox outbox) {
+    public RequestEventHandler(CreditOperations operations, ReplyOutbox outbox,
+            ReservedRepository reservations) {
         this.operations = operations;
         this.outbox = outbox;
+        this.reservations = reservations;
     }
 
     // an exception rolls the transaction back and reaches the listener,
@@ -90,11 +108,10 @@ public class RequestEventHandler {
     public Outcome handle(RequestEvent event) {
         return switch (event) {
             case RequestSubmitted e -> onSubmitted(e);
-            case RequestCompleted e -> settle(e.requestId(), operations.transfer(e.requestId(), e.courierId()));
-            case RequestCancelled e -> settle(e.requestId(), operations.release(e.requestId(), e.requesterId()));
-            case RequestExpired e -> settle(e.requestId(), operations.release(e.requestId(), e.requesterId()));
-            case RequestDisputeResolved e -> settle(e.requestId(), operations.resolve(
-                e.requestId(), e.courierId(), e.courierAmount(), e.requesterAmount()));
+            case RequestCompleted e -> onCompleted(e);
+            case RequestCancelled e -> onReleased(e, operations.release(e.requestId(), e.requesterId()));
+            case RequestExpired e -> onReleased(e, operations.release(e.requestId(), e.requesterId()));
+            case RequestDisputeResolved e -> onDisputeResolved(e);
             // A request event the Credit Service has no part in. Only the
             // five events above are bound to the queue, so this is one
             // published to it by hand: acknowledged, since there is nothing
@@ -113,8 +130,7 @@ public class RequestEventHandler {
         // no default: a new ReserveResult does not compile until it is given a reply
         DomainEvent reply = switch (operations.reserve(e.requestId(), e.requesterId(), e.reward())) {
             case RESERVED, ALREADY_RESERVED -> new CreditReserved(
-                newEventId(), Instant.now(), PRODUCER, e.correlationId(), List.of(),
-                e.requestId(), e.requesterId(), e.reward());
+                newEventId(), Instant.now(), PRODUCER, e.correlationId(), e.requestId(), e.requesterId(), e.reward());
             case REJECTED_INSUFFICIENT_CREDITS, ALREADY_REJECTED_INSUFFICIENT_CREDITS ->
                 rejected(e, INSUFFICIENT_CREDITS_TEXT, CreditReservationRejected.INSUFFICIENT_CREDITS);
             case REJECTED_INVALID_AMOUNT, ALREADY_REJECTED_INVALID_AMOUNT ->
@@ -128,10 +144,51 @@ public class RequestEventHandler {
         return Outcome.HANDLED;
     }
 
+    // The parties and amount come from the request's record, which the
+    // operation has just settled under its lock, not from the event.
+    private Outcome onCompleted(RequestCompleted e) {
+        SettleResult result = operations.transfer(e.requestId(), e.courierId());
+        if (result == SettleResult.SETTLED) {
+            Reserved record = settledRecord(e.requestId());
+            outbox.enqueue(new CreditTransferred(newEventId(), Instant.now(), PRODUCER, e.correlationId(),
+                e.requestId(), record.getRequesterId(), record.getCourierId(), record.getAmount()));
+        }
+        return settle(e.requestId(), result);
+    }
+
+    private Outcome onReleased(RequestEvent e, SettleResult result) {
+        if (result == SettleResult.SETTLED) {
+            Reserved record = settledRecord(e.requestId());
+            // a cancel or expiry that arrived before its reservation
+            // settles an amount-0 record: no balance moved, so no event
+            if (record.getAmount() > 0) {
+                outbox.enqueue(new CreditReleased(newEventId(), Instant.now(), PRODUCER, e.correlationId(),
+                    e.requestId(), record.getRequesterId(), record.getAmount()));
+            }
+        }
+        return settle(e.requestId(), result);
+    }
+
+    private Outcome onDisputeResolved(RequestDisputeResolved e) {
+        SettleResult result = operations.resolve(e.requestId(), e.courierId(), e.courierAmount(), e.requesterAmount());
+        if (result == SettleResult.SETTLED) {
+            Reserved record = settledRecord(e.requestId());
+            // both parties, a share of 0 included (team decision)
+            outbox.enqueue(new CreditDisputeSettled(newEventId(), Instant.now(), PRODUCER, e.correlationId(),
+                e.requestId(), record.getRequesterId(), record.getCourierId(), record.getCourierShare(),
+                record.getAmount() - record.getCourierShare()));
+        }
+        return settle(e.requestId(), result);
+    }
+
+    // SETTLED means the record exists: the operation locked or inserted it
+    private Reserved settledRecord(String requestRef) {
+        return reservations.findById(requestRef).orElseThrow();
+    }
+
     private static CreditReservationRejected rejected(RequestSubmitted e, String reason, String reasonCode) {
         return new CreditReservationRejected(
-            newEventId(), Instant.now(), PRODUCER, e.correlationId(), List.of(),
-            e.requestId(), e.requesterId(), e.reward(), reason, reasonCode);
+            newEventId(), Instant.now(), PRODUCER, e.correlationId(), e.requestId(), e.requesterId(), e.reward(), reason, reasonCode);
     }
 
     // no default: a new SettleResult does not compile until it is given an outcome

@@ -1,0 +1,164 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
+# Scope: user-service Deployment + ClusterIP Service; env as in compose.yaml
+# with cloud values (in-cluster hostnames, public origin, Gmail SMTP
+# for user-service), secrets from foc-secrets.
+# Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
+# docs/deployment.md); values mirror compose.yaml's defaults.
+# Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-08, Claude Code (Fable 5.1), PR #302 review: the pod template
+# carries the foc-secrets version as an annotation (set by deploy.sh);
+# second round (Sinnez1): the foc-config hash too.
+# Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform):
+# USER_DB_HOST comes from foc-secrets (the one RDS instance, DP4) and the
+# Hikari pool is capped at 5 (DP19).
+# Author review: Leong Wei Zhi, pending pull request review.
+# PR #316 review (Claude reviewer): Hikari keeps one idle connection
+# (team decision DP19, Leong Wei Zhi). Author review: Leong Wei Zhi,
+# pending pull request review.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: foc
+spec:
+  selector:
+    app: user-service
+  ports:
+    - port: 8080
+---
+# no replicas: the HorizontalPodAutoscaler in hpa.yaml owns the count
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: foc
+spec:
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+      annotations:
+        # set by deploy.sh to the foc-secrets resourceVersion: changed
+        # values roll the pods together with a new image tag
+        foc/secrets-version: "__SECRETS_VERSION__"
+        # the rendered foc-config, hashed by deploy.sh: a config change
+        # rolls the pods too
+        foc/config-hash: "__CONFIG_HASH__"
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: user-service
+          image: ghcr.io/ay2627s1-cs3219-p23/foc-user-service
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: foc-config
+          env:
+            - name: USER_DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: DB_HOST
+            - name: USER_DB_PORT
+              value: "5432"
+            - name: USER_DB_NAME
+              value: "user"
+            - name: USER_DB_USER
+              value: "user"
+            - name: USER_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: USER_DB_PASSWORD
+            # seven services share one db.t4g.micro (max_connections about
+            # 110): 7 x 5 x 2 replicas stays under it, and one idle
+            # connection per pod keeps a deploy's surge pods (a third
+            # replica each) from opening 5 apiece (DP19)
+            - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
+              value: "5"
+            - name: SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE
+              value: "1"
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: RABBITMQ_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: JWT_SECRET
+            - name: OWNER_SETUP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: OWNER_SETUP_TOKEN
+            - name: USER_RETENTION_DAYS
+              value: "30"
+            - name: USER_PURGE_CRON
+              value: "0 0 3 * * *"
+            - name: USER_SEED_DEMO
+              value: "true"
+            - name: JWT_ACCESS_TOKEN_TTL
+              value: "1h"
+            - name: SUPPLIER_SERVICE_URL
+              value: "http://supplier-service:8080"
+            - name: MAIL_HOST
+              value: "smtp.gmail.com"
+            - name: MAIL_PORT
+              value: "587"
+            - name: MAIL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: MAIL_USERNAME
+            - name: MAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: MAIL_PASSWORD
+            - name: MAIL_SMTP_AUTH
+              value: "true"
+            - name: MAIL_SMTP_STARTTLS
+              value: "true"
+            - name: MAIL_FROM
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: MAIL_FROM
+            - name: OTP_TTL
+              value: "10m"
+            - name: OTP_MAX_ATTEMPTS
+              value: "5"
+            - name: OTP_RESEND_COOLDOWN
+              value: "60s"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 384Mi
+            limits:
+              memory: 768Mi
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 20
+            failureThreshold: 3

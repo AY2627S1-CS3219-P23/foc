@@ -39,6 +39,11 @@
   2026-10-19, Claude Code (Fable 5), issue #221: starter-restclient
   removed with the RestUserDirectory adapter (D32 supersedes D30/D31 —
   the web hydrates names at read time; no sync user-service call).
+  2026-11-08, Claude Code (Fable 5.1), issue #305 (D36, team decision via
+  options Q&A): spring-boot-starter-flyway + flyway-database-postgresql
+  (Flyway owns the schema, as in order/rating/chat) and test-scope
+  testcontainers-postgresql for the migration test. Author review: Leong
+  Wei Zhi, pending pull request review.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -90,6 +95,16 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+		<!-- schema migrations (issue #305, D36): replicas starting together
+		     must not race Hibernate's ddl-auto -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-flyway</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -173,6 +188,12 @@
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers-rabbitmq</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- real Postgres for the Flyway migration test (issue #305) -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-postgresql</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>

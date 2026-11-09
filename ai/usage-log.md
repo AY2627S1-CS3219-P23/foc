@@ -23,11 +23,58 @@
   AuthServiceTest matcher-misuse fix entry below.
   Author review: Kwey Xiu Xi to review via pull request.
   2026-10-28, Claude Code (Opus 5): appended the issue #249 entry below.
+  2026-11-01, Claude Code (Opus 5): prepended the issue #284 entry
+  below (newest first, as the surrounding entries sit).
+  2026-11-02, Claude Code (Fable 5): prepended the PR #286 review-fixes
+  entry below.
+  2026-11-04, Claude Code (Fable 5.1): prepended the notification D34
+  (parties removal) entry below, then the PR #287 review-round entries.
+  2026-11-06, Claude Code (Opus 5.5): prepended the issue #48 realistic
+  demo usernames (DP11) entry below. Author review: Leong Wei Zhi,
+  pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1): the DP11 entry below notes the
+  stand-alone PR (DP17) and drops its infra/README.md item.
   PR #269's main merge: this file merged cleanly (main appends at the
   top, the #249 entry at the bottom, so both sides' entries are
   intact); README.md's AI Use Summary was the only conflict and both
   2026-10-28 paragraphs were kept there.
+  PR #286's main merge (main at PR #285): README.md's AI Use Summary
+  and web/AGENTS.md's disclosure header were the only conflicts —
+  both sides had appended an entry at the same spot, so both were
+  kept, in the order each file appends: main's #258 paragraph then the
+  #284 one in README (which appends at the bottom), and date order in
+  web/AGENTS.md (#284's 2026-11-01 entry, then #258's 2026-11-02 one).
+  This log merged cleanly — main's #258 entries append at the bottom,
+  the #284 ones sit at the top. Nothing reworded or removed.
+  2026-11-08, Claude Code (Fable 5.1): prepended the issue #48 simplified
+  deployment entry below.
+  2026-11-08, Claude Code (Fable 5.1): prepended the first-deploy OIDC
+  trust fix entry below.
+  2026-11-08, Claude Code (Fable 5.1): prepended the HTTPS (ACM on an ALB)
+  entry below.
+  2026-11-09, Claude Code (Fable 5.1): prepended the EKS re-platform entry
+  below.
+  2026-11-09, Claude Code (Opus 5.5): prepended the continuous deployment
+  (DP20) entry below.
+  2026-11-08, Claude Code (Fable 5.1): prepended the web admin-test flake
+  entry below.
+  2026-11-08, Claude Code (Fable 5.1): prepended the issue #305 entry
+  below.
+  2026-11-08, Claude Code (Opus 5.5): prepended the issue #308 owner
+  upgrade entry below.
+  2026-11-09, Claude Code (Opus 5.5): PR #309 review round 2 added to
+  the issue #308 entry.
+  2026-11-09, Claude Code (Opus 5.5): prepended the notification sound
+  preview entry below, then its PR #314 review round.
   Author review: Leong Wei Zhi to review via pull request.
+  2026-11-08, Claude Code (Opus 5.5): prepended the Credit NFR1.1
+  entry below (PR #313), then rewrote it for the credit-change
+  notification rework, then extended it with the credit-trio broker
+  integration test. Author review: Ryan Ang, pending pull request
+  review.
+  2026-11-09, Claude Code (Opus 5.5): prepended the balance refresh on
+  request.created entry below. Author review: Ryan Ang, pending pull
+  request review.
 -->
 
 # AI Usage Log
@@ -46,6 +93,535 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-09 — Ryan Ang (credit balance refresh on request.created)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug, generate
+- **Scope:** `web/src/features/credit/CreditBalanceProvider.tsx`: a pushed `request.created` now fetches the balance at once, alongside the three credit-change notifications, so the reserve a new request makes shows without waiting for the 30 s poll. `web/src/test/credits.test.tsx`: `request.created` added to the fetch cases; the other request events are still ignored.
+- **Prompt(s):** asked why the balance took a while to update after creating a request. The tool traced the saga on `main`: a reserve publishes no credit-change notification (team decision in PR #313), so only the poll picked it up; and order-service publishes `request.created` only after credit-service's `credit.reserved` reply, which credit-service sends after the reserve commits. The team chose to refresh on `request.created`.
+- **Author review:** web `vitest run src/test/credits.test.tsx` 51 pass; `tsc -b`, eslint and Prettier clean on the changed files. Ryan Ang reviews via pull request.
+
+## 2026-11-09 — Leong Wei Zhi (issue #48: continuous deployment, DP20)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** branch `feat/48-continuous-deploy` on PR #316's
+  `feat/48-eks-rds`. `.github/workflows/deploy.yml` (`workflow_run` on CI
+  for pushes to `main`, a plan job, a changed-images build matrix, a retag
+  job, `rebuild_all` dispatch input), new `infra/k8s/changed-images.sh`,
+  `docs/deployment.md` (DP20 + options table), `infra/README.md` (step 4,
+  rollback/retry), README AI Use Summary, this log.
+- **Prompt(s):** "on top of PR #316, create another PR to introduce
+  continuous deployment from GitHub Actions"; then "would reading from
+  the cluster incur AWS cost?" (answered with facts: EKS API calls,
+  `sts:AssumeRoleWithWebIdentity` and `eks:DescribeCluster` are not billed
+  per request; the transfer is a few KB) and "ok continue with the
+  cluster".
+- **Decisions (Leong Wei Zhi, neutral options Q&A, 2026-11-09):** trigger
+  after CI succeeds on `main` (over every push in parallel with CI); skip
+  docs-only pushes; no approval gate (over a GitHub Environment with
+  reviewers); rebuild changed images only (over all nine); the last
+  deployed tag read from the cluster (over a moving GHCR tag or the last
+  successful Deploy run). No reasons given; the tool recommended nothing.
+- **Author review:** `actionlint` 1.7.7 on the workflow (only the
+  pre-existing `tr a-z A-Z` infos), `shellcheck` and `bash -n` on the
+  script; the script run against a stub `kubectl` over real commits: an
+  infra-only diff (all retagged, deploy), a docs-only diff (no deploy), an
+  empty cluster and an unknown commit (built), a web-only diff (web
+  built, eight retagged), `rebuild_all`. Not yet run in Actions (needs the
+  cluster from PR #316). Leong Wei Zhi to review via pull request.
+- **PR #317 review round (2026-11-09, Claude reviewer + Copilot):** prompt
+  "address the latest mr comments!". The first attempt of an automatic run
+  whose commit is an ancestor of a live one deploys nothing (CI runs on
+  `main` can finish out of order); dispatches and re-runs (rollback) are
+  exempt. The root `.dockerignore` is a source of the seven root-context
+  images. Verified with the stub `kubectl`: older target skipped, same
+  target re-run proceeds, newer and equal targets proceed; the commit that
+  last changed `.dockerignore` rebuilds the seven backends and retags
+  web/gateway; `shellcheck` clean, `actionlint` unchanged.
+- **Deployment history (2026-11-09):** prompt "how to show a deployment
+  history and status for that environment on the repo's GitHub page";
+  the tool described two ways with facts (an `environment:` key changes
+  the OIDC subject and needs a trust-policy apply; Deployments API calls
+  need `deployments: write` only). Leong Wei Zhi chose the Deployments
+  API. The rollout job records a `production` deployment (in progress,
+  then success / failure / error with the run and site links); the deploy
+  step got a 55-min step timeout so the outcome step runs. `actionlint`
+  unchanged; the request body checked with `jq`; the API calls are first
+  exercised by the first real run.
+
+---
+## 2026-11-09 — Leong Wei Zhi (notification sound preview, no issue; stacked on PR #309)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** web: `NotificationProvider.tsx` (the context's
+  `setSoundEnabled` wraps the stored setter and plays the chime when
+  switching on), `chime.ts` (`playChime({ gesture: true })` resumes and
+  plays through a suspended context, for a toggle click that is the
+  page's first gesture). Tests: one case in `chime.test.ts`, the header
+  toggle case in `notification-center.test.tsx` updated, the chime
+  mocked in `profile.test.tsx` with a switch-on case and a silent
+  switch-off assertion. Docs: `web/AGENTS.md` notification-center row,
+  README AI Use Summary.
+- **Prompt(s):** "create a pr which plays sound when sound is toggled on
+  via click of notification toggle button", then "stack the pr on top of
+  pr 309" and plan approval. One neutral options question: Leong Wei Zhi
+  chose both toggle surfaces (Center header and Profile switch) over the
+  header only.
+- **Author review:** web `npm test` (443/443), lint, Prettier and build green; Leong Wei Zhi
+  to review via the pull request.
+- **PR #314 review round (@Sinnez1, CHANGES_REQUESTED), same tool:**
+  prompt "address the latest pr comments". The `gesture` flag is gone:
+  `unlockChime` keeps its in-flight resume and `playChime` waits on that
+  real unlock, at most `UNLOCK_WAIT_MS` (1 s), so a synthetic click's
+  never-settling resume holds nothing back. A pending idle suspend is
+  waited out first, one chime waits at a time, and an `enabled()` check
+  after the wait drops a preview switched off meanwhile. The provider
+  previews only on an off-to-on change (a ref holds the latest write,
+  ahead of the render), and calls `unlockChime` inside the click itself
+  so a keyboard toggle with no pointerdown still unlocks. Tests: the
+  fake's resume/suspend can land late; 6 `chime.test.ts` cases (unlock
+  lands / never settles / rejects, switch-off while waiting, joined
+  call, pending suspend) and 2 Center cases (one-batch double-click,
+  `enabled` follows a switch-off). Five of them fail on the previous
+  commit. `npm test` 450/450, lint, Prettier, build green.
+- **PR #314 re-review follow-ups (@Sinnez1, approved, two non-blocking)
+  and the base merge, 2026-11-09, same tool:** prompt "address pr
+  comments on PR #314 and fix merge conflict". `playChime` bounds its
+  other two waits as well (the idle resume and a pending suspend, each
+  `within(..., UNLOCK_WAIT_MS)`), so a hung one cannot keep the
+  one-at-a-time latch set; `idled` clears only once the context runs.
+  The push chime passes `enabled: () => soundRef.current` like the
+  preview. Tests: the fake's idle resume / suspend can hang; 2
+  `chime.test.ts` cases and 1 Center case, all three failing on the
+  previous code. The merge of `feat/308-owner-upgrade` (main after #313)
+  conflicted only in dated header lines (README, this log,
+  `profile.test.tsx`): both kept. `npm test` 467/467 (one earlier run
+  flaked once on #309's "poll 401" profile case, which passes alone and
+  on reruns), `tsc -b`, eslint, Prettier clean.
+
+---
+## 2026-11-08 — Leong Wei Zhi (issue #308: owner upgrade from the profile page)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, refactor, docs
+- **Scope:** user-service: `POST /users/me/owner`
+  (`AccountUpdateController`, `AccountUpdateService.upgradeToOwner`, new
+  `UpgradeOwnerRequest`), `ProblemTypes.OWNER_SETUP_TOKEN_INVALID`, the
+  `SecurityConfig` line, and `OwnerSignupService.checkOwnerKey` moved
+  unchanged into a new shared `OwnerSetupToken` bean. Tests: new
+  `OwnerUpgradeControllerTest` (9 cases), 4 cases in
+  `AccountUpdateServiceTest`, and the three tests that set the token by
+  reflection now set it on the bean. Web: `OwnerUpgradeCard.tsx`,
+  `ProfileSection.tsx` (card for USER/ADMIN only, sign-out on success),
+  `profileApi.upgradeToOwner`, the two token types in `problemTypes.ts`
+  (both `amend`), `sessionNotice.ts` and `login.tsx` (the flag carries
+  its notice text), 4 cases in `profile.test.tsx`. Docs:
+  `user-service/README.md`, `web/AGENTS.md`, README AI Use Summary.
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/308", then plan
+  approval. The issue left the design to the team, so the tool asked two
+  neutral options rounds and one follow-up; Leong Wei Zhi chose
+  `POST /users/me/owner`, token plus gate code, token checked before the
+  code (a wrong token keeps it), 403 with a new type for a wrong or blank
+  token and 503 when unconfigured, revoke every session and re-login,
+  sign out to `/login` with a notice, one log line as the audit, keep
+  `/register-owner`, and an unchanged 200 for an OWNER caller.
+- **Author review:** user-service `./mvnw clean test`: 413 tests, one
+  error, the known "too many clients already" flake in
+  `OutboxPublisherIntegrationTest`, which also fails on unmodified
+  `main` (400 tests) and passes when run alone; `OwnerUpgradeControllerTest`
+  9/9, `AccountUpdateServiceTest` 23/23. Web: `npx vitest run` 441/441,
+  `tsc -b`, eslint and prettier clean. Leong Wei Zhi reviews via pull
+  request.
+- **PR #309 review round (same day):** the bot review's unthrottled
+  token-guessing finding was put to Leong Wei Zhi as neutral options
+  (count against the OTP budget, per-user lockout, gateway rate limit,
+  accept and document); Leong Wei Zhi chose to accept the risk, now
+  recorded in `user-service/README.md`. Copilot: `OwnerSetupToken`'s
+  field made non-final (JDK 26 warns on reflective writes to final
+  fields); the other three comments were answered with the code that
+  disproves them (Boot 4 import package, `gate.request()` never throws,
+  the stored session is the JSON string `"null"`).
+- **PR #309 review round 2 (2026-11-09, @Sinnez1, CHANGES_REQUESTED):**
+  prompt "address pr comments on
+  https://github.com/AY2627S1-CS3219-P23/foc/pull/309". Sinnez1 showed
+  that the separate wrong-token 403 answered each guess instantly. The
+  tool put the fix to Leong Wei Zhi as neutral options (code first, same
+  answer as a wrong code, per-user token cap, keep and fix the note), and
+  Leong Wei Zhi chose code first. Implemented: `upgradeToOwner` checks
+  the configured token (503, code kept), then the gate code
+  (`matchGateOtp`, split from `consumeGateOtp`), then the token. A wrong
+  token keeps the row spent (`AccountUpdateOtp.spend`), not deleted, so
+  the resend cooldown still applies (PR #157's rule), and the 403 carries
+  `Retry-After` (new `OwnerSetupTokenException`; the
+  `ResponseStatusException` passthrough in `ProblemDetailAdvice` now
+  keeps headers). The README's accepted-risk note is replaced. Web: the
+  wrong token is a `restart` in `problemTypes.ts`, `OwnerUpgradeCard`
+  copy follows, and `ProfileSection` signs out with `endSession()` plus
+  an explicit `navigate('/login')` instead of `logout()` (the race
+  Sinnez1 described). Cleanups: `OwnerSetupToken`'s field is final again,
+  tests use the pinned token, and the 503 cases run in the new
+  `OwnerSetupUnconfiguredTest` (own context, `@DirtiesContext`). The
+  String-key `OwnerSignupService` constructor and the hand-built 403/503
+  are gone. Verification: `./mvnw clean test` 418 tests, 1 error, the
+  known "too many clients already" `OutboxPublisherIntegrationTest`
+  flake, which passes when rerun with the owner and account-update
+  classes; web `vitest run` 442/442, tsc, eslint, prettier clean; the new
+  race test fails against the old `logout()` code. Leong Wei Zhi reviews
+  via pull request.
+
+---
+## 2026-11-08 — Ryan Ang (Credit NFR1.1: credit-change notification and balance refresh, PR #313)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** First version (superseded within the PR): `CreditBalanceProvider` fetched the balance on pushed balance-changing request events and again 2 s later, since the push could arrive before the Credit Service committed. Reworked after review into the credit-change notification: `foc-contracts` gains `CreditTransferred`, `CreditReleased`, `CreditDisputeSettled` (records, registry entries, fixtures, registry count test). `credit-service`: `RequestEventHandler` enqueues the matching event to the outbox when a transfer, release or dispute split settles, reading the parties and amount from the settled record; none for an amount-0 release; both shares for a split, 0 included; unit tests and two Postgres-backed handler tests. `notification-service`: a `notification-service.credit-events` trio bound on the three exact keys, the listener's queue list and retry map, `RecipientResolver` rules (transferred and dispute-settled: requester and courier; released: requester), resolver tests, and (review follow-up) `CreditEventsRabbitMqIntegrationTest`, mirroring the rating one: the `credit.transferred` fixture stores one row per party and is deduped, `credit.reserved` and `credit.reservation-rejected` never reach the credit queue, and retry and dead-lettering run through the credit trio. `web`: `eventMessage.ts` copy per viewer (signed amount first), `NotificationCenter` passes the viewer id and opens `/credits` for a credit row, `CreditBalanceProvider` fetches once on a credit-change push (the request-event trigger, the 2 s recheck and `balanceEvents.ts` removed); tests for each. Docs: notification D37, credit D15, the recipient table, both services' and foc-contracts' AGENTS.md, the foc-contracts README record list.
+- **Prompt(s):** checked the D1 backlog's credit FRs and NFRs against the code; the gap was NFR1.1, as the web polled the balance every 30 s. Asked for a refresh when a credit-affecting notification arrives; the tool pointed out that `request.created` precedes the reserve and that the other request events race the Credit Service, and the team chose every balance-changing event plus a second fetch 2 s later. On review the approach was judged not robust, and the team chose a visible credit-change notification instead. The tool noted that the Credit Service publishes no event for a transfer, release or split, so new contracts were needed. Every design choice came from neutral options rounds and is the team's: notify on transfer, release and dispute split but not reserve; leave `credit.reserved` unbound; one event per operation named `credit.transferred` / `credit.released` / `credit.dispute-settled`; tell both parties of a split even for a 0 share; replace the request-event refresh; open `/credits` on click; signed-amount-first wording. The tool chose no fields beyond those offered and skipped the event for an amount-0 release, where no balance moved.
+- **Author review:** foc-contracts `./mvnw install` (tests pass); notification-service `./mvnw test` 115 pass (Docker integration tests included); credit-service `./mvnw test` 364 pass (Postgres-backed tests included); order-service `./mvnw test` passes (it binds only the saga replies, so the new events do not reach it); web `vitest run` 450 pass, `tsc -b`, `eslint .`, Prettier on the changed files. `CreditEventsRabbitMqIntegrationTest` 4 pass against a real broker, and its leak test fails when the binding is widened to `credit.#`. No end-to-end run. Ryan Ang reviews via pull request.
+## 2026-11-08 — Leong Wei Zhi (issue #305: chat and notification safe at 2 replicas)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** plan, generate, docs
+- **Scope:** branch `feat/305-replica-push` on PR #302's
+  `feat/48-cloud-deploy`. notification-service: `UserPush`,
+  `UserPushFanout`, `LocalUserPushDelivery` (messaging.stomp),
+  `RabbitMqUserPushFanout` + the `pushFanoutContainerFactory` bean
+  (messaging.rabbitmq), `NotificationPushListener` publishes to the port;
+  `DomainEventsListener` acks a SQLSTATE 23505 failure as a duplicate;
+  Flyway (`V1__baseline.sql`, `ddl-auto: validate`, baseline-on-migrate)
+  with `PostgresTestContainer` + `NotificationFlywayMigrationTest`; unit
+  tests for the fanout halves and the listener branches;
+  `StompPushIntegrationTest` now runs a Testcontainers RabbitMQ.
+  chat-service: `spring-boot-starter-amqp`, `ChatPush`,
+  `ChatPushFanoutConfig` (AMQP JSON converter, `chat.push`),
+  `StompChatPublisher` publishes, `ChatPushListener` delivers; unit tests
+  and the STOMP integration test through a Testcontainers RabbitMQ.
+  `compose.yaml` chat RabbitMQ env; `infra/k8s` (the two HPAs back, the
+  `replicas: 1` pins and Recreate strategy removed, chat's
+  `RABBITMQ_PASSWORD`); `docs/deployment.md` DP9/DP10 and the 2-replica
+  tables; `docs/notification-service.md` D35/D36 + section;
+  `docs/chat-service.md`, `docs/gateway.md`, `infra/README.md`, both
+  services' AGENTS.md and the notification README; this log and the
+  README summary.
+- **Decisions (Leong Wei Zhi, neutral options Q&A, 2026-11-08):** AMQP
+  fanout over a STOMP broker relay; ack the duplicate-key failure rather
+  than keep the retry hop or rewrite to insert-first; no
+  `x-single-active-consumer`; a Flyway baseline rather than documenting
+  the first-boot race; chat keeps Boot's RabbitMQ health indicator; one
+  PR stacked on #302. The closed PRs #291/#294 were the reference, not
+  reused.
+- **Prompt(s):** "make a plan to resolve …/issues/305 the implementation
+  should focus on simplicity"; "client only has one persistent websocket
+  connection with one replica, so only that replica should send the
+  notification?" (answered: the fanout reaches every replica and only the
+  socket holder's user-destination resolution delivers).
+- **PR #306 review round (same day):** Copilot — chat's k8s Deployment
+  gets `RABBITMQ_PASSWORD` from `foc-secrets` (missed in the first cut;
+  the cloud chat pods could not have logged in to the broker), and the
+  notification README's legacy-columns symptom corrected (baseline does
+  not compare the schema, Hibernate validate ignores extra columns, so
+  inserts fail rather than startup). Claude reviewer — the AFTER_COMMIT
+  listener already catches `publish` failures (unit-tested); a comment on
+  `publish` now says so.
+- **PR #306 review round 2 (same day, Sinnez1 non-blocking + the
+  blocking connect-timeout item, Claude reviewer):** "address the latest
+  comment from sinnez1 and claude bot". `spring.rabbitmq.connection-timeout:
+  5s` in both services (the after-commit publish on chat's request thread
+  no longer waits amqp-client's 60 s); the test yamls point at
+  `rabbitmq.invalid` with a 200 ms timeout so broker-less suites never
+  publish into a developer's compose RabbitMQ. `DomainEventsListener`
+  acks only a Hibernate `ConstraintViolationException` naming
+  `processed_events_pkey`; `ConcurrentDuplicateIntegrationTest` races
+  one event id on Testcontainers Postgres. `LocalUserPushDelivery` drops
+  a push with a null recipient or notification. The push container
+  factory pins one consumer and no advice chain. `V2__drop_legacy_entity_columns.sql`
+  (drop `entity_type`/`entity_id`/`entity_sequences` if they exist) with
+  a migration test; README/AGENTS/design doc updated, processor Javadoc
+  corrected. Not changed here, pending the team's call: the accept/drop
+  race across replicas, SockJS session affinity, an async chat publish,
+  and chat's readiness including the RabbitMQ indicator.
+- **Author review:** notification-service `./mvnw verify` with Docker
+  (Testcontainers RabbitMQ + Postgres), chat-service `./mvnw test`; the
+  compose `--scale 2` acceptance (both services at 2 replicas, fanout
+  queues delivered on every replica, a concurrent duplicate acked on
+  23505, the existing notification-db volume baselined) ran on the local
+  stack; the cloud HPA check is the author's after #302 deploys. Leong
+  Wei Zhi reviews via pull request.
+
+---
+## 2026-11-09 — Leong Wei Zhi (N5 cloud deployment, issue #48: re-platform to EKS and RDS, lifetime to 2026-12-11)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** generate, refactor, docs
+- **Scope:** `infra/terraform/`: `instance.tf` and `cloud-init.yaml.tftpl` removed; new `eks.tf` (cluster 1.37 in `API` access mode, node role and launch template with IMDS hop limit 1, managed node group t3.medium Spot 2/2/3 in the private subnets, add-ons eks-pod-identity-agent, metrics-server and aws-ebs-csi-driver with a Pod Identity role, cluster-admin access entry for the deploy role), `nat.tf` (fck-nat AMI lookup, interface with source/destination check off, Elastic IP, on-demand t4g.nano with an SSM-only role), `rds.tf` (subnet group, security group from the cluster SG, PostgreSQL 17 db.t4g.micro, 20 GB gp3, no final snapshot); `network.tf` (host SG removed, two private subnets with a route table to the NAT interface, cluster SG rule 30080 from the ALB SG), `iam.tf` (host role gone; deploy role: `eks:DescribeCluster` + `foc/*` reads instead of SSM), `secrets.tf` (`DB_HOST`, `DB_PORT`, `RDS_MASTER_USER`, `RDS_MASTER_PASSWORD` in `foc/app`), `tls.tf` (target group `foc-traefik-np` on NodePort 30080 with create_before_destroy, `aws_autoscaling_attachment` to the node group's ASG), `variables.tf`, `outputs.tf` (`cluster_name`, `rds_endpoint`, `nat_public_ip`). `infra/k8s/`: `data/postgres.yaml` removed; new `data/storageclass.yaml` (gp3) and `data/db-init.yaml` (Job: 7 roles + databases, idempotent, passwords re-applied); RabbitMQ and Redis claim `gp3`; the 7 app manifests take `<SVC>_DB_HOST` from the Secret and cap Hikari at 5; `secrets.sh` runs with the job's credentials and kubeconfig; `deploy.sh` writes the kubeconfig, installs the Traefik chart, runs secrets.sh and the Job before the kustomization. New `infra/helm/traefik-values.yaml` (chart 42.3.1: NodePort 30080, read 0 s / idle 3600 s, no websecure, default IngressClass). `.github/workflows/deploy.yml`: the rollout job runs `deploy.sh` itself; `CLUSTER_NAME` replaces `INSTANCE_ID`. `docs/deployment.md` replaced by a stand-alone EKS page (DP1 to DP19, options tables from the five rounds with 32-day prices, quoted reasons, scaling, cost, lifetime); `infra/README.md` rewritten; `AGENTS.md` deployment line, `docs/gateway.md` wording ("in the cluster"), README summary. No service code changed.
+- **Prompt(s):** "initially i thought budget is 50 dollars, turns out it is 250 dollars. Can we make our deployment more scalable? i was also thinking of using amazon's db provider instead of using stored state pods. We will need a partial rewrite for the deployment docs." then "we have until 11 december 2026". Under the AI policy the tool chose nothing: it fetched the ap-southeast-1 price files (RDS, EKS, MQ, ElastiCache, EC2, ELB), the Spot price history, the available EKS, RDS, Aurora, MQ and ElastiCache versions, and ran five neutral options rounds (compute shape, purchase model, Postgres, RabbitMQ + Redis; budget cuts, nodes, ingress, network; secrets, deploy access, controller, credentials; teardown, docs shape, reasons, PRs; then node size, NAT purchase model and Spot on the WebSocket path on request). Leong Wei Zhi chose EKS, Aurora Serverless v2 and Amazon MQ + ElastiCache first; the tool reported that Aurora's 0.5 ACU floor is never paused by the 1 s outbox pollers and that `mq.t3.micro` is not orderable here, and Leong Wei Zhi then chose RDS db.t4g.micro ("rds then"), RabbitMQ on EBS and Redis in-cluster. Four clarifying questions on the network ("what is the point of making node instances private subnet?", "why do we need it", "why cant the alb be the nat gateway?", "difference between nat instance and managed gateway?") were answered with facts; Leong Wei Zhi chose private subnets with an on-demand fck-nat instance, then "three t3.medium instances ... any two running at the same time" (node group 2/2/3), and all-Spot nodes after asking about the WebSocket services. Docs: replace the k3s page with a stand-alone EKS page and record the reasons given.
+- **Follow-up (same day, PR #316):** "is the spot pricing documented in this pr's documentation?" → the tool listed what was and was not on the page; "sure pls document them" → a "Spot behaviour" section in `docs/deployment.md` (price floats up to the on-demand rate, per-pool interruptions, the drain/recreate/replace sequence with capacity rebalancing, both nodes at once, no capacity, the three widening options as facts, none taken) and the runbook's Spot row. No decision changed.
+- **Review round (PR #316, Claude reviewer + Copilot, same day):** zone-bound EBS volumes vs a two-zone Spot group (both reviewers) → options round (document a PVC-delete recovery; single-zone node group; no volumes; one on-demand node); Leong Wei Zhi first asked for "one managed nodes and two spot nodes both of medium, message queue and redis are always in managed nodes, calculate capacity fit and costs", then "what if we switch to amazon mq and elasti cache instead" (≈ $313, over budget) and "what if instead of amazon mq, we use amazon sqs instead?" (a cross-service code change, facts given), and chose the **on-demand t3.medium node in zone a, shared (label only, no taint)**, with SQS recorded as an option considered: second node group `foc-stable`, label `foc.dev/pool`, `nodeSelector` on RabbitMQ and Redis, second ASG attachment, DP3/DP4, the nodes and RabbitMQ/Redis tables, Spot behaviour, scaling and cost (≈ $210) rewritten. Copilot: `engine_version = "17"` → a concrete minor (`db_engine_version`, default 17.9, minor upgrades ignored); the RDS master credentials leave `foc-secrets` for a separate `foc-db-admin` Secret that only the db-init Job mounts (secrets.sh emits a `List` of both; stub-tested); Helm, the Job and the rollouts share one 50-min deadline inside the job's 60; DP9/DP10, the 2-replica table and the runbook's HPA row restored to the state issue #305 left on `main` (the first draft had reverted them: chat and notification do scale, nine HPAs, no Recreate).
+- **Follow-up (same day):** "should we have more spot instances but with t3.micro instead" → facts: a micro's ~0.6 GiB allocatable cannot hold a backend's 768 Mi limit; "what is the best optimization strategy" → the tool declined to rank (AI policy) and listed the levers with measured effects; "what about this" (several Spot instance types) → the t3/t3a/t2 medium facts; "can we switch to t3a.medium for all" → both node groups default to `t3a.medium` (AMD, same shape; on-demand $0.0472/h vs $0.0528, Spot ~$0.024/h), DP3, tables and cost (≈ $208) updated. "i dont understand max 3?" → explained (a ceiling, no autoscaler, a third node only by hand); "remove max 3" → the Spot group's maximum equals `node_count` (2), `node_max` and the desired-size `ignore_changes` removed, the third-node rows dropped from the page and the runbook. "also why two zones, why not 3 zones? for spot" → facts (history: the ALB's two subnets; pools, cross-zone traffic, rebalancing), Leong Wei Zhi chose three zones: `aws_subnet.private_c`, `availability_zone_c`, the Spot group's subnet list; cluster ENIs, RDS and the on-demand node unchanged.
+- **Author review:** `terraform fmt`, `validate`; `terraform plan -out=eks.tfplan` against the live state: 39 to add, 1 to change, 10 to destroy (the k3s host, its SG, role and policies, the old target group and attachment; `foc/app` and the deploy policy replaced). `kubectl kustomize infra/k8s` renders 35 objects, no placeholder left after the fill; `helm template` of chart 42.3.1 with the values renders a NodePort 30080 Service, the two timeout arguments and the default IngressClass (a first draft put `type` at `service.type`; the chart's schema wants `service.spec.type`). The db-init script ran twice against a local `postgres:17` with a non-superuser CREATEROLE/CREATEDB master: 7 roles and databases created, a rotated password re-applied, the `order` role can create tables in `order` and is refused `CONNECT` on `credit`; the re-run's GRANT notices were silenced with a `pg_has_role` guard. `bash -n` on both scripts, YAML parsed. The apply (about 25 min, cutover downtime), the `CLUSTER_NAME` variable, the Deploy run and the smoke test are Leong Wei Zhi's to run; review via pull request.
+
+- **PR #316 review round (Sinnez1, CHANGES_REQUESTED, 2026-11-09), Claude Code (Opus 5.5):** prompt "address pr comments on PR #316". Options round (Leong Wei Zhi; facts only: subnets cost nothing, the ALB price does not depend on its zones, the subnets change in place): a third public subnet `public_c` (10.20.3.0/24) enabled on the load balancer, over returning the Spot group to zones a and b; Redis without a password and no NetworkPolicies kept as they are, recorded on `docs/deployment.md`. Mechanical fixes from the earlier Claude reviewer notes Sinnez1 repeated: `deploy.sh` polls the db-init Job for Complete or Failed (a failed Job stops the deploy with its log instead of waiting out the deadline), and `remaining` sets a variable from a plain call so the deadline exit ends the script, not a subshell; db-init's image pinned to `postgres:17.9` (the RDS minor). Verified: `terraform fmt -check`, `validate`, plan against the live state 45 to add / 2 to change / 10 to destroy (the balancer's subnets in place), saved as `eks.tfplan`; `shellcheck` clean; the poll loop against a stub `kubectl` (Complete, Failed, FailureTarget+Failed, SuccessCriteriaMet+Complete) and the deadline exit; `postgres:17.9` exists on Docker Hub.
+- **PR #316 review, next round (Claude reviewer, 2026-11-09), Claude Code (Opus 5.5):** prompt "address pr comments on PR #316". The db-init GRANT guard asked `pg_has_role(..., 'MEMBER')`, which is true for the ADMIN-only membership PostgreSQL 16+ gives a role's non-superuser creator (no SET), so the GRANT was skipped and `CREATE DATABASE ... OWNER` failed with "must be able to SET ROLE". Reproduced against a local `postgres:17.9` with a non-superuser CREATEROLE/CREATEDB master (MEMBER t, SET f, the error); the earlier claim in this entry that the script passed such a run did not hold for this path. Now `'SET'`: fresh and re-run both clean for two services, each role owns its database and is refused CONNECT on the other. Connection headroom: options round (Leong Wei Zhi; facts: 7 x 3 surge pods x 5 = 105 against about 110 at 2 replicas, Hikari opens `minimumIdle` = pool size by default): `SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=1` in the seven Deployments, beside the existing pool cap (over `maxSurge: 0` or no change); DP19 and the runbook row updated. `kubectl kustomize` renders the seven entries. The single Traefik replica and NAT instance noted by the reviewer stay as documented. Then (Claude reviewer, unverified finding): the nodes' IMDS hop limit of 1 also blocks the EBS CSI driver's pods, whose controller has failed without a region. `aws_eks_addon.ebs_csi` gains `configuration_values`: `controller.env` `AWS_REGION` and `node.metadataSources = "kubernetes,imds"`, both keys checked against `describe-addon-configuration` for the region's default add-on version (v1.67.2-eksbuild.1); the hop limit is unchanged. Runbook: a PVC `Pending` row with the two log commands. `terraform validate`, plan unchanged in counts (45 / 2 / 10), saved as `eks.tfplan`. Not verifiable before the first apply.
+---
+## 2026-11-08 — Leong Wei Zhi (N5 cloud deployment, issue #48: HTTPS with an ACM certificate on a load balancer)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** generate, docs
+- **Scope:** `infra/terraform/tls.tf` (new: ACM certificate for `foc23.mooo.com` with DNS validation, the validation waiter, an Application Load Balancer with an idle timeout of 3600 s, an instance target group health-checked on `/`, a 443 listener with the certificate and an 80 listener answering 301), `network.tf` (second public subnet in `ap-southeast-1b`, the balancer's security group, the host's port 80 now from that group only; the host group's description left as it was, since changing it forces a replacement), `instance.tf` (Elastic IP and its association removed), `variables.tf` (`domain_name`, `availability_zone_b`), `outputs.tf` (`public_host` is the hostname; `alb_dns_name` and `acm_validation_record` for the two FreeDNS records). `deploy.yml`, `infra/k8s/config.yaml`, `apps/chat-service.yaml`, `apps/notification-service.yaml`: the four `http://` origins are `https://`; `deploy.sh` usage comment. `docs/deployment.md`: DP5 rewritten, DP18 to DP21, two options-considered tables (domain source, TLS endpoint), diagram, cost, teardown. `infra/README.md`: step 2 split into certificate first and the rest, the FreeDNS record steps, https smoke test, four troubleshooting rows, teardown note. No service code changed.
+- **Prompt(s):** "create a plan to use aws certificate manager so foc runs over https". Under the AI policy the tool chose nothing: it checked the account read-only (Route 53 domain registration and the Pricing API are SCP-denied; ACM, hosted zones and the CloudFront prefix list are readable; one subnet exists) and ran three neutral options rounds. Leong Wei Zhi chose the domain source (a free CNAME-capable subdomain over a team-owned domain, a paid registrar or CloudFront's default certificate), the TLS endpoint (ALB over CloudFront, an exportable ACM certificate in Traefik, or an NLB), the 301 on port 80, the host taking port 80 from the balancer only with the Elastic IP dropped, keeping `PUBLIC_HOST` with `https://` hard-coded, and the hostname `foc23.mooo.com`. "what do i need to do on freedns.afraid.org" → the three FreeDNS steps, now in the runbook. The options are recorded as facts without reasons, as on the rest of the page.
+- **Author review:** `terraform fmt`, `validate`; `terraform plan` against the live state: 10 to add, 2 to change (the host security group's ingress rule in place, and the deploy role's trust, which is PR #307's pending change), 2 to destroy (the Elastic IP and its association); a first plan replaced the host security group because its description had changed, so the description was kept; `kubectl kustomize` renders with the placeholders filled; no `http://__PUBLIC_HOST__` or `http://$PUBLIC_HOST` remains. Whether FreeDNS accepts the underscore-prefixed validation CNAME is unconfirmed and is learned at the first apply step. Leong Wei Zhi applies and reviews via pull request.
+- **Review round (PR #310, Copilot, same day):** `aws_acm_certificate_validation.site` now names `validation_record_fqdns` from the certificate's own validation options (the record itself stays at FreeDNS); `acm_validation_record` outputs one record per certificate name instead of `one(...)`; the runbook sentence adjusted. `fmt`, `validate` and a fresh plan (same 10/2/2) re-run. Claude reviewer, same day: the ALB idle timeout is 3500 s, below Traefik's 3600 s, so the balancer closes idle keep-alive connections first (the Traefik side lives in `cloud-init`, which the running host no longer reads, so the balancer side was the one changed); the note that Traefik overwrites `X-Forwarded-Proto` with `http` was answered with the earlier check that no service reads it (the gateway sets its own, CORS and the WebSocket origin checks use `Origin`), no change.
+- **DP18 revised (same day, after merge):** FreeDNS refused the validation record ("CNAME records on dynamic dns domains are currently restricted"), so the hostname moved to a free Dynu hostname, `foc23.ddnsfree.com`, chosen by Leong Wei Zhi from a neutral round (Dynu, dynv6, or waiting for FreeDNS's admin; a bought or teammate-owned domain had been offered earlier and declined). `variables.tf` default, the three Terraform comments, `docs/deployment.md` (DP5, DP18, the domain table keeps the FreeDNS row as a fact and gains Dynu and dynv6 rows), `infra/README.md` (Dynu panel steps) and the README summary updated; no resource shape changed, so Terraform replaces the pending certificate for the new name. The first full apply had been started while the FreeDNS record was still being attempted: it created the balancer, target group and the port-80 listener and waited on the validation, which can never complete for the old name. PR #312 review (Sinnez1): the runbook's node-name instruction strips the trailing dot too, since ACM's record name ends with one.
+
+---
+## 2026-11-08 — Leong Wei Zhi (N5 first cloud deploy, issue #48: OIDC trust for GitHub's immutable subject)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** debug, generate
+- **Scope:** the first Deploy run's rollout job failed with `Not authorized to perform sts:AssumeRoleWithWebIdentity`. Cause: this repository has GitHub's immutable OIDC subject on (`gh api repos/<repo>/actions/oidc/customization/sub` shows `use_immutable_subject: true`), so the token's `sub` is `repo:AY2627S1-CS3219-P23@325983746/foc@1360023737:ref:refs/heads/main`, which the trust policy's plain-form condition did not match. `infra/terraform/iam.tf`: the `sub` condition is now a list of the plain and the immutable form; `variables.tf`: `github_owner_id` and `github_repo_id` with the repository's ids as defaults; `infra/README.md`: the troubleshooting row. Applied to the sandbox account from the deploy worktree (one in-place change to `aws_iam_role.deploy`), then the failed job re-run.
+- **Prompt(s):** "logged in, run the applies from here" → bootstrap and main applies (plan reviewed, then the saved plan applied), repo variables, Deploy run, this fix on the failure.
+- **Author review:** `terraform fmt`/`validate`, plan showed exactly one in-place change; the re-run rollout job's result is in the PR; Leong Wei Zhi reviews via pull request.
+- **Review round (PR #307, Sinnez1, same day):** the plain subject is dropped, only the immutable one is trusted (team decision, Leong Wei Zhi); `github_repo` is validated as `<owner>/<name>`; `github_owner_id` / `github_repo_id` default to null (this repository's ids) and must be set whenever `github_repo` is overridden (decision, Leong Wei Zhi); the README troubleshooting row points at renames/transfers, not ids. The two `.terraform.lock.hcl` files, new in this PR, pin `hashicorp/aws` 6.72.0 and `random` 3.9.1 deliberately and now carry hashes for linux_amd64, darwin_arm64, darwin_amd64 and windows_amd64. `terraform validate` passes; a plan shows the one in-place change to the role's `sub`; plans with `github_repo` = `foo/bar`, `foo` and `a/b/c` fail on the new validations.
+
+---
+## 2026-11-06 — Leong Wei Zhi (issue #48, DP11: realistic demo usernames)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** user-service `seed/DemoAccountsSeeder`: the generated
+  `demo_owner` / `demo_admin_N` / `demo_user_NNN` usernames replaced by
+  fixed lists of fictional `firstname_lastname` names (1 owner, 3 admins,
+  100 users; `ADMINS`/`USERS` now the list sizes); emails, passwords,
+  counts and the race handling unchanged. `DemoAccountsSeederTest` names
+  the new usernames and also checks they are unique ignoring case. Docs:
+  `user-service/README.md` demo-account table (all 100 in a collapsed
+  table) + the existing-volume note, `.env.example` comment,
+  `docs/postman/` README + environment. First opened as PR #295 on the
+  closed issue-#48 stack, where it also touched `infra/README.md`; on
+  2026-11-08 it became its own PR off `main` (DP17): Claude Code (Fable
+  5.1) cherry-picked it and dropped the `infra/README.md` hunk.
+- **Prompt(s):** this PR's brief: per Leong Wei Zhi's DP11 decision
+  (options Q&A), realistic usernames everywhere with the same counts,
+  emails and public passwords; a deterministic list of fictional, diverse
+  NUS-style names that passes the existing username rules; update every
+  current reference, leave historical records alone.
+- **Author review:** `./mvnw verify` 405 tests, 404 green; the one error
+  was the known "too many clients already" Testcontainers flake in
+  `OutboxPublisherIntegrationTest`, green when rerun alone
+  (`DemoAccountsSeederTest` 10/10). Re-run off `main` on 2026-11-08: 399
+  tests (the stack's ShedLock tests are gone), the same single flake,
+  green alone. PR #303 review: the `docs/deployment.md` link replaced by
+  plain text (the file is not on `main`), and a test pins the counts
+  (3 admins, 100 users, 104 accounts). Leong Wei Zhi reviews via pull
+  request.
+## 2026-11-08 — Leong Wei Zhi (web: flaky Admin Dashboard Stuck Orders test)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** debug, tests
+- **Scope:** `web/src/test/admin.test.tsx`, "a remembered threshold is used on the next visit": `StuckOrdersSection` fetches in a `useEffect` after the region renders, so the synchronous `getHeldReservations('P7D')` expectation raced it (`Number of calls: 0` once in CI on a branch that changes no web file; green on three other runs of the same tree). First fix: the expectation wrapped in `waitFor`. PR #304 review (Sinnez1): `findRegion()` now waits for the section's loading text (`Checking held credits…` / `Loading failed orders…`) to disappear, so every Stuck/Failed Orders case gets a settled section, and the P7D case asserts the rendered outcome (empty result, `No credits have been held longer than 7 days.`) before the call expectations. Test-only.
+- **Prompt(s):** the CI failure output pasted with "web ci failed".
+- **Author review:** `npx vitest run src/test/admin.test.tsx` three times in a row, then the whole web suite once after the review change (results in the PR); Leong Wei Zhi reviews via pull request.
+
+---
+## 2026-11-08 — Leong Wei Zhi (N5 cloud deployment, issue #48: simplified re-plan; DP7 and DP10 re-decided)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** generate, refactor, docs
+- **Scope:** the seven-PR stack (#289 to #297) was closed on 2026-11-07. This branch rebuilds the infra half from #289's two commits (`infra/`, the gateway resolver + `UPSTREAM_SUFFIX` change, `deploy.yml`, the order-independent credit-service tests) and applies the re-decided DP7: `infra/k8s/secrets.yaml` and the External Secrets Operator chart in `cloud-init` removed; new `infra/k8s/secrets.sh` (the host copies `foc/app` and `foc/ghcr` into the `foc-secrets` and `ghcr-pull` Secrets); `deploy.sh` runs it and restarts the Deployments when the values changed; `instance.tf` IMDS hop limit 1; `variables.tf`, `iam.tf`, `secrets.tf`, `kustomization.yaml` headers. `deploy.yml`: the host checks out the commit before `deploy.sh` runs, and the poll covers the 60 min timeout (both #289 review findings). `docs/deployment.md` rewritten as a stand-alone page (DP1 to DP13, options-considered tables, scaling, behaviour at 2 replicas; no PR history, by request); `infra/README.md` rewritten as the short runbook; 21 infra headers now point at `docs/deployment.md`. The five backend hardening PRs are not carried (DP10: no multi-replica hardening); the demo-names change is its own branch. PR #302 review (same day): the poll loop fails at once on any error other than the transient `InvocationDoesNotExist`; `foc-secrets` is built as a Secret document by `jq` (newline-safe, non-string values rejected); the Secret's `resourceVersion` is stamped into the eight pod templates as `foc/secrets-version` instead of a second `rollout restart`; the HPA header cites DP10. Review follow-up on hpa.yaml (max 1 for the six job/socket services, or keep 1→2 and state it): Leong Wei Zhi chose to keep 1→2 everywhere; DP10, the 2-replica section and the runbook now say plainly which services are unsafe to scale and that it is accepted. Second follow-up (Leong Wei Zhi): a STOMP push reaching one replica only is unsafe, so chat and notification are pinned to one replica (their HPAs removed, `replicas: 1`); doubled scheduled runs stay accepted as idempotent; issue #305 filed for cross-replica delivery. Sinnez1's review round: image tags carry the run id and the pod templates carry a `foc/config-hash` annotation, so a same-commit redeploy after a config change or a rebuilt image rolls (blocking); chat and notification use `strategy: Recreate` so a deploy never overlaps two pods, while the four idempotent-job services keep RollingUpdate under DP10 (blocking, resolved by the team's acceptance); `aws_instance.host` depends on the secret versions and the read policy, `secrets.sh` retries reads and validates `foc/ghcr`, the poll keeps stderr apart from the status, `deploy.sh` no longer re-fetches and shares one 45-min deadline across rollouts, the gateway evaluates the suffix once per request at server level, and the stale ESO comment in `secrets.tf` is gone. The credit-service test comments (reset the pool in the committing classes and restore the zero assertions) are deferred to a separate PR, as both reviewers suggested.
+- **Prompt(s):** "Previously, there were PR 289, 290, 291, 292, 294, 297 opened to for deployment. However, I have since dropped it as it was too complicated to be pushed. Create a plan to simplify the deployment plan and add human readable documentation with trade offs considered. I would like the deployment of the microservices to be simple but scalable." The tool did not choose or justify a design (AI policy) and ran three neutral options rounds instead: runtime, provisioning, secrets, deploy path; hardening, PR split, demo names, reasons; docs shape, PR numbers, the IMDS finding. Leong Wei Zhi kept the design, re-decided DP7 (host-side secrets copy, IMDS hop limit 1) and DP10 (no multi-replica hardening), chose one infra PR plus an independent demo-names PR with fresh numbers and a decision page plus short runbook, and chose to record the alternatives as factual comparisons without reasons. Later: "redo the docs/deployment.md such that it is ignorant of previous PRs, it should be isolated" → the page rewritten without PR history; the process choices live in the PR, not the page. Then: "can you state why we chose to use a single node cluster? in the future, i think it might be easier to extend to multiple nodes since we already have kubernetes?" → that reason recorded under the platform table in Leong Wei Zhi's words; the tool added only the facts of what joining a second node takes.
+- **Author review:** `terraform fmt -check` and `validate` for both stacks (hashicorp/terraform:1.13.4 image), `kubectl kustomize infra/k8s` renders 48 objects, `secrets.sh` exercised against a stub `aws` with the real `kubectl --dry-run=client`, the gateway image rebuilt under compose and its health route curled, credit-service `./mvnw verify` in reverse-alphabetical order (results in the PR); Leong Wei Zhi reviews via pull request.
+
+---
+## 2026-11-06 — Leong Wei Zhi (credit-service tests: order-independent common-pool cases, PR #289 CI)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug, tests
+- **Scope:** `CreditServiceApplicationTests.commonPoolIsOneRow` (was `commonPoolStartsAsOneEmptyRow`) checks only the single row; `EntityMappingTest.commonPool` round-trips relative to the current balance. Both assumed a zero balance, which fails whenever a committing class (expiry/closure) runs first in the shared container, as in #289's CI (pool = 38). Test-only; no production change.
+- **Prompt(s):** "fix ci failure on credit service for #289".
+- **Author review:** credit-service 360/360 in reverse-alphabetical, filesystem and alphabetical test order (reverse order reproduced the CI failure before the fix); Leong Wei Zhi reviews via pull request.
+
+---
+## 2026-11-05 — Leong Wei Zhi (N5 cloud deployment, issue #48: infra/ + gateway)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** new `infra/` (Terraform: state bootstrap, VPC, t3.xlarge Spot host + Elastic IP, IAM instance role + GitHub OIDC deploy role, Secrets Manager, cloud-init installing k3s + External Secrets Operator; Kubernetes manifests for the 7 Postgres + RabbitMQ + Redis StatefulSets, 9 Deployments, ESO secrets, Traefik ingress, HPAs; `deploy.sh`), `.github/workflows/deploy.yml` (GHCR build + SSM rollout), gateway `nginx.conf`/`auth.lua` (resolver from resolv.conf, `UPSTREAM_SUFFIX`, env-driven Redis host/port; compose unchanged), `docs/deployment.md`, `infra/README.md`, AGENTS.md, gateway.md and architecture.md notes. First PR of the issue-#48 stack.
+- **Prompt(s):** "i have my aws console open, how should i start deploying?" → the tool listed the team decisions owed under the AI policy and asked them as neutral options rounds; Leong Wei Zhi chose EKS + managed data stores first, then — after "wait what is the total cost?" (the tool priced it from AWS's public price files at ~$280–350) and "that is too expensive, we only have $50" — the single Spot instance + k3s design (DP1–DP13 in `docs/deployment.md`, all their choices). "create a plan" → plan with a six-PR split; "sure please stack the prs".
+- **Author review:** `kubectl kustomize infra/k8s` renders (51 objects); Terraform `fmt`/`validate`/`plan` and the compose gateway regression listed in the PR; Leong Wei Zhi reviews via pull request.
+
+---
+## 2026-11-04 — Leong Wei Zhi (notification-service: resolver drops the credit/user arms, follow-up to PR #287)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** refactor, docs
+- **Scope:** `RecipientResolver` — the explicit `CreditEvent`/`UserEvent`
+  arms, their `ignored()` helper and the logger removed; those events
+  now hit the throwing default like any type without a rule.
+  `RecipientResolverTest` expects the refusal; the D34 rule table and
+  runtime paragraph say so.
+- **Prompt(s):** "why map credit and user event here" — the tool's answer:
+  no strong reason, they were added in review round 2 to preserve the
+  old "tell nobody" behaviour when the default started throwing, and
+  silently recording a message that should not be there is the same
+  swallow the review objected to; then "remove them and make new pr".
+- **Author review:** notification-service suite with
+  `SPRING_RABBITMQ_HOST=broker.invalid` (result in the PR); Leong Wei Zhi
+  reviews via pull request.
+
+---
+## 2026-11-04 — Leong Wei Zhi (notification-service + web: PR #287 review round 2, D34)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** fix, docs
+- **Scope:** `IdempotentEventProcessor` resolves recipients before its
+  first write; `RecipientResolver` fails loudly on a missing required
+  courier (the five two-party events) and on a registered type with no
+  rule, so the message dead-letters and stays replayable, while credit
+  and user events are recorded and ignored explicitly;
+  `RecipientResolverTest` and `IdempotentEventProcessorTest` cover the
+  refusals and the no-write guarantee; the D34 section states the runtime
+  rule. Web: `actorIdOf` takes the event type and answers null for
+  templates that never name the actor (derived from the templates'
+  arity), so an expired row's new `courierId` costs the Notification
+  Center no username lookup; `event-message.test.ts` pins it.
+- **Prompt(s):** "address the latest pr comments" — @Sinnez1's four
+  non-blocking notes on the approval: the swallowed-default and
+  null-courier concerns and the dedupe-before-resolve ordering (applied
+  together as "resolve first, fail loudly"), and the wasted username
+  lookup on expired rows (applied by narrowing `actorIdOf`). The rollout
+  note the review also asked for was already in the D34 section from
+  round 1.
+- **Author review:** notification-service 115/115 with
+  `SPRING_RABBITMQ_HOST=broker.invalid`; web `vitest` 437/437 (4 new),
+  `tsc -b`, `eslint` and `prettier` clean on the changed files. Leong Wei
+  Zhi reviews via pull request.
+
+---
+## 2026-11-04 — Leong Wei Zhi (notification-service: PR #287 review round, D34)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** fix, docs
+- **Scope:** `RecipientResolver` — the two-party arms go through a
+  null-safe helper, so a missing courier tells the requester alone and
+  nothing throws after the dedupe insert; `RecipientResolverTest` — a
+  null-courier case and a pre-D34 accepted-expiry body case pinning the
+  accepted rollout limitation; `docs/notification-service.md` D34
+  section — rollout note (in-flight pre-D34 expiries lose the courier's
+  notice; drain the outbox and queues before deploying); the PR
+  description's Deploy section likewise.
+- **Prompt(s):** "address the latest pr comments" — the @claude bot's two
+  notes (`List.of` NPE on a null `courierId`; the pre-D34 expiry rollout
+  caveat) and Copilot's (normalize legacy expiry bodies at the
+  converter). The NPE note applied as the helper plus test. The rollout
+  caveat documented as the accepted limitation the approved D34 plan
+  already recorded; Copilot's converter shim, which would read the
+  removed field back into this service, not adopted on that basis —
+  replies posted on the PR, the owner can reopen it.
+- **Author review:** notification-service suite with
+  `SPRING_RABBITMQ_HOST=broker.invalid` (result in the PR); Leong Wei Zhi
+  reviews via pull request.
+
+---
+## 2026-11-04 — Leong Wei Zhi (refactor: `parties` removed from the event contracts, notification D34)
+- **Tool:** Claude Code (Fable 5.1)
+- **Mode:** refactor, docs
+- **Scope:** `foc-contracts` — `parties` removed from `DomainEvent`
+  (`METADATA_FIELDS` and the accessor), all 17 records and fixtures;
+  `RequestExpired` gains a nullable `courierId`; README/AGENTS record
+  the one-time break of the additive rule. `order-service`,
+  `credit-service`, `user-service`, `rating-service` — the publishers
+  drop the recipient list (order-service's `expired()` stamps the courier
+  who had accepted instead); positional constructor calls and the
+  `parties` assertions in their tests follow. `notification-service` —
+  new `RecipientResolver` (one rule per event type, the same lists the
+  publishers used to send), `IdempotentEventProcessor` fans out over it,
+  `RecipientResolverTest` (fixture- and registry-driven), the STOMP and
+  broker tests rewritten around `requesterId`/`courierId`, the contract
+  test's unknown-fields case kept as the pre-D34-backlog proof. Docs:
+  `docs/notification-service.md` D34 row, D18 note, catalog and
+  traceability wording, the "Recipient resolution (D34)" section
+  (factual comparison matrix, the author's reasoning, rule table,
+  ingest diagram); `.mmd` labels and the `parties` mentions in the
+  architecture, rating, disputes and credit docs.
+- **Prompt(s):** "Create a plan to remove parties from events defined in
+  foc contracts and its dependencies. [pasted note: a core event carries
+  business data only; who and how to notify belongs in the notification
+  service] Note this design change in the docs. Weigh the pros and cons
+  of having just events and notification service design who should send
+  to whom vs other services sending an async message to notification
+  service to deliver the message." Then "which one is better?" — the tool
+  declined under the AI policy (no recommendation, no trade-off
+  weighing) and presented the options as factual property comparisons;
+  the author reasoned about ordering and coupling in their own words and
+  decided each point: notification-service derives recipients (over a
+  publisher-sent notification command and over the status quo), a
+  nullable `courierId` on `request.expired`, one coordinated breaking
+  release, and their own reasoning recorded as the rationale. The plan
+  was then approved for implementation.
+- **Author review:** foc-contracts 15/15; order-service 192/192;
+  rating-service 101/101; notification-service 111/111 (eight new
+  resolver cases). Two suites reach the compose stack's RabbitMQ on host
+  port 5672 and fail its login as a fatal listener error — run them with
+  `SPRING_RABBITMQ_HOST=broker.invalid` or the stack stopped.
+  credit-service 359/360: `commonPoolStartsAsOneEmptyRow` fails
+  identically on `main` with main's own jar (a shared-container balance
+  leak), unrelated. user-service 398/399: the full run exhausts the
+  Testcontainers Postgres connection limit across its 34 contexts, also
+  identically on `main`; the touched class passes alone. Compose smoke
+  against the running stack recorded in the PR description. Leong Wei
+  Zhi reviews via pull request.
+
+---
+## 2026-11-02 — Leong Wei Zhi (web: PR #286 review fixes, issue #284)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** fix, refactor
+- **Scope:** `web` — the shared `Modal` caps at the viewport and
+  scrolls (`max-h-[calc(100dvh-2rem)] overflow-y-auto`): a review with
+  many line breaks grew the Your Review dialog past the screen with
+  both Close buttons unreachable (@Sinnez1 measured nine cases; Copilot
+  flagged it too). `Modal` also closes on Escape — through the same
+  `onClose` the backdrop uses, so dialogs that lock their close handler
+  (`RateExperienceModal` mid-submit) stay locked — and moves focus into
+  the dialog on open unless a child's `autoFocus` (the OTP inputs)
+  already took it. New `features/rating/components/ReviewBody.tsx`
+  holds the stars/date/text block the dialog had copied from the public
+  profile's review cards; both render it now, and an empty-string
+  review reads as "No written review" (the PR's bot-review nit).
+  `routes/request-history.tsx`: the Rated chip's label names the
+  request and what clicking opens ("View your review of request #1
+  (rated 4 stars)", singular star included); the `rated` alias and the
+  `{requestId, rating}` viewing wrapper are gone — `RatingResponse`
+  carries `requestId`, so `MyReviewModal` reads it off the rating.
+  Tests: chip assertions through a `chipLabel` helper; Escape and
+  empty-text cases added.
+- **Prompt(s):** Address PR comments. (All inline comments from
+  @Sinnez1 and Copilot on PR #286 applied as suggested.)
+- **Author review:** web `vitest` 427/427 (two new cases), `tsc -b` +
+  vite build, and `prettier` on the changed files all clean; to be
+  re-reviewed via the pull request.
+
+---
+## 2026-11-01 — Leong Wei Zhi (feat: own-profile link and rater review readback, issue #284)
+- **Tool:** Claude Code (Opus 5)
+- **Mode:** generate, docs
+- **Scope:** web only, no API change.
+  `features/rating/components/MyReviewModal.tsx` (new: the read-only
+  "Your Review" dialog — shared `Modal`, `StarDisplay` from #257,
+  `formatDateTime`; no fetch, so no loading or error state);
+  `routes/request-history.tsx` (`RateCell`'s rated branch is a button
+  that hands its already-loaded rating up to the page, which holds the
+  one `viewing` dialog and drops it on a tab switch, as it already does
+  for the rate dialog); `features/user/components/ProfileDetailsCard.tsx`
+  (a "View public profile" link to `/users/<own id>` under the username).
+  Tests: `src/test/rating.test.tsx` (five readback cases; the `myRating`
+  fixture takes optional text and a fixed `createdAt`),
+  `src/test/profile.test.tsx` (the link's href). `web/AGENTS.md`
+  (profile.png, public-profile.png, rating-review.png and
+  order-history.png rows). `README.md` (AI Use Summary and header line).
+- **Prompt(s):** Create a plan to resolve issue #284, then implement it.
+  Author decisions via neutral-options Q&A: the rater reads their review
+  back from a dialog the `Rated ★n` chip opens, not a `title` tooltip
+  (unreachable by keyboard and on touch, and silent when the review has
+  no text) and not an inline expand (the Actions column is narrow); the
+  own-profile entry point is a link in the Profile Details card under
+  the username, not a heading-row link or a fifth card. Two findings
+  shaped the code: the card already holds `user` from the session's one
+  `GET /users/me`, so the link needs no hook and carries the canonical
+  numeric id the public profile's `CANONICAL_USER_ID` gate requires;
+  and `RateExperienceModal` was not reusable read-only (write-shaped
+  state, and `StarRating` is a radio group with a shared `name`), so the
+  dialog is its sibling and reuses #257's `StarDisplay` instead.
+- **Author review:** web `npm run test` (20 files, 417 tests, all
+  passing — 19 in `rating.test.tsx`, 34 in `profile.test.tsx`),
+  `npm run lint`, `npm run format:check` and `npm run build` (tsc -b +
+  vite build) all clean; to be reviewed via pull request.
 
 ---
 ## 2026-10-30 — Leong Wei Zhi (feat: notification on rating.submitted, issue #255)
@@ -7532,3 +8108,163 @@ Entry template:
   none skipped, Temurin 21 container); web lint, build and `npm test`
   green (435 tests); the web marking test fails with marking disabled.
   Ko-Khan reviews via pull request.
+## 2026-11-02 — Leong Wei Zhi (docs: N1 rating-service documentation checklist, issue #258)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs
+- **Scope:** `docs/rating-service.md` + `docs/rating-service.mmd` (new:
+  the service's design record, decisions D1-D17 transcribed from the
+  merged code's disclosure headers, the N1 issues and the PR reviews,
+  with the no-`user.purged`-listener decision from the author's comment
+  on #258 as D17), `docs/architecture.md` + `docs/architecture.mmd`
+  (scope paragraph, domain list, three dependency rows, Rating Service
+  + rating-db nodes and edges — the first nice-to-have drawn in the
+  runtime diagram), `docs/notification-service.mmd` (the rating-events
+  trio the .md has described since #255), `rating-service/README.md`
+  (Configuration/Events/Status sections, stale intro line),
+  `rating-service/AGENTS.md` (filled — it was an empty file),
+  `web/README.md` (structure tree, the pre-gateway "calls each backend
+  service directly" line), `web/src/features/README.md` (rating/ added,
+  notifications/ name fixed), `web/AGENTS.md` (Rating service row in
+  the screen mapping, belated #256 header entry), root `AGENTS.md`
+  (walking-skeleton row retired, gateway row's service list), root
+  `README.md` (AI Use Summary: belated #256 paragraph + this pass).
+  Verified as already done, no edit: `docs/gateway.md` `/api/rating/**`
+  row, the README repository tree, `.env.example`/`compose.yaml`/port
+  table entries (all landed with #250/#251).
+- **Prompt(s):** "create a plan to resolve
+  https://github.com/AY2627S1-CS3219-P23/foc/issues/258". The author's
+  decisions via neutral-options Q&A: document the merged state only
+  (#284 documents itself when it lands); the hybrid mid-size doc shape
+  (notification-service's skeleton + supplier-service's requirements
+  and entities tables); a dedicated wiki page + Home entry (owed after
+  this PR merges); and including the four adjacent stale-doc fixes.
+  Only team decisions already made on the cited issues/PRs were
+  transcribed; the tool made no design decisions.
+- **Author review:** all three `.mmd` files render through mermaid-cli;
+  prettier clean on the touched web markdown. Leong Wei Zhi reviews via
+  pull request.
+
+## 2026-11-02 — Leong Wei Zhi (docs: PR #285 review round, issue #258)
+- **Tool:** Claude Code (Fable 5)
+- **Mode:** docs
+- **Scope:** `docs/rating-service.md` (D15 scoped to report
+  submissions, the rating routes' missing NUL/length guards recorded
+  as a known gap and a new Open item; the Rating entity's column named
+  `body`; the outbox failure legs split — only an unroutable publish
+  gets the 30 s delay, broker failures stop the poll; the legend
+  sentence matched to a diagram that does cite decision IDs inline),
+  `rating-service/AGENTS.md` (`RateableRequest` listed as the
+  deliberately updatable D5 projection, not with the immutable D9
+  entities; the D11 review order located in `RatingService.reviewsOf`;
+  the dto/ row's caps scoped to `SubmitReportRequest`), `web/README.md`
+  (shared/auth is a placeholder README — the session code lives in
+  `features/user`). All seven findings are @Sinnez1's inline comments
+  on PR #285 (two also raised by Copilot), each verified against the
+  merged code before editing; the docs were corrected to the merged
+  state rather than changing code, per this PR's docs-only scope — the
+  rating-input hardening is left as a recorded follow-up.
+- **Prompt(s):** "address pr comments".
+- **Author review:** every corrected claim re-checked against
+  `SubmitRatingRequest`/`SubmitReportRequest`, `Rating.java` +
+  `V3__rating_and_outbox.sql`, `RatingRepository`/`RatingService`,
+  `OutboxPublisher` and `RateableRequest`; prettier clean on the
+  touched web markdown. Leong Wei Zhi reviews via pull request.
+
+## 2026-11-07 — Alastair Tan Choon Wei (supplier seed data #299; caching docs #298)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** data + docs + local debugging
+- **Scope:** `data/csv/supplier-seed-data.csv` and
+  `supplier-service/src/main/resources/csv/supplier-seed-data.csv` (the
+  author's 44 new supplier rows appended to both copies, keeping the
+  original rows' Windows-1252 bytes and CRLF endings; the rows were
+  supplied by the author, the tool only appended them and checked the
+  result); a local-only, gitignored `.env` (variables added from
+  `.env.example` so `docker compose` runs again); a throwaway database
+  and container used to time the supplier list/search endpoints at 65
+  and 1,000 rows (removed afterwards, nothing committed); and, for
+  #298, `docs/supplier-service.md` (NFR1.1.1 struck, D15 added),
+  `docs/architecture.md` (non-functional list and open-decisions list)
+  and `docs/architecture.mmd` (Supplier Service node label), recording
+  the team's decision not to implement caching, in the author's words.
+- **Prompt(s):** "im want to clear github issue #299 ...", "paste only
+  the 44 new rows onto the end of the original file", "run the seed and
+  run the UI", "any chance u can help me run the test?", "for #298,
+  please update the docs to remove caching NFR ...". Asked whether
+  caching was worth doing, the tool declined under the AI policy
+  (performance trade-off) and offered measurements instead; the team
+  decided, and the tool only transcribed that decision.
+- **Author review:** timings and the decision are the team's; the
+  author reviews the diff and the PR.
+
+## 2026-11-07 — Alastair Tan Choon Wei (supplier NFR tests, issue #300)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** tests
+- **Scope:** `supplier-service/src/test/java/foc/supplier/SupplierNfrTest.java`
+  (new: NFR2.1 — exactly 1,000 suppliers stored, every one listable once
+  across pages and in one request, search and category filter correct at
+  that size; NFR1.1 — ten listing/search/filter/nearest/sort requests
+  each complete within 5 s after a warm-up call),
+  `supplier-service/src/test/java/foc/supplier/PostgresTestContainer.java`
+  (new: copied from rating-service's base class, postgres:17,
+  skipped without Docker) and `supplier-service/pom.xml` (the three
+  versionless Testcontainers test dependencies, as in rating-service).
+  The tests run on a real PostgreSQL rather than the H2 the other
+  supplier tests use; those are unchanged.
+- **Prompt(s):** "lets work on issue #300 now. what to add?", "can u
+  check what other services are using for such tests?", "ok lets do it
+  similarly like other services. we do testcontainers testing. can u
+  implement it now". The tool laid out the H2 and Testcontainers options
+  as facts; the author chose Testcontainers to match the other services.
+  The 5 s bound and the 1,000 target are the team's own NFRs
+  (`docs/supplier-service.md`); no cap is enforced and none was added.
+- **Author review:** `./mvnw verify` in `supplier-service` — 90 tests, 0
+  failures (14 new), run with JDK 22 locally since JDK 21 is not
+  installed (CI uses 21). The author reviews via pull request.
+
+## 2026-11-09 — Leong Wei Zhi (N5 cloud deployment, issue #48: EBS CSI add-on create fix)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debugging
+- **Scope:** `infra/terraform/eks.tf` (`aws_eks_addon.ebs_csi` drops the
+  `controller.env` `AWS_REGION` entry added in 3aa99430; keeps
+  `node.metadataSources`) and the PVC `Pending` runbook row in
+  `infra/README.md`.
+- **Prompt(s):** the `terraform apply eks.tfplan` error "UnsupportedAddonModification
+  ... containers[name="ebs-plugin"].env: duplicate entries for key
+  [name="AWS_REGION"]". The managed add-on manifest (v1.67.2-eksbuild.1)
+  already sets `AWS_REGION` on the controller, so the extra entry
+  collided; the schema has no separate region key.
+- **Then (same day):** the re-apply timed out with the add-on `CREATING`;
+  `ebs-csi-controller` crash-looped on `AccessDeniedException ...
+  eks-auth:AssumeRoleForPodIdentity ... explicit deny in a service control
+  policy` (the ISB organization SCP). The tool laid out three options as
+  facts (IRSA; node role + hop limit 2; no EBS volumes, emptyDir); the
+  author chose IRSA. `eks.tf`: `aws_iam_openid_connect_provider.cluster`
+  for the cluster issuer, `foc-ebs-csi` trusts
+  `system:serviceaccount:kube-system:ebs-csi-controller-sa` via
+  `sts:AssumeRoleWithWebIdentity`, the add-on gets
+  `service_account_role_arn`; the Pod Identity agent add-on and
+  association are removed. DP2 in `docs/deployment.md` and the add-on
+  `DEGRADED` runbook row updated.
+- **Author review:** `terraform fmt`, `terraform validate`; `terraform
+  plan` = 2 to add, 1 to change, 3 to destroy (tainted add-on replaced,
+  OIDC provider, role trust, Pod Identity agent + association gone),
+  saved as `eks.tfplan`. Apply owed by the author; whether the SCP allows
+  web identity for the cluster issuer is only shown by the apply. The
+  author reviews via pull request.
+
+## 2026-11-09 — Leong Wei Zhi (N5 cloud deployment, issue #48: Redis volume permissions on first deploy)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debugging
+- **Scope:** `infra/k8s/data/redis.yaml` (pod `securityContext.fsGroup:
+  1000`, `fsGroupChangePolicy: OnRootMismatch`).
+- **Prompt(s):** "check the deploy rollout status". The first Deploy hung
+  on `redis-0` in `CrashLoopBackOff`: "Can't open or create append-only
+  dir appendonlydir: Permission denied". The fresh ext4 EBS volume holds
+  `lost+found`, so the redis:8.8-alpine entrypoint skips its ownership
+  fix ("Unknown file './lost+found' ... Permissions will not be
+  modified") and redis (uid 999, gid 1000) cannot write the root-owned
+  `/data`.
+- **Author review:** reproduced with Docker (root-owned volume with
+  `lost+found`: the same error; with group 1000, mode 2775 as fsGroup
+  applies: "Ready to accept connections"); `kubectl kustomize infra/k8s`
+  renders. The author reviews via pull request.

@@ -34,6 +34,16 @@
  * the missing-consumer-queue guard now nacks with requeue instead of
  * throwing (in MANUAL mode an uncaught exception settles nothing and
  * the delivery would pin a prefetch slot until restart).
+ * 2026-11-08, Claude Code (Fable 5.1), issue #305 (team decision, Leong
+ * Wei Zhi via options Q&A): a duplicate-key failure from the processor is
+ * acked as a duplicate instead of taking a retry hop — with two replicas
+ * the same event can be in flight twice, and the loser's whole transaction
+ * rolled back on the processed_events primary key. Author review: Leong
+ * Wei Zhi, pending pull request review.
+ * Same day, PR #306 review (Sinnez1, Claude reviewer): only a violation of
+ * processed_events_pkey counts as the duplicate; any other unique violation
+ * takes the retry/DLQ path. Author review: Leong Wei Zhi, pending pull
+ * request review.
  */
 package foc.notification.messaging.rabbitmq;
 
@@ -42,6 +52,7 @@ import foc.contracts.events.core.DomainEvent;
 import foc.notification.service.EventProcessor;
 import java.io.IOException;
 import java.util.Map;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -102,7 +113,7 @@ import org.springframework.stereotype.Component;
  * catalogs flows through unchanged, so a new domain queue is one more
  * entry in the {@code queues} list below plus its row in
  * {@link #RETRY_QUEUE_BY_WORK_QUEUE} (the rating queue arrived with
- * issue #255). Nothing here is domain-specific: the retry target is
+ * issue #255, the credit queue with the credit-change notification). Nothing here is domain-specific: the retry target is
  * looked up per delivery from its consuming queue; a delivery the map
  * cannot place is nacked with requeue — settled, so it never pins a
  * prefetch slot, and redelivered rather than guessed at.
@@ -124,7 +135,14 @@ class DomainEventsListener {
 	 */
 	static final Map<String, String> RETRY_QUEUE_BY_WORK_QUEUE = Map.of(
 			RabbitMqTopology.REQUEST_EVENTS_QUEUE, RabbitMqTopology.REQUEST_EVENTS_RETRY_QUEUE,
-			RabbitMqTopology.RATING_EVENTS_QUEUE, RabbitMqTopology.RATING_EVENTS_RETRY_QUEUE);
+			RabbitMqTopology.RATING_EVENTS_QUEUE, RabbitMqTopology.RATING_EVENTS_RETRY_QUEUE,
+			RabbitMqTopology.CREDIT_EVENTS_QUEUE, RabbitMqTopology.CREDIT_EVENTS_RETRY_QUEUE);
+
+	/**
+	 * The dedupe inbox's primary key (V1__baseline.sql): the one unique
+	 * violation that means "a concurrent delivery already processed it".
+	 */
+	static final String PROCESSED_EVENTS_PKEY = "processed_events_pkey";
 
 	/**
 	 * Ceiling on waiting for the broker to confirm a retry republish;
@@ -147,12 +165,26 @@ class DomainEventsListener {
 
 	@RabbitListener(queues = {
 			RabbitMqTopology.REQUEST_EVENTS_QUEUE,
-			RabbitMqTopology.RATING_EVENTS_QUEUE })
+			RabbitMqTopology.RATING_EVENTS_QUEUE,
+			RabbitMqTopology.CREDIT_EVENTS_QUEUE })
 	void onDomainEvent(@Payload DomainEvent event, Message amqpMessage, Channel channel,
 			@Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) throws IOException {
 		try {
 			eventProcessor.process(event);
 		} catch (RuntimeException ex) {
+			if (isDuplicateKey(ex)) {
+				// Two replicas processed the same event at once (issue #305):
+				// both passed the dedupe read, the loser's INSERT into
+				// processed_events hit the winner's row, and its whole
+				// transaction (notifications included) rolled back; only the
+				// winner's AFTER_COMMIT push went out. The outcome is the
+				// seen-before case, so ack it instead of spending a retry hop
+				// on it.
+				log.info("event {} already processed by a concurrent delivery; acked",
+						event.eventId());
+				channel.basicAck(deliveryTag, false);
+				return;
+			}
 			long attempts = attemptsSoFar(amqpMessage);
 			log.warn("event {} failed on attempt {}/{}", event.eventId(), attempts, maxAttempts);
 			// Map.of rejects null keys, so the absent-header case is guarded
@@ -185,6 +217,22 @@ class DomainEventsListener {
 			throw ex;
 		}
 		channel.basicAck(deliveryTag, false);
+	}
+
+	/**
+	 * A violation of {@link #PROCESSED_EVENTS_PKEY} anywhere in the cause
+	 * chain (the JPA commit wraps it); Hibernate names the constraint from
+	 * the database's error. Any other unique violation is a real failure
+	 * and keeps its retry/DLQ path (PR #306 review).
+	 */
+	static boolean isDuplicateKey(Throwable ex) {
+		for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+			if (cause instanceof ConstraintViolationException violation
+					&& PROCESSED_EVENTS_PKEY.equals(violation.getConstraintName())) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** 1 for the delivery in hand, plus the attempts already stamped. */

@@ -8,6 +8,11 @@
  * once, and a returned or unconfirmed retry copy, each on this
  * listener's own queue and header.
  * Author review: Ryan Ang, pending pull request review.
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
 
@@ -25,7 +30,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
-import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -56,7 +60,7 @@ class UserEventsListenerTest {
 	private final UserEventsListener listener = new UserEventsListener(handler, rabbitTemplate, MAX_ATTEMPTS,
 			CONFIRM_TIMEOUT_MS, pause);
 	private final UserPurged event = new UserPurged("e-1", Instant.parse("2026-10-28T03:00:00Z"), "user-service",
-			"e-1", List.of(), "42");
+			"e-1", "42");
 
 	@ParameterizedTest
 	@EnumSource(value = AccountResult.class, names = "NO_USER", mode = EnumSource.Mode.EXCLUDE)

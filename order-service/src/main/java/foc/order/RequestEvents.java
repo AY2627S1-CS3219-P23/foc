@@ -26,6 +26,11 @@
  * request.dispute-resolved, parties = the requester and the courier
  * (DSP-9), with the stored dispute's category and notes (DSP-12; team
  * decisions). Author review: Ryan Ang, pending pull request review.
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author decision
+ * via options Q&A): parties removed from every event — who is told is
+ * the Notification Service's rule — and request.expired now carries the
+ * courier who had accepted (nullable). Author review: Leong Wei Zhi,
+ * pending pull request review.
  */
 package foc.order;
 
@@ -45,8 +50,6 @@ import foc.order.model.RequestDispute;
 import foc.order.model.Requests;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 /** The request events this service publishes, built from a stored request. */
@@ -59,20 +62,20 @@ final class RequestEvents {
 
     // request.submitted: saga step 1, asks the Credit Service to reserve the reward
     static RequestSubmitted submitted(Requests r) {
-        return new RequestSubmitted(newEventId(), Instant.now(), PRODUCER, correlationId(r), parties(r),
+        return new RequestSubmitted(newEventId(), Instant.now(), PRODUCER, correlationId(r),
                 id(r.getId()), id(r.getRequesterId()), r.getSupplierName(), r.getDropoffLocation(), r.getItem(),
                 r.getCreditAmount());
     }
 
     // request.created: saga step 3a, the reward is reserved
     static RequestCreated created(Requests r) {
-        return new RequestCreated(newEventId(), Instant.now(), PRODUCER, correlationId(r), parties(r),
+        return new RequestCreated(newEventId(), Instant.now(), PRODUCER, correlationId(r),
                 id(r.getId()), id(r.getRequesterId()), r.getSupplierName(), r.getDropoffLocation(), r.getItem());
     }
 
     // request.rejected: saga step 3b, with the Credit Service's reason
     static RequestRejected rejected(Requests r, String reason) {
-        return new RequestRejected(newEventId(), Instant.now(), PRODUCER, correlationId(r), parties(r),
+        return new RequestRejected(newEventId(), Instant.now(), PRODUCER, correlationId(r),
                 id(r.getId()), id(r.getRequesterId()), r.getSupplierName(), r.getDropoffLocation(), r.getItem(),
                 reason);
     }
@@ -80,31 +83,31 @@ final class RequestEvents {
     // request.cancelled: a pending request timed out, or the requester
     // cancelled before any courier accepted, so there is never a courier
     static RequestCancelled cancelled(Requests r) {
-        return new RequestCancelled(newEventId(), Instant.now(), PRODUCER, correlationId(r), parties(r),
+        return new RequestCancelled(newEventId(), Instant.now(), PRODUCER, correlationId(r),
                 id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
                 r.getDropoffLocation(), r.getItem());
     }
 
     // request.accepted: a courier took the request
     static RequestAccepted accepted(Requests r) {
-        return new RequestAccepted(newEventId(), Instant.now(), PRODUCER, correlationId(r), requesterAndCourier(r),
+        return new RequestAccepted(newEventId(), Instant.now(), PRODUCER, correlationId(r),
                 id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
                 r.getDropoffLocation(), r.getItem());
     }
 
     // request.collected: the courier has the item from the supplier
     static RequestCollected collected(Requests r) {
-        return new RequestCollected(newEventId(), Instant.now(), PRODUCER, correlationId(r), requesterAndCourier(r),
+        return new RequestCollected(newEventId(), Instant.now(), PRODUCER, correlationId(r),
                 id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
                 r.getDropoffLocation(), r.getItem());
     }
 
     // request.dropped: the courier withdrew after accepting; the request
-    // reopens and the reward stays held (F5.2), so only the requester is
-    // told. The dropping courier is a parameter: the caller has already
-    // cleared the entity's courier fields.
+    // reopens and the reward stays held (F5.2). The dropping courier is a
+    // parameter: the caller has already cleared the entity's courier
+    // fields. Who is told is the Notification Service's rule (D34).
     static RequestDropped dropped(Requests r, Long droppedCourierId) {
-        return new RequestDropped(newEventId(), Instant.now(), PRODUCER, correlationId(r), parties(r),
+        return new RequestDropped(newEventId(), Instant.now(), PRODUCER, correlationId(r),
                 id(r.getId()), id(r.getRequesterId()), id(droppedCourierId), r.getSupplierName(),
                 r.getDropoffLocation(), r.getItem());
     }
@@ -112,36 +115,33 @@ final class RequestEvents {
     // request.courier-arrived: the courier is at the drop-off location,
     // so the requester can come and collect the item
     static CourierArrived courierArrived(Requests r) {
-        return new CourierArrived(newEventId(), Instant.now(), PRODUCER, correlationId(r), parties(r),
+        return new CourierArrived(newEventId(), Instant.now(), PRODUCER, correlationId(r),
                 id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
                 r.getDropoffLocation(), r.getItem());
     }
 
     // request.completed: the Credit Service transfers the held reward to
-    // the courier. Both users are told, unlike the other events.
+    // the courier.
     static RequestCompleted completed(Requests r) {
         return new RequestCompleted(newEventId(), Instant.now(), PRODUCER, correlationId(r),
-                requesterAndCourier(r),
                 id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
                 r.getDropoffLocation(), r.getItem());
     }
 
-    // request.expired: the deadline passed before collection. The record
-    // has no courierId, so a courier who had accepted is only in parties.
+    // request.expired: the deadline passed before collection. courierId is
+    // the courier who had accepted, or null when the request was still open
+    // (D34: the Notification Service tells them too when present).
     static RequestExpired expired(Requests r) {
-        List<String> parties = new ArrayList<>(parties(r));
-        if (r.getCourierId() != null) {
-            parties.add(id(r.getCourierId()));
-        }
-        return new RequestExpired(newEventId(), Instant.now(), PRODUCER, correlationId(r), List.copyOf(parties),
-                id(r.getId()), id(r.getRequesterId()), r.getSupplierName(), r.getDropoffLocation(), r.getItem());
+        return new RequestExpired(newEventId(), Instant.now(), PRODUCER, correlationId(r),
+                id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
+                r.getDropoffLocation(), r.getItem());
     }
 
     // request.disputed: the requester reported a problem, or the sweep
     // escalated the request; the reward stays held until an admin
     // resolves it. disputeNote is the stored dispute_note.
     static RequestDisputed disputed(Requests r, RequestDispute d) {
-        return new RequestDisputed(newEventId(), Instant.now(), PRODUCER, correlationId(r), requesterAndCourier(r),
+        return new RequestDisputed(newEventId(), Instant.now(), PRODUCER, correlationId(r),
                 id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
                 r.getDropoffLocation(), r.getItem(), d.getCategory().name(), d.getDisputeNote());
     }
@@ -151,21 +151,13 @@ final class RequestEvents {
     // resolution_note.
     static RequestDisputeResolved disputeResolved(Requests r, RequestDispute d) {
         return new RequestDisputeResolved(newEventId(), Instant.now(), PRODUCER, correlationId(r),
-                requesterAndCourier(r), id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()),
-                r.getSupplierName(), r.getDropoffLocation(), r.getItem(), d.getCourierAmount(),
-                d.getRequesterAmount(), d.getResolutionNote());
+                id(r.getId()), id(r.getRequesterId()), id(r.getCourierId()), r.getSupplierName(),
+                r.getDropoffLocation(), r.getItem(), d.getCourierAmount(), d.getRequesterAmount(),
+                d.getResolutionNote());
     }
 
     private static String correlationId(Requests r) {
         return id(r.getId());
-    }
-
-    private static List<String> requesterAndCourier(Requests r) {
-        return List.of(id(r.getRequesterId()), id(r.getCourierId()));
-    }
-
-    private static List<String> parties(Requests r) {
-        return List.of(id(r.getRequesterId()));
     }
 
     private static String id(Long id) {

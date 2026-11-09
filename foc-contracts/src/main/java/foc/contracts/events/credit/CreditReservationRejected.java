@@ -18,7 +18,6 @@ import foc.contracts.events.core.EventTypeRegistry;
 import foc.contracts.events.core.Nullable;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -38,7 +37,6 @@ public record CreditReservationRejected(
 		Instant occurredAt,
 		String producer,
 		String correlationId,
-		List<String> parties,
 		String requestId,
 		String requesterId,
 		Integer amount,

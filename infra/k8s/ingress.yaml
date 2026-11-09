@@ -1,0 +1,37 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
+# Scope: Traefik on port 80: /api to the gateway (the only way to the
+# backends, G3), everything else to the web SPA.
+# Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
+# docs/deployment.md); values mirror compose.yaml's defaults.
+# Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform): Traefik
+# comes from its Helm chart (infra/helm/traefik-values.yaml) behind the load
+# balancer's NodePort target group (DP15); the class name and the routes are
+# unchanged.
+# Author review: Leong Wei Zhi, pending pull request review.
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: foc
+  namespace: foc
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80

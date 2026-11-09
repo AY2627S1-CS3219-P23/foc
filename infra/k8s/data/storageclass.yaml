@@ -1,0 +1,21 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5.1), 2026-11-09, issue #48 (EKS re-platform).
+# Scope: the gp3 StorageClass the RabbitMQ and Redis StatefulSets claim
+# from, served by the EBS CSI driver add-on (team decision DP4, Leong Wei
+# Zhi, 2026-11-09, options Q&A, recorded in docs/deployment.md). Not marked
+# default: EKS ships a gp2 class of its own, and both templates name gp3.
+# Author review: Leong Wei Zhi, pending pull request review.
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+provisioner: ebs.csi.aws.com
+# the volume is created in the zone of the node the pod lands on; it stays
+# bound to that zone afterwards
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+parameters:
+  type: gp3
+  encrypted: "true"

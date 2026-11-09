@@ -11,6 +11,11 @@
  * 2026-10-21, issue #234: test records built with the new reasonCode
  * component (team decision, DSP-12).
  * Author review: Ryan Ang, pending pull request review.
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.credit.messaging.rabbitmq;
 
@@ -20,7 +25,6 @@ import static org.awaitility.Awaitility.await;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -107,7 +111,7 @@ class OutboxPublisherIntegrationTest extends PostgresTestContainer {
 	void aReplyIsPublishedAsItsEventAndMarkedSent() {
 		bindOrderQueue();
 		CreditReserved reply = new CreditReserved(UUID.randomUUID().toString(), Instant.now(), "credit-service",
-				"corr-1", List.of(), "r-1", "u-req", 3);
+				"corr-1", "r-1", "u-req", 3);
 
 		transaction.executeWithoutResult(status -> outbox.enqueue(reply));
 
@@ -124,7 +128,7 @@ class OutboxPublisherIntegrationTest extends PostgresTestContainer {
 	@Test
 	void aReplyPublishedWithNoQueueBoundStaysUnsentUntilOneIs(CapturedOutput output) {
 		CreditReservationRejected reply = new CreditReservationRejected(UUID.randomUUID().toString(), Instant.now(),
-				"credit-service", "corr-2", List.of(), "r-2", "u-req", 9, "insufficient available credits",
+				"credit-service", "corr-2", "r-2", "u-req", 9, "insufficient available credits",
 				CreditReservationRejected.INSUFFICIENT_CREDITS);
 
 		transaction.executeWithoutResult(status -> outbox.enqueue(reply));
@@ -157,7 +161,7 @@ class OutboxPublisherIntegrationTest extends PostgresTestContainer {
 		CreditReservationRejected firstUnroutable = rejected(now.minusSeconds(20), "r-5");
 		CreditReservationRejected secondUnroutable = rejected(now.minusSeconds(10), "r-6");
 		CreditReserved routable = new CreditReserved(UUID.randomUUID().toString(), now, "credit-service",
-				"corr-7", List.of(), "r-7", "u-req", 2);
+				"corr-7", "r-7", "u-req", 2);
 		// committed together, so the first poll finds all three
 		transaction.executeWithoutResult(status -> {
 			store(firstUnroutable, now.minusSeconds(20));
@@ -187,7 +191,7 @@ class OutboxPublisherIntegrationTest extends PostgresTestContainer {
 		bindOrderQueue();
 		UUID eventId = UUID.randomUUID();
 		String payload = "{\"eventId\":\"" + eventId + "\",\"occurredAt\":\"2026-10-12T08:00:00Z\","
-				+ "\"producer\":\"credit-service\",\"correlationId\":\"corr-3\",\"parties\":[],"
+				+ "\"producer\":\"credit-service\",\"correlationId\":\"corr-3\","
 				+ "\"requestId\":\"r-3\",\"requesterId\":\"u-req\",\"amount\":4,\"eventType\":\"credit.reserved\"}";
 		outboxEvents.save(new OutboxEvent(eventId, "credit.reserved", payload, Instant.now().minusSeconds(3600)));
 
@@ -201,7 +205,7 @@ class OutboxPublisherIntegrationTest extends PostgresTestContainer {
 	void aSentReplyIsNotPublishedAgain() {
 		bindOrderQueue();
 		CreditReserved reply = new CreditReserved(UUID.randomUUID().toString(), Instant.now(), "credit-service",
-				"corr-4", List.of(), "r-4", "u-req", 1);
+				"corr-4", "r-4", "u-req", 1);
 		transaction.executeWithoutResult(status -> outbox.enqueue(reply));
 		assertThat(rabbitTemplate.receive(ORDER_QUEUE, TIMEOUT.toMillis())).isNotNull();
 		awaitSent(reply.eventId());
@@ -224,7 +228,7 @@ class OutboxPublisherIntegrationTest extends PostgresTestContainer {
 
 	private static CreditReservationRejected rejected(Instant occurredAt, String requestId) {
 		return new CreditReservationRejected(UUID.randomUUID().toString(), occurredAt, "credit-service",
-				"corr-" + requestId, List.of(), requestId, "u-req", 9, "insufficient available credits",
+				"corr-" + requestId, requestId, "u-req", 9, "insufficient available credits",
 				CreditReservationRejected.INSUFFICIENT_CREDITS);
 	}
 

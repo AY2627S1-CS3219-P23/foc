@@ -13,7 +13,11 @@ policy). The team's decisions for this service are C1–C15 in
 them, and ask the owner (Ko-Khan) before changing any of them.
 
 - Build and test with this folder's wrapper: `./mvnw test` (Docker must
-  be running for the database tests).
+  be running for the database tests and the STOMP integration test's
+  RabbitMQ).
+- STOMP pushes go through the `chat.push` fanout (`StompChatPublisher`
+  publishes, `ChatPushListener` delivers on every replica, issue #305);
+  never send to the local `SimpMessagingTemplate` from the publisher.
 - Flyway owns the schema (`src/main/resources/db/migration`); Hibernate
   only validates it. Add a new migration, never edit an applied one.
 - Who may read and send is decided in `ChatService` only; the REST

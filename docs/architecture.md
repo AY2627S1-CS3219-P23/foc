@@ -48,6 +48,23 @@
   2026-10-28 (Claude Code, Opus 5.5), issue #267: the User Service →
   Broker → Credit Service dependency row, per the team's USR-1 to USR-9
   (docs/credit-service.md D14). Transcription only.
+  2026-11-02 (Claude Code, Fable 5), issue #258: the Rating Service
+  joins the runtime picture now that N1 is merged (issues #249-#257,
+  decisions D1-D17 in docs/rating-service.md, made by Leong Wei Zhi) —
+  the scope paragraph, the style paragraph's domain list and three
+  dependency rows; the first nice-to-have drawn in the runtime diagram.
+  Transcription only; no decisions made by the tool.
+  Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-04, Claude Code (Fable 5.1), notification D34: the legend's
+  user-id note and the rating row no longer name the removed `parties`
+  field. Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-05, Claude Code (Opus 5.5), issue #48: the N5 note links the
+  new deployment record (docs/deployment.md). Author review: Leong Wei
+  Zhi, pending pull request review.
+  2026-11-07 (Claude Code, Sonnet 5.5), issue #298: Supplier caching
+  (NFR1.1.1) removed from the non-functional list and the open-decisions
+  list, per the team's decision recorded in docs/supplier-service.md
+  D15. Transcription only; no decision made by the tool.
 -->
 
 # Favours on Campus (FoC) — High-Level Service Architecture
@@ -63,21 +80,28 @@ decision, deliberately left open.
 **Architectural style:** distributed deployment × domain partitioning —
 i.e. **microservices** (per the L4 categorization of architecture
 styles). Each service owns exactly one business domain (users,
-suppliers, orders, credits, notifications) and its own database
+suppliers, orders, credits, notifications, ratings) and its own database
 (database-per-service); services interact only through their published
 APIs. The request-event workflow is **event-driven** through the message
 broker (course milestone M6), decoupling the Notification Service and
 the Credit Service's reservation, transfer and release from the Order
 Service that produces the events.
 
-**Scope:** committed functional and non-functional requirements (F/NFR)
-only. The selected nice-to-haves (N1 ratings, N2 request history, N3
-disputes, N4 centralized logging, N5 cloud deployment/CI-CD/Kubernetes,
-N6 requester–courier chat, N7 admin dashboard incl. admin credit
-adjustments, N8 supplier bookmarks) are intentionally excluded from this runtime diagram; N5
-concerns deployment, not runtime structure. (In the latest backlog, chat
-and admin credit adjustment were reclassified from committed
-requirements to nice-to-haves N6/N7, so they no longer appear here.)
+**Scope:** committed functional and non-functional requirements (F/NFR),
+plus the one nice-to-have that added a deployable service: **N1 ratings**
+shipped as its own `rating-service` with its own database (issues
+#249–#257, [`rating-service.md`](rating-service.md)), so excluding it
+would misstate the runtime structure — it is the first nice-to-have
+drawn in this diagram. The other selected nice-to-haves (N2 request
+history, N3 disputes, N4 centralized logging, N5 cloud
+deployment/CI-CD/Kubernetes, N6 requester–courier chat, N7 admin
+dashboard incl. admin credit adjustments, N8 supplier bookmarks) remain
+intentionally excluded: they live inside existing components (their
+design records: [`disputes.md`](disputes.md),
+[`supplier-service.md`](supplier-service.md) N8); N5 concerns
+deployment, not runtime structure ([`deployment.md`](deployment.md)). (In the latest backlog, chat and
+admin credit adjustment were reclassified from committed requirements
+to nice-to-haves N6/N7, so they no longer appear here.)
 
 **Diagram source:** [`architecture.mmd`](architecture.mmd) — GitHub
 renders it directly in the file view; the legend and dependency table
@@ -114,8 +138,9 @@ F6.1.5). Token-validation mechanics (shared `JWT_SECRET` per
 drawn for it.
 Provisional convention (decided under Notification issue #67, before
 the User Service exists): the JWT's `sub` claim carries the platform
-user ID — the same ID used in event `parties[]` and notification
-recipients — and the User Service must mint tokens accordingly.
+user ID — the same ID the request events carry as `requesterId`/
+`courierId` and the Notification Service stores as recipient
+(notification D34) — and the User Service must mint tokens accordingly.
 
 **Abbreviations:** REST = HTTP/JSON web APIs · JWT = JSON Web Token ·
 OTP = one-time password · JPA = Java Persistence API (Spring Data JPA) ·
@@ -132,6 +157,7 @@ TBD = to be decided.
 | Web → Order Service (via gateway) | sync REST | create/list/accept/collect–arrive/cancel/complete requests; re-release expired requests | Order F1–F8 (re-release: F6.4) |
 | Web → Credit Service (via gateway) | sync REST | available + reserved balances (shown in the user's profile), filtered transaction history; the account with its 5 starting credits (reserved balance 0) is created the first time the user is seen (see [`credit-service.md`](credit-service.md), D6) | Credit F1.1, F4; User F8.1 |
 | Web → Notification Service (via gateway) | sync REST | list recent notifications in-app, mark read/unread, retention window | Notif F3.1, F3.2, F3.4 |
+| Web → Rating Service (via gateway) | sync REST | submit the one immutable rating per direction of a completed request; the caller's own rating; any user's rating summary + paged review history for the public profile; report a user, admins list reports (see [`rating-service.md`](rating-service.md)) | N1.1–N1.4; User F8.1 |
 | Notification Service → Web (socket via gateway) | async WebSocket (STOMP) push, per-user destinations | request state-change updates to requester and assigned courier within 5 seconds; the system's **only standing connection** — all other Web ↔ service traffic is stateless REST (see [`notification-service.md`](notification-service.md), "Connection topology") | Notif F1.2; Order NFR1.1–1.2 |
 | User Service → Email Provider | async email (Gmail SMTP; a Mailpit container is the local dev/demo target) | OTP for sign-up verification, email-change confirmation, password reset | User F1.1.3, F2.1.1, F2.1.3, F4.2 |
 | Order Service → Supplier Service | sync REST | validate pickup location is a known supplier/landmark; fetch supplier locations for the 1 km acceptance-proximity check | Order F1.1.1, F8.1 |
@@ -139,6 +165,8 @@ TBD = to be decided.
 | Credit Service → Broker (RabbitMQ) → Order Service | **async events** | reservation reply: `credit.reserved` moves the request from pending to created, `credit.reservation-rejected` moves it to rejected when the available balance is insufficient (see [`credit-service.md`](credit-service.md), D7–D8) | Credit F2.1.3; Order F1.1.4; **M6** |
 | User Service → Broker (RabbitMQ) → Credit Service | **async events** | `user.created` when a verified sign-up inserts the user row opens the credit account (get-or-create stays the fallback); `user.purged` for each account the day-31 purge deletes closes it, moving its balance to the common pool so redistribution skips it (see [`credit-service.md`](credit-service.md), D14) | Credit F1.1, F6.1.1; User F3.1.3 |
 | Order Service → Broker (RabbitMQ) → Notification Service | **async events** | event on every request state transition (submitted/created/accepted/collected/completed/cancelled/expired/rejected); at-least-once, persisted across restarts; consumer deduplicates, retries, dead-letters exhausted retries; delivery failure never affects the producing operation; new event types need no publisher changes | Order F0.2; Notif F1.1, F1.3, F1.4, F2.1–F2.3, NFR1.1–1.2; **M6** |
+| Order Service → Broker (RabbitMQ) → Rating Service | **async events** | `request.completed` (the producer's existing stream, no N1 change) builds the rating-eligibility projection, so eligibility checks need no call to the Order Service; idempotent via the consumer's own inbox (see [`rating-service.md`](rating-service.md), D2–D5) | N1.1; **M6** |
+| Rating Service → Broker (RabbitMQ) → Notification Service | **async events** | `rating.submitted` (ids + stars; the Notification Service tells the ratee only, D34) through a transactional outbox notifies the ratee in-app; consumed on the Notification Service's own queue trio bound to the `rating-events` exchange (see [`rating-service.md`](rating-service.md) D7/D8, [`notification-service.md`](notification-service.md) D16 note) | N1 (#44 decision); Notif F1.1–F1.4 |
 
 Timer-driven behaviors stay **inside** the owning service (no arrow):
 request expiry from the created or accepted state at the deadline, with
@@ -160,8 +188,8 @@ These shape sizing and implementation rather than adding components:
   access the records (User NFR4).
 - **Supplier Service:** 1,000 suppliers (Supplier NFR2, revised
   2026-09-27 from the original 100,000 — see docs/supplier-service.md
-  D7); listings within 5 s, with caching on frequently queried fields
-  such as name and location (Supplier NFR1.1, NFR1.1.1).
+  D7); listings within 5 s (Supplier NFR1.1). No caching: NFR1.1.1 was
+  removed on 2026-11-07 — see docs/supplier-service.md D15.
 - **Order Service:** courier listings reflect requests entering/leaving
   the created state within 5 s; every state change visible to requester
   and assigned courier within 5 s (Order NFR1.1–1.2) — via the
@@ -176,8 +204,9 @@ These shape sizing and implementation rather than adding components:
 
 ## Decisions still open (team, not AI)
 
-- **Supplier caching mechanism** (Supplier NFR1.1.1) — in-process vs. a
-  shared cache; drawn inside the Supplier Service until decided.
+Resolved 2026-11-07: the **supplier caching mechanism** (Supplier
+NFR1.1.1) is no longer open — the team removed the caching requirement
+and will not implement it (docs/supplier-service.md D15).
 
 Resolved 2026-10-26: the **bookmark cleanup on account purge** (N8.5) is
 a direct API call — the User Service's purge job calls the Supplier

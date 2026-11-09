@@ -29,6 +29,10 @@
 -- strictly before the stamp answer the same revoked 401; missing
 -- sub/iat and Redis errors fail open like the jti check (G6).
 -- Reviewed by: Leong Wei Zhi (via pull request).
+-- 2026-11-05, Claude Code (Opus 5.5), issue #48: the Redis host/port are
+-- the REDIS_HOST/REDIS_PORT globals nginx.conf's init block reads from
+-- the environment (default redis:6379, unchanged for compose). Author
+-- review: Leong Wei Zhi, pending pull request review.
 
 local cjson = require "cjson.safe"
 local jwt = require "resty.jwt"
@@ -37,8 +41,7 @@ local redis = require "resty.redis"
 
 local DENYLIST_PREFIX = "denylist:"
 local USER_DENYLIST_PREFIX = "denylist:user:"
-local REDIS_HOST = "redis"
-local REDIS_PORT = 6379
+-- REDIS_HOST / REDIS_PORT: globals set in nginx.conf init_by_lua_block
 local REDIS_TIMEOUT_MS = 100 -- keep the hot path tight; errors fail open
 local KEEPALIVE_IDLE_MS = 10000
 local KEEPALIVE_POOL = 100

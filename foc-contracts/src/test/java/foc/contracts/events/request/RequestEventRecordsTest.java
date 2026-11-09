@@ -25,6 +25,9 @@
  * Leong Wei Zhi, pending pull request review.
  * 2026-10-28, Claude Code (Opus 5.5), issue #267: a user event carries a
  * userId instead; author review: Ryan Ang, pending pull request review.
+ * 2026-11-04, Claude Code (Fable 5.1), D34 (author decision): no record
+ * declares parties any more, and RequestExpired.courierId is @Nullable;
+ * author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.contracts.events.request;
 
@@ -123,6 +126,38 @@ class RequestEventRecordsTest {
 				}
 			}
 		}
+	}
+
+	/**
+	 * D34 (docs/notification-service.md): recipients are the Notification
+	 * Service's rule per event type, so no record may carry a recipient
+	 * list — a reintroduced {@code parties} would put notification logic
+	 * back into the producers' contract.
+	 */
+	@Test
+	void noRecordCarriesARecipientList() {
+		for (EventTypeRegistry.Entry entry : EventTypeRegistry.entries()) {
+			assertFalse(componentNames(entry.eventClass()).contains("parties"),
+					entry.eventClass() + " must not declare parties (D34)");
+		}
+	}
+
+	/**
+	 * A request can expire while still open, so the courier is optional
+	 * (D34): a required courierId would dead-letter every open-request
+	 * expiry at the Credit Service.
+	 */
+	@Test
+	void requestExpiredCourierIdIsNullable() {
+		boolean found = false;
+		for (RecordComponent component : RequestExpired.class.getRecordComponents()) {
+			if (component.getName().equals("courierId")) {
+				found = true;
+				assertTrue(component.isAnnotationPresent(Nullable.class),
+						"RequestExpired.courierId must be @Nullable");
+			}
+		}
+		assertTrue(found, "RequestExpired must declare a courierId component");
 	}
 
 	/**

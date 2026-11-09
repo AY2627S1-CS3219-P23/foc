@@ -34,8 +34,22 @@
   table and chat-db to the port table (host port 5439, Ko-Khan via
   options Q&A; docs/chat-service.md). Author review: Ko-Khan, pending
   pull request review.
+  2026-11-02, issue #258 (Fable 5): the rating-service folder row's
+  "walking skeleton for now" retired (the N1 issues are merged; design
+  record docs/rating-service.md) and the gateway port-table row's
+  service list corrected — it had not kept up with order-service and
+  rating-service joining the cutover. Transcription only.
+  Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-05, Claude Code (Opus 5.5), issue #48: infra/ recorded as the
+  second non-service folder and the cloud deployment noted under Tech
+  Stack (team decisions, Leong Wei Zhi via options Q&A,
+  docs/deployment.md). Transcription only. Author review: Leong Wei Zhi,
+  pending pull request review.
   All decisions documented here were made by the team.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-11-09, Claude Code (Fable 5.1), issue #48: the deployment line
+  names the EKS cluster and RDS instead of the k3s host. Transcription
+  only. Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # Favours on Campus (FoC) — Agent Guide
@@ -54,7 +68,10 @@ credit economy (credits cannot be bought or cashed out).
   service's wrapper (`./mvnw` / `./gradlew`); there is no shared root
   build
 - **Deployment:** Docker per service (`Dockerfile` in each service folder),
-  orchestrated via root `compose.yaml`
+  orchestrated via root `compose.yaml`; the cloud deployment (N5, issue
+  #48) runs the same images on an EKS cluster in AWS with one RDS
+  PostgreSQL instance, provisioned by `infra/` — design in
+  `docs/deployment.md`, runbook in `infra/README.md`
 
 ## Architecture
 
@@ -71,6 +88,7 @@ an independent Spring Boot application:
 | `notification-service/` | Order event updates, delivery retries, idempotent event processing |
 | `rating-service/` | Ratings for completed orders (nice-to-have N1, issue #44) — walking skeleton for now |
 | `chat-service/` | Requester–courier chat for accepted orders, admins read-only (nice-to-have N6, `docs/chat-service.md`) |
+| `rating-service/` | Ratings for completed orders (nice-to-have N1, issue #44): immutable per-direction ratings, profile rating summaries/history, user reports — design record `docs/rating-service.md` |
 
 Any nice-to-have feature that warrants its own service gets an additional
 top-level folder following the same skeleton. A service folder may contain
@@ -80,7 +98,9 @@ working in that service.
 One top-level folder is **not** a service: `foc-contracts/` is a shared
 Maven library holding cross-service contract constants (e.g. broker
 exchange names) and the typed event contracts (event records +
-registry) — see the exception under Conventions.
+registry) — see the exception under Conventions. A second one,
+`infra/`, holds the cloud deployment (Terraform + Kubernetes manifests,
+issue #48) — no service code.
 
 ## Conventions
 
@@ -159,7 +179,7 @@ alone is only a gate inside the server.
 | `web` | — | no database (frontend itself published on `${WEB_PORT:-5173}`) |
 | `mailpit` | — | mail catcher, not a DB: SMTP `${MAILPIT_SMTP_PORT:-1025}`, web inbox `${MAILPIT_UI_PORT:-8025}` (both loopback only) |
 | `redis` | `${REDIS_HOST_PORT:-6379}` (loopback only) | logout token denylist (issue #151), not a DB profile — inspect with `redis-cli` |
-| `gateway` | — | not a DB: the API gateway itself is published on `${GATEWAY_PORT:-8090}`; since the cutover (issue #151, `docs/gateway.md`) it is the only way to the user/supplier/credit/notification services (`/api/<service>/**` — their containers have no host ports) |
+| `gateway` | — | not a DB: the API gateway itself is published on `${GATEWAY_PORT:-8090}`; since the cutover (issue #151, `docs/gateway.md`) it is the only way to every backend service — user, supplier, order, credit, notification and rating (`/api/<service>/**` — their containers have no host ports) |
 
 When a service gains its own database, its owner adds the container to
 `compose.yaml` in that service's own PR (the same convention the compose

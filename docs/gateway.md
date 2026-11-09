@@ -51,7 +51,18 @@
   block, following the issue #225 supplier-purge pattern (reviewer's
   request). No new gateway decision number. Author review: Ko-Khan,
   pending pull request review.
+  2026-11-05, Claude Code (Opus 5.5), issue #48: the resolver note and
+  the container env updated for the k3s deployment (resolver reads
+  resolv.conf; UPSTREAM_SUFFIX, REDIS_HOST/REDIS_PORT). Behaviour under
+  compose unchanged; the deployment decisions are Leong Wei Zhi's
+  (docs/deployment.md). No new gateway decision.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-11-08, Claude Code (Fable 5.1), issue #305: the D10 scale-out
+  bullet closed (D35, AMQP fanout). Author review: Leong Wei Zhi,
+  pending pull request review.
+  2026-11-09, Claude Code (Fable 5.1), issue #48: "k3s" wording replaced
+  by "the cluster" (the deployment moved to EKS); no gateway change.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # FoC API Gateway — Design
@@ -165,9 +176,13 @@ and the 502/504 a briefly-restarting backend produces — is problem+json
 with `Access-Control-Allow-Origin`, so the SPA reads a status instead
 of a blocked response (PR #176 review).
 
-Upstream names resolve per request through compose's DNS
-(`resolver 127.0.0.11`), so the gateway starts and keeps routing while
-individual backends restart or are rebuilt.
+Upstream names resolve per request through the container's nameserver
+(`resolver local=on`: compose's DNS locally, the cluster DNS in Kubernetes), so
+the gateway starts and keeps routing while individual backends restart
+or are rebuilt. The nginx resolver ignores search domains, so in the cluster each
+upstream name gets `UPSTREAM_SUFFIX` (`.foc.svc.cluster.local`; empty in
+compose) and `REDIS_HOST` is fully qualified (issue #48,
+[`deployment.md`](deployment.md)).
 
 ## Known limits (accepted with G4/G5)
 
@@ -201,8 +216,8 @@ individual backends restart or are rebuilt.
   (PR #176 review) for whoever first designs one that does.
 - `docs/notification-service.md` D10 ("no Redis") predates this: Redis
   now exists as platform infrastructure for the denylist. D10's
-  scale-out question (Redis pub/sub vs broker relay) remains open and
-  unrelated.
+  scale-out question was settled by D35 (issue #305): pushes fan out
+  over AMQP, not Redis, so the gateway is unaffected.
 
 ## Container
 
@@ -211,5 +226,5 @@ individual backends restart or are rebuilt.
 | Image | `openresty/openresty:1.31.1.1-alpine-fat` + `opm get cdbattags/lua-resty-jwt=0.3.2` (both pinned) |
 | Host port | `${GATEWAY_PORT:-8090}` → 8080 |
 | Config | `gateway/nginx.conf` (routing) + `gateway/lua/auth.lua` (auth) |
-| Env | `JWT_SECRET` (shared platform secret), `WEB_ALLOWED_ORIGIN` |
+| Env | `JWT_SECRET` (shared platform secret), `WEB_ALLOWED_ORIGIN`; `UPSTREAM_SUFFIX` (default empty), `REDIS_HOST` / `REDIS_PORT` (default `redis` / 6379) — set in the cloud cluster only (issue #48) |
 | Redis | `redis:8.8-alpine`, `--appendonly yes`, volume `redis-data`, loopback host port `${REDIS_HOST_PORT:-6379}` |

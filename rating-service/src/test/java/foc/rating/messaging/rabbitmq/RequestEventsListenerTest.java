@@ -11,6 +11,11 @@
  * EventFailedException wrapper with the handler's failure as cause,
  * and the ack case pins the applied vs duplicate outcome.
  * Author review: [pending]
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.rating.messaging.rabbitmq;
 
@@ -31,7 +36,6 @@ import static org.mockito.Mockito.when;
 
 import java.net.ConnectException;
 import java.time.Instant;
-import java.util.List;
 import java.util.function.Consumer;
 
 import org.junit.jupiter.api.Test;
@@ -250,6 +254,6 @@ class RequestEventsListenerTest {
 
     private static RequestCompleted completed() {
         return new RequestCompleted("e-1", Instant.parse("2026-10-30T08:00:00Z"), "order-service", "c-1",
-                List.of("u-req", "u-cou"), "r-1", "u-req", "u-cou", "Techno Edge", "COM3-01-19", null);
+                "r-1", "u-req", "u-cou", "Techno Edge", "COM3-01-19", null);
     }
 }

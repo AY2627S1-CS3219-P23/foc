@@ -4,9 +4,9 @@
   "occurredAt": "2026-09-19T09:00:00Z",
   "producer": "order-service",
   "correlationId": "corr-7f3a1c9e",
-  "parties": ["usr-req-1001"],
   "requestId": "req-20260919-0042",
   "requesterId": "usr-req-1001",
+  "courierId": null,
   "pickupLocation": "Techno Edge",
   "dropoffLocation": "COM3-01-19",
   "note": "Chicken rice, less chilli"

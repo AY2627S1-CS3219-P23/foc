@@ -1,0 +1,86 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
+# Scope: the platform Redis (logout denylist), redis:8.8-alpine with
+# --appendonly yes on an EBS volume — G7 unchanged.
+# Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
+# docs/deployment.md); values mirror compose.yaml's defaults.
+# Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform): the AOF
+# volume is an EBS gp3 PersistentVolume through the EBS CSI driver (DP4);
+# zone-bound, so the pod follows it.
+# Author review: Leong Wei Zhi, pending pull request review.
+# PR #316 review (Claude reviewer, zone-bound volume): the pod selects the
+# on-demand node in zone a (team decision, Leong Wei Zhi, 2026-11-09).
+# Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-09, Claude Code (Opus 5.5), issue #48 (first deploy): fsGroup so
+# the redis user can write the fresh EBS volume (CrashLoopBackOff on
+# "Can't open or create append-only dir: Permission denied").
+# Author review: Leong Wei Zhi, pending pull request review.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: foc
+spec:
+  clusterIP: None
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: foc
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      # the on-demand node in zone a (DP3): its EBS volume is bound to that
+      # zone, and a Spot squeeze must not take this pod
+      nodeSelector:
+        foc.dev/pool: stable
+      # a fresh ext4 volume holds lost+found, so the image's entrypoint
+      # leaves /data root-owned ("Unknown file ... Permissions will not be
+      # modified") and redis (uid 999, gid 1000) cannot create its AOF dir;
+      # the kubelet hands the volume to the redis group instead
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: redis
+          image: redis:8.8-alpine
+          args: ["redis-server", "--appendonly", "yes"]
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 1Gi

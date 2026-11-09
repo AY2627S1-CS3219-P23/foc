@@ -4,6 +4,5 @@
   "occurredAt": "2026-11-28T18:00:00Z",
   "producer": "user-service",
   "correlationId": "42",
-  "parties": [],
   "userId": "42"
 }

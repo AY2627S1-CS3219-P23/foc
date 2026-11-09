@@ -19,6 +19,16 @@
  * 2026-10-25, issue #235: a dispute resolution calls resolve with the
  * event's split, and with no record throws (team decision, DSP-13).
  * Author review: Ryan Ang, pending pull request review.
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
+ * 2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): a settled
+ * transfer, release or split enqueues its credit event with the record's
+ * parties and amount; an amount-0 release and an unsettled one enqueue
+ * nothing (team decision). Author review: Ryan Ang, pending pull request
+ * review.
  */
 package foc.credit.service;
 
@@ -30,7 +40,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
-import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,14 +52,20 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import foc.contracts.events.core.DomainEvent;
+import foc.contracts.events.credit.CreditDisputeSettled;
+import foc.contracts.events.credit.CreditReleased;
 import foc.contracts.events.credit.CreditReservationRejected;
 import foc.contracts.events.credit.CreditReserved;
+import foc.contracts.events.credit.CreditTransferred;
 import foc.contracts.events.request.RequestCancelled;
 import foc.contracts.events.request.RequestCompleted;
 import foc.contracts.events.request.RequestDisputeResolved;
 import foc.contracts.events.request.RequestEvent;
 import foc.contracts.events.request.RequestExpired;
 import foc.contracts.events.request.RequestSubmitted;
+import foc.credit.entity.ReservationStatus;
+import foc.credit.entity.Reserved;
+import foc.credit.repository.ReservedRepository;
 import foc.credit.service.RequestEventHandler.Outcome;
 
 @ExtendWith(MockitoExtension.class)
@@ -63,12 +79,14 @@ class RequestEventHandlerTest {
     @Mock
     private ReplyOutbox outbox;
 
+    @Mock
+    private ReservedRepository reservations;
+
     @InjectMocks
     private RequestEventHandler handler;
 
     private static RequestSubmitted submitted(int reward) {
-        return new RequestSubmitted("evt-1", SENT_AT, "order-service", "corr-1", List.of("u-req"),
-            "r-1", "u-req", "UTown", "PGP", null, reward);
+        return new RequestSubmitted("evt-1", SENT_AT, "order-service", "corr-1", "r-1", "u-req", "UTown", "PGP", null, reward);
     }
 
     private DomainEvent enqueuedReply() {
@@ -91,7 +109,6 @@ class RequestEventHandlerTest {
             assertThat(reply.amount()).isEqualTo(3);
             assertThat(reply.producer()).isEqualTo("credit-service");
             assertThat(reply.correlationId()).isEqualTo("corr-1");
-            assertThat(reply.parties()).isEmpty();
             // its own identity and time, not the request event's
             assertThat(reply.eventId()).isNotBlank().isNotEqualTo("evt-1");
             assertThat(reply.occurredAt()).isBetween(before, after);
@@ -109,7 +126,6 @@ class RequestEventHandlerTest {
             assertThat(reply.requesterId()).isEqualTo("u-req");
             assertThat(reply.amount()).isEqualTo(9);
             assertThat(reply.correlationId()).isEqualTo("corr-1");
-            assertThat(reply.parties()).isEmpty();
             assertThat(reply.reason()).isEqualTo(RequestEventHandler.INSUFFICIENT_CREDITS_TEXT);
             assertThat(reply.reasonCode()).isEqualTo(CreditReservationRejected.INSUFFICIENT_CREDITS);
         });
@@ -184,12 +200,12 @@ class RequestEventHandlerTest {
     }
 
     @ParameterizedTest
-    @CsvSource({ "SETTLED, HANDLED", "DUPLICATE, HANDLED", "INVALID_STATE, INVALID_STATE" })
-    void completionTransfersToTheCourier(SettleResult result, Outcome expected) {
+    @CsvSource({ "DUPLICATE, HANDLED", "INVALID_STATE, INVALID_STATE" })
+    void unsettledCompletionEnqueuesNothing(SettleResult result, Outcome expected) {
         when(operations.transfer("r-1", "u-cou")).thenReturn(result);
 
         RequestCompleted completed = new RequestCompleted("evt-2", SENT_AT, "order-service", "corr-1",
-            List.of("u-req", "u-cou"), "r-1", "u-req", "u-cou", "UTown", "PGP", null);
+            "r-1", "u-req", "u-cou", "UTown", "PGP", null);
 
         assertThat(handler.handle(completed)).isEqualTo(expected);
         verifyNoInteractions(outbox);
@@ -200,7 +216,7 @@ class RequestEventHandlerTest {
         when(operations.transfer("r-1", "u-cou")).thenReturn(SettleResult.NO_RESERVATION);
 
         RequestCompleted completed = new RequestCompleted("evt-2", SENT_AT, "order-service", "corr-1",
-            List.of("u-req", "u-cou"), "r-1", "u-req", "u-cou", "UTown", "PGP", null);
+            "r-1", "u-req", "u-cou", "UTown", "PGP", null);
 
         assertThatThrownBy(() -> handler.handle(completed))
             .isInstanceOf(ReservationNotFoundException.class).hasMessageContaining("r-1");
@@ -208,32 +224,32 @@ class RequestEventHandlerTest {
     }
 
     @ParameterizedTest
-    @CsvSource({ "SETTLED, HANDLED", "DUPLICATE, HANDLED", "INVALID_STATE, INVALID_STATE" })
-    void cancellationReleasesToTheRequester(SettleResult result, Outcome expected) {
+    @CsvSource({ "DUPLICATE, HANDLED", "INVALID_STATE, INVALID_STATE" })
+    void unsettledCancellationEnqueuesNothing(SettleResult result, Outcome expected) {
         when(operations.release("r-1", "u-req")).thenReturn(result);
 
         RequestCancelled cancelled = new RequestCancelled("evt-3", SENT_AT, "order-service", "corr-1",
-            List.of("u-req"), "r-1", "u-req", null, "UTown", "PGP", null);
+            "r-1", "u-req", null, "UTown", "PGP", null);
 
         assertThat(handler.handle(cancelled)).isEqualTo(expected);
         verifyNoInteractions(outbox);
     }
 
     @ParameterizedTest
-    @CsvSource({ "SETTLED, HANDLED", "DUPLICATE, HANDLED", "INVALID_STATE, INVALID_STATE" })
-    void expiryReleasesToTheRequester(SettleResult result, Outcome expected) {
+    @CsvSource({ "DUPLICATE, HANDLED", "INVALID_STATE, INVALID_STATE" })
+    void unsettledExpiryEnqueuesNothing(SettleResult result, Outcome expected) {
         when(operations.release("r-1", "u-req")).thenReturn(result);
 
         RequestExpired expired = new RequestExpired("evt-4", SENT_AT, "order-service", "corr-1",
-            List.of("u-req"), "r-1", "u-req", "UTown", "PGP", null);
+            "r-1", "u-req", null, "UTown", "PGP", null);
 
         assertThat(handler.handle(expired)).isEqualTo(expected);
         verifyNoInteractions(outbox);
     }
 
     @ParameterizedTest
-    @CsvSource({ "SETTLED, HANDLED", "DUPLICATE, HANDLED", "INVALID_STATE, INVALID_STATE" })
-    void resolutionSplitsTheReward(SettleResult result, Outcome expected) {
+    @CsvSource({ "DUPLICATE, HANDLED", "INVALID_STATE, INVALID_STATE" })
+    void unsettledResolutionEnqueuesNothing(SettleResult result, Outcome expected) {
         when(operations.resolve("r-1", "u-cou", 1, 2)).thenReturn(result);
 
         assertThat(handler.handle(disputeResolved())).isEqualTo(expected);
@@ -249,9 +265,111 @@ class RequestEventHandlerTest {
         verifyNoInteractions(outbox);
     }
 
+    // what the operation leaves behind, read back for the event's fields
+    private void settledRecord(ReservationStatus status, int amount, String courierId, Integer courierShare) {
+        Reserved record = new Reserved("r-1", "u-req", amount, status, SENT_AT);
+        record.setCourierId(courierId);
+        record.setCourierShare(courierShare);
+        when(reservations.findById("r-1")).thenReturn(Optional.of(record));
+    }
+
+    @Test
+    void settledCompletionEnqueuesCreditTransferred() {
+        when(operations.transfer("r-1", "u-cou")).thenReturn(SettleResult.SETTLED);
+        settledRecord(ReservationStatus.TRANSFERRED, 3, "u-cou", null);
+
+        Instant before = Instant.now();
+        assertThat(handler.handle(new RequestCompleted("evt-2", SENT_AT, "order-service", "corr-1",
+            "r-1", "u-req", "u-cou", "UTown", "PGP", null))).isEqualTo(Outcome.HANDLED);
+        Instant after = Instant.now();
+
+        assertThat(enqueuedReply()).isInstanceOfSatisfying(CreditTransferred.class, event -> {
+            assertThat(event.requestId()).isEqualTo("r-1");
+            assertThat(event.requesterId()).isEqualTo("u-req");
+            assertThat(event.courierId()).isEqualTo("u-cou");
+            assertThat(event.amount()).isEqualTo(3);
+            assertThat(event.producer()).isEqualTo("credit-service");
+            assertThat(event.correlationId()).isEqualTo("corr-1");
+            assertThat(event.eventId()).isNotBlank().isNotEqualTo("evt-2");
+            assertThat(event.occurredAt()).isBetween(before, after);
+        });
+    }
+
+    @Test
+    void settledCancellationEnqueuesCreditReleased() {
+        when(operations.release("r-1", "u-req")).thenReturn(SettleResult.SETTLED);
+        settledRecord(ReservationStatus.RELEASED, 3, null, null);
+
+        assertThat(handler.handle(new RequestCancelled("evt-3", SENT_AT, "order-service", "corr-1",
+            "r-1", "u-req", null, "UTown", "PGP", null))).isEqualTo(Outcome.HANDLED);
+
+        assertThat(enqueuedReply()).isInstanceOfSatisfying(CreditReleased.class, event -> {
+            assertThat(event.requestId()).isEqualTo("r-1");
+            assertThat(event.requesterId()).isEqualTo("u-req");
+            assertThat(event.amount()).isEqualTo(3);
+            assertThat(event.correlationId()).isEqualTo("corr-1");
+        });
+    }
+
+    @Test
+    void settledExpiryEnqueuesCreditReleased() {
+        when(operations.release("r-1", "u-req")).thenReturn(SettleResult.SETTLED);
+        settledRecord(ReservationStatus.RELEASED, 4, null, null);
+
+        assertThat(handler.handle(new RequestExpired("evt-4", SENT_AT, "order-service", "corr-1",
+            "r-1", "u-req", null, "UTown", "PGP", null))).isEqualTo(Outcome.HANDLED);
+
+        assertThat(enqueuedReply()).isInstanceOfSatisfying(CreditReleased.class,
+            event -> assertThat(event.amount()).isEqualTo(4));
+    }
+
+    // a cancel that arrived before its reservation: nothing was held
+    @Test
+    void aReleaseOfNothingEnqueuesNothing() {
+        when(operations.release("r-1", "u-req")).thenReturn(SettleResult.SETTLED);
+        settledRecord(ReservationStatus.RELEASED, 0, null, null);
+
+        assertThat(handler.handle(new RequestCancelled("evt-3", SENT_AT, "order-service", "corr-1",
+            "r-1", "u-req", null, "UTown", "PGP", null))).isEqualTo(Outcome.HANDLED);
+
+        verifyNoInteractions(outbox);
+    }
+
+    @Test
+    void settledResolutionEnqueuesCreditDisputeSettled() {
+        when(operations.resolve("r-1", "u-cou", 1, 2)).thenReturn(SettleResult.SETTLED);
+        settledRecord(ReservationStatus.RESOLVED, 3, "u-cou", 1);
+
+        assertThat(handler.handle(disputeResolved())).isEqualTo(Outcome.HANDLED);
+
+        assertThat(enqueuedReply()).isInstanceOfSatisfying(CreditDisputeSettled.class, event -> {
+            assertThat(event.requestId()).isEqualTo("r-1");
+            assertThat(event.requesterId()).isEqualTo("u-req");
+            assertThat(event.courierId()).isEqualTo("u-cou");
+            assertThat(event.courierAmount()).isEqualTo(1);
+            assertThat(event.requesterAmount()).isEqualTo(2);
+            assertThat(event.correlationId()).isEqualTo("corr-1");
+        });
+    }
+
+    // both parties are told, a share of 0 included (team decision)
+    @Test
+    void aResolutionWithAZeroShareStillEnqueuesTheEvent() {
+        when(operations.resolve("r-1", "u-cou", 0, 3)).thenReturn(SettleResult.SETTLED);
+        settledRecord(ReservationStatus.RESOLVED, 3, "u-cou", 0);
+
+        handler.handle(new RequestDisputeResolved("evt-5", SENT_AT, "order-service", "corr-1",
+            "r-1", "u-req", "u-cou", "UTown", "PGP", null, 0, 3, null));
+
+        assertThat(enqueuedReply()).isInstanceOfSatisfying(CreditDisputeSettled.class, event -> {
+            assertThat(event.courierAmount()).isZero();
+            assertThat(event.requesterAmount()).isEqualTo(3);
+        });
+    }
+
     private static RequestDisputeResolved disputeResolved() {
         return new RequestDisputeResolved("evt-5", SENT_AT, "order-service", "corr-1",
-            List.of("u-req", "u-cou"), "r-1", "u-req", "u-cou", "UTown", "PGP", null, 1, 2, "late delivery");
+            "r-1", "u-req", "u-cou", "UTown", "PGP", null, 1, 2, "late delivery");
     }
 
     @Test

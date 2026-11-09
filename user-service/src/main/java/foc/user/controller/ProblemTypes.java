@@ -12,6 +12,9 @@ Author review: Leong Wei Zhi to review via the PR.
 2026-10-05 (Claude Code, Fable 5), PR #157 Copilot review:
 OTP_ATTEMPTS_EXCEEDED's doc now describes the spent/cooldown-gated
 lifecycle instead of the discarded-operation one it replaced.
+2026-11-08 (Claude Code, Opus 5.5), issue #308: OWNER_SETUP_TOKEN_INVALID
+for POST /users/me/owner (403 type decided by Leong Wei Zhi via options
+Q&A).
 */
 
 package foc.user.controller;
@@ -60,6 +63,9 @@ public final class ProblemTypes {
 
     /** No owner key is set up on the server. */
     public static final URI OWNER_SETUP_TOKEN_MISSING = URI.create("urn:foc:user:owner-setup-token-missing");
+
+    /** The owner setup token sent to POST /users/me/owner is wrong or blank (#308). */
+    public static final URI OWNER_SETUP_TOKEN_INVALID = URI.create("urn:foc:user:owner-setup-token-invalid");
     
     /**
      * The password-reset code is wrong, expired, spent, or belongs to

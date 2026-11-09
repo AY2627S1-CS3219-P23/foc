@@ -35,6 +35,9 @@
   (UserEvent, UserCreated, UserPurged, user-events) in the exchange,
   record, package and topology lists (team decision USR-1); author
   review: Ryan Ang, pending pull request review.
+  2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): record list updated for the
+  three credit-change events (team decision).
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # foc-contracts
@@ -57,7 +60,8 @@ Only things that are a *contract between services* belong here:
   `RequestCancelled`, `RequestDropped`, `RequestExpired`,
   `CourierArrived`, `RequestSubmitted`, `RequestRejected`,
   `RequestDisputed`, `RequestDisputeResolved`, `CreditReserved`,
-  `CreditReservationRejected`, `RatingSubmitted`, `UserCreated`,
+  `CreditReservationRejected`, `CreditTransferred`, `CreditReleased`,
+  `CreditDisputeSettled`, `RatingSubmitted`, `UserCreated`,
   `UserPurged`. Where a field takes a
   fixed set of values, the field is a `String` and the record holds
   each value as a `String` constant plus one `Set` of them all
@@ -130,9 +134,12 @@ Leong Wei Zhi — D16–D19 in
    record component: `DomainEvent.eventType()` derives it from the
    registry and the message converter injects it on publish.
 
-3. **Wire shape.** Flat JSON — six metadata fields (`eventId`,
-   `eventType`, `occurredAt`, `producer`, `correlationId`,
-   `parties`) plus the event's business fields, all top-level.
+3. **Wire shape.** Flat JSON — five metadata fields (`eventId`,
+   `eventType`, `occurredAt`, `producer`, `correlationId`) plus the
+   event's business fields, all top-level. Who is notified is not on the
+   wire: the Notification Service derives recipients from the business
+   fields (`requesterId`, `courierId`, `rateeId`) per event type
+   (notification D34).
    Instants are ISO-8601 UTC. Everything rides in the body, never in
    AMQP headers (D11).
 
@@ -145,7 +152,8 @@ Leong Wei Zhi — D16–D19 in
    migration and is retired in a later release. Every record
    component is **required on the wire** unless marked with the
    contracts' `@Nullable` annotation (currently
-   `RequestCancelled.courierId`, every request record's `note`,
+   `RequestCancelled.courierId`, `RequestExpired.courierId` (null when
+   the request expired while still open), every request record's `note`,
    `RequestDisputed.disputeNote`, `RequestDisputeResolved.resolutionNote`
    and `CreditReservationRejected.reasonCode` — the last always set by
    credit-service from this version on, null only on messages published
@@ -155,6 +163,11 @@ Leong Wei Zhi — D16–D19 in
    *type* is likewise a conversion failure — which is also how a
    breaking change presents to a not-yet-upgraded consumer (all of
    these dead-letter to the consumer's DLQ for replay).
+   *One exception on record, 2026-11-04 (notification D34):* the `parties`
+   field was removed from every event in a single coordinated release
+   rather than as `.v2` types — every producer and consumer builds this
+   module from source and deploys together, and consumers tolerate the
+   field on messages published before the release.
 
 5. **Topology naming.** One durable **topic exchange per producing
    domain** (`request-events`, `credit-events`, `rating-events`,

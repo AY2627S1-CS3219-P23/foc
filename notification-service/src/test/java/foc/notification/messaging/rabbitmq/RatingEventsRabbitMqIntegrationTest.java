@@ -51,8 +51,7 @@ import tools.jackson.databind.ObjectMapper;
  * the canonical {@code rating.submitted} fixture goes to the
  * {@code rating-events} topic exchange under its canonical key; the
  * listener consumes, the processor stores one row for the
- * <em>ratee only</em> (the contract's {@code parties}, decided on
- * #44), duplicates are absorbed, and the exact-key binding lets
+ * <em>ratee only</em> (this service's rule, D34; decided on #44), duplicates are absorbed, and the exact-key binding lets
  * nothing leak between the request and rating exchanges.
  *
  * <p>Failure paths prove the listener's per-queue retry derivation: a
@@ -244,10 +243,10 @@ class RatingEventsRabbitMqIntegrationTest {
 				EventTypeRegistry.routingKeyFor(event.getClass()), event);
 	}
 
-	/** Parties = the ratee alone, as rating-service publishes it (#44). */
+	/** As rating-service publishes it; the rule tells the ratee alone (#44, D34). */
 	private static RatingSubmitted rating(String eventId) {
 		return new RatingSubmitted(eventId, Instant.parse("2026-09-19T09:30:00Z"),
-				"rating-service", "c-int", List.of("usr-cou-2002"), "rat-20260919-0001",
+				"rating-service", "c-int", "rat-20260919-0001",
 				"req-20260919-0042", "usr-req-1001", "usr-cou-2002", 4);
 	}
 

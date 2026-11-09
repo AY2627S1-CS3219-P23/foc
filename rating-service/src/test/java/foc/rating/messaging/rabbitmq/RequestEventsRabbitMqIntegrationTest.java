@@ -11,6 +11,11 @@
  * Rows here are keyed by requestId, not eventId, so dedupe and
  * sentinel assertions read the rateable_request table.
  * Author review: [pending]
+ 
+ * 2026-11-04, Claude Code (Fable 5.1), notification D34 (author
+ * decision via options Q&A): the parties argument/assertions removed —
+ * events carry no recipient list; RequestExpired gains a nullable
+ * courierId. Author review: Leong Wei Zhi, pending pull request review.
  */
 package foc.rating.messaging.rabbitmq;
 
@@ -135,7 +140,7 @@ class RequestEventsRabbitMqIntegrationTest {
 
         // Acceptance 1: the canonical fixture, as raw JSON under its
         // canonical routing key, becomes exactly one eligibility row with
-        // the fixture's parties and its occurredAt as completed_at.
+        // the fixture's requester and courier and its occurredAt as completed_at.
         publishRawJson(fixture, "request.completed");
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(rateableRequests.findById("req-20260919-0042")).hasValueSatisfying(row -> {
@@ -173,8 +178,7 @@ class RequestEventsRabbitMqIntegrationTest {
         // delivery and dead-lettered straight to the DLQ — no rows, queue
         // not wedged, message kept intact for replay.
         publishRawJson("""
-                {"eventType": "request.refunded", "eventId": "e-int-unknown",
-                 "parties": ["usr-req-1001"]}
+                {"eventType": "request.refunded", "eventId": "e-int-unknown"}
                 """.getBytes(StandardCharsets.UTF_8), "request.completed");
 
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
@@ -274,7 +278,7 @@ class RequestEventsRabbitMqIntegrationTest {
 
     private static RequestCompleted completed(String eventId, String requestId) {
         return new RequestCompleted(eventId, Instant.parse("2026-09-19T09:05:00Z"),
-                "order-service", "c-int", List.of("usr-req-1001"), requestId,
+                "order-service", "c-int", requestId,
                 "usr-req-1001", "usr-cou-2002", "Techno Edge", "COM3-01-19", "integration");
     }
 

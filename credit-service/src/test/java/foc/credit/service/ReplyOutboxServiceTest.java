@@ -16,7 +16,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -72,7 +71,8 @@ class ReplyOutboxServiceTest extends PostgresTestContainer {
         assertThat(body.get("occurredAt").stringValue()).isEqualTo("2026-10-12T08:00:00Z");
         assertThat(body.get("producer").stringValue()).isEqualTo("credit-service");
         assertThat(body.get("correlationId").stringValue()).isEqualTo("corr-1");
-        assertThat(body.get("parties").isEmpty()).isTrue();
+        // no recipient list on the wire (notification D34)
+        assertThat(body.has("parties")).isFalse();
         assertThat(body.get("requestId").stringValue()).isEqualTo("r-1");
         assertThat(body.get("requesterId").stringValue()).isEqualTo("u-req");
         assertThat(body.get("amount").intValue()).isEqualTo(3);
@@ -81,8 +81,7 @@ class ReplyOutboxServiceTest extends PostgresTestContainer {
     @Test
     void aRejectionKeepsItsReason() {
         transaction.executeWithoutResult(status -> outbox.enqueue(new CreditReservationRejected(
-            eventId.toString(), OCCURRED_AT, "credit-service", "corr-1", List.of(),
-            "r-1", "u-req", 9, "insufficient available credits",
+            eventId.toString(), OCCURRED_AT, "credit-service", "corr-1", "r-1", "u-req", 9, "insufficient available credits",
             CreditReservationRejected.INSUFFICIENT_CREDITS)));
 
         OutboxEvent stored = outboxEvents.findById(eventId).orElseThrow();
@@ -126,7 +125,6 @@ class ReplyOutboxServiceTest extends PostgresTestContainer {
     }
 
     private CreditReserved reserved() {
-        return new CreditReserved(eventId.toString(), OCCURRED_AT, "credit-service", "corr-1", List.of(),
-            "r-1", "u-req", 3);
+        return new CreditReserved(eventId.toString(), OCCURRED_AT, "credit-service", "corr-1", "r-1", "u-req", 3);
     }
 }

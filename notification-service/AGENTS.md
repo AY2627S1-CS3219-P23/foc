@@ -12,16 +12,25 @@
   packages, security chain, D24-D29); stale D1-D22 range fixed.
   2026-10-17, Claude Code (Fable 5), PR #198 Codex review: the config/
   row records the CORS registration's /notifications/** scope.
+  2026-11-08, Claude Code (Fable 5.1), issue #305: package map, invariants
+  and test list for the D35 push fanout, the duplicate-key ack and the D36
+  Flyway schema. Author review: Leong Wei Zhi, pending pull request review.
+  Same day, PR #306 review: V2 converges legacy volumes. Author review:
+  Leong Wei Zhi, pending pull request review.
+  2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): the credit-change
+  events (D37) in the summary line.
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # notification-service/ — Agent Guide
 
-Java 21 + Spring Boot 4 service that consumes request events from
+Java 21 + Spring Boot 4 service that consumes request events (and the
+rating and credit-change events, issue #255 and D37) from
 RabbitMQ, stores notifications, and pushes them over STOMP. Read the
 root `AGENTS.md` first (architecture, course constraints, AI usage
 policy). The design authority is
 [`docs/notification-service.md`](../docs/notification-service.md) —
-every architectural choice is a numbered decision (D1–D29) there; cite
+every architectural choice is a numbered decision (D1–D34) there; cite
 the decision ID when touching related code.
 
 ## Package map (`src/main/java/foc/notification/`)
@@ -30,9 +39,9 @@ the decision ID when touching related code.
 | --- | --- |
 | `entity/` | `Notification` (one row per recipient, read/unread flag), `ProcessedEvent` (dedupe inbox) |
 | `repository/` | Spring Data JPA repositories for both entities |
-| `service/` | `EventProcessor` (port), `IdempotentEventProcessor` (dedupe + insert + publishes `NotificationStoredEvent`), `NotificationDto`, `RetentionPurgeScheduler` (purges `notifications` + `processed_events` past the retention window, #137) |
-| `messaging/rabbitmq/` | The only package allowed to touch broker types: `DomainEventsListener` (manual ack, retry republish), `DomainEventMessageConverter` (dispatch on body `eventType` via `EventTypeRegistry`), `RabbitMqTopology` + `RabbitMqTopologyInitializer` (startup declaration), `RabbitMqMessageConverterConfig` |
-| `messaging/stomp/` | `WebSocketStompConfig` (`/ws`, SockJS, heartbeats — also owns the app's sole `TaskScheduler`), `JwtChannelInterceptor` (CONNECT auth), `NotificationPushListener` (`AFTER_COMMIT` push), `StompPrincipal` |
+| `service/` | `EventProcessor` (port), `IdempotentEventProcessor` (dedupe + insert + publishes `NotificationStoredEvent`), `RecipientResolver` (who an event notifies, per event type from its id fields — D34), `NotificationDto`, `RetentionPurgeScheduler` (purges `notifications` + `processed_events` past the retention window, #137) |
+| `messaging/rabbitmq/` | The only package allowed to touch broker types: `DomainEventsListener` (manual ack, retry republish, duplicate-key ack), `DomainEventMessageConverter` (dispatch on body `eventType` via `EventTypeRegistry`), `RabbitMqTopology` + `RabbitMqTopologyInitializer` (startup declaration), `RabbitMqMessageConverterConfig`, `RabbitMqUserPushFanout` (the `notification.push` fanout adapter of `UserPushFanout`, D35) |
+| `messaging/stomp/` | `WebSocketStompConfig` (`/ws`, SockJS, heartbeats — also owns the app's sole `TaskScheduler`), `JwtChannelInterceptor` (CONNECT auth), `NotificationPushListener` (`AFTER_COMMIT` → `UserPushFanout.publish`), `UserPush` + `UserPushFanout` (the push envelope and its outbound port), `LocalUserPushDelivery` (the per-user STOMP send every replica makes for a fanned-out push), `StompPrincipal` |
 | `security/` | `JwtVerifier` (HS256, jjwt; fails startup on missing/short secret), `JwtAuthenticationFilter` (REST bearer → security context, empty authorities per D28; built inline by `SecurityConfig`, not a bean), `RestAuthEntryPoint`/`RestAccessDeniedHandler` (401/403 problem+json), `redis/RedisTokenDenylist` (D23 — STOMP CONNECT only, never the REST path, G4) |
 | `config/` | `SecurityConfig` — stateless chain: `/error`, `/actuator/health` and the `/ws` SockJS paths open (the CONNECT frame authenticates, not the handshake), everything else bearer-authenticated; CORS from `WEB_ALLOWED_ORIGIN`, registered for `/notifications/**` only — never `/**`, which would put the REST origin policy in front of the WS handshake/SockJS paths (PR #198 review) |
 | `controller/` | `NotificationController` (`/notifications/me` routes, D24–D27), `ApiExceptionHandler` (problem+json 400/404), the contract's exceptions |
@@ -47,7 +56,15 @@ the decision ID when touching related code.
   notification insert commit in one transaction. The dedupe window is
   bounded by the retention purge (#137): rows older than
   `NOTIF_RETENTION_DAYS` are swept — an accepted trade-off, since
-  redelivery ends at the DLQ within seconds.
+  redelivery ends at the DLQ within seconds. At two replicas (#305) a
+  concurrent duplicate loses on the `processed_events` primary key; the
+  listener acks that failure as a duplicate only when the violated
+  constraint is `processed_events_pkey`; any other unique violation
+  retries and dead-letters as usual.
+- **Pushes go through the fanout, never straight to the local broker**
+  (D35, #305): `NotificationPushListener` publishes to `UserPushFanout`;
+  `LocalUserPushDelivery` is called only by the fanout adapter, once per
+  replica, so a socket gets each frame exactly once.
 - **Broker isolation** (D11): only `messaging.rabbitmq` may import
   `org.springframework.amqp` / `com.rabbitmq`. `ArchitectureTest`
   (ArchUnit) fails the build otherwise.
@@ -55,7 +72,8 @@ the decision ID when touching related code.
   other broker headers; `EventTypeRegistry` in `foc-contracts` is the
   single class↔identity source.
 - **JWT verified at STOMP CONNECT** (issue #67): principal = token
-  `sub` = platform user ID = `parties[]` entry = `recipientId`. The
+  `sub` = platform user ID = the recipient `RecipientResolver` names from the
+  event's `requesterId`/`courierId`/`rateeId` (D34) = `recipientId`. The
   REST API verifies the same token per request (issue #66) but must
   **not** read the denylist — the gateway does that for HTTP (G4);
   `ArchitectureTest` confines Redis types to `security.redis`.
@@ -78,7 +96,8 @@ the decision ID when touching related code.
 ./mvnw test
 ```
 
-Tests: `IdempotentEventProcessorTest`, `NotificationRepositoryTest`,
+Tests: `IdempotentEventProcessorTest`, `RecipientResolverTest` (the D34
+rule per event type, registry-driven), `NotificationRepositoryTest`,
 `ProcessedEventRepositoryTest`,
 `RetentionPurgeSchedulerTest` (H2), `DomainEventContractTest` (fixture
 tolerant-reader lock-in), `DomainEventMessageConverterTest`,
@@ -86,10 +105,21 @@ tolerant-reader lock-in), `DomainEventMessageConverterTest`,
 `/ws/info` stays-open canary for #67), `NotificationControllerTest`
 (REST contract: order, paging 400s, ownership 404s, idempotent
 writes), `StompPushIntegrationTest` (real STOMP session,
-random port, no Docker), `RequestEventsRabbitMqIntegrationTest`
+random port, Testcontainers RabbitMQ for the push fanout — auto-skips
+without Docker), `NotificationFlywayMigrationTest` (Testcontainers
+Postgres: V1 and V2 apply, a ddl-auto database baselines, a legacy
+entity-columns database converges), `ConcurrentDuplicateIntegrationTest`
+(Testcontainers Postgres: the losing delivery of a raced event id fails
+on `processed_events_pkey`),
+`RabbitMqUserPushFanoutTest` / `LocalUserPushDeliveryTest` /
+`NotificationPushListenerTest` (the D35 fanout halves),
+`RequestEventsRabbitMqIntegrationTest`
 (Testcontainers — auto-skips without Docker), `ArchitectureTest`
 (D11 boundary).
 
-Schema is JPA-managed (`ddl-auto: update`) — it never drops columns;
-stale dev volumes need the reset in the
-[README's Troubleshooting section](README.md#troubleshooting).
+Flyway owns the schema (`src/main/resources/db/migration`, D36, #305);
+Hibernate only validates it. Add a new migration, never edit an applied
+one. A volume built by the old `ddl-auto: update` is baselined as V1 on
+first start, and V2 drops the pre-typed-contracts columns such a volume
+may still carry, so no reset is needed for the schema; broker-volume resets
+are in the [README's Troubleshooting section](README.md#troubleshooting).

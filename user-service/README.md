@@ -91,6 +91,21 @@
   2026-10-31, Claude Code (Fable 5), issue #280: the status sentence for
   GET /users/{id} notes the public profile's joinedAt. Author review:
   pending.
+  2026-11-06, Claude Code (Opus 5.5), issue #48 DP11: demo-account table
+  lists the new realistic usernames, plus the note on existing user-db
+  volumes. Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-08, Claude Code (Opus 5.5), issue #308: POST /users/me/owner
+  (owner upgrade) in the status and the account-update section, plus
+  its two token types. Author review: Leong Wei Zhi, pending pull
+  request review. PR #309 review: the accepted risk of unthrottled
+  token guesses recorded (Leong Wei Zhi's decision via options Q&A).
+  2026-11-09, PR #309 bot re-review: the note states that the gateway
+  does not rate-limit the routes either. Author review: Leong Wei Zhi,
+  pending pull request review.
+  2026-11-09, PR #309 review (@Sinnez1): the accepted-risk note is
+  replaced. The gate code is now checked before the token (Leong Wei
+  Zhi's decision via options Q&A), and the 403 row is updated to match.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # User Service
@@ -111,7 +126,8 @@ answers `username` and `joinedAt`, #280), `DELETE /users/me`
 (self-deletion, #93), the account-update flows `POST /users/me/otp` /
 `PATCH /users/me` / `POST /users/me/email/verify` /
 `POST /users/me/email/resend` / `POST /users/me/password` (#92 — see
-below), and the admin endpoints
+below), the owner upgrade `POST /users/me/owner` (#308, below), and the
+admin endpoints
 `GET /users` (list, search, role filter, sort, 20/50/100 page sizes,
 `includeDeleted=true` to list removed accounts with their `deletedAt`),
 `PATCH /users/{id}` (promote/demote) and `DELETE /users/{id}` (soft
@@ -320,6 +336,27 @@ email-change verify had just replaced (PR #157 review).
   **204**. Both entries must match (checked server-side, F2.1.4) and the
   new password passes sign-up's policy (F2.1.5); there is no
   `currentPassword` — the gate code is the authentication.
+- `POST /users/me/owner` `{ ownerKey, otp }` → **200** with the account,
+  now `OWNER` (#308): the owner setup token (`OWNER_SETUP_TOKEN`, the
+  one `/register-owner` uses) plus the gate code. The code is checked
+  **before** the token (PR #309 review, Leong Wei Zhi's decision), so
+  every token guess needs a requested code. A wrong code answers like any
+  gate-code refusal and says nothing about the token. A wrong or blank
+  token with the right code is a **403** (`owner-setup-token-invalid`)
+  that spends the code: the row is kept spent, so its `Retry-After` and
+  the resend cooldown hold back the next code, which allows at most one
+  guess per cooldown. An unconfigured token is the same **503** as
+  `/auth/signup-owner`, answered before the code is read, so the code
+  stays usable. On success every session of the account is
+  revoked after the commit (#178's per-user stamp), so the caller signs
+  in again and the new token carries `OWNER`; one log line records the
+  upgrade. An `OWNER` caller gets **200** with the account unchanged —
+  nothing consumed or revoked.
+  Set `OWNER_SETUP_TOKEN` to a long random value (the cloud deployment
+  generates 32 random alphanumerics), and unset it when no more owners
+  are needed — the routes then answer 503. `/auth/signup-owner` reveals
+  the token's result only inside the OTP email, behind the per-email
+  resend cooldown.
 
 OTP-flavoured errors carry a stable problem+json `type` URI, so clients
 can match failures by machine instead of by `detail` wording (the SPA's
@@ -336,6 +373,8 @@ may change). The sign-up OTP errors carry them too:
 | `urn:foc:user:email-change-none` | nothing pending to verify/resend (400) |
 | `urn:foc:user:email-taken` | email already registered (400) |
 | `urn:foc:user:username-taken` | username already taken (400) |
+| `urn:foc:user:owner-setup-token-invalid` | owner upgrade: wrong or blank setup token with the right gate code; the code is spent, `Retry-After` until the next (403) |
+| `urn:foc:user:owner-setup-token-missing` | no owner setup token configured on the server (503) |
 
 ## Password reset & account recovery (#94)
 
@@ -469,9 +508,49 @@ that already exist, so restarts are safe:
 
 | Accounts | Role | Password |
 | --- | --- | --- |
-| `demo_owner` (`e9000001@u.nus.edu`) | OWNER | `OwnerPass123` |
-| `demo_admin_1` … `demo_admin_3` (`e9000101`–`e9000103@u.nus.edu`) | ADMIN | `AdminPass123` |
-| `demo_user_001` … `demo_user_100` (`e9100001`–`e9100100@u.nus.edu`) | USER | `StudentPass123` |
+| `daniel_koh` (`e9000001@u.nus.edu`) | OWNER | `OwnerPass123` |
+| `priya_menon`, `farhan_ismail`, `chloe_ng` (`e9000101`–`e9000103@u.nus.edu`) | ADMIN | `AdminPass123` |
+| `weiling_tan`, `arjun_nair`, `siti_rahman`, … 100 in all (`e9100001`–`e9100100@u.nus.edu`) | USER | `StudentPass123` |
+
+<details>
+<summary>All 100 users (<code>NNN</code> = email <code>e9100NNN@u.nus.edu</code>)</summary>
+
+| | | | | |
+| --- | --- | --- | --- | --- |
+| `001` weiling_tan | `002` arjun_nair | `003` siti_rahman | `004` junjie_lim | `005` nurul_huda |
+| `006` kaixuan_ong | `007` rachel_goh | `008` haziq_osman | `009` meiling_chua | `010` rohan_pillai |
+| `011` xinyi_teo | `012` aisyah_karim | `013` bryan_yeo | `014` kavya_iyer | `015` zhiwei_chen |
+| `016` amirah_salleh | `017` ethan_wong | `018` divya_krishnan | `019` shufen_lee | `020` irfan_hamid |
+| `021` jiahui_sim | `022` nicholas_desouza | `023` yuting_low | `024` hafiz_yusof | `025` sarah_pereira |
+| `026` kenji_tanaka | `027` minjun_park | `028` anh_nguyen | `029` putri_wijaya | `030` haoran_liu |
+| `031` jiayi_zhang | `032` vikram_raj | `033` nadia_aziz | `034` shawn_tay | `035` ananya_rao |
+| `036` wenjie_huang | `037` syafiq_rahim | `038` clara_fernandez | `039` yixuan_wang | `040` darren_quek |
+| `041` huimin_ho | `042` aqil_zainal | `043` meera_subramaniam | `044` jonathan_seah | `045` xiaoyu_li |
+| `046` farah_hassan | `047` gabriel_soh | `048` pooja_sharma | `049` yongsheng_phua | `050` izzah_mansor |
+| `051` marcus_toh | `052` sneha_reddy | `053` zhenyu_kwek | `054` alya_rashid | `055` timothy_chan |
+| `056` hannah_loh | `057` suresh_kumar | `058` qianhui_yap | `059` danish_iskandar | `060` isabel_rodrigues |
+| `061` thanh_tran | `062` lucas_neo | `063` jasmine_kaur | `064` boonkiat_lau | `065` nabilah_ahmad |
+| `066` aditya_bose | `067` sihan_zheng | `068` yuhan_xu | `069` amir_hakim | `070` natalie_foo |
+| `071` harish_balan | `072` kexin_guo | `073` ilyas_jamal | `074` megan_choo | `075` tarun_gupta |
+| `076` ruiqi_peh | `077` sofia_lim | `078` adam_noor | `079` jingwen_tham | `080` rizwan_ali |
+| `081` grace_chia | `082` shreya_das | `083` zihan_sun | `084` fatin_amin | `085` javier_ong |
+| `086` lakshmi_venkat | `087` hongyi_koh | `088` daphne_wee | `089` zulfiqar_basri | `090` elaine_kok |
+| `091` mohan_prakash | `092` yiting_ng | `093` aiman_razak | `094` olivia_sng | `095` rahul_varma |
+| `096` shuting_lam | `097` hidayah_said | `098` benjamin_lee | `099` tomoko_sato | `100` joel_cheong |
+
+</details>
+
+The names are fictional, fixed in `DemoAccountsSeeder` (team decision
+DP11 under issue #48). Login takes the username or the email.
+
+**Existing `user-db` volumes keep the old names.** Earlier seeds used
+`demo_owner`, `demo_admin_1..3` and `demo_user_001..100` on the same
+emails. The seeder skips an account whose email *or* username is
+already there, so on an old volume every row still present is skipped
+and keeps its `demo_*` name; only an account whose row is gone (purged
+after day 31) is inserted again, under its new name. Reset the user database (below) to get the new names;
+the other services' data still points at the old user ids, so
+`docker compose down -v` gives the cleaner demo stack.
 
 The passwords are public, so never set the flag on a real deployment.
 

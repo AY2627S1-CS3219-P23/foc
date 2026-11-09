@@ -6,6 +6,44 @@
   Scope: team allocation table and repository-structure notes
   transcribed from team decisions (2026-09-10); the AI Use Summary
   section is maintained as the policy's consolidated disclosure.
+  2026-11-02, Claude Code (Fable 5), issue #258: AI Use Summary
+  extended for the Rate Your Experience modal (issue #256 — a belated
+  paragraph; the work shipped in PR #278 with its usage-log entries but
+  no paragraph here) and for the N1 documentation pass itself (issue
+  #258, the new docs/rating-service.md + .mmd and the doc updates it
+  touches).
+  Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-06, Claude Code (Opus 5.5), issue #48 (DP11): AI Use Summary
+  extended for the realistic demo usernames. Author review: Leong Wei
+  Zhi, pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1), issue #48 (DP17): the DP11 paragraph
+  notes this change ships as its own PR off main. Author review: Leong Wei
+  Zhi, pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7, DP10): the cloud
+  deployment paragraph extended for the simplified re-plan. Author review:
+  Leong Wei Zhi, pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1), issue #48 (DP18 to DP21): the cloud
+  deployment paragraph extended for HTTPS. Author review: Leong Wei Zhi,
+  pending pull request review.
+  2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform): a
+  cloud deployment paragraph added for the move to EKS and RDS. Author
+  review: Leong Wei Zhi, pending pull request review.
+  2026-11-09, Claude Code (Opus 5.5), issue #48 (DP20): AI Use Summary
+  extended for continuous deployment. Author review: Leong Wei Zhi,
+  pending pull request review.
+  2026-11-08, Claude Code (Fable 5.1): AI Use Summary extended for the
+  admin-test flake fix. Author review: Leong Wei Zhi, pending pull request
+  review.
+  2026-11-08, Claude Code (Opus 5.5), issue #308: AI Use Summary extended
+  for the owner upgrade from the profile page. Author review: Leong Wei
+  Zhi, pending pull request review.
+  2026-11-09, Claude Code (Opus 5.5), PR #309 review: the #308 paragraph
+  now records the code-first order. Author review: Leong Wei Zhi,
+  pending pull request review.
+  2026-11-09, Claude Code (Opus 5.5): AI Use Summary extended for the
+  notification sound preview; PR #314 review (Copilot): its sentence
+  reworded so the subject reads singular. Author review: Leong Wei Zhi,
+  pending pull request review.
   2026-10-31, Claude Code (Fable 5): AI Use Summary extended for the
   public profile's joined date and deliveries-completed count (issue
   #280), and the #257 paragraph's deviation sentence updated to point
@@ -292,6 +330,19 @@
   2026-10-31: AI Use Summary extended for the PR #277 review fixes
   (prune reorder bound/guard, Center pager bookkeeping, badge re-sync
   on mount) by Claude Code (Fable 5).
+  2026-11-01: AI Use Summary extended for the own-profile entry link and
+  the rater's review readback (issue #284) by Claude Code (Opus 5).
+  Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-08: AI Use Summary extended for issue #305 (cross-replica push,
+  duplicate-key ack, Flyway baseline) by Claude Code (Fable 5.1).
+  Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-08: AI Use Summary extended for the push-triggered credit
+  balance refresh (Credit NFR1.1) by Claude Code (Opus 5.5), then
+  rewritten for its rework into the credit-change notification (PR
+  #313). Author review: Ryan Ang, pending pull request review.
+  2026-11-09: AI Use Summary extended for the balance refresh on
+  request.created by Claude Code (Opus 5.5). Author review: Ryan Ang,
+  pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1379,6 +1430,22 @@ the badge re-syncs when the Center opens. The guard-vs-documented-
 limitation and badge-signal choices were the author's via
 neutral-options Q&A. Recorded in `ai/usage-log.md`.
 
+Claude Code (Fable 5) built the Rate Your Experience modal (issue
+#256, N1.1/N1.2 under #44): an Actions column on Request History's
+COMPLETED rows — both tabs — opens the wireframe's dialog (required
+stars, "Write a review (optional)" with a 1000-char counter matching
+rating-service's cap), posting `POST /ratings` and flipping the entry
+point to "Rated ★n" once `GET /ratings/mine` answers; the subtitle
+names the other party and reads "Requested by {name}" on the courier
+tab. A session cache keyed by viewer and request holds the immutable
+answers (a 404 is never cached — a just-completed request can trail
+rating-service's ingest, so the lookup retries on the page's push
+refresh), a 409 locks the form into close-only, and the PR #278 review
+(@Sinnez1) made the modal unclosable while a submit is in flight. The
+Request History entry point (not My Requests, which lists only active
+states) and the cache policy were the author's decisions via
+neutral-options Q&A. Recorded in `ai/usage-log.md`.
+
 Claude Code (Fable 5) built the public profile page (issue #257,
 N1.3/N1.4 under #44): `/users/:id` with the username from
 user-service's public profile (a 404 there reads "user not found"),
@@ -1414,5 +1481,183 @@ backfill for completions before the #251 ingest shipped) and the
 single PR stacked on PR #279's branch were the author's decisions via
 neutral-options Q&A. Recorded in `ai/usage-log.md`.
 
+Claude Code (Fable 5) wrote the N1 documentation pass (issue #258, the
+docs checklist under #44): `docs/rating-service.md` + `.mmd` — the
+service's decision record (D1–D17) transcribed from the merged code's
+disclosure headers, the issues and the PR reviews, with the decisions
+table attributing each to its issue — plus the Rating Service's entry
+into `docs/architecture.md`/`.mmd` (the first nice-to-have drawn in the
+runtime diagram), the rating-events trio in
+`docs/notification-service.mmd`, the rating-service README's
+Configuration/Events/Status sections, a filled
+`rating-service/AGENTS.md`, the web README/feature-README/AGENTS
+catch-ups (gateway wording, folder lists, the Rating service row in the
+screen mapping), and this summary. Every decision documented was made
+by Leong Wei Zhi on the cited issues and PRs; the tool transcribed and
+formatted. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5) closed the two ends of the rating flow that had no
+way back to a rating once it was made (issue #284, follow-up to #256 and
+#257): `/profile`'s details card links to `/users/<own id>`, the
+account's own entry into the public profile (nothing pointed there
+before — the nav's Profile item is account settings — so a ratee had to
+type the URL to read the reviews they had received), and Request
+History's `Rated ★n` chip is a button opening a read-only Your Review
+dialog with the stars, the write-up and the date. Ratings are immutable,
+so no edit screen ever showed a rater their own text; the text was
+already in the `GET /ratings/mine` answer each row holds, so neither
+part adds an API call. Both placements, and the dialog over a `title`
+tooltip or an inline expand, were the author's decisions via
+neutral-options Q&A. Recorded in `ai/usage-log.md`.
+
+Claude Code (Fable 5.1) implemented notification decision D34
+(2026-11-04): the `parties` recipient list left every foc-contracts
+event, `request.expired` gained a nullable `courierId`, and the
+Notification Service now derives who is told per event type
+(`RecipientResolver`), with the four publishing services, their tests,
+and the docs updated in one coordinated release. Asked which option was
+better, the tool declined under the AI policy and laid the options out
+as factual property comparisons; Leong Wei Zhi chose the model, the
+expiry field and the one-release rollout, and supplied the reasoning
+recorded in `docs/notification-service.md`. Recorded in
+`ai/usage-log.md`.
+
+2026-11-07: Claude Code (Sonnet 5.5) appended the author's 44 new supplier
+rows to the two supplier seed CSV copies (issue #299), timed the supplier
+list and search endpoints at 65 and 1,000 rows on a throwaway database,
+and updated `docs/supplier-service.md`, `docs/architecture.md` and
+`docs/architecture.mmd` to record the team's decision to remove the
+caching requirement (NFR1.1.1, issue #298; D15). Asked whether caching
+was worth doing, the tool declined under the AI policy and offered
+measurements; the team decided and supplied the wording. Recorded in
+`ai/usage-log.md`.
+
+2026-11-07: Claude Code (Sonnet 5.5) wrote the Supplier Service's NFR1.1
+(5-second listings) and NFR2.1 (1,000-supplier capacity) tests, issue
+#300, as a Testcontainers PostgreSQL test following the other services'
+pattern, with its Maven test dependencies. The tool compared the H2 and
+Testcontainers options as facts and the author chose Testcontainers; the
+NFR bounds are the team's. Recorded in `ai/usage-log.md`.
+
+Claude Code (Opus 5.5) gave the user-service demo seed realistic,
+fictional usernames (issue #48, DP11): fixed lists of `firstname_lastname`
+names for the owner, 3 admins and 100 users, with the emails, passwords
+and counts unchanged, plus the seeder test and the docs that name the
+accounts. Realistic names everywhere was Leong Wei Zhi's decision; the
+tool picked the names and wrote the change. First opened as PR #295 on
+the closed issue-#48 stack, it ships as its own PR off `main` (DP17,
+2026-11-08). Recorded in `ai/usage-log.md`.
+Claude Code (Opus 5.5, 2026-11-05) wrote the N5 cloud deployment (issue
+#48): the `infra/` Terraform and Kubernetes manifests, the Deploy
+workflow, the gateway's resolver/upstream-suffix change and
+`docs/deployment.md`. The tool asked the deployment decisions as neutral
+options rounds and priced the options from AWS's public price files; the
+platform, sizing, data-store, secrets, rollout and lifetime choices
+(DP1–DP13) were Leong Wei Zhi's, including replacing a first EKS design
+with the single Spot + k3s host to fit the team's $50 budget. On
+2026-11-08, after the seven-PR stack was closed, Claude Code (Fable 5.1)
+ran three more options rounds; Leong Wei Zhi kept the infra design,
+dropped the five backend multi-replica PRs, chose fresh PRs, a decision
+page plus a short runbook, and the host-side secrets copy with IMDS hop
+limit 1 (DP7 and DP10 re-decided), and chose to record the alternatives
+as facts without reasons. The tool then rebuilt the branch, removed
+External Secrets Operator, fixed the two review findings in the Deploy
+workflow and rewrote the two documents; `docs/deployment.md` carries no
+PR history, by request. On the first cloud deploy the same day, it
+diagnosed the rollout's OIDC refusal (GitHub's immutable subject claim)
+and switched the deploy role's trust to it (the plain form dropped on
+review, by team decision). Later that day it put the site behind an
+Application Load Balancer with an AWS Certificate Manager certificate for
+`foc23.ddnsfree.com` (DP18 to DP21; first `foc23.mooo.com` on FreeDNS, moved to
+Dynu the same day when FreeDNS refused CNAME records): the domain source, the TLS endpoint, the
+port-80 redirect, the host's exposure and the pipeline variable were
+Leong Wei Zhi's choices from neutral options rounds; the tool wrote the
+Terraform, flipped the four baked origins to https and extended the two
+documents. Recorded in `ai/usage-log.md`.
+On 2026-11-09, with the budget known to be $250 and the deadline
+2026-12-11, Claude Code (Fable 5.1) re-platformed the cloud stack (issue
+#48): an EKS cluster with a t3a.medium Spot node group in private subnets
+behind a fck-nat NAT instance, one RDS PostgreSQL 17 instance holding the
+seven service databases (a `db-init` Job creates the roles), RabbitMQ and
+Redis on EBS volumes, Traefik from its Helm chart on a NodePort behind the
+existing load balancer, `secrets.sh` and `deploy.sh` run from the Deploy
+job under an EKS access entry. Every choice was Leong Wei Zhi's, taken in
+five neutral options rounds with prices from the public price files
+(platform, nodes, purchase model, network, Postgres, RabbitMQ and Redis,
+ingress, secrets, deploy access, controller, credentials, lifetime, docs
+shape); Aurora Serverless v2 and Amazon MQ were chosen first and dropped
+after the tool reported the 0.5 ACU floor and the unavailable
+`mq.t3.micro`, and the network layout was settled after the tool answered
+four questions on private subnets and NAT with facts only. The tool wrote
+the Terraform, manifests, chart values, scripts and workflow, tested the
+init script against a local Postgres, planned against the live state, and
+replaced `docs/deployment.md` and `infra/README.md`, quoting the reasons
+Leong Wei Zhi gave. The PR #316 review round (same day) added a third,
+on-demand node that RabbitMQ and Redis select (chosen by Leong Wei Zhi
+after the reviewers' zone-bound-volume finding, from options incl. Amazon
+MQ + ElastiCache and SQS, recorded as facts), a separate Secret for the
+RDS master credentials, a pinned RDS minor and one deploy deadline, and
+restored the issue #305 state of DP9/DP10; both node groups then moved to
+t3a.medium on request. Recorded in `ai/usage-log.md`.
+
+2026-11-08: Claude Code (Fable 5.1) made the Admin Dashboard tests wait for a
+section's first load to settle before asserting on it, after one case
+flaked in CI on an unrelated branch. Test-only. Recorded in
+`ai/usage-log.md`.
+
+Claude Code (Opus 5.5, 2026-11-08) wrote the owner upgrade (issue #308):
+`POST /users/me/owner` in user-service, with the owner setup token check
+moved into a shared `OwnerSetupToken` bean, and the profile page's Become
+an Owner card, plus tests and docs. The endpoint shape, the gate-code
+requirement, the 403/503 answers, the session revoke and re-login, the
+log-line audit, keeping `/register-owner` and the OWNER caller's
+unchanged 200 were Leong Wei Zhi's decisions via neutral options rounds;
+the tool implemented them. After the PR #309 review, Leong Wei Zhi also
+chose to check the gate code before the token (it was token first), so a
+wrong token spends the code. Recorded in `ai/usage-log.md`.
+
+The credit-change notification (Credit NFR1.1, PR #313): Claude Code
+(Opus 5.5) added the `credit.transferred`, `credit.released` and
+`credit.dispute-settled` contracts, had credit-service write them to its
+outbox when a transfer, release or dispute split settles,
+notification-service bind them and tell each party, and the web show the
+viewer's side of the change, open `/credits` on click and refresh the
+balance on the push, with tests and the design docs' D37 (notification)
+and D15 (credit). Which movements notify, the contract names and
+fields, the recipients and the wording were team decisions. Recorded in
+`ai/usage-log.md`.
+Later (2026-11-09) Claude Code (Opus 5.5) also had a pushed
+`request.created` refresh the balance, so a new request's reserve shows
+at once; refreshing on that event was a team decision.
+
+Claude Code (Opus 5.5, 2026-11-09) made switching the notification sound
+on preview the chime once, from the Notification Center header and the
+profile's Preferences switch alike, plus tests. Covering both surfaces
+was Leong Wei Zhi's choice via a neutral options question. Recorded in
+`ai/usage-log.md`.
+
 **Verification:** all AI-assisted output is reviewed by the team through
 pull requests before merging.
+
+Issue #305 (chat and notification safe at two replicas, 2026-11-08) —
+Claude Code (Fable 5.1) implemented the team's decisions (Leong Wei Zhi,
+neutral options Q&A): STOMP pushes fan out over a per-service AMQP
+exchange so the replica holding the browser's socket delivers them
+(notification D35, chat), notification-service acks a concurrent
+duplicate on its `processed_events` key and moves to a Flyway baseline
+(D36), the two HPAs return and the one-replica pins go (DP9/DP10); unit
+and Testcontainers tests, compose and k8s wiring, and the docs. The
+alternatives (STOMP broker relay, insert-first dedupe, single active
+consumer, ShedLock) were declined by the author and are recorded in
+`ai/usage-log.md`. The PR #306 review rounds (Sinnez1, the Claude
+reviewer) added a 5 s broker connect timeout, an ack scoped to the
+`processed_events_pkey` constraint with a real-Postgres race test, a V2
+migration for legacy volumes and smaller hardening.
+
+Continuous deployment (issue #48, DP20, 2026-11-09) — Claude Code (Opus
+5.5) implemented the team's decisions (Leong Wei Zhi, neutral options
+Q&A): the Deploy workflow runs after CI succeeds on `main`, skips
+docs-only changes, builds only the images changed since the commit
+running in the cluster (read by a plan job, `infra/k8s/changed-images.sh`)
+and retags the rest; the runbook and `docs/deployment.md` follow.
+Recorded in `ai/usage-log.md`.

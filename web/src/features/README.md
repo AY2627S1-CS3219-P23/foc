@@ -3,6 +3,11 @@
   Tool: Claude Code (Fable 5), 2026-09-21, issue #108.
   Scope: convention note for the per-domain feature folders.
   Reviewed by: Leong Wei Zhi (via pull request).
+  2026-11-02, Claude Code (Fable 5), issue #258: the folder list caught
+  up with main — rating/ added (N1, issues #256/#257) and notification/
+  corrected to notifications/, the folder's actual name. Transcription
+  only.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # `src/features/` — per-domain code
@@ -16,7 +21,9 @@ features/
 ├── supplier/
 ├── order/
 ├── credit/
-└── notification/
+├── notifications/
+└── rating/        # N1: rate-experience modal, star displays, report
+                   # user, my-rating cache (issues #256/#257)
 ```
 
 Conventions:
