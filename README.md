@@ -334,6 +334,9 @@
   balance refresh (Credit NFR1.1) by Claude Code (Opus 5.5), then
   rewritten for its rework into the credit-change notification (PR
   #313). Author review: Ryan Ang, pending pull request review.
+  2026-11-09: AI Use Summary extended for the balance refresh on
+  request.created by Claude Code (Opus 5.5). Author review: Ryan Ang,
+  pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1592,6 +1595,9 @@ balance on the push, with tests and the design docs' D37 (notification)
 and D15 (credit). Which movements notify, the contract names and
 fields, the recipients and the wording were team decisions. Recorded in
 `ai/usage-log.md`.
+Later (2026-11-09) Claude Code (Opus 5.5) also had a pushed
+`request.created` refresh the balance, so a new request's reserve shows
+at once; refreshing on that event was a team decision.
 
 Claude Code (Opus 5.5, 2026-11-09) made switching the notification sound
 on preview the chime once, from the Notification Center header and the

@@ -12,6 +12,12 @@
 // fetch sees it (team decision, replacing a first version that fetched
 // on request events and again 2 s later).
 // Author review: Ryan Ang, pending pull request review.
+// 2026-11-09, Claude Code (Opus 5.5): request.created fetches too, so the
+// reserve a new request makes shows at once instead of on the next poll
+// (team decision). The Order Service publishes it only after the Credit
+// Service's credit.reserved reply, which is sent after the reserve
+// committed, so one fetch sees it.
+// Author review: Ryan Ang, pending pull request review.
 
 import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet } from 'react-router'
@@ -27,6 +33,13 @@ import { CreditBalanceContext, type BalanceState } from './useCreditBalance'
 export const BALANCE_POLL_MS = 30_000
 
 const NO_PUSHES: NotificationDto[] = []
+
+// A pushed notification whose change to the balance has committed by the
+// time it arrives: the credit-change notifications, and request.created,
+// which the Order Service publishes only once the reserve is confirmed
+// (the Credit Service sends credit.reserved after the reserve commits).
+const changesBalance = (eventType: string) =>
+  isCreditEvent(eventType) || eventType === 'request.created'
 
 // the balance stamped with the session that fetched it
 interface SessionBalance {
@@ -138,8 +151,8 @@ export const CreditBalanceProvider = () => {
       (n) => !consumed.current.includes(n),
     )
     consumed.current = pushedNotifications
-    // a credit-change notification: the change it reports has committed
-    if (!fresh.some((n) => isCreditEvent(n.eventType ?? ''))) return
+    // the change it reports has committed (changesBalance above)
+    if (!fresh.some((n) => changesBalance(n.eventType ?? ''))) return
     // a hidden tab fetches when it is shown again
     if (document.visibilityState !== 'visible') return
     loadRef.current?.()
