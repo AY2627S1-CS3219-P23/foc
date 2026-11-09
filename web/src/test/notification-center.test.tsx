@@ -690,6 +690,41 @@ describe('notification center page', () => {
     await screen.findByRole('link', { name: '← Back to requests' })
   })
 
+  test("a credit-change row reads as the viewer's side and opens /credits", async () => {
+    const user = userEvent.setup()
+    // the session user (id 1, /users/me above) was the courier
+    pages = [
+      pageOf(
+        [
+          notification(
+            7,
+            'credit.transferred',
+            { requestId: '1045', requesterId: '9', courierId: '1', amount: 3 },
+            false,
+          ),
+        ],
+        0,
+        1,
+        1,
+      ),
+    ]
+    unreadCountOnServer = 1
+    localStorage.setItem('user', JSON.stringify(session))
+    const router = createMemoryRouter(routes, {
+      initialEntries: ['/notifications'],
+    })
+    render(<RouterProvider router={router} />)
+    await act(async () => {})
+
+    await user.click(
+      await screen.findByRole('button', {
+        name: '+3 Credits earned for Request #1045 — unread, select to open your credits',
+      }),
+    )
+
+    expect(router.state.location.pathname).toBe('/credits')
+  })
+
   test('clicking an unread row without a request marks it read in place', async () => {
     const user = userEvent.setup()
     // an uncataloged type with no requestId: nothing to navigate to, so
