@@ -26,6 +26,9 @@
   Author review: Leong Wei Zhi, pending pull request review.
   PR #317 review: older automatic runs skip; `.dockerignore` listed.
   Same day: the rollout's deployment record (repo page, Deployments).
+  2026-11-10, Claude Code (Opus 5.5), issue #48 (DP9, DP21): smoke counts,
+  checks and the Spot/HPA rows follow the 2-replica backends and the PDBs.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # infra: cloud deployment runbook
@@ -51,7 +54,7 @@ flowchart TD
 | --- | --- |
 | `terraform/bootstrap/` | S3 state bucket (local state, applied once) |
 | `terraform/` | network (`network.tf`: three public + three private subnets), NAT instance (`nat.tf`), EKS cluster, the Spot and on-demand node groups, add-ons and the deploy role's access entry (`eks.tf`), RDS (`rds.tf`), ACM certificate + Application Load Balancer (`tls.tf`), GitHub OIDC deploy role (`iam.tf`), Secrets Manager (`secrets.tf`) |
-| `k8s/` | kustomization applied by the Deploy job: gp3 StorageClass, RabbitMQ and Redis StatefulSets, app Deployments, Traefik Ingress, HPAs; `data/db-init.yaml` is the Job that creates the seven database roles |
+| `k8s/` | kustomization applied by the Deploy job: gp3 StorageClass, RabbitMQ and Redis StatefulSets, app Deployments, Traefik Ingress, HPAs, PodDisruptionBudgets; `data/db-init.yaml` is the Job that creates the seven database roles |
 | `k8s/secrets.sh` | copies `foc/app` and `foc/ghcr` from Secrets Manager into the k8s Secrets `foc-secrets`, `foc-db-admin` (the RDS master credentials, mounted by db-init only) and `ghcr-pull` (every deploy, from the Deploy job) |
 | `k8s/deploy.sh` | run by the Deploy workflow: kubeconfig, Traefik chart, secrets, db-init, apply, rollouts |
 | `k8s/changed-images.sh` | the Deploy workflow's plan: compares the commit the cluster runs with the target, lists the images to build and the ones to retag (DP20) |
@@ -202,7 +205,7 @@ curl -sI http://<public_host>/ | head -3                          # 301, Locatio
 curl -s https://<public_host>/api/user/actuator/health           # {"status":"UP"}
 openssl s_client -connect <public_host>:443 -servername <public_host> </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer
 aws elbv2 describe-target-health --target-group-arn "$(aws elbv2 describe-target-groups --names foc-traefik-np --query 'TargetGroups[0].TargetGroupArn' --output text)"   # 2 healthy
-kubectl -n foc get pods,hpa,pvc                                  # 11 pods Running, 9 HPAs at 1, 2 PVCs Bound
+kubectl -n foc get pods,hpa,pvc                                  # 18 pods Running, 7 HPAs at 2 + gateway/web at 1, 2 PVCs Bound
 kubectl -n foc logs job/db-init | tail -1                        # db-init: chat ready
 ```
 
@@ -250,14 +253,14 @@ one that ran the apply, and the deploy role): `aws eks update-kubeconfig
 
 | Task | Command |
 | --- | --- |
-| Pods, HPAs, volumes | `kubectl -n foc get pods,hpa,pvc -o wide` (rabbitmq-0 and redis-0 sit on the `stable` node) |
+| Pods, HPAs, volumes | `kubectl -n foc get pods,hpa,pdb,pvc -o wide` (rabbitmq-0 and redis-0 sit on the `stable` node; a backend's two replicas usually on different nodes, DP21) |
 | Logs | `kubectl -n foc logs deploy/<name>` |
 | Restart one service | `kubectl -n foc rollout restart deploy/<name>` |
 | Database shell | `kubectl -n foc run psql --rm -it --restart=Never --image=postgres:17.9 -- psql "host=<rds_endpoint> user=<svc> dbname=<svc> sslmode=require"` (password from `foc/app`) |
-| Spot took a node | nothing to redeploy: the pods are recreated on the other nodes as soon as the drain evicts them, and the group launches a replacement that joins in 2 to 3 min (on a rebalance recommendation the replacement comes first). RabbitMQ and Redis are on the on-demand node and unaffected. Open WebSockets drop and the browsers reconnect once chat/notification are back (1 to 2 min). Both Spot nodes at once: what fits on the on-demand node keeps running, the rest returns in 5 to 10 min; see `docs/deployment.md`, Spot behaviour |
+| Spot took a node | nothing to redeploy: the pods are recreated on the other nodes as soon as the drain evicts them, and the group launches a replacement that joins in 2 to 3 min (on a rebalance recommendation the replacement comes first). RabbitMQ and Redis are on the on-demand node and unaffected. The backends and Traefik keep answering from their replica on another node (DP21); WebSockets held on the lost node drop and the browsers reconnect. Both Spot nodes at once: what fits on the on-demand node keeps running, the rest returns in 5 to 10 min; see `docs/deployment.md`, Spot behaviour |
 | The on-demand node is replaced (hardware failure, node group update) | `kubectl get nodes -L foc.dev/pool` | RabbitMQ and Redis are down for the minutes it takes; the new node comes up in zone a and their volumes reattach by themselves |
 | NAT instance shell | `aws ssm start-session --target <id of the foc-nat instance>` |
-| An HPA shows 2 replicas | expected under load for every service (chat and notification fan their STOMP pushes out over AMQP, issue #305). The doubled scheduled runs are idempotent (DP10). It goes back to 1 about five minutes after CPU drops below 70 %. With two Spot nodes, the second replica may stay `Pending` on memory unless `node_count` is raised and applied |
+| An HPA shows 3 replicas (backends) or 2 (gateway, web) | expected under load (chat and notification fan their STOMP pushes out over AMQP, issue #305). The repeated scheduled runs are idempotent (DP10). It goes back to the minimum about five minutes after CPU drops below 70 %. The nodes are not grown for it (DP21): the extra replica may stay `Pending` on memory unless `node_count` is raised and applied |
 
 ## Troubleshooting
 
@@ -271,7 +274,7 @@ one that ran the apply, and the deploy role): `aws eks update-kubeconfig
 | Deploy job: `kubectl` gets `Unauthorized` or `403` | `aws eks list-access-entries --cluster-name foc` | the deploy role's access entry or its `AmazonEKSClusterAdminPolicy` association is missing (`eks.tf`); `terraform apply` |
 | Deploy job: `helm` cannot reach `traefik.github.io` | the runner's network | GitHub-side; re-run the job |
 | `db-init` Job fails | `kubectl -n foc logs job/db-init` | RDS still creating or `DB_HOST` stale in `foc/app` (apply, then redeploy); `password authentication failed` means `RDS_MASTER_PASSWORD` in `foc/app` differs from the instance (apply again) |
-| Backend `CrashLoopBackOff` with `FATAL: too many connections` | `kubectl -n foc logs <pod> -p` | the pool cap (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`, 5) was raised or removed, or `SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE` (1) dropped, so a deploy's surge pods open 5 each; db.t4g.micro allows about 110 |
+| Backend `CrashLoopBackOff` with `FATAL: too many connections` | `kubectl -n foc logs <pod> -p` | the pool cap (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`, 5) was raised or removed, or `SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE` (1) dropped, so a deploy's surge pods open 5 each; or every backend sits at HPA max 3 with full pools (105, DP19) while a deploy adds surge pods; db.t4g.micro allows about 110 |
 | Backend `CrashLoopBackOff` with `password authentication failed` | `kubectl -n foc logs job/db-init` | the Job did not run after the password changed; re-run Deploy |
 | `foc-secrets`, `foc-db-admin` or `ghcr-pull` missing | the Deploy job's `secrets.sh` output | the deploy role was denied `secretsmanager:GetSecretValue`, or the secret is not in `ap-southeast-1` |
 | `ImagePullBackOff` on every pod | `aws ec2 describe-instances --filters Name=tag:Name,Values=foc-nat --query 'Reservations[].Instances[].State.Name'` | the NAT instance is stopped (start it), its interface has source/destination checking on, or the private route table lost its default route |

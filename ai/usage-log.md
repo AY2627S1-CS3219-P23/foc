@@ -8197,3 +8197,30 @@ Entry template:
   `lost+found`: the same error; with group 1000, mode 2775 as fsGroup
   applies: "Ready to accept connections"); `kubectl kustomize infra/k8s`
   renders. The author reviews via pull request.
+
+## 2026-11-10 — Leong Wei Zhi (N5 cloud deployment, issue #48: replicas, spread and PDBs)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** implementation + documentation of team decisions
+- **Scope:** `infra/k8s/hpa.yaml` (seven backends HPA min 2 / max 3),
+  `infra/k8s/apps/*.yaml` (soft `topologySpreadConstraints` per node on
+  all nine Deployments; Hikari comment notes 105 of ~110 at max 3), new
+  `infra/k8s/pdb.yaml` (seven `minAvailable: 1` PDBs) +
+  `kustomization.yaml`, `infra/helm/traefik-values.yaml` (2 replicas,
+  chart PDB, same spread), `docs/deployment.md` (DP9 revised, DP21 new,
+  DP10/DP14/DP19, fit, scaling and Spot tables), README AI Use Summary.
+- **Prompt(s):** "create a plan to improve availability of services, min
+  two replicas and at max three replicas (under high load) im not sure
+  affinity goes as the k8 cluster involves one on demand instance (needed
+  for shared redis and rabbitmq broker) and two spot instances". Under
+  the policy, the placement, capacity, connection-pool, supplier
+  first-boot, scope, PDB and Traefik choices were put to the author as
+  two neutral options rounds (factual properties only, no
+  recommendation); the author chose soft spread per node, nodes
+  unchanged, pool unchanged, supplier min 2 accepted, backends only,
+  PDB minAvailable 1, Traefik 2 replicas + PDB, and gave no reasons.
+- **Author review:** `kubectl kustomize infra/k8s` renders 42 objects
+  (7 PDBs, 7 HPAs at 2/3, spread on 9 Deployments); `helm template` of
+  traefik 42.3.1 with the values renders 2 replicas, the PDB and the
+  spread. Rollout through CD after merge; the author checks
+  `kubectl -n foc get hpa,pdb` and pod placement, and reviews via pull
+  request.

@@ -8,6 +8,9 @@
 # 2026-11-08, Claude Code (Fable 5.1), PR #302 review (Sinnez1): the pod
 # template carries the foc-config hash as an annotation (set by deploy.sh).
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision DP21,
+# Leong Wei Zhi, options Q&A): soft spread of the replicas across nodes.
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1
 kind: Service
@@ -39,6 +42,18 @@ spec:
         # rolls the pods too
         foc/config-hash: "__CONFIG_HASH__"
     spec:
+      # replicas prefer different nodes, but still schedule when only one
+      # node has room (DP21); pod-template-hash keeps a rollout's old
+      # pods out of the count
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: web
+          matchLabelKeys:
+            - pod-template-hash
       imagePullSecrets:
         - name: ghcr-pull
       containers:
