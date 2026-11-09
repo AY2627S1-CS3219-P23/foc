@@ -50,7 +50,9 @@ resource "aws_lb" "site" {
   name               = "foc"
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = [aws_subnet.public.id, aws_subnet.public_b.id]
+  # every zone a node can be in (DP3): targets in a zone the balancer is
+  # not enabled in are registered but never sent traffic
+  subnets = [aws_subnet.public.id, aws_subnet.public_b.id, aws_subnet.public_c.id]
   # below Traefik's 3600 s idle timeout (infra/helm/traefik-values.yaml), so
   # the balancer closes an idle keep-alive connection before the backend
   # does (AWS guidance; PR #310 review). The STOMP sockets the gateway

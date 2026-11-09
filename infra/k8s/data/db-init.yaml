@@ -9,6 +9,8 @@
 # deploy.sh deletes the previous Job and applies this one before the
 # kustomization, then waits for it, so the services find their databases.
 # Author review: Leong Wei Zhi, pending pull request review.
+# PR #316 review (Claude reviewer, Sinnez1): the image is pinned to the
+# RDS minor (db_engine_version) instead of the moving `postgres:17`.
 ---
 apiVersion: batch/v1
 kind: Job
@@ -25,7 +27,9 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: psql
-          image: postgres:17
+          # the same minor as the RDS instance (db_engine_version in
+          # rds.tf); bump both together
+          image: postgres:17.9
           env:
             - name: DB_HOST
               valueFrom:

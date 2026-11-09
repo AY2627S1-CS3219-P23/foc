@@ -16,7 +16,9 @@
 # db-init Job before the kustomization, and waits as before. Author
 # review: Leong Wei Zhi, pending pull request review.
 # PR #316 review (Copilot): Helm, the Job and the rollouts share one
-# 50-min deadline.
+# 50-min deadline. Later rounds (Claude reviewer, Sinnez1): a failed
+# db-init Job stops the deploy at once instead of waiting out the
+# deadline, and the deadline check exits the script, not a subshell.
 #
 # Usage: deploy.sh <image-tag> <public-host> <cluster-name>
 # <public-host> is the hostname the load balancer serves over https; the
@@ -38,21 +40,24 @@ traefik_chart_version="42.3.1"
 # rollout): 50 min, inside the workflow job's 60 (PR #316 review). A
 # single slow phase then fails here, with its name, instead of the job
 # being killed from outside
+# `left` is set by a plain call, never read through $(...): an exit inside
+# a command substitution would end only the subshell
 deadline=$((SECONDS + 3000))
+left=0
 remaining() {
-    local r=$((deadline - SECONDS))
-    [ "$r" -gt 0 ] || { echo "deploy exceeded 50 min at: $1" >&2; exit 1; }
-    echo "$r"
+    left=$((deadline - SECONDS))
+    [ "$left" -gt 0 ] || { echo "deploy exceeded 50 min at: $1" >&2; exit 1; }
 }
 
 export KUBECONFIG="${KUBECONFIG:-$(mktemp)}"
 aws eks update-kubeconfig --name "$cluster_name" >/dev/null
 
 # the ingress controller behind the load balancer's NodePort target group
+remaining helm
 helm upgrade --install traefik traefik \
     --repo https://traefik.github.io/charts --version "$traefik_chart_version" \
     --namespace traefik --create-namespace \
-    -f "$repo/infra/helm/traefik-values.yaml" --wait --timeout "$(remaining helm)s"
+    -f "$repo/infra/helm/traefik-values.yaml" --wait --timeout "${left}s"
 
 bash "$repo/infra/k8s/secrets.sh"
 # stamped into the pod templates (foc/secrets-version annotation): changed
@@ -77,17 +82,30 @@ fill __CONFIG_HASH__ "$(sha256sum "$work/config.yaml" | cut -c1-16)"
 # immutable, so the previous run's object goes before the new one
 kubectl -n foc delete job db-init --ignore-not-found --wait
 kubectl apply -f "$work/data/db-init.yaml"
-if ! kubectl -n foc wait --for=condition=complete --timeout="$(remaining db-init)s" job/db-init; then
-    kubectl -n foc logs job/db-init --all-containers --tail=50 >&2 || true
-    echo "db-init did not complete" >&2
-    exit 1
-fi
+# polled for either outcome: `kubectl wait --for=condition=complete` would
+# sit out the whole deadline on a Job that has already failed (a wrong
+# master password, RDS unreachable), since Complete then never arrives
+while :; do
+    remaining db-init
+    status="$(kubectl -n foc get job db-init -o \
+        jsonpath='{range .status.conditions[?(@.status=="True")]}{.type}{" "}{end}')"
+    case " $status " in
+        *" Complete "*) break ;;
+        *" Failed "*)
+            kubectl -n foc logs job/db-init --all-containers --tail=50 >&2 || true
+            echo "db-init failed" >&2
+            exit 1
+            ;;
+    esac
+    sleep 5
+done
 
 kubectl apply -k "$work"
 
 for kind in statefulset deployment; do
     for name in $(kubectl -n foc get "$kind" -o name); do
-        kubectl -n foc rollout status "$name" --timeout="$(remaining "$name")s"
+        remaining "$name"
+        kubectl -n foc rollout status "$name" --timeout="${left}s"
     done
 done
 kubectl -n foc get pods -o wide

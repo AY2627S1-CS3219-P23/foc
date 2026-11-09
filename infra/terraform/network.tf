@@ -14,6 +14,9 @@
 # routed to the NAT instance (nat.tf); the cluster
 # security group takes Traefik's NodePort from the load balancer only.
 # Author review: Leong Wei Zhi, pending pull request review.
+# PR #316 review (Sinnez1): a third public subnet, in zone c, so the load
+# balancer reaches the Spot nodes there (team decision, Leong Wei Zhi,
+# options Q&A). Author review: Leong Wei Zhi, pending pull request review.
 
 resource "aws_vpc" "main" {
   cidr_block           = "10.20.0.0/16"
@@ -44,6 +47,15 @@ resource "aws_subnet" "public_b" {
   tags              = { Name = "foc-public-b" }
 }
 
+# third zone: a load balancer sends no traffic to targets in a zone it is
+# not enabled in, and the Spot group spans zone c too (DP3, PR #316 review)
+resource "aws_subnet" "public_c" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.20.3.0/24"
+  availability_zone = var.availability_zone_c
+  tags              = { Name = "foc-public-c" }
+}
+
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
   route {
@@ -60,6 +72,11 @@ resource "aws_route_table_association" "public" {
 
 resource "aws_route_table_association" "public_b" {
   subnet_id      = aws_subnet.public_b.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table_association" "public_c" {
+  subnet_id      = aws_subnet.public_c.id
   route_table_id = aws_route_table.public.id
 }
 
