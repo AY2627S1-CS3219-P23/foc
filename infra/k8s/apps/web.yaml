@@ -11,6 +11,9 @@
 # 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision DP21,
 # Leong Wei Zhi, options Q&A): soft spread of the replicas across nodes.
 # Author review: Leong Wei Zhi, pending pull request review.
+# PR #323 review (Copilot), team decision DP21 (Leong Wei Zhi): rolling
+# update without surge (maxSurge 0, maxUnavailable 1).
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1
 kind: Service
@@ -33,6 +36,15 @@ spec:
   selector:
     matchLabels:
       app: web
+  # no surge pod (DP21, PR #323 review): a rollout never waits on memory
+  # for a second pod; at one replica the pod is stopped before its
+  # replacement starts, so each deploy is a few seconds' outage and
+  # the SPA is unreachable for those seconds
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   template:
     metadata:
       labels:

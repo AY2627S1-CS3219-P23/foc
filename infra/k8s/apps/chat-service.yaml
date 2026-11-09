@@ -10,7 +10,9 @@
 # carries the foc-secrets version as an annotation (set by deploy.sh);
 # second round (Sinnez1): the foc-config hash too.
 # Author review: Leong Wei Zhi, pending pull request review.
-# Same day, review follow-up: replicas pinned to 1 (DP10, issue #305).
+# Same day, review follow-up: replicas pinned to 1 (DP10, issue #305;
+# lifted by issue #305 below, HPA min 2 / max 3 since DP9's 2026-11-10
+# revision).
 # Same day, issue #48 (HTTPS): the WebSocket origin is https (DP19, DP21).
 # 2026-11-08, Claude Code (Fable 5.1), issue #305 (team decision, Leong Wei
 # Zhi via options Q&A): the pin removed — pushes fan out over AMQP, so the

@@ -8244,3 +8244,19 @@ Entry template:
 - **Author review:** `kubectl kustomize infra/k8s` renders 42 objects with
   7 no-surge strategies and 7 `maxUnavailable: 1` PDBs. The author reviews
   via pull request.
+
+## 2026-11-10 — Leong Wei Zhi (N5 cloud deployment, issue #48: PR #323 review round 2)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** review fixes from team decisions
+- **Scope:** `infra/k8s/apps/gateway.yaml`, `web.yaml` (`maxSurge: 0`,
+  `maxUnavailable: 1`); `infra/k8s/hpa.yaml` header (scope line, node
+  fit); chat/notification headers (the old 'pinned to 1' note marked as
+  lifted); README AI Use Summary (PDB values); `docs/deployment.md` DP21.
+- **Prompt(s):** "address the latest pr comments". Copilot: the summary's
+  PDB values, the stale hpa.yaml header, gateway/web left on the default
+  surge; Claude reviewer: the 'pinned to 1' headers. The wording fixes
+  were made directly; the gateway/web strategy was put to the author as a
+  neutral options round (default surge documented / no surge / default
+  surge + min 2). The author chose no surge, no reasons given.
+- **Author review:** `kubectl kustomize infra/k8s` renders. The author
+  reviews via pull request.
