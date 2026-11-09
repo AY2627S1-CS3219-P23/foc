@@ -42,8 +42,16 @@
 // 2026-11-08, Claude Code (Opus 5.5), issue #308: the owner upgrade card,
 // shown to USER and ADMIN accounts only; on success it signs out to the
 // login page with its own notice (decisions via options Q&A).
+// 2026-11-09, Claude Code (Opus 5.5), PR #309 review (@Sinnez1): that
+// sign-out no longer calls logout(), which navigates to / and only lands
+// on /login because ProtectedRoute's redirect wins. It raises the flag,
+// ends the local session (the server already revoked it, so no POST
+// /auth/logout) and navigates to /login itself. A poll's 401 that ends
+// the session first can no longer leave the user on the home page, and
+// the login page swaps its generic notice for the owner one.
 
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router'
 
 import { errorMessage } from '@/lib/api/http'
 import { useNotifications } from '@/features/notifications/useNotifications'
@@ -73,7 +81,8 @@ export function ProfileSection() {
     useLocalStorage<PendingEmailChange>(PENDING_EMAIL_KEY)
   const [codeOpen, setCodeOpen] = useState(false)
   // the session's own GET /users/me answer, fetched once by AuthProvider
-  const { me, logout, updateMe } = useAuth()
+  const { me, logout, updateMe, endSession } = useAuth()
+  const navigate = useNavigate()
   const user = me?.status === 'ready' ? me.user : null
   // the account's single gate code, held here so both cards see the same
   // one (issue #167)
@@ -193,10 +202,12 @@ export function ProfileSection() {
           gate={gate}
           onUpgraded={() => {
             // every session of the account was revoked server-side; the
-            // next sign-in's token carries OWNER. logout() lands on
-            // /login the same way deleteAccount's does
+            // next sign-in's token carries OWNER. The flag goes up first:
+            // if a poll's 401 already took the user to /login, the open
+            // page swaps its generic notice for this one
             flagSessionEnded('You are now an owner. Please sign in again.')
-            logout()
+            endSession()
+            navigate('/login', { replace: true })
           }}
         />
       )}

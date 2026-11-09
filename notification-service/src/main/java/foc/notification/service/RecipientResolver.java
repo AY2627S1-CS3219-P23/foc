@@ -18,10 +18,18 @@
  * 2026-11-04, follow-up to PR #287 (author's call): the explicit credit
  * and user arms removed — this service binds neither exchange, so one
  * that arrives is refused like any type without a rule.
+ * 2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): the credit-change
+ * notification's three events (team decision): credit.transferred and
+ * credit.dispute-settled tell the requester and the courier,
+ * credit.released the requester. Author review: Ryan Ang, pending pull
+ * request review.
  */
 package foc.notification.service;
 
 import foc.contracts.events.core.DomainEvent;
+import foc.contracts.events.credit.CreditDisputeSettled;
+import foc.contracts.events.credit.CreditReleased;
+import foc.contracts.events.credit.CreditTransferred;
 import foc.contracts.events.rating.RatingSubmitted;
 import foc.contracts.events.request.CourierArrived;
 import foc.contracts.events.request.RequestAccepted;
@@ -48,7 +56,9 @@ import java.util.List;
  * The requester and the courier: accepted, collected, completed,
  * disputed and dispute-resolved. Expired: the requester, plus the
  * courier who had accepted when there was one. Rating submitted: the
- * ratee alone (#44).
+ * ratee alone (#44). Credit transferred and credit dispute-settled: the
+ * requester and the courier, whose balances moved (a 0 share included);
+ * credit released: the requester.
  *
  * <p>Only {@code request.expired} may lack a courier (the request was
  * still open). On the five events that require one, a null courier is a
@@ -58,10 +68,10 @@ import java.util.List;
  * as well. {@link IdempotentEventProcessor} resolves recipients before
  * its first write, so either throw leaves nothing behind and the
  * listener's retry/DLQ path keeps the message replayable once the rule
- * or the producer is fixed (PR #287 review). Credit and user events take
- * that path too: this service binds neither exchange (D16), so one can
- * only arrive by hand or by a rebinding, and dead-lettering it is the
- * visible outcome. {@code RecipientResolverTest} checks every registered
+ * or the producer is fixed (PR #287 review). The saga's credit replies
+ * and the user events take that path too: this service binds neither
+ * (D16), so one can only arrive by hand or by a rebinding, and
+ * dead-lettering it is the visible outcome. {@code RecipientResolverTest} checks every registered
  * request and rating type against its fixture.
  */
 final class RecipientResolver {
@@ -87,6 +97,9 @@ final class RecipientResolver {
 					? List.of(e.requesterId())
 					: List.of(e.requesterId(), e.courierId());
 			case RatingSubmitted e -> List.of(e.rateeId());
+			case CreditTransferred e -> both(e, e.requesterId(), e.courierId());
+			case CreditReleased e -> List.of(e.requesterId());
+			case CreditDisputeSettled e -> both(e, e.requesterId(), e.courierId());
 			default -> throw new IllegalStateException(
 					"no recipient rule for " + event.eventType() + " (eventId " + event.eventId() + ")");
 		};

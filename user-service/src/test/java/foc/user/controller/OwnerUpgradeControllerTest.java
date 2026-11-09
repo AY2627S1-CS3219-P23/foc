@@ -9,6 +9,11 @@ Scope: integration tests for issue #308's POST /users/me/owner against the
        caller, and the unauthenticated 401. Behaviour decided by Leong Wei
        Zhi via options Q&A (2026-11-08).
 Author review: Leong Wei Zhi to review via the PR.
+2026-11-09 (Claude Code, Opus 5.5), PR #309 review (@Sinnez1): code-first
+order (decided by Leong Wei Zhi via options Q&A, 2026-11-09): a wrong
+token spends the code and the cooldown holds back the next one, guesses with a wrong code learn nothing and are
+bounded by the attempt budget, and no code means no compare. No
+reflection; the unconfigured-token 503 moved to OwnerSetupUnconfiguredTest.
 */
 
 package foc.user.controller;
@@ -31,11 +36,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.util.ReflectionTestUtils;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -47,7 +52,6 @@ import foc.user.repository.PendingEmailChangeRepository;
 import foc.user.repository.UserRepository;
 import foc.user.security.TokenDenylist;
 import foc.user.service.OtpEmailSender;
-import foc.user.service.OwnerSetupToken;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -71,9 +75,6 @@ class OwnerUpgradeControllerTest extends PostgresTestContainer {
     @Autowired
     private PendingEmailChangeRepository pendingEmailChanges;
 
-    @Autowired
-    private OwnerSetupToken ownerSetupToken;
-
     // captures the plain codes instead of speaking SMTP; reset per test
     @MockitoBean
     private OtpEmailSender otpEmailSender;
@@ -91,14 +92,12 @@ class OwnerUpgradeControllerTest extends PostgresTestContainer {
         gateOtps.deleteAll();
         pendingEmailChanges.deleteAll();
         userRepository.deleteAll();
-        ReflectionTestUtils.setField(ownerSetupToken, "expectedOwnerKey", OWNER_KEY);
         alex = userRepository.save(new User(EMAIL, "student_alex", "hashed_password", Role.USER));
     }
 
     @AfterEach
     void clearOtpRows() {
         gateOtps.deleteAll();
-        ReflectionTestUtils.setField(ownerSetupToken, "expectedOwnerKey", OWNER_KEY);
     }
 
     private ResultActions upgrade(Map<String, String> body) throws Exception {
@@ -149,30 +148,67 @@ class OwnerUpgradeControllerTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("A wrong token is a typed 403 and the same code still works afterwards")
-    void upgrade_wrongTokenKeepsCode() throws Exception {
+    @DisplayName("A wrong token after the right code is a typed 403 and spends the code")
+    void upgrade_wrongTokenSpendsCode() throws Exception {
         String code = freshGateCode();
 
         upgrade(Map.of("ownerKey", "not-the-token", "otp", code))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.type").value("urn:foc:user:owner-setup-token-invalid"))
-            .andExpect(jsonPath("$.detail").value("Owner setup token is incorrect"));
+            .andExpect(jsonPath("$.detail").value(
+                "Owner setup token is incorrect; request a new code to try again"))
+            // application-test.yaml turns the resend cooldown off, so no
+            // wait; AccountUpdateServiceTest checks a real one
+            .andExpect(header().string("Retry-After", "0"));
         assertThat(storedRole()).isEqualTo(Role.USER);
         verify(tokenDenylist, never()).revokeUserSessions(any());
 
+        // the spent code refuses even the right token
         upgrade(Map.of("ownerKey", OWNER_KEY, "otp", code))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.role").value("OWNER"));
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-attempts-exceeded"));
+        // the row is kept, so its lastSentAt still gates the next code
+        assertThat(gateOtps.findByUserId(alex.getId())).isPresent();
+        assertThat(storedRole()).isEqualTo(Role.USER);
     }
 
     @Test
-    @DisplayName("A blank or missing token is refused like a wrong one")
+    @DisplayName("Repeated token guesses with a wrong code answer as wrong codes until the code is spent")
+    void upgrade_guessesWithoutCodeLearnNothing() throws Exception {
+        String code = freshGateCode();
+        String wrongCode = code.equals("000000") ? "000001" : "000000";
+
+        for (int i = 0; i < 4; i++) {
+            upgrade(Map.of("ownerKey", "guess-" + i, "otp", wrongCode))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("urn:foc:user:otp-invalid"));
+        }
+        // the fifth wrong code exhausts the budget (user.otp.max-attempts=5)
+        upgrade(Map.of("ownerKey", OWNER_KEY, "otp", wrongCode))
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-attempts-exceeded"));
+        // the spent code refuses even the right pair
+        upgrade(Map.of("ownerKey", OWNER_KEY, "otp", code))
+            .andExpect(status().isTooManyRequests());
+        assertThat(storedRole()).isEqualTo(Role.USER);
+    }
+
+    @Test
+    @DisplayName("A blank token is refused like a wrong one")
     void upgrade_blankToken() throws Exception {
         String code = freshGateCode();
 
         upgrade(Map.of("ownerKey", "", "otp", code))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.type").value("urn:foc:user:owner-setup-token-invalid"));
+        assertThat(storedRole()).isEqualTo(Role.USER);
+    }
+
+    @Test
+    @DisplayName("A missing token is refused like a wrong one")
+    void upgrade_missingToken() throws Exception {
+        String code = freshGateCode();
+
         upgrade(Map.of("otp", code))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.type").value("urn:foc:user:owner-setup-token-invalid"));
@@ -180,21 +216,11 @@ class OwnerUpgradeControllerTest extends PostgresTestContainer {
     }
 
     @Test
-    @DisplayName("An unconfigured setup token answers 503 like /auth/signup-owner")
-    void upgrade_unconfigured() throws Exception {
-        String code = freshGateCode();
-        ReflectionTestUtils.setField(ownerSetupToken, "expectedOwnerKey", "");
-
-        upgrade(Map.of("ownerKey", OWNER_KEY, "otp", code))
-            .andExpect(status().isServiceUnavailable())
-            .andExpect(jsonPath("$.type").value("urn:foc:user:owner-setup-token-missing"))
-            .andExpect(jsonPath("$.detail").value("Owner setup is unavailable"));
-        assertThat(storedRole()).isEqualTo(Role.USER);
-    }
-
-    @Test
-    @DisplayName("The right token without a requested gate code is refused")
+    @DisplayName("A token guess without a requested gate code is refused before the token is compared")
     void upgrade_noGateCode() throws Exception {
+        upgrade(Map.of("ownerKey", "not-the-token", "otp", "123456"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.type").value("urn:foc:user:otp-required"));
         upgrade(Map.of("ownerKey", OWNER_KEY, "otp", "123456"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.type").value("urn:foc:user:otp-required"));

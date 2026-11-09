@@ -9,6 +9,9 @@ Scope: gate-code row for issue #92 (F2.1.1): POST /users/me/otp parks
        single-use gate, code carried in the mutating request (owner
        Q&A, 2026-09-30).
 Author review: Leong Wei Zhi to review via the PR.
+2026-11-09 (Claude Code, Opus 5.5), PR #309 review: spend(), for the
+owner upgrade's wrong token after a right code. The row is kept spent, so
+its lastSentAt still holds back the next code.
 */
 
 package foc.user.entity;
@@ -118,5 +121,14 @@ public class AccountUpdateOtp {
 
     public void incrementAttempts() {
         this.attempts++;
+    }
+
+    /**
+     * Uses up the attempt budget without deleting the row. A spent row
+     * refuses every code, and its lastSentAt still holds back the next
+     * request until the cooldown passes (PR #157's rule).
+     */
+    public void spend(int maxAttempts) {
+        this.attempts = Math.max(attempts, maxAttempts);
     }
 }

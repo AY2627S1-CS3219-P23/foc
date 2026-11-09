@@ -31,6 +31,9 @@
   2026-11-08, Claude Code (Opus 5.5), issue #308: AI Use Summary extended
   for the owner upgrade from the profile page. Author review: Leong Wei
   Zhi, pending pull request review.
+  2026-11-09, Claude Code (Opus 5.5), PR #309 review: the #308 paragraph
+  now records the code-first order. Author review: Leong Wei Zhi,
+  pending pull request review.
   2026-11-09, Claude Code (Opus 5.5): AI Use Summary extended for the
   notification sound preview; PR #314 review (Copilot): its sentence
   reworded so the subject reads singular. Author review: Leong Wei Zhi,
@@ -327,6 +330,10 @@
   2026-11-08: AI Use Summary extended for issue #305 (cross-replica push,
   duplicate-key ack, Flyway baseline) by Claude Code (Fable 5.1).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-08: AI Use Summary extended for the push-triggered credit
+  balance refresh (Credit NFR1.1) by Claude Code (Opus 5.5), then
+  rewritten for its rework into the credit-change notification (PR
+  #313). Author review: Ryan Ang, pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1568,10 +1575,22 @@ Claude Code (Opus 5.5, 2026-11-08) wrote the owner upgrade (issue #308):
 `POST /users/me/owner` in user-service, with the owner setup token check
 moved into a shared `OwnerSetupToken` bean, and the profile page's Become
 an Owner card, plus tests and docs. The endpoint shape, the gate-code
-requirement, the token-before-code order, the 403/503 answers, the
-session revoke and re-login, the log-line audit, keeping `/register-owner`
-and the OWNER caller's unchanged 200 were Leong Wei Zhi's decisions via
-neutral options rounds; the tool implemented them. Recorded in
+requirement, the 403/503 answers, the session revoke and re-login, the
+log-line audit, keeping `/register-owner` and the OWNER caller's
+unchanged 200 were Leong Wei Zhi's decisions via neutral options rounds;
+the tool implemented them. After the PR #309 review, Leong Wei Zhi also
+chose to check the gate code before the token (it was token first), so a
+wrong token spends the code. Recorded in `ai/usage-log.md`.
+
+The credit-change notification (Credit NFR1.1, PR #313): Claude Code
+(Opus 5.5) added the `credit.transferred`, `credit.released` and
+`credit.dispute-settled` contracts, had credit-service write them to its
+outbox when a transfer, release or dispute split settles,
+notification-service bind them and tell each party, and the web show the
+viewer's side of the change, open `/credits` on click and refresh the
+balance on the push, with tests and the design docs' D37 (notification)
+and D15 (credit). Which movements notify, the contract names and
+fields, the recipients and the wording were team decisions. Recorded in
 `ai/usage-log.md`.
 
 Claude Code (Opus 5.5, 2026-11-09) made switching the notification sound

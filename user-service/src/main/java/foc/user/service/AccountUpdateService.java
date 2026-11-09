@@ -42,6 +42,14 @@ before the code, so a wrong token leaves the code usable; an OWNER
 caller gets the account back unchanged; one log line per upgrade; every
 session revoked after the commit, as AdminService.changeRole does (#178).
 Author review: Leong Wei Zhi to review via the PR.
+2026-11-09 (Claude Code, Opus 5.5), PR #309 review (@Sinnez1): the gate
+code is now checked before the token (code first, decided by Leong Wei
+Zhi via options Q&A, 2026-11-09), so each token guess needs a requested
+code and spends it. A wrong token commits the spent code
+(OwnerSetupTokenException in noRollbackFor). The row is kept spent, not
+deleted, so the resend cooldown also holds back the next guess.
+consumeGateOtp is split into matchGateOtp plus the delete. An
+unconfigured token still answers 503 before the code is touched.
 */
 
 package foc.user.service;
@@ -61,7 +69,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import foc.user.controller.ProblemTypes;
 import foc.user.dto.ChangePasswordRequest;
 import foc.user.dto.EmailChangePendingResponse;
 import foc.user.dto.UpdateAccountRequest;
@@ -75,6 +82,7 @@ import foc.user.entity.User;
 import foc.user.exception.OtpAttemptsExceededException;
 import foc.user.exception.OtpResendTooSoonException;
 import foc.user.exception.OtpVerificationException;
+import foc.user.exception.OwnerSetupTokenException;
 import foc.user.exception.SignupIdentifierTakenException;
 import foc.user.repository.AccountUpdateOtpRepository;
 import foc.user.repository.PendingEmailChangeRepository;
@@ -454,23 +462,29 @@ public class AccountUpdateService {
         userRepository.save(user);
     }
 
-    // issue #308: the caller's own account becomes OWNER. The token is
-    // checked before the gate code, so a wrong token leaves the code
-    // usable for the retry; an OWNER caller gets the account back with
-    // nothing consumed or revoked (changeRole's same-role answer)
-    @Transactional(noRollbackFor = {OtpVerificationException.class, OtpAttemptsExceededException.class})
+    // issue #308: the caller's own account becomes OWNER. The gate code
+    // is checked before the token (PR #309 review), so a token guess needs
+    // a requested code and spends it. A wrong token leaves the row spent,
+    // not deleted, so its lastSentAt holds back the next code by the
+    // resend cooldown (PR #157's rule): one guess per cooldown at most.
+    // An unconfigured token answers 503 first, with the code kept; an
+    // OWNER caller gets the account back with nothing consumed or
+    // revoked (changeRole's same-role answer)
+    @Transactional(noRollbackFor = {OtpVerificationException.class, OtpAttemptsExceededException.class,
+        OwnerSetupTokenException.class})
     public UserResponse upgradeToOwner(Long userId, UpgradeOwnerRequest request) {
         User user = userRepository.getActiveUserWithLock(userId);
         if (user.getRole() == Role.OWNER) {
             return UserResponse.from(user);
         }
+        ownerSetupToken.requireConfigured();
+        AccountUpdateOtp gate = matchGateOtp(userId, request.otp());
         if (!ownerSetupToken.matches(request.ownerKey())) {
-            ResponseStatusException e = new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Owner setup token is incorrect");
-            e.getBody().setType(ProblemTypes.OWNER_SETUP_TOKEN_INVALID);
-            throw e;
+            gate.spend(otpService.maxAttempts());
+            gateOtps.save(gate);
+            throw OwnerSetupTokenException.invalid(untilResendAllowed(gate.getLastSentAt(), clock.instant()));
         }
-        consumeGateOtp(userId, request.otp());
+        gateOtps.delete(gate);
 
         user.setRole(Role.OWNER);
         UserResponse response = UserResponse.from(userRepository.save(user));
@@ -489,6 +503,12 @@ public class AccountUpdateService {
     // that exhausts the limit leaves the row spent, refusing everything
     // until the cooldown lets a replacement in (PR #157 reviews)
     private void consumeGateOtp(Long userId, String code) {
+        gateOtps.delete(matchGateOtp(userId, code));
+    }
+
+    // consumeGateOtp's checks without the delete: the matched row, for a
+    // caller that decides what happens to it (upgradeToOwner)
+    private AccountUpdateOtp matchGateOtp(Long userId, String code) {
         AccountUpdateOtp gate = gateOtps.findWithLockByUserId(userId).orElse(null);
         Instant now = clock.instant();
         // honest answers, not sign-up's dummy-hash guessing game: the
@@ -524,7 +544,7 @@ public class AccountUpdateService {
             }
             throw new OtpVerificationException();
         }
-        gateOtps.delete(gate);
+        return gate;
     }
 
     // the spent row's Retry-After: how long until the resend cooldown

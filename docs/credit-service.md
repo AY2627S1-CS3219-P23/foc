@@ -142,6 +142,11 @@
   of the removed `parties` field dropped (D14, the reply fields, the
   Notification Service row). Author review: Leong Wei Zhi, pending pull
   request review.
+  2026-11-08, Claude Code (Opus 5.5), Credit NFR1.1 (PR #313): D15 added — the
+  credit-change events written to the outbox with a settled transfer,
+  release or dispute split (team decision) — with the saga-events note,
+  the event-handling paragraph and the two dependency rows.
+  Author review: Ryan Ang, pending pull request review.
 -->
 
 # FoC Credit Service — Architecture Design
@@ -169,6 +174,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D12 | Scheduler | Done by a **cron job** through use of `@Scheduled`. One routine runs daily at 00:00 Asia/Singapore time and once at startup: the expiry sweep, then, if the current Singapore month has no `redistribution_run` row, that month's redistribution. The order inside the routine puts what expired into the pool before it is shared out, so the redistribution happens at 00:00 on the 1st, straight after that night's sweep. A month that is missed (the service down) or whose run fails is completed by the next run, at startup or the next day. The expiry is one transaction per account. A month is recorded in `redistribution_run` even when the pool is empty. | F6.1.1, F6.1.2 |
 | D13 | Outbox retention | A **scheduled purge** deletes the replies sent more than 30 days ago (`CREDIT_OUTBOX_RETENTION_DAYS`, default 30, at least 1 or the service does not start), daily at 03:00 Asia/Singapore time (`CREDIT_OUTBOX_PURGE_CRON`), away from the 00:00 routine of D12. Only sent rows (`sent_at` not null) are deleted: an unsent row is a reply the Order Service is still waiting for, and deleting it would leave that request stuck in pending. The window counts from `sent_at`, since a row's job ends at delivery. A partial index on `sent_at` covers the sent rows, so the purge's condition matches it exactly. Nothing but `outbox_event` is purged: `credit_reservation`, `credit_history`, `credit_lot` and `credit_reservation_slice` are the ledger and are kept. This differs from the Notification Service, which purges its `processed_events`: there that table is only a duplicate check, while here the duplicate check is `credit_reservation`, which is also the record of every request's credits. | NFR2.1 |
 | D14 | Account lifecycle | **User events** (issue #267, team decisions USR-1 to USR-9). The User Service publishes `user.created` whenever a user row is inserted (USR-8, revised): a verified sign-up (after OTP verification, not at the pending sign-up), a verified owner setup, and each account the demo seeder creates, all through one shared creation method, and `user.purged` for each account the day-31 purge deletes, through its own transactional outbox written in the same transaction, to one `user-events` topic exchange. Each carries the envelope and `userId` only. `user.created` opens the account with the sign-up credits; `user.purged` closes it: the row is kept with `closed_at` set, every available credit (the sign-up ones included) moves to the common pool with a `CLOSURE` history row, held reservations settle normally, and any credits that reach a closed account afterwards (a release, a transfer, a dispute share) go on to the pool in the same transaction with a `CLOSURE` row. Duplicates and reordering are decided by the account's state, with no processed-events table (see "User events" below). Redistribution and the pool preview count open accounts only, through one query. No soft-delete or restore event: shares received during the 30-day window return to the pool at closure. Deploy order: `foc-contracts`, then the Credit Service, then the User Service. A user event's `correlationId` is the user's ID, so every event about one user can be traced together. An event with a blank `userId` is dead-lettered at once, before any query. The User Service starts and serves login and sign-up without the broker: compose does not make it wait for RabbitMQ, its RabbitMQ health check is off, and the exchange is declared when the publisher first connects, so an event published before the Credit Service has bound its queue is returned and retried from the outbox. Sent user events are deleted 30 days after they were sent, never an unsent one, as the Credit Service's replies are (D13). | F1.1, F6.1.1, F1 (closed economy) |
+| D15 | Credit-change events (PR #313) | A settled transfer, release or dispute split also writes `credit.transferred`, `credit.released` or `credit.dispute-settled` to the outbox, in the same transaction (D10), published to `credit-events` like the replies. The parties and amount are read from the request's record. A release that settles an amount-0 record (the cancel or expiry came first) writes none. A dispute split writes its event with both shares, a share of 0 included. The Notification Service binds the three to tell each party (notification D37). Team decision, 2026-11-08 | NFR1.1 |
 
 ## The saga
  
@@ -192,7 +198,10 @@ High-level system architecture: [`architecture.md`](architecture.md)
 
 The four saga events, `request.submitted`, `request.rejected`,
 `credit.reserved` and `credit.reservation-rejected`, are defined in
-`foc-contracts` (records, registry entries and fixtures).
+`foc-contracts` (records, registry entries and fixtures). So are the
+three credit-change events of D15, `credit.transferred`,
+`credit.released` and `credit.dispute-settled`, which no saga step
+waits on: they are for the Notification Service.
 
 ## Components
 
@@ -657,7 +666,9 @@ amount-0 `RELEASED` record (D6). A resolution gets or creates both
 accounts, the courier's even for a share of 0, since the record
 references it. Each writes its history rows in the
 same transaction, including the sign-up lot and `PROVISION` row of an
-account it creates. When an account the operation credits is closed
+account it creates. A transfer, a release of more than 0 credits and a
+resolution that settle (not a duplicate) also write their credit-change
+event to the outbox in that transaction (D15). When an account the operation credits is closed
 (D14), its lots are emptied into the common pool before the commit,
 with a `CLOSURE` row after the row that credited it.
 
@@ -901,8 +912,9 @@ Credits are created only by the one-time account provision (F1.1, D6). The credi
 | Order Service | Consume `credit.reserved` and `credit.reservation-rejected` on its own queue, ignoring replies for requests that are no longer `pending` | Saga steps 3a and 3b |
 | Order Service | Cancel a request that stays `pending` past a waiting time, publishing `request.cancelled` | Without it, a lost or dead-lettered reply strands the request |
 | Order Service | Publish `request.cancelled` only when a request is finally cancelled, never when a courier withdraws and the request returns to created (Order F5.2) — a withdrawal publishes `request.dropped` instead, which this service does not consume | A withdrawal must leave the credits held |
-| `foc-contracts` | Records and registry entries for the four new events, and a `credit-events` exchange name; since D14, `user.created` and `user.purged` and a `user-events` exchange name | Shared contracts |
+| `foc-contracts` | Records and registry entries for the four new events, and a `credit-events` exchange name; since D14, `user.created` and `user.purged` and a `user-events` exchange name; since D15, `credit.transferred`, `credit.released` and `credit.dispute-settled` | Shared contracts |
 | Notification Service | Nothing to build: `request.submitted` and `request.rejected` arrive through its existing `request.#` binding and notify the requester (its own rule for both, notification D34) | The requester sees the submission, and `request.rejected` is the only way they learn of a refusal |
+| Notification Service | Since D15: bind `credit.transferred`, `credit.released` and `credit.dispute-settled` on its own `credit-events` queue and tell each party whose balance moved (notification D37) | Users learn of a credit change, and the web refreshes the balance on it (NFR1.1) |
 | Web App | Show `pending` and `rejected` requests to the requester, and warn before submitting when the reward exceeds the displayed balance | The server's answer is no longer immediate |
 | User Service | Publish `user.created` when a verified sign-up inserts the user row and `user.purged` for each account the day-31 purge deletes, through a transactional outbox (D14) | A purged user must stop receiving redistribution shares and their credits must return to the pool; D6's get-or-create stays the fallback, so a lost `user.created` costs nothing |
  

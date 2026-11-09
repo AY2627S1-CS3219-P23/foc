@@ -8,6 +8,8 @@ Scope: issue #267, revised USR-8 (team decision): every path that inserts
 Author review: Ryan Ang, pending pull request review.
 2026-11-08 (Claude Code, Opus 5.5), issue #308: the setup token is set
 on the shared OwnerSetupToken bean, where the check moved.
+2026-11-09 (Claude Code, Opus 5.5), PR #309 review: no reflection; the
+test uses the token PostgresTestContainer pins.
 */
 
 package foc.user.service;
@@ -33,7 +35,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
 
@@ -51,7 +52,8 @@ import tools.jackson.databind.json.JsonMapper;
 class UserCreatedEventTest extends PostgresTestContainer {
 
     private static final String PASSWORD = "ValidPassword123";
-    private static final String OWNER_KEY = "user-created-event-test-key";
+    // PostgresTestContainer's pin
+    private static final String OWNER_KEY = "test-owner-setup-token";
 
     @Autowired
     private MockMvc mockMvc;
@@ -64,9 +66,6 @@ class UserCreatedEventTest extends PostgresTestContainer {
 
     @Autowired
     private OutboxEventRepository outboxEvents;
-
-    @Autowired
-    private OwnerSetupToken ownerSetupToken;
 
     @Autowired
     private UserCreation userCreation;
@@ -87,8 +86,6 @@ class UserCreatedEventTest extends PostgresTestContainer {
         pendingSignupRepository.deleteAll();
         userRepository.deleteAll();
         outboxEvents.deleteAll();
-        // the setup key on the shared bean, as OwnerSignupControllerTest sets it
-        ReflectionTestUtils.setField(ownerSetupToken, "expectedOwnerKey", OWNER_KEY);
     }
 
     // other test classes share the database

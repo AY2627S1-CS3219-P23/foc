@@ -9,6 +9,11 @@
 // the account is revoked server-side. Not drawn in profile.png; see
 // web/AGENTS.md.
 // Author review: Leong Wei Zhi (via the PR).
+// 2026-11-09, Claude Code (Opus 5.5), PR #309 review (@Sinnez1): the
+// server checks the code first now (decision via options Q&A), so a wrong
+// token spends the code. The card goes back to the token field without a
+// code, and the button counts down the 403's Retry-After before a new
+// code can be requested.
 
 import React, { useState } from 'react'
 
@@ -81,8 +86,9 @@ export function OwnerUpgradeCard({
         case 'retry':
           break
         default:
-          // a new code is needed, or the token was refused (its code
-          // kept): either way the token field is where the user goes
+          // a new code is needed (a wrong token spends it too), or the
+          // server is not set up for owners (code kept): either way the
+          // token field is where the user goes
           setVerifying(false)
       }
       setError(errorMessage(err, 'Could not upgrade your account. Try again.'))
@@ -93,7 +99,8 @@ export function OwnerUpgradeCard({
   const submit = (event: React.SyntheticEvent) => {
     event.preventDefault()
     if (verifying) return void upgrade()
-    // a refused token leaves the code unconsumed: reuse it
+    // a code still held (the 503 leaves it unread, or another card
+    // requested it): reuse it
     if (gate.live) {
       setVerifying(true)
       setError('')
