@@ -19,8 +19,8 @@
   review.
   Later round (Sinnez1): three public subnets (the balancer in zone c);
   the psql image pinned to 17.9; Hikari's minimum idle in the
-  too-many-connections row. Author review: Leong Wei Zhi, pending pull
-  request review.
+  too-many-connections row; then the PVC `Pending` row (EBS CSI without
+  IMDS). Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # infra: cloud deployment runbook
@@ -240,6 +240,7 @@ one that ran the apply, and the deploy role): `aws eks update-kubeconfig
 | `ImagePullBackOff` on every pod | `aws ec2 describe-instances --filters Name=tag:Name,Values=foc-nat --query 'Reservations[].Instances[].State.Name'` | the NAT instance is stopped (start it), its interface has source/destination checking on, or the private route table lost its default route |
 | `ImagePullBackOff` on one pod | `kubectl -n foc describe pod <pod>` | GHCR token wrong or without `read:packages`; no image pushed for that sha |
 | Nodes `NotReady` or none join | EC2 console, the node group's health in the EKS console | Spot capacity (`InsufficientInstanceCapacity`: wait or change `node_instance_type`), or no egress (NAT instance, as above) |
+| PVC `Pending` (rabbitmq, redis) | `kubectl -n kube-system logs deploy/ebs-csi-controller -c ebs-plugin`; `kubectl -n kube-system logs ds/ebs-csi-node -c ebs-plugin` | `could not get region` / metadata errors: the add-on lacks its `configuration_values` (`AWS_REGION` on the controller, `metadataSources` on the node plugin, `eks.tf`), since the hop limit of 1 blocks IMDS for its pods; apply. Do not raise the hop limit: pods would reach the node role |
 | Pod `Pending` | `describe pod` events | `Insufficient memory` or `cpu`: raise `node_count` in `variables.tf` and apply. `didn't match Pod's node affinity/selector` on rabbitmq-0 or redis-0: the `stable` node is missing (node group `foc-stable` in the EKS console). `volume node affinity conflict`: the volume's zone (a) has no node; wait for the on-demand node, or as a last resort delete the PVC (RabbitMQ: queued messages lost; Redis: logout denylist lost) |
 | Add-on `DEGRADED` | `aws eks describe-addon --cluster-name foc --addon-name <name>` | usually a pod `Pending` for the reasons above; `ebs-csi-controller` also needs its Pod Identity association |
 | 502 / 504 on `/api/<svc>` | `kubectl -n foc get pods` | the backend is not ready yet (the startup probe allows 5 min) |
