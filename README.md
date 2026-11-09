@@ -28,6 +28,9 @@
   2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform): a
   cloud deployment paragraph added for the move to EKS and RDS. Author
   review: Leong Wei Zhi, pending pull request review.
+  2026-11-09, Claude Code (Opus 5.5), issue #48 (DP20): AI Use Summary
+  extended for continuous deployment. Author review: Leong Wei Zhi,
+  pending pull request review.
   2026-11-08, Claude Code (Fable 5.1): AI Use Summary extended for the
   admin-test flake fix. Author review: Leong Wei Zhi, pending pull request
   review.
@@ -1602,3 +1605,11 @@ consumer, ShedLock) were declined by the author and are recorded in
 reviewer) added a 5 s broker connect timeout, an ack scoped to the
 `processed_events_pkey` constraint with a real-Postgres race test, a V2
 migration for legacy volumes and smaller hardening.
+
+Continuous deployment (issue #48, DP20, 2026-11-09) — Claude Code (Opus
+5.5) implemented the team's decisions (Leong Wei Zhi, neutral options
+Q&A): the Deploy workflow runs after CI succeeds on `main`, skips
+docs-only changes, builds only the images changed since the commit
+running in the cluster (read by a plan job, `infra/k8s/changed-images.sh`)
+and retags the rest; the runbook and `docs/deployment.md` follow.
+Recorded in `ai/usage-log.md`.

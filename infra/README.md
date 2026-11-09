@@ -17,6 +17,9 @@
   node for RabbitMQ and Redis (DP3) in the intro, checks, operating and
   troubleshooting rows. Author review: Leong Wei Zhi, pending pull request
   review.
+  2026-11-09, Claude Code (Opus 5.5), continuous deployment (DP20): step 4
+  covers the automatic runs, `changed-images.sh` in the layout table.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # infra: cloud deployment runbook
@@ -45,6 +48,7 @@ flowchart TD
 | `k8s/` | kustomization applied by the Deploy job: gp3 StorageClass, RabbitMQ and Redis StatefulSets, app Deployments, Traefik Ingress, HPAs; `data/db-init.yaml` is the Job that creates the seven database roles |
 | `k8s/secrets.sh` | copies `foc/app` and `foc/ghcr` from Secrets Manager into the k8s Secrets `foc-secrets`, `foc-db-admin` (the RDS master credentials, mounted by db-init only) and `ghcr-pull` (every deploy, from the Deploy job) |
 | `k8s/deploy.sh` | run by the Deploy workflow: kubeconfig, Traefik chart, secrets, db-init, apply, rollouts |
+| `k8s/changed-images.sh` | the Deploy workflow's plan: compares the commit the cluster runs with the target, lists the images to build and the ones to retag (DP20) |
 | `helm/traefik-values.yaml` | the ingress controller's chart values (NodePort 30080, WebSocket timeouts) |
 
 ## Before the first apply
@@ -132,7 +136,23 @@ kubectl -n kube-system get pods                    # aws-node, kube-proxy, cored
 
 ## 4. Deploy
 
-**Actions, Deploy, Run workflow**, on `main`.
+Deploy runs by itself after every CI run that succeeds on a push to
+`main` (DP20). The first one after this step needs the cluster and the
+repo variables; until then each merge's Deploy run fails at its plan job.
+By hand: **Actions, Deploy, Run workflow**, on `main` (always deploys,
+also when only Secrets Manager or the docs changed).
+
+The plan job reads the image tag running in the cluster
+(`<commit>-<run id>`) and diffs that commit against the target:
+
+- only docs changed (`*.md`, `docs/`, `ai/`): no deploy (automatic runs);
+- an image's sources changed (its folder, `foc-contracts/` for the five
+  services that use it, or `deploy.yml`): built;
+- otherwise: the live image retagged to this run's tag;
+- no Deployment yet, or a commit not in the history: built.
+
+The web bundle has `PUBLIC_HOST` baked in, which no diff sees: after
+changing it, run Deploy by hand with **rebuild_all** ticked.
 
 ```mermaid
 sequenceDiagram
@@ -140,7 +160,8 @@ sequenceDiagram
   participant G as GHCR
   participant K as EKS API
   participant R as RDS
-  A->>G: build + push the 9 images, tagged commit-runid (web has the public URL baked in)
+  A->>K: plan: read the live image tags, diff their commit with the target
+  A->>G: build + push the changed images, retag the rest, tagged commit-runid (web has the public URL baked in)
   A->>K: aws eks update-kubeconfig (OIDC role, access entry)
   A->>K: helm upgrade --install traefik (NodePort 30080)
   A->>K: secrets.sh: Secrets Manager -> foc-secrets, ghcr-pull
@@ -151,8 +172,12 @@ sequenceDiagram
 ```
 
 A cold start of the 7 JVMs takes a few minutes; the whole job about 10.
-**Rollback:** re-run an earlier Deploy run from the Actions tab. A new
-dispatch always builds the head of `main`.
+**Rollback:** re-run an earlier Deploy run (all jobs) from the Actions
+tab: the diff runs from the live commit back to that run's, so what
+differs is rebuilt there. A new dispatch always builds the head of
+`main`. To retry a failed rollout, re-run its **failed jobs** or
+dispatch: a full re-run finds the cluster already on its tag (the apply
+happened) and skips the deploy.
 
 ## 5. Smoke test
 

@@ -54,6 +54,8 @@
   entry below.
   2026-11-09, Claude Code (Fable 5.1): prepended the EKS re-platform entry
   below.
+  2026-11-09, Claude Code (Opus 5.5): prepended the continuous deployment
+  (DP20) entry below.
   2026-11-08, Claude Code (Fable 5.1): prepended the web admin-test flake
   entry below.
   2026-11-08, Claude Code (Fable 5.1): prepended the issue #305 entry
@@ -77,6 +79,36 @@ Entry template:
 - **Prompt(s):** <exact prompt or summary + key responses>
 - **Author review:** <how the output was validated/edited/tested>
 ```
+
+---
+## 2026-11-09 — Leong Wei Zhi (issue #48: continuous deployment, DP20)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** branch `feat/48-continuous-deploy` on PR #316's
+  `feat/48-eks-rds`. `.github/workflows/deploy.yml` (`workflow_run` on CI
+  for pushes to `main`, a plan job, a changed-images build matrix, a retag
+  job, `rebuild_all` dispatch input), new `infra/k8s/changed-images.sh`,
+  `docs/deployment.md` (DP20 + options table), `infra/README.md` (step 4,
+  rollback/retry), README AI Use Summary, this log.
+- **Prompt(s):** "on top of PR #316, create another PR to introduce
+  continuous deployment from GitHub Actions"; then "would reading from
+  the cluster incur AWS cost?" (answered with facts: EKS API calls,
+  `sts:AssumeRoleWithWebIdentity` and `eks:DescribeCluster` are not billed
+  per request; the transfer is a few KB) and "ok continue with the
+  cluster".
+- **Decisions (Leong Wei Zhi, neutral options Q&A, 2026-11-09):** trigger
+  after CI succeeds on `main` (over every push in parallel with CI); skip
+  docs-only pushes; no approval gate (over a GitHub Environment with
+  reviewers); rebuild changed images only (over all nine); the last
+  deployed tag read from the cluster (over a moving GHCR tag or the last
+  successful Deploy run). No reasons given; the tool recommended nothing.
+- **Author review:** `actionlint` 1.7.7 on the workflow (only the
+  pre-existing `tr a-z A-Z` infos), `shellcheck` and `bash -n` on the
+  script; the script run against a stub `kubectl` over real commits: an
+  infra-only diff (all retagged, deploy), a docs-only diff (no deploy), an
+  empty cluster and an unknown commit (built), a web-only diff (web
+  built, eight retagged), `rebuild_all`. Not yet run in Actions (needs the
+  cluster from PR #316). Leong Wei Zhi to review via pull request.
 
 ---
 ## 2026-11-08 — Leong Wei Zhi (issue #305: chat and notification safe at 2 replicas)

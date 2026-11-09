@@ -22,15 +22,31 @@
 # an access entry) instead of sending it to a host over SSM; CLUSTER_NAME
 # replaces INSTANCE_ID. Author review: Leong Wei Zhi, pending pull request
 # review.
+# 2026-11-09, Claude Code (Opus 5.5), issue #48 (continuous deployment,
+# DP20, team decisions Leong Wei Zhi, options Q&A): runs by itself once CI
+# succeeds on a push to main, skips docs-only changes, builds only the
+# images whose sources changed since the commit running in the cluster and
+# retags the others. Author review: Leong Wei Zhi, pending pull request
+# review.
 #
-# Manual trigger only, from main (the OIDC role trusts main alone). Needs
-# the repo variables AWS_ROLE_ARN, AWS_REGION, CLUSTER_NAME and PUBLIC_HOST
-# (the hostname, served over https by the load balancer) from
+# Runs after every successful CI run on a push to main, or by hand from
+# main (the OIDC role trusts main alone; a workflow_run job runs on main).
+# Needs the repo variables AWS_ROLE_ARN, AWS_REGION, CLUSTER_NAME and
+# PUBLIC_HOST (the hostname, served over https by the load balancer) from
 # `terraform output`.
 name: Deploy
 
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      rebuild_all:
+        description: Build all nine images (after PUBLIC_HOST changed, which the diff cannot see)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -43,31 +59,64 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io/ay2627s1-cs3219-p23
+  # the commit CI passed on, or main's head for a dispatch (github.sha of a
+  # workflow_run run is main's head when it starts, maybe a later commit)
+  TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
   # one tag per workflow run: a re-run of Deploy at the same commit still
   # rolls every Deployment and pulls a rebuilt image (same-commit tags
   # would be cached on the node)
-  IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}
+  IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}-${{ github.run_id }}
 
 jobs:
+  # which images changed since the commit the cluster runs (DP20)
+  plan:
+    # CI on a push to this repository's main, not a pull request whose
+    # branch happens to be called main
+    if: >-
+      github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.plan.outputs.build }}
+      retag: ${{ steps.plan.outputs.retag }}
+      # a dispatch always deploys (secrets and config roll with it)
+      deploy: ${{ github.event_name == 'workflow_dispatch' || steps.plan.outputs.relevant == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0 # the diff starts at the commit the cluster runs
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Compare with the cluster
+        id: plan
+        env:
+          CLUSTER_NAME: ${{ vars.CLUSTER_NAME }}
+          REBUILD_ALL: ${{ inputs.rebuild_all == true }}
+        run: |
+          set -euo pipefail
+          test -n "$CLUSTER_NAME" || { echo "CLUSTER_NAME repo variable is not set"; exit 1; }
+          export KUBECONFIG="$RUNNER_TEMP/kubeconfig"
+          aws eks update-kubeconfig --name "$CLUSTER_NAME" >/dev/null
+          bash infra/k8s/changed-images.sh "$TARGET_SHA" "$REBUILD_ALL" | tee -a "$GITHUB_OUTPUT"
+
   images:
-    if: github.ref == 'refs/heads/main'
+    needs: plan
+    if: needs.plan.outputs.deploy == 'true' && needs.plan.outputs.build != '[]'
     strategy:
       fail-fast: true
       matrix:
-        image:
-          - user-service
-          - supplier-service
-          - order-service
-          - credit-service
-          - notification-service
-          - rating-service
-          - chat-service
-          - gateway
-          - web
+        image: ${{ fromJSON(needs.plan.outputs.build) }}
     runs-on: ubuntu-latest
     name: image (${{ matrix.image }})
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.TARGET_SHA }}
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -116,14 +165,43 @@ jobs:
           cache-from: type=gha,scope=deploy-${{ matrix.image }}
           cache-to: type=gha,scope=deploy-${{ matrix.image }},mode=max
 
+  # unchanged images get this run's tag too, so deploy.sh still applies
+  # one tag to every Deployment
+  retag:
+    needs: plan
+    if: needs.plan.outputs.deploy == 'true' && needs.plan.outputs.retag != '[]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Retag from the live tags
+        env:
+          RETAG: ${{ needs.plan.outputs.retag }}
+        run: |
+          set -euo pipefail
+          jq -r '.[] | "\(.image) \(.from)"' <<<"$RETAG" | while read -r image from; do
+            docker buildx imagetools create \
+              -t "$REGISTRY/foc-$image:$IMAGE_TAG" "$REGISTRY/foc-$image:$from"
+          done
+
   rollout:
-    needs: images
+    needs: [plan, images, retag]
+    # images or retag may be skipped (nothing to build, or nothing to retag)
+    if: >-
+      !cancelled() && needs.plan.outputs.deploy == 'true' &&
+      needs.images.result != 'failure' && needs.retag.result != 'failure'
     runs-on: ubuntu-latest
     # deploy.sh shares one 50-min deadline across the Helm install, the
     # db-init Job and every rollout, so it fails by itself before this
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.TARGET_SHA }}
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}

@@ -32,6 +32,10 @@
   was removed: it is fixed at node_count. Then the Spot group gained a
   third zone (facts given: pools, cross-zone traffic, rebalancing).
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-09, Claude Code (Opus 5.5), continuous deployment: DP20 and
+  its options table, transcribed from a further options round (Leong Wei
+  Zhi; facts only, including that reading the cluster costs nothing
+  extra). Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # Cloud deployment (N5, issue #48)
@@ -116,6 +120,7 @@ on 2026-11-09). The AI tool presented facts and prices only.
 | DP17 | Domain | `foc23.ddnsfree.com`, a free Dynu hostname (records added by hand in Dynu's panel). The sandbox SCP denies Route 53 domain registration. First `foc23.mooo.com` on FreeDNS, revised when FreeDNS refused CNAME records on its shared domains |
 | DP18 | TLS endpoint | Application Load Balancer in `ap-southeast-1` with a free ACM certificate (DNS validation); its port 80 answers **301** to https; plain HTTP to Traefik behind it |
 | DP19 | Connection pool | Hikari capped at **5 connections per service** (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`): `db.t4g.micro` allows about 110 connections, and 7 services x 10 (the default) x 2 replicas would exceed it |
+| DP20 | Continuous deployment | Deploy runs **by itself when CI succeeds on a push to `main`** (`workflow_run`), with **no approval gate**; changes touching only docs (`*.md`, `docs/`, `ai/`) **do not deploy**. Only the images whose sources changed since the commit **running in the cluster** (read with `kubectl` in a plan job) are built; the others are retagged. The manual run stays (always deploys; `rebuild_all` input) |
 
 ## Options considered
 
@@ -284,6 +289,16 @@ ElastiCache plus RabbitMQ on an on-demand node ~$223.
 | This page | stand-alone page for the EKS design; k3s design kept as a superseded section | **stand-alone** |
 | Reasons | recorded in Leong Wei Zhi's words; facts only | **recorded** where given |
 | Pull requests | one (infra + workflow + docs); code then docs; docs then code | **one** |
+
+### Continuous deployment (2026-11-09)
+
+| Topic | Options | Chosen |
+| --- | --- | --- |
+| Trigger | every push to `main`, in parallel with CI; after CI succeeds on `main` (`workflow_run`, builds its `head_sha`) | **after CI** (DP20) |
+| Docs-only pushes | deploy on every push; skip | **skip** |
+| Approval | none (the PR review is the gate); a GitHub Environment with required reviewers (OIDC subject becomes `environment:<name>`, trust policy change) | **none** |
+| Images | rebuild all nine every time; rebuild the changed ones, retag the rest | **changed only** |
+| Last deployed tag from | the cluster (`kubectl`, what is live, failed runs included); a moving `deployed` tag in GHCR; the last successful Deploy run (Actions API) | **the cluster** |
 
 ### HTTPS: domain and TLS endpoint (2026-11-08)
 
