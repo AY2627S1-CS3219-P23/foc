@@ -73,6 +73,7 @@
 // change (a ref tracks the latest write ahead of the render), unlocks
 // the context inside the click and then waits on that unlock, and asks
 // the ref again after the wait so a quick switch-off drops it.
+// Re-review: a push chime asks the same ref, since it can wait too.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet } from 'react-router'
@@ -212,7 +213,11 @@ export const NotificationProvider = () => {
     // only the tab being looked at chimes: every open tab holds its own
     // subscription and the user destination delivers to all of them
     // (PR #215 review)
-    if (soundEnabled && document.visibilityState === 'visible') playChime()
+    // the chime may wait (an unlock in flight, an idle suspend landing):
+    // it asks for the latest setting, so a switch-off meanwhile drops it
+    // (PR #314 re-review)
+    if (soundEnabled && document.visibilityState === 'visible')
+      playChime({ enabled: () => soundRef.current })
   }, [arrivalSeq, soundEnabled])
 
   // iOS Safari only unlocks an audio context created or resumed inside

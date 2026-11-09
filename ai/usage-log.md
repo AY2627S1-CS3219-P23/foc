@@ -122,6 +122,20 @@ Entry template:
   call, pending suspend) and 2 Center cases (one-batch double-click,
   `enabled` follows a switch-off). Five of them fail on the previous
   commit. `npm test` 450/450, lint, Prettier, build green.
+- **PR #314 re-review follow-ups (@Sinnez1, approved, two non-blocking)
+  and the base merge, 2026-11-09, same tool:** prompt "address pr
+  comments on PR #314 and fix merge conflict". `playChime` bounds its
+  other two waits as well (the idle resume and a pending suspend, each
+  `within(..., UNLOCK_WAIT_MS)`), so a hung one cannot keep the
+  one-at-a-time latch set; `idled` clears only once the context runs.
+  The push chime passes `enabled: () => soundRef.current` like the
+  preview. Tests: the fake's idle resume / suspend can hang; 2
+  `chime.test.ts` cases and 1 Center case, all three failing on the
+  previous code. The merge of `feat/308-owner-upgrade` (main after #313)
+  conflicted only in dated header lines (README, this log,
+  `profile.test.tsx`): both kept. `npm test` 467/467 (one earlier run
+  flaked once on #309's "poll 401" profile case, which passes alone and
+  on reruns), `tsc -b`, eslint, Prettier clean.
 
 ---
 ## 2026-11-08 — Leong Wei Zhi (issue #308: owner upgrade from the profile page)

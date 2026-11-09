@@ -20,6 +20,8 @@
 // in-flight unlock — one that lands, one that never settles (bounded,
 // nothing fires late), one that rejects — a switch-off while it waits,
 // a second call joining the wait, and a pending idle suspend waited out.
+// Re-review: an idle suspend or idle resume that never settles is given
+// up on after the bound, and the next chime still plays.
 
 class FakeGainParam {
   setValueAtTime = vi.fn()
@@ -53,6 +55,11 @@ class FakeAudioContext {
   // iOS Safari's slow resume, a suspend still in flight
   static resumeAfterMs: number | null = null
   static suspendAfterMs: number | null = null
+  // a resume()/suspend() that never settles at all, while the context
+  // still reports its old state — a hung audio thread (PR #314
+  // re-review)
+  static idleResumeNeverSettles = false
+  static suspendNeverSettles = false
 
   state = FakeAudioContext.initialState
   currentTime = 1
@@ -66,6 +73,8 @@ class FakeAudioContext {
 
   resume = vi.fn(() => {
     if (FakeAudioContext.resumeNeverSettles) return new Promise<void>(() => {})
+    if (FakeAudioContext.idleResumeNeverSettles && this.state === 'suspended')
+      return new Promise<void>(() => {})
     if (FakeAudioContext.resumeRejects) return Promise.reject(new Error('no'))
     const land = () => {
       if (FakeAudioContext.resumesTo) this.state = FakeAudioContext.resumesTo
@@ -84,6 +93,7 @@ class FakeAudioContext {
   })
 
   suspend = vi.fn(() => {
+    if (FakeAudioContext.suspendNeverSettles) return new Promise<void>(() => {})
     const after = FakeAudioContext.suspendAfterMs
     if (after === null) {
       this.state = 'suspended'
@@ -129,6 +139,8 @@ beforeEach(() => {
   FakeAudioContext.resumeNeverSettles = false
   FakeAudioContext.resumeAfterMs = null
   FakeAudioContext.suspendAfterMs = null
+  FakeAudioContext.idleResumeNeverSettles = false
+  FakeAudioContext.suspendNeverSettles = false
   vi.stubGlobal('AudioContext', FakeAudioContext)
 })
 
@@ -402,6 +414,63 @@ describe('playChime after an unlock', () => {
     await vi.advanceTimersByTimeAsync(100)
     expect(ctx.resume).toHaveBeenCalled()
     expect(ctx.state).toBe('running')
+    expect(ctx.oscillators).toHaveLength(4)
+  })
+})
+
+// PR #314 re-review: a wait that never settles must not keep the
+// one-at-a-time latch set, or every later chime is silenced
+describe('playChime with a wait that never settles', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  test('gives up on an idle suspend that never lands, and the next chime plays', async () => {
+    FakeAudioContext.suspendNeverSettles = true
+    const { playChime } = await importChime()
+
+    playChime()
+    await vi.advanceTimersByTimeAsync(650)
+    const ctx = FakeAudioContext.instances[0]
+    expect(ctx.oscillators).toHaveLength(2)
+    expect(ctx.suspend).toHaveBeenCalled()
+
+    // waits on the stuck suspend for the bound, then plays into the
+    // still-running context
+    playChime()
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(ctx.oscillators).toHaveLength(4)
+
+    // and the latch is free again
+    await vi.advanceTimersByTimeAsync(650)
+    playChime()
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(ctx.oscillators).toHaveLength(6)
+  })
+
+  test('gives up on an idle resume that never settles, and a later chime still plays', async () => {
+    FakeAudioContext.idleResumeNeverSettles = true
+    const { playChime } = await importChime()
+
+    playChime()
+    await vi.advanceTimersByTimeAsync(650)
+    const ctx = FakeAudioContext.instances[0]
+    expect(ctx.state).toBe('suspended')
+
+    playChime()
+    await vi.advanceTimersByTimeAsync(1_000)
+    // the resume hung: silent, but not stuck
+    expect(ctx.oscillators).toHaveLength(2)
+
+    // the audio thread recovers; the next chime is not locked out
+    FakeAudioContext.idleResumeNeverSettles = false
+    FakeAudioContext.resumesTo = 'running'
+    playChime()
+    await vi.advanceTimersByTimeAsync(0)
     expect(ctx.oscillators).toHaveLength(4)
   })
 })

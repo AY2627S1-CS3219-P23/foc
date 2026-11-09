@@ -25,6 +25,9 @@
 // waited out before deciding; one chime waits at a time; and an
 // `enabled` check after the wait drops a preview the user switched off
 // meanwhile.
+// Re-review (@Sinnez1): every wait is bounded, the idle resume and a
+// pending suspend too, so one that never settles cannot keep `waiting`
+// set and silence every later chime.
 // Author review: Leong Wei Zhi to review via the PR.
 
 // One context for the page's lifetime: browsers cap concurrent
@@ -85,8 +88,11 @@ let suspending: Promise<void> | null = null
 // than stacking a second, overlapping chime (PR #314 review)
 let waiting = false
 
-// how long a chime waits for an in-flight unlock before it gives up and
-// stays silent — long enough for iOS Safari's slow resume
+// how long a chime waits on anything (an in-flight unlock, its own idle
+// resume, a pending suspend) before it gives up and stays silent — long
+// enough for iOS Safari's slow resume. Every wait is bounded: a stuck
+// one would keep `waiting` set and silence every later chime
+// (PR #314 re-review)
 const UNLOCK_WAIT_MS = 1_000
 
 const settled = (p: Promise<void>): Promise<void> =>
@@ -146,13 +152,15 @@ export const playChime = ({
       waiting = true
       try {
         // our own idle suspend still landing: let it, then wake below
-        if (suspending) await suspending
+        if (suspending) await within(suspending, UNLOCK_WAIT_MS)
         if (c.state === 'suspended') {
           if (idled) {
             // our own post-chime suspension: the context is already
-            // unlocked, so this resume settles promptly
-            await c.resume()
-            idled = false
+            // unlocked, so this resume settles promptly. If it did not,
+            // the context stays marked idled for the next chime to try
+            await within(settled(c.resume()), UNLOCK_WAIT_MS)
+            // (re-read after the await; TS keeps the narrowing above)
+            if ((c.state as AudioContextState) === 'running') idled = false
           } else if (unlocking) {
             // a gesture's unlock in flight (the toggle's own click, or a
             // push landing just after the first pointerdown): wait for

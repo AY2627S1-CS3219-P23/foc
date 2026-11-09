@@ -62,7 +62,8 @@
 // issue): the header toggle case now expects switching the sound on to
 // preview the chime once. PR #314 review (@Sinnez1): the click unlocks
 // the context; a double-click inside one batch previews once; the
-// preview's `enabled` check follows a later switch-off. Author review:
+// preview's `enabled` check follows a later switch-off. Re-review: a
+// push chime's `enabled` check follows a switch-off too. Author review:
 // Leong Wei Zhi, pending pull request review.
 
 import {
@@ -1786,6 +1787,25 @@ describe('notification center page', () => {
     expect(enabled()).toBe(false)
     // and switching off never previews
     expect(chime.playChime).toHaveBeenCalledTimes(1)
+  })
+
+  test('a push chime asks for the latest setting, so a switch-off while it waits drops it', async () => {
+    const user = userEvent.setup()
+    await renderCenter()
+    const onMessage = connectPush()
+    await act(async () => {})
+
+    await act(async () => {
+      onMessage(pushFrame(acceptedBy(99)))
+    })
+    expect(chime.playChime).toHaveBeenCalledTimes(1)
+    const [{ enabled }] = chime.playChime.mock.calls[0] as [
+      { enabled: () => boolean },
+    ]
+    expect(enabled()).toBe(true)
+
+    await user.click(screen.getByRole('button', { name: 'Notification sound' }))
+    expect(enabled()).toBe(false)
   })
 
   test('a stored "false" renders the sound toggle off', async () => {
