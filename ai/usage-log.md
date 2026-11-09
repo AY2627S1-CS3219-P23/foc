@@ -109,6 +109,15 @@ Entry template:
   empty cluster and an unknown commit (built), a web-only diff (web
   built, eight retagged), `rebuild_all`. Not yet run in Actions (needs the
   cluster from PR #316). Leong Wei Zhi to review via pull request.
+- **PR #317 review round (2026-11-09, Claude reviewer + Copilot):** prompt
+  "address the latest mr comments!". The first attempt of an automatic run
+  whose commit is an ancestor of a live one deploys nothing (CI runs on
+  `main` can finish out of order); dispatches and re-runs (rollback) are
+  exempt. The root `.dockerignore` is a source of the seven root-context
+  images. Verified with the stub `kubectl`: older target skipped, same
+  target re-run proceeds, newer and equal targets proceed; the commit that
+  last changed `.dockerignore` rebuilds the seven backends and retags
+  web/gateway; `shellcheck` clean, `actionlint` unchanged.
 
 ---
 ## 2026-11-08 — Leong Wei Zhi (issue #305: chat and notification safe at 2 replicas)

@@ -28,6 +28,8 @@
 # images whose sources changed since the commit running in the cluster and
 # retags the others. Author review: Leong Wei Zhi, pending pull request
 # review.
+# PR #317 review (Claude reviewer, Copilot): an automatic run older than
+# the commit already live deploys nothing (out-of-order CI runs).
 #
 # Runs after every successful CI run on a push to main, or by hand from
 # main (the OIDC role trusts main alone; a workflow_run job runs on main).
@@ -97,12 +99,16 @@ jobs:
         env:
           CLUSTER_NAME: ${{ vars.CLUSTER_NAME }}
           REBUILD_ALL: ${{ inputs.rebuild_all == true }}
+          # CI runs on main can finish out of order: a first automatic
+          # attempt older than the live commit must not roll it back. A
+          # dispatch or a re-run (rollback) may deploy an older commit
+          NEWER_ONLY: ${{ github.event_name == 'workflow_run' && github.run_attempt == 1 }}
         run: |
           set -euo pipefail
           test -n "$CLUSTER_NAME" || { echo "CLUSTER_NAME repo variable is not set"; exit 1; }
           export KUBECONFIG="$RUNNER_TEMP/kubeconfig"
           aws eks update-kubeconfig --name "$CLUSTER_NAME" >/dev/null
-          bash infra/k8s/changed-images.sh "$TARGET_SHA" "$REBUILD_ALL" | tee -a "$GITHUB_OUTPUT"
+          bash infra/k8s/changed-images.sh "$TARGET_SHA" "$REBUILD_ALL" "$NEWER_ONLY" | tee -a "$GITHUB_OUTPUT"
 
   images:
     needs: plan

@@ -20,6 +20,7 @@
   2026-11-09, Claude Code (Opus 5.5), continuous deployment (DP20): step 4
   covers the automatic runs, `changed-images.sh` in the layout table.
   Author review: Leong Wei Zhi, pending pull request review.
+  PR #317 review: older automatic runs skip; `.dockerignore` listed.
 -->
 
 # infra: cloud deployment runbook
@@ -146,8 +147,11 @@ The plan job reads the image tag running in the cluster
 (`<commit>-<run id>`) and diffs that commit against the target:
 
 - only docs changed (`*.md`, `docs/`, `ai/`): no deploy (automatic runs);
-- an image's sources changed (its folder, `foc-contracts/` for the five
-  services that use it, or `deploy.yml`): built;
+- the target is older than the live commit (a later merge's CI finished
+  first and deployed): no deploy (first attempt of an automatic run);
+- an image's sources changed (its folder, the root `.dockerignore` for the
+  seven backend images, `foc-contracts/` for the five services that use
+  it, or `deploy.yml`): built;
 - otherwise: the live image retagged to this run's tag;
 - no Deployment yet, or a commit not in the history: built.
 
@@ -174,7 +178,8 @@ sequenceDiagram
 A cold start of the 7 JVMs takes a few minutes; the whole job about 10.
 **Rollback:** re-run an earlier Deploy run (all jobs) from the Actions
 tab: the diff runs from the live commit back to that run's, so what
-differs is rebuilt there. A new dispatch always builds the head of
+differs is rebuilt there (a re-run is not subject to the older-commit
+skip). A new dispatch always builds the head of
 `main`. To retry a failed rollout, re-run its **failed jobs** or
 dispatch: a full re-run finds the cluster already on its tag (the apply
 happened) and skips the deploy.
