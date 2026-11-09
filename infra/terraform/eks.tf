@@ -264,17 +264,17 @@ resource "aws_eks_pod_identity_association" "ebs_csi" {
 
 # The nodes' IMDS hop limit of 1 (DP3) keeps the driver's pods (not on the
 # host network) from reading instance metadata too, so they are told where
-# they are instead: the controller gets the region, and the node plugin
-# reads its instance and zone from its Node object first (PR #316 review;
-# keys from the add-on's configuration schema)
+# they are instead: the node plugin reads its instance and zone from its
+# Node object first (PR #316 review; key from the add-on's configuration
+# schema). The controller needs nothing: the managed manifest already sets
+# AWS_REGION on it, and a second entry fails the create (duplicate key)
 resource "aws_eks_addon" "ebs_csi" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "aws-ebs-csi-driver"
   addon_version               = data.aws_eks_addon_version.ebs_csi.version
   resolve_conflicts_on_update = "OVERWRITE"
   configuration_values = jsonencode({
-    controller = { env = [{ name = "AWS_REGION", value = var.region }] }
-    node       = { metadataSources = "kubernetes,imds" }
+    node = { metadataSources = "kubernetes,imds" }
   })
   depends_on = [aws_eks_pod_identity_association.ebs_csi]
 }

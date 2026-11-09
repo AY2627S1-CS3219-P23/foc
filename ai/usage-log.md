@@ -8149,3 +8149,19 @@ Entry template:
 - **Author review:** `./mvnw verify` in `supplier-service` — 90 tests, 0
   failures (14 new), run with JDK 22 locally since JDK 21 is not
   installed (CI uses 21). The author reviews via pull request.
+
+## 2026-11-09 — Leong Wei Zhi (N5 cloud deployment, issue #48: EBS CSI add-on create fix)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debugging
+- **Scope:** `infra/terraform/eks.tf` (`aws_eks_addon.ebs_csi` drops the
+  `controller.env` `AWS_REGION` entry added in 3aa99430; keeps
+  `node.metadataSources`) and the PVC `Pending` runbook row in
+  `infra/README.md`.
+- **Prompt(s):** the `terraform apply eks.tfplan` error "UnsupportedAddonModification
+  ... containers[name="ebs-plugin"].env: duplicate entries for key
+  [name="AWS_REGION"]". The managed add-on manifest (v1.67.2-eksbuild.1)
+  already sets `AWS_REGION` on the controller, so the extra entry
+  collided; the schema has no separate region key.
+- **Author review:** `terraform fmt -check`; re-plan and apply owed by
+  the author (the failed add-on is tainted and is replaced on the next
+  apply). The author reviews via pull request.
