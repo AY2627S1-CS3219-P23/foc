@@ -118,6 +118,16 @@ Entry template:
   target re-run proceeds, newer and equal targets proceed; the commit that
   last changed `.dockerignore` rebuilds the seven backends and retags
   web/gateway; `shellcheck` clean, `actionlint` unchanged.
+- **Deployment history (2026-11-09):** prompt "how to show a deployment
+  history and status for that environment on the repo's GitHub page";
+  the tool described two ways with facts (an `environment:` key changes
+  the OIDC subject and needs a trust-policy apply; Deployments API calls
+  need `deployments: write` only). Leong Wei Zhi chose the Deployments
+  API. The rollout job records a `production` deployment (in progress,
+  then success / failure / error with the run and site links); the deploy
+  step got a 55-min step timeout so the outcome step runs. `actionlint`
+  unchanged; the request body checked with `jq`; the API calls are first
+  exercised by the first real run.
 
 ---
 ## 2026-11-08 — Leong Wei Zhi (issue #305: chat and notification safe at 2 replicas)

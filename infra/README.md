@@ -21,6 +21,7 @@
   covers the automatic runs, `changed-images.sh` in the layout table.
   Author review: Leong Wei Zhi, pending pull request review.
   PR #317 review: older automatic runs skip; `.dockerignore` listed.
+  Same day: the rollout's deployment record (repo page, Deployments).
 -->
 
 # infra: cloud deployment runbook
@@ -157,6 +158,12 @@ The plan job reads the image tag running in the cluster
 
 The web bundle has `PUBLIC_HOST` baked in, which no diff sees: after
 changing it, run Deploy by hand with **rebuild_all** ticked.
+
+Each rollout is recorded as a deployment of `production` (repo page,
+**Deployments**, or `/deployments`): in progress, then success, failure
+or error (cancelled), with links to the run and the site; a success
+marks the previous ones inactive. Runs that deploy nothing (docs only,
+an older commit) leave no record.
 
 ```mermaid
 sequenceDiagram

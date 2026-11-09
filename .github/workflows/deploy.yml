@@ -30,6 +30,10 @@
 # review.
 # PR #317 review (Claude reviewer, Copilot): an automatic run older than
 # the commit already live deploys nothing (out-of-order CI runs).
+# 2026-11-09, on request (Leong Wei Zhi chose the Deployments API over an
+# `environment:` key, which would change the OIDC subject): the rollout
+# records a deployment of `production` with its status, shown on the
+# repo page. Author review: Leong Wei Zhi, pending pull request review.
 #
 # Runs after every successful CI run on a push to main, or by hand from
 # main (the OIDC role trusts main alone; a workflow_run job runs on main).
@@ -54,6 +58,7 @@ permissions:
   contents: read
   packages: write
   id-token: write
+  deployments: write
 
 concurrency:
   group: deploy
@@ -204,7 +209,24 @@ jobs:
     # deploy.sh shares one 50-min deadline across the Helm install, the
     # db-init Job and every rollout, so it fails by itself before this
     timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      LOG_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
+      # a deployment record through the API, not an `environment:` key: the
+      # key would change the OIDC subject the deploy role trusts (iam.tf).
+      # The repo page lists it under Deployments, with its status
+      - name: Record the deployment
+        id: record
+        run: |
+          set -euo pipefail
+          id="$(jq -n --arg ref "$TARGET_SHA" --arg tag "$IMAGE_TAG" '{
+              ref: $ref, environment: "production", production_environment: true,
+              auto_merge: false, required_contexts: [], description: $tag
+            }' | gh api "repos/$GITHUB_REPOSITORY/deployments" --input - --jq .id)"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" \
+            -f state=in_progress -f log_url="$LOG_URL" >/dev/null
       - uses: actions/checkout@v5
         with:
           ref: ${{ env.TARGET_SHA }}
@@ -215,6 +237,9 @@ jobs:
       # kubectl and helm are preinstalled on ubuntu-latest; the deploy role
       # is cluster admin through an EKS access entry (infra/terraform/eks.tf)
       - name: Run deploy.sh against the cluster
+        id: deploy
+        # below the job's 60, so the status step still runs on a hang
+        timeout-minutes: 55
         env:
           CLUSTER_NAME: ${{ vars.CLUSTER_NAME }}
           PUBLIC_HOST: ${{ vars.PUBLIC_HOST }}
@@ -223,3 +248,20 @@ jobs:
           test -n "$CLUSTER_NAME" || { echo "CLUSTER_NAME repo variable is not set"; exit 1; }
           test -n "$PUBLIC_HOST" || { echo "PUBLIC_HOST repo variable is not set"; exit 1; }
           bash infra/k8s/deploy.sh "$IMAGE_TAG" "$PUBLIC_HOST" "$CLUSTER_NAME"
+      # success marks the previous production deployments inactive
+      - name: Record the outcome
+        if: always() && steps.record.outputs.id != ''
+        env:
+          ID: ${{ steps.record.outputs.id }}
+          OUTCOME: ${{ steps.deploy.outcome }}
+          PUBLIC_HOST: ${{ vars.PUBLIC_HOST }}
+        run: |
+          set -euo pipefail
+          case "$OUTCOME" in
+            success) state=success ;;
+            cancelled) state=error ;;
+            *) state=failure ;;
+          esac
+          gh api "repos/$GITHUB_REPOSITORY/deployments/$ID/statuses" \
+            -f state="$state" -f log_url="$LOG_URL" \
+            -f environment_url="https://$PUBLIC_HOST" >/dev/null

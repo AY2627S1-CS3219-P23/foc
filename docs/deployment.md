@@ -36,6 +36,8 @@
   its options table, transcribed from a further options round (Leong Wei
   Zhi; facts only, including that reading the cluster costs nothing
   extra). Author review: Leong Wei Zhi, pending pull request review.
+  Same day: the deployment history row (Deployments API), Leong Wei
+  Zhi's choice. Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # Cloud deployment (N5, issue #48)
@@ -120,7 +122,7 @@ on 2026-11-09). The AI tool presented facts and prices only.
 | DP17 | Domain | `foc23.ddnsfree.com`, a free Dynu hostname (records added by hand in Dynu's panel). The sandbox SCP denies Route 53 domain registration. First `foc23.mooo.com` on FreeDNS, revised when FreeDNS refused CNAME records on its shared domains |
 | DP18 | TLS endpoint | Application Load Balancer in `ap-southeast-1` with a free ACM certificate (DNS validation); its port 80 answers **301** to https; plain HTTP to Traefik behind it |
 | DP19 | Connection pool | Hikari capped at **5 connections per service** (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`): `db.t4g.micro` allows about 110 connections, and 7 services x 10 (the default) x 2 replicas would exceed it |
-| DP20 | Continuous deployment | Deploy runs **by itself when CI succeeds on a push to `main`** (`workflow_run`), with **no approval gate**; changes touching only docs (`*.md`, `docs/`, `ai/`) **do not deploy**. Only the images whose sources changed since the commit **running in the cluster** (read with `kubectl` in a plan job) are built; the others are retagged. The manual run stays (always deploys; `rebuild_all` input) |
+| DP20 | Continuous deployment | Deploy runs **by itself when CI succeeds on a push to `main`** (`workflow_run`), with **no approval gate**; changes touching only docs (`*.md`, `docs/`, `ai/`) **do not deploy**. Only the images whose sources changed since the commit **running in the cluster** (read with `kubectl` in a plan job) are built; the others are retagged. The manual run stays (always deploys; `rebuild_all` input). Each rollout is recorded as a deployment of **`production`** through the **Deployments API** (status and site link on the repo page) |
 
 ## Options considered
 
@@ -299,6 +301,7 @@ ElastiCache plus RabbitMQ on an on-demand node ~$223.
 | Approval | none (the PR review is the gate); a GitHub Environment with required reviewers (OIDC subject becomes `environment:<name>`, trust policy change) | **none** |
 | Images | rebuild all nine every time; rebuild the changed ones, retag the rest | **changed only** |
 | Last deployed tag from | the cluster (`kubectl`, what is live, failed runs included); a moving `deployed` tag in GHCR; the last successful Deploy run (Actions API) | **the cluster** |
+| Deployment history on the repo page | `environment:` on the rollout job (OIDC subject becomes `environment:<name>`, trust policy change + apply); Deployments API calls from the job (`deployments: write`, no AWS change) | **Deployments API** |
 
 ### HTTPS: domain and TLS endpoint (2026-11-08)
 
