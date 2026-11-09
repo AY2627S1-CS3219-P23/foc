@@ -1,12 +1,17 @@
 # AI-assisted (CS3219 AI Usage Policy disclosure):
 # Tool: Claude Code (Opus 5.5), 2026-11-10, issue #48 (N5 cloud deployment).
-# Scope: one PodDisruptionBudget per backend Deployment, minAvailable 1, so
-# a voluntary drain (a Spot rebalance or interruption, a node group update)
-# evicts one replica at a time. Team decision DP21 (Leong Wei Zhi, options
-# Q&A, recorded in docs/deployment.md).
+# Scope: one PodDisruptionBudget per backend Deployment, so a voluntary
+# drain (a Spot rebalance or interruption, a node group update) evicts one
+# replica at a time. Team decision DP21 (Leong Wei Zhi, options Q&A,
+# recorded in docs/deployment.md).
 # Author review: Leong Wei Zhi, pending pull request review.
-# gateway and web have none: they run one replica at rest, and minAvailable 1
-# on a single replica would never allow an eviction, stalling every drain
+# PR #323 review (Copilot), team decision (Leong Wei Zhi): maxUnavailable 1
+# instead of minAvailable 1, which allowed two evictions at 3 replicas.
+# Author review: Leong Wei Zhi, pending pull request review.
+# maxUnavailable counts against the HPA's desired count: while a replica is
+# Pending (2 of 3 running, or 1 of 2) no eviction is allowed and a drain
+# waits. gateway and web have none: they run one replica at rest, and a
+# budget on a single replica would never allow an eviction
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
@@ -14,7 +19,7 @@ metadata:
   name: user-service
   namespace: foc
 spec:
-  minAvailable: 1
+  maxUnavailable: 1
   selector:
     matchLabels:
       app: user-service
@@ -25,7 +30,7 @@ metadata:
   name: supplier-service
   namespace: foc
 spec:
-  minAvailable: 1
+  maxUnavailable: 1
   selector:
     matchLabels:
       app: supplier-service
@@ -36,7 +41,7 @@ metadata:
   name: order-service
   namespace: foc
 spec:
-  minAvailable: 1
+  maxUnavailable: 1
   selector:
     matchLabels:
       app: order-service
@@ -47,7 +52,7 @@ metadata:
   name: credit-service
   namespace: foc
 spec:
-  minAvailable: 1
+  maxUnavailable: 1
   selector:
     matchLabels:
       app: credit-service
@@ -58,7 +63,7 @@ metadata:
   name: rating-service
   namespace: foc
 spec:
-  minAvailable: 1
+  maxUnavailable: 1
   selector:
     matchLabels:
       app: rating-service
@@ -69,7 +74,7 @@ metadata:
   name: notification-service
   namespace: foc
 spec:
-  minAvailable: 1
+  maxUnavailable: 1
   selector:
     matchLabels:
       app: notification-service
@@ -80,7 +85,7 @@ metadata:
   name: chat-service
   namespace: foc
 spec:
-  minAvailable: 1
+  maxUnavailable: 1
   selector:
     matchLabels:
       app: chat-service

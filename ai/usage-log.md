@@ -8224,3 +8224,23 @@ Entry template:
   spread. Rollout through CD after merge; the author checks
   `kubectl -n foc get hpa,pdb` and pod placement, and reviews via pull
   request.
+
+## 2026-11-10 — Leong Wei Zhi (N5 cloud deployment, issue #48: PR #323 review round)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** review fixes from team decisions
+- **Scope:** the seven backend Deployments gain `strategy: RollingUpdate`
+  with `maxSurge: 0`, `maxUnavailable: 1` (Hikari comments updated);
+  `infra/k8s/pdb.yaml` moves to `maxUnavailable: 1`; `infra/k8s/hpa.yaml`,
+  `docs/deployment.md` (DP9, DP19, DP21, Spot table) and `infra/README.md`
+  say the spread is best effort and the rollout adds no surge.
+- **Prompt(s):** "address the latest pr comments". Copilot: surge pods at
+  HPA max reach 112 connections; surge pods can stall a rollout at full
+  memory; `ScheduleAnyway` gives no guarantee; `minAvailable: 1` lets two
+  go at 3 replicas. The wording fix was made directly; the rollout
+  strategy and PDB form were put to the author as a neutral options round
+  (default surge kept / maxSurge 0 / pool 4 / db.t4g.small; minAvailable
+  with corrected docs / maxUnavailable). The author chose maxSurge 0 and
+  maxUnavailable 1, no reasons given.
+- **Author review:** `kubectl kustomize infra/k8s` renders 42 objects with
+  7 no-surge strategies and 7 `maxUnavailable: 1` PDBs. The author reviews
+  via pull request.

@@ -21,7 +21,8 @@
 # Author review: Leong Wei Zhi, pending pull request review.
 # 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision, Leong Wei
 # Zhi, options Q&A): the seven backends run HPA min 2 / max 3 (DP9), so a
-# node loss leaves one replica answering; gateway and web stay 1 to 2. The
+# node loss leaves one replica answering when the soft spread placed the
+# two apart (best effort, DP21); gateway and web stay 1 to 2. The
 # backends' PodDisruptionBudgets are in pdb.yaml (DP21).
 # Author review: Leong Wei Zhi, pending pull request review.
 ---
