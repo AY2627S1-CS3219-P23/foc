@@ -7,35 +7,56 @@
   recommended nothing); this document records them. Implementation and
   this write-up by the tool, per the allowed-use rules.
   Author review: Leong Wei Zhi, pending pull request review.
-  2026-11-08, Claude Code (Fable 5.1): rewritten as a stand-alone page.
-  DP7 and DP10 were re-decided that day through further options rounds;
-  the options-considered tables list the alternatives as facts only,
-  with no reasons, by Leong Wei Zhi's choice. Same day: the platform
-  reason added, as stated by Leong Wei Zhi; the tool added only the
-  facts of what a second node takes.
+  2026-11-08, Claude Code (Fable 5.1): rewritten as a stand-alone page
+  for the single k3s host; the HTTPS decisions added the same day.
   Author review: Leong Wei Zhi, pending pull request review.
-  2026-11-08, Claude Code (Fable 5.1), issue #48 (HTTPS): DP5 rewritten and
-  DP18 to DP21 added for the ACM certificate on a load balancer; the
-  options-considered tables list the alternatives as facts only, by Leong
-  Wei Zhi's choice. Author review: Leong Wei Zhi, pending pull request
-  review. Same day: DP18 revised to Dynu after FreeDNS refused the CNAME
-  records; the FreeDNS row stays as a fact. Author review: Leong Wei Zhi,
-  pending pull request review.
-  2026-11-08, Claude Code (Fable 5.1), issue #305: DP9/DP10, the options,
-  scaling and 2-replica tables updated for the AMQP push fanout and the
-  notification Flyway baseline (team decisions, Leong Wei Zhi via options
-  Q&A). Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform):
+  replaced by this stand-alone page for the EKS design, by Leong Wei
+  Zhi's choice; the k3s host stays as a row in the platform table. The
+  decisions were re-taken in five options rounds that day (budget $250,
+  deadline 2026-12-11); prices come from the ap-southeast-1 price files
+  of 2026-11-09. Reasons are quoted where Leong Wei Zhi gave them.
+  Author review: Leong Wei Zhi, pending pull request review.
+  Same day, on request: the "Spot behaviour" section and the price
+  ceiling note in the cost table (facts only; no decision changed).
+  Author review: Leong Wei Zhi, pending pull request review.
+  PR #316 review (Copilot, Claude reviewer): DP9, DP10, the 2-replica
+  table and DP14 restored to the state issue #305 (PR #306) left on main
+  (chat and notification scale; the first draft of this page had reverted
+  them); DP7 and DP16 name the separate `foc-db-admin` Secret. The
+  zone-bound volume finding led to a further options round: DP3 gains the
+  on-demand node (shared, not tainted), DP4 and the tables follow; SQS
+  recorded as an option considered, by Leong Wei Zhi's choice. Then, on
+  request, both node groups moved to t3a.medium (facts given on the
+  t3/t3a/t2 medium types), and the Spot group's headroom slot (maximum 3)
+  was removed: it is fixed at node_count. Then the Spot group gained a
+  third zone (facts given: pools, cross-zone traffic, rebalancing).
+  Author review: Leong Wei Zhi, pending pull request review.
+  PR #316 review (Sinnez1), options round: the load balancer gains zone c
+  (DP18, over returning the Spot group to a and b); Redis without a
+  password and no NetworkPolicies kept as they are, recorded below
+  (Leong Wei Zhi). Author review: Leong Wei Zhi, pending pull request
+  review. Then (Claude reviewer): DP19 gains Hikari's minimum idle of 1.
+  2026-11-09, Claude Code (Opus 5.5), continuous deployment: DP20 and
+  its options table, transcribed from a further options round (Leong Wei
+  Zhi; facts only, including that reading the cluster costs nothing
+  extra). Author review: Leong Wei Zhi, pending pull request review.
+  Same day: the deployment history row (Deployments API), Leong Wei
+  Zhi's choice. Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # Cloud deployment (N5, issue #48)
 
-FoC runs in the cloud as one EC2 Spot instance in the NUS Innovation
-Sandbox account, running k3s, behind an Application Load Balancer that
-serves `https://foc23.ddnsfree.com` with an AWS Certificate Manager
-certificate. The same images as `docker compose` run there. It stays up
-until about 2026-11-19 and is then destroyed with nothing kept. The
-runbook is [`infra/README.md`](../infra/README.md).
-Local `docker compose` stays the development stack and the demo fallback.
+FoC runs in the cloud on an Amazon EKS cluster in the NUS Innovation
+Sandbox account: two Spot nodes and one on-demand node in private
+subnets, one RDS PostgreSQL instance holding the seven service databases,
+RabbitMQ and Redis on the on-demand node with EBS volumes, and an
+Application Load Balancer that serves
+`https://foc23.ddnsfree.com` with an AWS Certificate Manager certificate.
+The same images as `docker compose` run there. It stays up until
+2026-12-11 and is then destroyed with nothing kept. The runbook is
+[`infra/README.md`](../infra/README.md). Local `docker compose` stays the
+development stack and the demo fallback.
 
 ## What runs where
 
@@ -43,135 +64,315 @@ Local `docker compose` stays the development stack and the demo fallback.
 flowchart LR
   browser["Browser"] -->|"HTTPS :443<br/>(:80 answers 301)"| alb["ALB<br/>ACM certificate<br/>foc23.ddnsfree.com"]
   dns["Dynu<br/>2 CNAME records"] -.-> alb
-  alb -->|"HTTP :80"| traefik
-  subgraph ec2["EC2 t3.xlarge Spot, k3s single node"]
-    traefik["Traefik ingress"] -->|"/api"| gateway
-    traefik -->|"/"| web["web (nginx SPA)"]
-    gateway --> svc["7 backend Deployments<br/>(HPA 1 to 2)"]
-    svc --> pg[("7 Postgres<br/>StatefulSets")]
-    svc --> mq[("RabbitMQ")]
-    gateway --> redis[("Redis AOF")]
-    svc --> redis
-    host["host: secrets.sh"] -.->|"k8s Secrets"| svc
+  subgraph vpc["VPC 10.20.0.0/16, ap-southeast-1"]
+    subgraph pub["public subnets (3 zones)"]
+      alb
+      nat["NAT instance<br/>t4g.nano, Elastic IP"]
+    end
+    subgraph priv["private subnets (3 zones; RDS and the on-demand node in a and b / a)"]
+      subgraph eks["EKS: t3a.medium Spot x2 (three zones) + t3a.medium on-demand x1 (zone a)"]
+        traefik["Traefik<br/>NodePort 30080"] -->|"/api"| gateway
+        traefik -->|"/"| web["web (nginx SPA)"]
+        gateway --> svc["7 backend Deployments<br/>(HPA 1 to 2)"]
+        svc --> mq[("RabbitMQ<br/>EBS gp3, on-demand node")]
+        gateway --> redis[("Redis AOF<br/>EBS gp3, on-demand node")]
+        svc --> redis
+      end
+      svc --> rds[("RDS PostgreSQL 17<br/>db.t4g.micro<br/>7 databases")]
+    end
+    alb -->|"HTTP :30080"| traefik
+    eks -.->|"egress"| nat
   end
-  host -.->|"instance role"| sm["Secrets Manager<br/>foc/app, foc/ghcr"]
   gha["GitHub Actions<br/>Deploy"] -->|"push"| ghcr["GHCR images"]
-  gha -->|"OIDC, SSM Run Command"| ec2
-  ec2 -->|"pull"| ghcr
+  gha -->|"OIDC, kubectl + helm"| api["EKS API<br/>(public endpoint)"]
+  gha -.->|"secrets.sh"| sm["Secrets Manager<br/>foc/app, foc/ghcr"]
+  eks -->|"pull via NAT"| ghcr
 ```
 
-The load balancer holds the certificate and is the only client of the
-host's port 80; the hostname's CNAME at Dynu points at it. Traefik is
-the reverse proxy k3s ships with. It owns port 80 on the host and routes
-by path: `/api` to the gateway, everything else to the web container. The
-gateway stays the only route to the backend services, as in compose. The
-web container serves static files only.
+The load balancer holds the certificate and is the only way in: every
+node answers Traefik's NodePort to the load balancer's security group and
+to nothing else, and the private subnets have no route from the internet.
+Traefik routes by path, `/api` to the gateway and everything else to the
+web container; the gateway stays the only route to the backend services,
+as in compose. Outbound traffic (image pulls, OTP mail, the AWS APIs a
+node calls when it joins) leaves through the NAT instance's one Elastic
+IP. The Deploy workflow talks to the cluster's API endpoint directly with
+`kubectl` and `helm`.
+
+Inside the cluster nothing is fenced: Redis has no password and there are
+no NetworkPolicies, so any pod can reach Redis, RabbitMQ (which has a
+password) and the services directly. Kept as is on review (Leong Wei Zhi,
+2026-11-09, over a Redis password or default-deny NetworkPolicies, which
+the VPC CNI enforces only with its network policy agent on).
 
 ## Decisions
 
-Decider: Leong Wei Zhi, by options Q&A, on 2026-11-05 and 2026-11-08
-(DP18 to DP21 on 2026-11-08). The AI tool presented facts and prices
-only. DP14 to DP17 are process decisions recorded in the pull requests,
-not on this page.
+Decider: Leong Wei Zhi, by options Q&A, on 2026-11-05, 2026-11-08 and
+2026-11-09 (the platform, nodes, network, data stores, secrets, deploy
+access, ingress, credentials, lifetime and the pool size were re-decided
+on 2026-11-09). The AI tool presented facts and prices only.
 
 | # | Topic | Choice |
 | --- | --- | --- |
 | DP1 | Account, region | NUS Innovation Sandbox account, `ap-southeast-1` (its SCPs allow writes there and in `us-east-1` only) |
-| DP2 | Host | One EC2 **t3.xlarge Spot** (4 vCPU, 16 GB), persistent request, **stop** on interruption, CPU credits `standard` |
-| DP3 | Runtime | **k3s** single node: Traefik ingress, local-path volumes, metrics-server |
-| DP4 | Data stores | In-cluster StatefulSets: 7 Postgres (supplier `postgres:16`, the rest `17`), RabbitMQ, Redis with AOF (G7 unchanged) |
-| DP5 | Public access | `https://foc23.ddnsfree.com` through the load balancer (DP18 to DP20). The host has no public listener; shell through SSM Session Manager. Replaced plain HTTP on an Elastic IP on 2026-11-08 |
+| DP2 | Platform | **Amazon EKS**, Kubernetes 1.37, authentication by access entries (`API` mode); vpc-cni, kube-proxy and CoreDNS as EKS installs them; add-ons: metrics-server, EBS CSI driver, Pod Identity agent |
+| DP3 | Nodes | Two managed node groups of **t3a.medium** (AMD; same 2 vCPU / 4 GB shape as t3.medium, chosen 2026-11-09 for its lower on-demand rate): **Spot, exactly 2** (minimum, desired and maximum; the earlier headroom slot for a third node was removed on 2026-11-09) across **three zones** (a, b, c: three Spot capacity pools, chosen 2026-11-09 over the two zones the load balancer needed), and **one on-demand node in zone a** labelled `foc.dev/pool: stable`, which RabbitMQ and Redis select and application pods may also use (not tainted). x86, since the images are built for `linux/amd64`; IMDS hop limit 1 so pods cannot use the node role. The on-demand node was added on 2026-11-09 after review: the EBS volumes are zone-bound, and a Spot replacement in the other zone would have left the broker or Redis `Pending` |
+| DP4 | Network and data stores | Nodes and the database in **private subnets** (zones a and b; a zone-c subnet for the Spot group only); egress through a **NAT instance** (fck-nat on an on-demand `t4g.nano`, one Elastic IP). **One RDS PostgreSQL 17 `db.t4g.micro`** with the seven service databases. RabbitMQ and Redis (AOF, G7 unchanged) stay StatefulSets on **EBS gp3** volumes, on the on-demand node (DP3) |
+| DP5 | Public access | `https://foc23.ddnsfree.com` through the load balancer (DP17, DP18). No node has a public address; the cluster API endpoint is public for GitHub Actions and private for the nodes |
 | DP6 | IaC | Terraform, state in S3 (`use_lockfile`), a bootstrap stack for the bucket |
-| DP7 | Secrets | AWS Secrets Manager (`foc/app`, `foc/ghcr`). `secrets.sh` on the host copies them into k8s Secrets at first boot and on every deploy, through the instance role. IMDS hop limit 1, so pods cannot use that role |
-| DP8 | Images, rollout | GHCR, pushed by GitHub Actions and tagged `<commit>-<run id>`; rollout by SSM Run Command from an OIDC role trusted for `main` only. A pod rolls when its image tag, the Secret version or the ConfigMap hash changed |
-| DP9 | Replicas | 1 per Deployment at rest, HPA min 1 / max 2 on CPU 70 % (N5.4) on every Deployment |
+| DP7 | Secrets | AWS Secrets Manager (`foc/app`, `foc/ghcr`); `secrets.sh` copies them into k8s Secrets **from the Deploy job**, with the deploy role, on every deploy. `foc/app` also carries the database address and the RDS master credentials; the script writes the master credentials to their own Secret (`foc-db-admin`), which only the db-init Job mounts |
+| DP8 | Images, rollout, cluster access | GHCR, pushed by GitHub Actions and tagged `<commit>-<run id>`; the Deploy job runs `deploy.sh` itself: `kubectl` and `helm` against the EKS API under an **access entry with cluster-admin** for the OIDC role trusted for `main` only. The job installs Traefik's chart, runs `secrets.sh` and the db-init Job, applies the kustomization and waits. A pod rolls when its image tag, the Secret version or the ConfigMap hash changed |
+| DP9 | Replicas | 1 per Deployment at rest, HPA min 1 / max 2 on CPU 70 % (N5.4) on every Deployment, from the metrics-server add-on |
 | DP10 | Backends at 2 replicas | Scheduled jobs run on both replicas per tick, accepted because the jobs are idempotent (Leong Wei Zhi, 2026-11-08, on review). chat and notification were first pinned to one replica because a STOMP push reached only the replica holding the socket; issue #305 (same day, options Q&A) lifted the pin with the smallest change: pushes fan out over an AMQP exchange per service, notification acks a concurrent duplicate on its `processed_events` key and moves to a Flyway baseline. No ShedLock, no single active consumer |
 | DP11 | Demo data | Seed on in the cloud; realistic usernames everywhere, same passwords and counts |
-| DP12 | Lifetime | Up to about 2026-11-19, then `terraform destroy`, nothing kept |
-| DP13 | Repo layout | `infra/` (Terraform + manifests), the second non-service top-level folder |
-| DP18 | Domain | `foc23.ddnsfree.com`, a free Dynu hostname (records added by hand in Dynu's panel). The sandbox SCP denies Route 53 domain registration. First chosen as `foc23.mooo.com` on FreeDNS, revised the same day when FreeDNS refused CNAME records on its shared domains |
-| DP19 | TLS endpoint | Application Load Balancer in `ap-southeast-1` with a free ACM certificate (DNS validation); its port 80 answers **301** to https. The balancer forwards plain HTTP to Traefik |
-| DP20 | Host exposure | The host's port 80 accepts the load balancer's security group only; the Elastic IP is gone. The instance keeps an auto-assigned public IPv4 for egress and SSM |
-| DP21 | Public URL in the pipeline | The `PUBLIC_HOST` repo variable holds the hostname; `https://` is written at the four places that build the origin (web build args, `WEB_ALLOWED_ORIGIN`, the two WebSocket origin lists) |
+| DP12 | Lifetime | Up to **2026-12-11**, then `terraform destroy`, nothing kept (revised from about 2026-11-19 on 2026-11-09) |
+| DP13 | Repo layout | `infra/` (Terraform, manifests, Helm values), the second non-service top-level folder |
+| DP14 | Spot on the WebSocket path | **All nodes stay Spot.** A Spot interruption drops the STOMP sockets held by the pods on that node (chat, notification, gateway or Traefik; one replica each at rest) for the 1 to 2 minutes a replacement pod takes to start elsewhere; the web clients reconnect (1 s exponential back-off, 10 s heartbeats) and refetch, and nothing is lost server-side |
+| DP15 | Ingress path | The Terraform-owned load balancer targets the node group's Auto Scaling group on **NodePort 30080**; **Traefik from its Helm chart** (42.3.1) is the ingress controller, same class name and routes as before |
+| DP16 | Database credentials | **Seven roles, one per service**, each owning its database, with the `foc/app` passwords; a `db-init` Job creates them with the master credentials on every deploy and re-applies the passwords. The master credentials sit in their own Secret (`foc-db-admin`) that only this Job mounts; the services read single keys of `foc-secrets` |
+| DP17 | Domain | `foc23.ddnsfree.com`, a free Dynu hostname (records added by hand in Dynu's panel). The sandbox SCP denies Route 53 domain registration. First `foc23.mooo.com` on FreeDNS, revised when FreeDNS refused CNAME records on its shared domains |
+| DP18 | TLS endpoint | Application Load Balancer in `ap-southeast-1`, enabled in **zones a, b and c** (c added on 2026-11-09 after review, since a balancer sends nothing to targets in a zone it is not enabled in and the Spot group spans c), with a free ACM certificate (DNS validation); its port 80 answers **301** to https; plain HTTP to Traefik behind it |
+| DP19 | Connection pool | Hikari capped at **5 connections per service** (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`): `db.t4g.micro` allows about 110 connections, and 7 services x 10 (the default) x 2 replicas would exceed it. **One idle connection per pod** (`SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=1`, added 2026-11-09 on review over `maxSurge: 0` or no change): a deploy rolls every Deployment at once, and a third surge replica per service with 5 open connections each would have reached about 105 |
+| DP20 | Continuous deployment | Deploy runs **by itself when CI succeeds on a push to `main`** (`workflow_run`), with **no approval gate**; changes touching only docs (`*.md`, `docs/`, `ai/`) **do not deploy**. Only the images whose sources changed since the commit **running in the cluster** (read with `kubectl` in a plan job) are built; the others are retagged. The manual run stays (always deploys; `rebuild_all` input). Each rollout is recorded as a deployment of **`production`** through the **Deployments API** (status and site link on the repo page) |
 
 ## Options considered
 
 Rows are the options, columns their properties as checked on the day.
-The chosen row names its decision. No reasons are recorded, by Leong Wei
-Zhi's choice, except where a reason is quoted.
+The chosen row names its decision. Costs are for the 32 days from
+2026-11-09 to 2026-12-11 (about 768 hours), from the public
+`ap-southeast-1` price files of 2026-11-09, unless marked otherwise.
+Reasons appear only where Leong Wei Zhi gave one.
 
-### Platform, against the $50 budget
+### Platform, against the $250 budget
 
-| Option | Managed pieces | 2-week cost | Chosen |
+| Option | Managed pieces | 32-day cost (compute only) | Scaling path | Chosen |
+| --- | --- | --- | --- | --- |
+| One EC2 Spot host + k3s, everything in-cluster (the design of 2026-11-05 to 2026-11-08, built for a $50 budget) | none | t3.xlarge Spot ~$58 | HPA max 2 on one node | |
+| Single k3s node on a bigger Spot host | none | m7i.xlarge Spot ~$77 | HPA max above 2 on one node | |
+| k3s multi-node: server + Spot agents | none | ~$28 per t3.large agent | join token, agent cloud-init, 3 security-group rules; volumes pinned to the server | |
+| **Amazon EKS** + managed node group | control plane | $0.10/h = ~$77 plus nodes | node group size, HPA | DP2 |
+
+Reason, as stated by Leong Wei Zhi (2026-11-09): "initially i thought
+budget is 50 dollars, turns out it is 250 dollars. Can we make our
+deployment more scalable? i was also thinking of using amazon's db
+provider instead of using stored state pods."
+
+### Nodes
+
+Facts: 7 JVM pods request 200m CPU / 384 Mi each (limit 768 Mi); at one
+replica about 1.4 vCPU / 2.7 GB, at HPA max 2 about 3 vCPU / 5.4 GB; EKS
+system pods take about 0.3 vCPU / 0.5 GB per node; RabbitMQ and Redis add
+about 0.15 vCPU / 0.3 GB. The images are `linux/amd64`, so x86 types only.
+
+| Option | Total | 32-day cost | Pods per node | Chosen |
+| --- | --- | --- | --- | --- |
+| 2 x t3.large Spot | 4 vCPU / 16 GB | ~$57 | 35 | first choice |
+| 3 x t3.large Spot | 6 vCPU / 24 GB | ~$85 | 35 | |
+| t3.medium Spot, 2 running, max 3 | 4 vCPU / 8 GB (6 / 12 with the third) | ~$34, the third ~$17 while it runs | 17 (about 11 used) | second choice |
+| 1 x t3.xlarge Spot | 4 vCPU / 16 GB on one node | ~$58 | 58 | |
+| t3.medium Spot x2 (max 3) + t3.medium on-demand x1 in zone a, shared | 6 vCPU / 12 GB | ~$34 + ~$41 | 17 | third choice |
+| **t3a.medium Spot x2 + t3a.medium on-demand x1 in zone a, shared** | 6 vCPU / 12 GB | ~$37 + ~$36 (Spot ~$0.024/h, on-demand $0.0472/h) | 17 | DP3 |
+
+Chosen after the PR #316 review of the zone-bound volumes (facts given:
+document a PVC-delete recovery, a single-zone node group, no volumes, or
+a node that is never reclaimed). Fit on the chosen layout, per medium node
+about 1.9 vCPU / 3.3 GB allocatable and 0.3 vCPU / 0.5 GB of system pods:
+RabbitMQ and Redis take 0.12 vCPU / 0.29 GB of the on-demand node; the
+apps at one replica request 1.5 vCPU / 2.9 GB and fit on the Spot pair;
+at HPA max 2 they request 2.9 vCPU / 5.6 GB, which fits across the three
+nodes with about 1.8 GB spare, while their memory limits (11.2 GB) exceed
+the total, so under real load pods are killed before every service holds
+two replicas. On-demand node exclusive (tainted) was the other sub-option:
+about 2.5 GB idle and HPA max 2 only just fitting on the Spot pair.
+
+### Host purchase model
+
+| Option | 32-day cost | On interruption | Chosen |
 | --- | --- | --- | --- |
-| EKS + 7 RDS + Amazon MQ + ElastiCache | all | ~$280 to 350 | |
-| One EC2 Spot host + k3s, everything in-cluster | none | ~$30 | DP2 to DP4 |
+| **Spot** | ~$37 (two t3a.medium) | the node group drains and replaces the node; pods reschedule | DP3 |
+| On-demand | ~$81 | none | |
+| Spot nodes + one on-demand node for Traefik, gateway, chat, notification | ~$34 + $41 | sockets stay up; the other services move | |
 
-Reason, as stated by Leong Wei Zhi (2026-11-08): the budget is $50, and
-k3s is Kubernetes, so the single node can grow into more nodes later
-instead of moving to a new platform.
+The WebSocket question was asked on its own after the network round
+(DP14): the clients reconnect and catch up by themselves, and the
+interruption frequency for the medium types here is not visible from the CLI.
 
-### Runtime on the host
+### Network
 
-| Option | New files | Scaling path | N5.4 wording ("Kubernetes") | Chosen |
+Facts: a private subnet has no route from the internet, so a node in it
+cannot be reached whatever its security group says; its outbound traffic
+(GHCR, Amazon ECR, the EKS and EC2 APIs when a node joins, Gmail) then
+needs a NAT, because a load balancer is a reverse proxy, carries only
+connections that arrive at it, and cannot be a route target. RDS sits in
+private subnets in every option and needs no NAT.
+
+| Option | Nodes reachable from the internet | Egress | 32-day cost | Chosen |
 | --- | --- | --- | --- | --- |
-| Docker Compose + a cloud override file | ~2 | `--scale` on one host, gateway DNS round-robin, no autoscaler | not met | |
-| k3s with plain manifests only (no Terraform, secrets by hand) | ~20 manifests | HPA on the node; `k3s agent` join later | met | |
-| k3s with Terraform, Secrets Manager and the SSM deploy path | ~35 | HPA on the node; `k3s agent` join later | met | DP3, DP6 to DP8 |
+| Public subnets, no NAT | on whatever the security groups open (30080 from the load balancer only today) | each node's own public IPv4 | ~$8 (IPv4) | first choice |
+| Private subnets + NAT gateway | no | managed, 45 Gbps, zone-redundant, one zone | ~$45 + $0.059/GB | |
+| **Private subnets + NAT instance** | no | fck-nat on `t4g.nano`, 5 Gbps burst, one instance, one zone, EC2 auto-recovery | ~$4 + $4 Elastic IP | DP4 |
 
-### Provisioning
-
-| Option | Tooling | State | Teardown | Chosen |
-| --- | --- | --- | --- | --- |
-| AWS CLI script | AWS CLI v2 | none, resources found by tag | delete by tag | |
-| CloudFormation | AWS CLI v2 | kept by AWS | `delete-stack` | |
-| Terraform | Terraform (not installed locally; run from its Docker image) | S3 bucket from a bootstrap stack | `destroy` twice | DP6 |
-| Console, documented | none | none | manual | |
-
-### Secrets
-
-| Option | Where the values sit | Reader | New value reaches pods | Chosen |
-| --- | --- | --- | --- | --- |
-| Env file on the host | host disk, plaintext | compose, or `kubectl create secret --from-env-file` | edit + restart | |
-| Secrets Manager + External Secrets Operator | AWS | ESO pod through the instance role; IMDS hop limit 2, so any pod can use the role | hourly sync | |
-| Secrets Manager + a static IAM key for ESO | AWS; the key in Terraform state | ESO pod | hourly sync | |
-| Secrets Manager, copied by the host at deploy | AWS | `secrets.sh` on the host; IMDS hop limit 1 | next Deploy run | DP7 |
-| GitHub Actions secrets | GitHub | the deploy workflow writes the file | next Deploy run | |
-
-### Deploy path
-
-| Option | Inbound port | Credentials held in GitHub | N5.3.3 | Chosen |
-| --- | --- | --- | --- | --- |
-| Manual on the host | none (SSM) | none | not met | |
-| Actions, GHCR, SSH | 22 | a deploy key | met | |
-| Actions, GHCR, SSM over OIDC | none | none (OIDC role) | met | DP8 |
-| Pull-based timer on the host | none | none | met; outcome visible on the host only | |
-
-### Backends at 2 replicas
-
-Facts at decision time: 6 of 7 services run `@Scheduled` jobs;
-notification and chat pushed STOMP from a per-JVM simple broker; supplier
-and notification used `ddl-auto: update`; supplier and user seed at
-startup. Issue #305 since moved both pushes onto an AMQP fanout and
-notification onto Flyway.
-
-| Option | Service code changed | Behaviour at 2 replicas | Chosen |
+| NAT instance purchase model | 32-day cost | While stopped | Chosen |
 | --- | --- | --- | --- |
-| HPA on gateway + web only | none | backends never reach 2 | |
-| HPA 1 to 2 everywhere, no hardening | none | the table below, split STOMP sockets included | |
-| HPA 1 to 2 except chat and notification at one replica, no hardening | none | scheduled jobs run twice (accepted as idempotent); no split sockets | DP10, first cut |
-| STOMP fanout over AMQP + duplicate-key ack + Flyway baseline on notification | chat, notification | pushes everywhere, each event once, no first-boot race; jobs still run twice (accepted) | DP10, issue #305 |
-| ShedLock on the jobs + STOMP fanout over AMQP | user, order, credit, rating, chat, notification | jobs once, pushes everywhere; notification dedupe and first-boot races remain | |
-| Full hardening: ShedLock, fanout, Flyway baselines + seed lock, insert-first dedupe + single active consumer | all 7 services | all covered | |
+| **On-demand** | ~$4 | not interrupted; auto-recovery after hardware failure keeps the interface and address | DP4 |
+| Spot | ~$1.4 | egress gone until capacity returns | |
+
+### Postgres
+
+Facts: all seven services read `<SVC>_DB_HOST/PORT/NAME/USER/PASSWORD`;
+pgjdbc defaults to `sslmode=prefer`, so RDS's enforced TLS works without
+URL changes; RDS offers PostgreSQL 16.x and 17.x here. Four services poll
+their outbox tables every second and order-service sweeps every 15 s, so
+a database that needs five idle minutes to pause never pauses while the
+pods run.
+
+| Option | Instance | 32-day cost | Databases and roles | Chosen |
+| --- | --- | --- | --- | --- |
+| Keep 7 StatefulSets on node volumes | none | 0 | as today | |
+| **One RDS instance, 7 databases** | `db.t4g.micro` $0.025/h (1 GiB, ~110 connections) | ~$19 + ~$3 for 20 GB gp3 | created by a Job inside the VPC (RDS is not public) | DP4 |
+| One RDS instance, 7 databases | `db.t4g.small` $0.051/h, `db.t4g.medium` $0.102/h | ~$39, ~$78 | same | |
+| 7 RDS instances, one per service | 7 x `db.t4g.micro` | ~$134 + ~$20 storage | each master user is the service's user | |
+| Aurora PostgreSQL Serverless v2, one cluster | 0.5 to 1 ACU | $0.20/ACU-h: ~$77 at the 0.5 ACU floor, $0 only while paused | same Job | first choice, dropped the same day after the pause fact |
+
+Storage: Aurora $0.11/GB-month against gp3 $0.138, plus $0.22 per
+million I/Os; negligible at 20 GB.
+
+### RabbitMQ and Redis
+
+Facts: the services declare durable classic queues with TTL and
+dead-letter arguments; the gateway reaches Redis over plain TCP with
+`lua-resty-redis`, no AUTH.
+
+| Option | 32-day cost | Notes | Chosen |
+| --- | --- | --- | --- |
+| Amazon MQ for RabbitMQ, `mq.t3.micro` | ~$26 | priced in the price file but **not orderable** here: the API offers m5 and m7g types only | first choice, dropped |
+| Amazon MQ for RabbitMQ, `mq.m7g.medium` | ~$131 | AMQPS 5671 only (`SPRING_RABBITMQ_SSL_ENABLED=true`) | |
+| **RabbitMQ in the cluster on an EBS gp3 volume** | ~$0.1 (+ the on-demand node, DP3) | EBS CSI add-on; the volume is zone-bound, so the pod selects the on-demand node in that zone | DP4 |
+| RabbitMQ in the cluster without a volume | 0 | queued, unconsumed messages lost on restart | |
+| Amazon SQS (+ SNS for one-to-many) | ~0 (first million requests a month free) | a different model, so a code change in all six AMQP services and `foc-contracts`: queues instead of exchanges and routing keys, redrive policies instead of TTL + dead-letter arguments, pull instead of push, at-least-once and unordered on standard queues, a per-replica queue created at start-up for the STOMP fan-out, IAM per pod, ElasticMQ or LocalStack for compose; its own design record under the AI policy | asked 2026-11-09, recorded only |
+| ElastiCache Valkey `cache.t4g.micro` | ~$15 (Redis OSS ~$18) | plain 6379 in the VPC | first choice, dropped for budget |
+| **Redis in the cluster on an EBS gp3 volume** | ~$0.1 (+ the on-demand node, DP3) | unchanged StatefulSet, AOF, on the on-demand node | DP4 |
+
+Layouts compared on 2026-11-09 for the zone-bound volumes (32 days):
+Amazon MQ + ElastiCache with two Spot nodes ~$313 (over the budget unless
+teardown moves to about 2026-12-05); one on-demand node holding both
+~$208 (DP3); two Spot nodes with a documented PVC-delete recovery ~$167;
+ElastiCache plus RabbitMQ on an on-demand node ~$223.
+
+### Ingress path and controller
+
+| Option | Who owns the load balancer | DNS | Chosen |
+| --- | --- | --- | --- |
+| **Terraform ALB to a NodePort ingress controller** | Terraform (certificate, listeners, target group on the node group's Auto Scaling group) | unchanged | DP15 |
+| AWS Load Balancer Controller | the controller, from a Kubernetes Ingress (Helm chart + Pod Identity role); Terraform keeps the certificate only | the CNAME changes with the controller's balancer | |
+
+| Controller | Carry-over from k3s | Chosen |
+| --- | --- | --- |
+| **Traefik (Helm chart)** | same controller; the Ingress and the two timeouts (read 0 s, idle 3600 s) move to chart values | DP15 |
+| ingress-nginx (Helm chart) | new class name and timeout annotations | |
+
+### Secrets on EKS
+
+| Option | Reader | Refresh | Chosen |
+| --- | --- | --- | --- |
+| External Secrets Operator + Pod Identity | a pod with an IAM role bound to its service account | timer and deploy | |
+| **`secrets.sh` from the Deploy job** | the deploy role, in GitHub Actions; values pass through the runner's memory | every deploy | DP7 |
+| Secrets Store CSI driver + ASCP | two charts + Pod Identity; files mirrored into Secrets | poll interval | |
+
+### Deploy access
+
+| Option | Role scope | Add-ons installed by | Chosen |
+| --- | --- | --- | --- |
+| Namespace-scoped access entry | `AmazonEKSEditPolicy` on `foc` | Terraform's helm/kubernetes providers | |
+| **Cluster-admin access entry** | `AmazonEKSClusterAdminPolicy` | the Deploy job (`helm upgrade --install`) | DP8 |
+
+### Database credentials
+
+| Option | Isolation | Setup | Chosen |
+| --- | --- | --- | --- |
+| **Seven roles, created by a Job** | each service reaches its own database only | master password generated by Terraform, in `foc/app` | DP16 |
+| One master user for all seven | any service could read another's database | the Job creates six databases | |
+| Seven roles, RDS-managed master secret | as the first | RDS stores and rotates the master password (~$0.40/month) | |
+
+### Lifetime and docs
+
+| Topic | Options | Chosen |
+| --- | --- | --- |
+| Teardown | 2026-12-11; 2026-12-12; right after the Week 13 demo | **2026-12-11** (DP12) |
+| This page | stand-alone page for the EKS design; k3s design kept as a superseded section | **stand-alone** |
+| Reasons | recorded in Leong Wei Zhi's words; facts only | **recorded** where given |
+| Pull requests | one (infra + workflow + docs); code then docs; docs then code | **one** |
+
+### Continuous deployment (2026-11-09)
+
+| Topic | Options | Chosen |
+| --- | --- | --- |
+| Trigger | every push to `main`, in parallel with CI; after CI succeeds on `main` (`workflow_run`, builds its `head_sha`) | **after CI** (DP20) |
+| Docs-only pushes | deploy on every push; skip | **skip** |
+| Approval | none (the PR review is the gate); a GitHub Environment with required reviewers (OIDC subject becomes `environment:<name>`, trust policy change) | **none** |
+| Images | rebuild all nine every time; rebuild the changed ones, retag the rest | **changed only** |
+| Last deployed tag from | the cluster (`kubectl`, what is live, failed runs included); a moving `deployed` tag in GHCR; the last successful Deploy run (Actions API) | **the cluster** |
+| Deployment history on the repo page | `environment:` on the rollout job (OIDC subject becomes `environment:<name>`, trust policy change + apply); Deployments API calls from the job (`deployments: write`, no AWS change) | **Deployments API** |
+
+### HTTPS: domain and TLS endpoint (2026-11-08)
+
+Facts: an ACM certificate names a domain, never an IP, and ACM validates
+by a CNAME record under that name. The sandbox SCP denies
+`route53domains:*`; Route 53 hosted zones and ACM are allowed.
+
+| Domain option | Who owns the name | Cost | Chosen |
+| --- | --- | --- | --- |
+| A domain a team member already owns | the member | none | |
+| A domain bought at an external registrar | whoever pays | about US$2 to 12 a year | |
+| Free subdomain on FreeDNS's shared `mooo.com` | FreeDNS account | none; FreeDNS refuses CNAME records on its shared domains for free accounts (tried 2026-11-08) | first DP17, dropped |
+| **Free Dynu hostname (`foc23.ddnsfree.com`)** | Dynu account | none; two CNAMEs by hand | DP17 |
+| Free dynv6 zone | dynv6 account | none | |
+| No domain: CloudFront's default `*.cloudfront.net` certificate | AWS | none | |
+
+| TLS endpoint | WebSockets | 32-day cost | Chosen |
+| --- | --- | --- | --- |
+| **Application Load Balancer** | yes (idle timeout up to 4000 s; 3500 s set) | ~$19 + LCU | DP18 |
+| CloudFront in front of the cluster | yes | ~0 (free tier) | |
+| ACM exportable certificate loaded into Traefik | yes | $15 per name, once | |
+| Network Load Balancer, TLS listener | yes; no redirect possible | ~$19 | |
 
 ## Scaling
 
 | Lever | Today | What it takes |
 | --- | --- | --- |
 | Replicas | HPA 1 to 2 at CPU 70 % on every Deployment | nothing; `kubectl -n foc get hpa` shows it |
-| Headroom | CPU requests at every HPA max are about 3.0 of 4 vCPU | an HPA max above 2 needs a bigger host |
-| Vertical | t3.xlarge | the `instance_type` variable and `terraform apply` (the host restarts) |
-| Horizontal | one node | a second instance running `k3s agent` with the server's URL and join token (not provisioned). Between the nodes: 6443/tcp to the server, 8472/udp for flannel, 10250/tcp for metrics. Local-path volumes stay on the node that created them, so the StatefulSets keep running on the first node |
+| Headroom | 3 x t3a.medium = 6 vCPU / 12 GB (about 5.7 vCPU / 9.9 GB allocatable); requests at every HPA max about 3.0 vCPU / 5.9 GB incl. RabbitMQ and Redis; JVM memory limits at HPA max about 10.8 GB | a higher `node_count` |
+| More or bigger nodes | `node_count`, `node_instance_type`, `stable_node_instance_type` variables | `terraform apply`; the Spot group's minimum, desired and maximum all follow `node_count`; a type change replaces the nodes one at a time |
+| Database | `db.t4g.micro`, 20 GB gp3 | `db_instance_class`; RDS resizes with a short outage |
+| Volumes | RabbitMQ and Redis on gp3 EBS in zone a, on the on-demand node (`foc.dev/pool: stable`) | the node group replaces that node in the same zone, so the volume always has a node; while it is being replaced both pods are down (minutes) |
+| Load balancer | one target group on both node groups' Auto Scaling groups | new nodes register themselves |
+
+## Spot behaviour
+
+The two application nodes are Spot capacity: AWS may reclaim one with a
+two-minute notice, and the hourly price floats with the market up to the
+on-demand rate ($0.0472/h for t3a.medium; $0.024/h was the sample of
+2026-11-09). Interruptions come per capacity pool (one instance type in
+one zone); the Spot node group lists three zones, so its two nodes sit in
+two of three pools and a replacement can come from any of the three. The
+on-demand node (RabbitMQ, Redis and
+whatever apps the scheduler put there) is never reclaimed.
+
+| Event | What happens | Gap seen by users |
+| --- | --- | --- |
+| Rebalance recommendation (AWS warns that a pool is tightening) | the node group launches a replacement node first, then drains the old one once the new one is Ready (capacity rebalancing is on for managed node groups) | none beyond the pod restart below |
+| Interruption notice (two minutes) | EKS cordons and drains the node: its pods are evicted and recreated at once on any node with room; the instance terminates; the group, now below its minimum of 2, launches a replacement, which joins after about 2 to 3 minutes and takes the pods still `Pending` | chat, notification and whatever else was on that node restart elsewhere: 1 to 2 minutes until the JVMs pass their startup probe; open WebSockets drop and the browsers reconnect (DP14) |
+| Both Spot nodes reclaimed together (their two pools tightening in the same hour) | the group launches two replacements as capacity allows; the evicted apps are recreated on the on-demand node as far as its memory allows (about 2.5 GB free), the rest wait, then pull their images through the NAT instance | services that fit on the on-demand node keep answering; the others return after about 5 to 10 minutes; RabbitMQ, Redis and RDS are untouched |
+| No Spot capacity for t3a.medium in any of the three zones | the Spot group stays at zero nodes until capacity returns; AWS gives no bound | only what fits on the on-demand node runs, until capacity returns or `node_instance_type` is changed and applied |
+
+The interruption frequency for t3a.medium here is visible only in the
+console's Spot Instance Advisor, not from the CLI. Ways to widen the odds,
+none taken: several instance types in the node group (t3a.medium,
+t3.medium, t2.medium: more pools, no cost). The third zone was taken
+(2026-11-09, on request: a third private subnet, no cost; pods in zone c
+reach the zone-a services over cross-zone traffic at $0.01/GB each way,
+as zone b already does; the group may occasionally move a node between
+zones to stay balanced). The on-demand node for the volumes is DP3.
 
 ## Behaviour at 2 replicas (DP10)
 
@@ -190,51 +391,27 @@ it about five minutes after CPU drops.
 Below the CPU threshold every Deployment runs one replica and none of
 this occurs.
 
-### HTTPS: domain
-
-Facts: an ACM certificate names a domain, never an IP, and ACM validates
-by a CNAME record under that name (no HTTP or file challenge). The
-sandbox SCP denies `route53domains:*` (checked 2026-11-08); Route 53
-hosted zones and ACM are allowed.
-
-| Option | Who owns the name | DNS records | Cost | Chosen |
-| --- | --- | --- | --- | --- |
-| A domain a team member already owns | the member | validation CNAME + site CNAME at their DNS | none | |
-| A domain bought at an external registrar | whoever pays | same, at the registrar | about US$2 to 12 a year by TLD | |
-| Free subdomain on FreeDNS's shared `mooo.com` | FreeDNS account | FreeDNS refuses CNAME records on its shared ("dynamic DNS") domains for free accounts: "contact an admin to have it enabled" (tried 2026-11-08) | none | first DP18, dropped |
-| Free Dynu hostname (`foc23.ddnsfree.com`) | Dynu account | same two CNAMEs, by hand in Dynu's DNS Records page; 4 hostnames on a free account | none | DP18 |
-| Free dynv6 zone (`<name>.dynv6.net`) | dynv6 account | same, by hand or API; record types A, AAAA, CAA, CNAME, MX, SPF, SRV, TXT | none | |
-| No domain: CloudFront's default `*.cloudfront.net` certificate | AWS | none | none | |
-
-Whether Dynu accepts the underscore-prefixed validation record name
-(`_<token>.foc23.ddnsfree.com`) was not confirmed from its documentation; the
-runbook requests the certificate on its own first, so this is learned
-before anything else changes.
-
-### HTTPS: TLS endpoint
-
-| Option | Certificate region | WebSockets | New AWS pieces | 2-week cost | Chosen |
-| --- | --- | --- | --- | --- | --- |
-| Application Load Balancer in front of the host | `ap-southeast-1` | yes (idle timeout up to 4000 s) | second subnet, ALB, target group, 2 listeners | about 10 | DP19 |
-| CloudFront in front of the host | `us-east-1` | yes | distribution, cache policy off for `/api` | about 0 (free tier) | |
-| ACM exportable certificate loaded into Traefik | `ap-southeast-1` | yes | none (port 443 on the host) | 15 per name, once | |
-| Network Load Balancer, TLS listener | `ap-southeast-1` | yes | second subnet, NLB, target group; no redirect possible | about 10 | |
-
-## Cost (2 weeks, AWS price files, 2026-11-05)
+## Cost (32 days, 2026-11-09 to 2026-12-11, AWS price files of 2026-11-09)
 
 | Item | ~USD |
 | --- | --- |
-| t3.xlarge Spot (~$0.074/h, floats) | 25 |
-| 40 GB gp3 | 2 |
-| Public IPv4, auto-assigned ($0.005/h) | 2 |
-| Application Load Balancer (about $0.025/h plus LCU; demo traffic stays under one LCU) | 10 |
-| ACM certificate | 0 |
-| Secrets Manager (2 secrets) | 0.5 |
-| **Total** | **~40** |
+| EKS control plane ($0.10/h) | 77 |
+| 2 x t3a.medium Spot (~$0.024/h each on 2026-11-09; floats, never above the $0.0472/h on-demand rate) | 37 |
+| 1 x t3a.medium on-demand ($0.0472/h), zone a, RabbitMQ and Redis | 36 |
+| NAT instance t4g.nano on-demand ($0.0053/h) + its Elastic IP ($0.005/h) | 8 |
+| Application Load Balancer ($0.0252/h plus LCU; demo traffic stays under one LCU) | 21 |
+| RDS db.t4g.micro ($0.025/h) + 20 GB gp3 ($0.138/GB-month) | 22 |
+| EBS gp3 for RabbitMQ and Redis (2 GB) + node root volumes (3 x 20 GB, $0.096/GB-month) | 6 |
+| Secrets Manager (2 secrets), ACM certificate | 1 |
+| **Total** | **~208** |
+
+About $3 was spent on
+the k3s host before the re-platform.
 
 ## Lifetime
 
-Up until about 2026-11-19 (D4 on 2026-11-11, Week 13 demo). Then
-`terraform destroy` in `infra/terraform` and in its `bootstrap/`. Secrets
-are deleted without a recovery window, the volumes go with the instance,
-nothing is kept. The two CNAME records at Dynu are deleted by hand.
+Up until 2026-12-11. Then, in order: delete the `foc` namespace (its EBS
+volumes are not Terraform's), `terraform destroy` in `infra/terraform`
+and in its `bootstrap/`. Secrets are deleted without a recovery window,
+the database without a final snapshot, nothing is kept. The two CNAME
+records at Dynu are deleted by hand.

@@ -2,7 +2,7 @@
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
 # Scope: user-service Deployment + ClusterIP Service; env as in compose.yaml
 # with cloud values (in-cluster hostnames, public origin, Gmail SMTP
-# for user-service), secrets from the ESO-synced foc-secrets.
+# for user-service), secrets from foc-secrets.
 # Team decisions (Leong Wei Zhi, 2026-11-05, options Q&A, recorded in
 # docs/deployment.md); values mirror compose.yaml's defaults.
 # Author review: Leong Wei Zhi, pending pull request review.
@@ -10,6 +10,13 @@
 # carries the foc-secrets version as an annotation (set by deploy.sh);
 # second round (Sinnez1): the foc-config hash too.
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform):
+# USER_DB_HOST comes from foc-secrets (the one RDS instance, DP4) and the
+# Hikari pool is capped at 5 (DP19).
+# Author review: Leong Wei Zhi, pending pull request review.
+# PR #316 review (Claude reviewer): Hikari keeps one idle connection
+# (team decision DP19, Leong Wei Zhi). Author review: Leong Wei Zhi,
+# pending pull request review.
 ---
 apiVersion: v1
 kind: Service
@@ -56,7 +63,10 @@ spec:
                 name: foc-config
           env:
             - name: USER_DB_HOST
-              value: "user-db"
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: DB_HOST
             - name: USER_DB_PORT
               value: "5432"
             - name: USER_DB_NAME
@@ -68,6 +78,14 @@ spec:
                 secretKeyRef:
                   name: foc-secrets
                   key: USER_DB_PASSWORD
+            # seven services share one db.t4g.micro (max_connections about
+            # 110): 7 x 5 x 2 replicas stays under it, and one idle
+            # connection per pod keeps a deploy's surge pods (a third
+            # replica each) from opening 5 apiece (DP19)
+            - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
+              value: "5"
+            - name: SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE
+              value: "1"
             - name: RABBITMQ_PASSWORD
               valueFrom:
                 secretKeyRef:

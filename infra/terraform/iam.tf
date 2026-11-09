@@ -1,22 +1,17 @@
 # AI-assisted (CS3219 AI Usage Policy disclosure):
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
-# Scope: IAM for the team's decisions (Leong Wei Zhi, 2026-11-05, options
-# Q&A): the instance role (SSM for shell + deploys, Secrets Manager reads
-# for the host's secrets.sh), and the GitHub Actions OIDC role that
-# may only run commands on this instance through SSM.
+# Scope: the GitHub Actions OIDC deploy role (team decision, Leong Wei Zhi,
+# 2026-11-05, options Q&A).
 # Author review: Leong Wei Zhi, pending pull request review.
-# 2026-11-08, Claude Code (Fable 5.1), issue #48 (DP7): the Secrets
-# Manager reader is the host's secrets.sh, not External Secrets Operator;
-# the policies are unchanged. Author review: Leong Wei Zhi, pending pull
-# request review.
-# 2026-11-08, Claude Code (Fable 5.1), first deploy: the deploy role's trust
-# also accepts GitHub's immutable subject (repo:<owner>@<id>/<name>@<id>),
-# which this repository sends; the first rollout failed on the plain form.
+# 2026-11-08, Claude Code (Fable 5.1), first deploy and PR #307 review: the
+# trust accepts GitHub's immutable subject only (team decision, Leong Wei
+# Zhi); null ids fall back to this repository's. Author review: Leong Wei
+# Zhi, pending pull request review.
+# 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform, DP7 and
+# DP8): the k3s host role is gone with the host. The deploy role no longer
+# runs SSM commands; it describes the cluster (kubectl through an access
+# entry, eks.tf) and reads foc/* so secrets.sh can run in the Deploy job.
 # Author review: Leong Wei Zhi, pending pull request review.
-# 2026-11-08, Claude Code (Fable 5.1), PR #307 review: the plain subject is
-# dropped (team decision, Leong Wei Zhi), only the immutable one is trusted;
-# null ids fall back to this repository's. Author review: Leong Wei Zhi,
-# pending pull request review.
 
 data "aws_caller_identity" "current" {}
 
@@ -26,45 +21,6 @@ locals {
   # null ids mean the default github_repo's (validated in variables.tf)
   github_owner_id = coalesce(var.github_owner_id, 325983746)
   github_repo_id  = coalesce(var.github_repo_id, 1360023737)
-}
-
-# --- instance role ----------------------------------------------------------
-
-resource "aws_iam_role" "host" {
-  name = "foc-host"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ec2.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "host_ssm" {
-  role       = aws_iam_role.host.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-# secrets.sh and deploy.sh run on the host and read foc/* through IMDS;
-# pods cannot (hop limit 1 in instance.tf, DP7)
-resource "aws_iam_role_policy" "host_secrets" {
-  name = "read-foc-secrets"
-  role = aws_iam_role.host.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
-      Resource = "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:foc/*"
-    }]
-  })
-}
-
-resource "aws_iam_instance_profile" "host" {
-  name = "foc-host"
-  role = aws_iam_role.host.name
 }
 
 # --- GitHub Actions deploy role ----------------------------------------------
@@ -95,25 +51,24 @@ resource "aws_iam_role" "deploy" {
   })
 }
 
+# What the Deploy job does with AWS itself: describe the cluster to write a
+# kubeconfig, and read the two secrets for secrets.sh. Everything else goes
+# through the Kubernetes API under the access entry in eks.tf
 resource "aws_iam_role_policy" "deploy" {
-  name = "run-deploy-on-host"
+  name = "deploy-to-cluster"
   role = aws_iam_role.deploy.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = "ssm:SendCommand"
-        Resource = [
-          "arn:aws:ssm:${var.region}::document/AWS-RunShellScript",
-          aws_instance.host.arn,
-        ]
+        Effect   = "Allow"
+        Action   = "eks:DescribeCluster"
+        Resource = aws_eks_cluster.main.arn
       },
       {
-        # no resource-level permissions exist for reading command results
         Effect   = "Allow"
-        Action   = ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations"]
-        Resource = "*"
+        Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+        Resource = "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:foc/*"
       },
     ]
   })

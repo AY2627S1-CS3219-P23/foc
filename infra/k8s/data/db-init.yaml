@@ -1,0 +1,123 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Fable 5.1), 2026-11-09, issue #48 (EKS re-platform).
+# Scope: the Job that creates the seven service roles and databases on the
+# one RDS instance (team decision DP16, Leong Wei Zhi, 2026-11-09, options
+# Q&A, recorded in docs/deployment.md: database-per-service kept as seven
+# roles with the foc/app passwords; the master credentials reach this Job
+# only, from the foc-db-admin Secret secrets.sh writes). Idempotent: roles and databases are created once, the password is
+# re-applied every run, so a changed value no longer locks a service out.
+# deploy.sh deletes the previous Job and applies this one before the
+# kustomization, then waits for it, so the services find their databases.
+# Author review: Leong Wei Zhi, pending pull request review.
+# PR #316 review (Claude reviewer, Sinnez1): the image is pinned to the
+# RDS minor (db_engine_version) instead of the moving `postgres:17`.
+# Next round (Claude reviewer): the GRANT guard asks for the SET privilege,
+# not MEMBER: on PostgreSQL 16+ the creating role holds an ADMIN-only
+# membership (no SET), which MEMBER counts, so the GRANT was skipped and
+# CREATE DATABASE ... OWNER failed.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-init
+  namespace: foc
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app: db-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: psql
+          # the same minor as the RDS instance (db_engine_version in
+          # rds.tf); bump both together
+          image: postgres:17.9
+          env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: DB_PORT
+            - name: RDS_MASTER_USER
+              valueFrom:
+                secretKeyRef:
+                  name: foc-db-admin
+                  key: RDS_MASTER_USER
+            - name: RDS_MASTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: foc-db-admin
+                  key: RDS_MASTER_PASSWORD
+            - name: USER_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: USER_DB_PASSWORD
+            - name: SUPPLIER_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: SUPPLIER_DB_PASSWORD
+            - name: ORDER_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: ORDER_DB_PASSWORD
+            - name: CREDIT_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: CREDIT_DB_PASSWORD
+            - name: NOTIFICATION_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: NOTIFICATION_DB_PASSWORD
+            - name: RATING_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: RATING_DB_PASSWORD
+            - name: CHAT_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: foc-secrets
+                  key: CHAT_DB_PASSWORD
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              export PGHOST="$DB_HOST" PGPORT="$DB_PORT" PGUSER="$RDS_MASTER_USER" \
+                PGPASSWORD="$RDS_MASTER_PASSWORD" PGDATABASE=postgres PGSSLMODE=require
+              for _ in $(seq 1 30); do pg_isready -q && break; sleep 5; done
+              for svc in user supplier order credit notification rating chat; do
+                pw="$(printenv "$(echo "$svc" | tr a-z A-Z)_DB_PASSWORD")"
+                # the RDS master user is not a superuser: it must be able to
+                # SET ROLE to make it a database's owner (GRANT before
+                # CREATE). PG 16+ gives the creator an ADMIN-only membership
+                # without SET, which a MEMBER check would count
+                psql -v ON_ERROR_STOP=1 -q -v svc="$svc" -v pw="$pw" <<'SQL'
+              SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'svc', :'pw')
+                WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'svc') \gexec
+              ALTER ROLE :"svc" WITH LOGIN PASSWORD :'pw';
+              SELECT format('GRANT %I TO CURRENT_USER', :'svc')
+                WHERE NOT pg_has_role(current_user, :'svc', 'SET') \gexec
+              SELECT format('CREATE DATABASE %I OWNER %I', :'svc', :'svc')
+                WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'svc') \gexec
+              REVOKE CONNECT ON DATABASE :"svc" FROM PUBLIC;
+              SQL
+                echo "db-init: $svc ready"
+              done
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi

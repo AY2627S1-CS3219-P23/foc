@@ -4,11 +4,13 @@
 # owner-setup step (infra/README.md).
 # Author review: Leong Wei Zhi, pending pull request review.
 # 2026-11-08, Claude Code (Fable 5.1), issue #48 (HTTPS): public_host is the
-# hostname (DP18, DP21); alb_dns_name and acm_validation_record are the two
-# CNAME records to add at the DNS provider (Dynu, DP18) by hand.
-# Author review: Leong Wei Zhi, pending pull request review.
-# PR #310 review (Copilot): acm_validation_record lists one record per
-# certificate name instead of asserting a single one.
+# hostname; alb_dns_name and acm_validation_record are the two CNAME
+# records to add at Dynu by hand (one validation record per certificate
+# name, PR #310 review). Author review: Leong Wei Zhi, pending pull
+# request review.
+# 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform):
+# instance_id is replaced by cluster_name; rds_endpoint and nat_public_ip
+# added. Author review: Leong Wei Zhi, pending pull request review.
 
 output "public_host" {
   description = "PUBLIC_HOST repo variable; the site is https://<this>"
@@ -30,14 +32,24 @@ output "acm_validation_record" {
   }
 }
 
-output "instance_id" {
-  description = "INSTANCE_ID repo variable"
-  value       = aws_instance.host.id
+output "cluster_name" {
+  description = "CLUSTER_NAME repo variable; also `aws eks update-kubeconfig --name`"
+  value       = aws_eks_cluster.main.name
 }
 
 output "deploy_role_arn" {
   description = "AWS_ROLE_ARN repo variable"
   value       = aws_iam_role.deploy.arn
+}
+
+output "rds_endpoint" {
+  description = "the database's address (DB_HOST in foc/app)"
+  value       = aws_db_instance.main.address
+}
+
+output "nat_public_ip" {
+  description = "the cluster's one outbound address"
+  value       = aws_eip.nat.public_ip
 }
 
 output "owner_setup_token" {
