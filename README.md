@@ -1672,5 +1672,6 @@ neutral options Q&A, facts only): the seven backends run HPA min 2 /
 max 3, every Deployment and Traefik prefer one replica per node
 (soft topology spread), the backends get PodDisruptionBudgets
 (`maxUnavailable: 1`) and Traefik one (`minAvailable: 1`), Traefik runs 2
-replicas, every Deployment rolls without surge (`maxSurge: 0`); `docs/deployment.md`
+replicas, the backends roll without surge (`maxSurge: 0`), gateway and web with
+one surge pod; `docs/deployment.md`
 follows. Recorded in `ai/usage-log.md`.

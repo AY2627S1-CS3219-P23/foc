@@ -8224,6 +8224,10 @@ Entry template:
   spread. Rollout through CD after merge; the author checks
   `kubectl -n foc get hpa,pdb` and pod placement, and reviews via pull
   request.
+- **Superseded in review (PR #323, entries below):** the backend PDBs
+  became `maxUnavailable: 1` (Traefik keeps `minAvailable: 1`); the
+  backends roll with `maxSurge: 0` / `maxUnavailable: 1`; gateway and web
+  with `maxSurge: 1` / `maxUnavailable: 0`.
 
 ## 2026-11-10 — Leong Wei Zhi (N5 cloud deployment, issue #48: PR #323 review round)
 - **Tool:** Claude Code (Opus 5.5)
@@ -8258,5 +8262,19 @@ Entry template:
   were made directly; the gateway/web strategy was put to the author as a
   neutral options round (default surge documented / no surge / default
   surge + min 2). The author chose no surge, no reasons given.
+- **Author review:** `kubectl kustomize infra/k8s` renders. The author
+  reviews via pull request.
+
+## 2026-11-10 — Leong Wei Zhi (N5 cloud deployment, issue #48: PR #323 review round 3)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** review fixes from team decisions
+- **Scope:** `infra/k8s/apps/gateway.yaml`, `web.yaml` (`maxSurge: 1`,
+  `maxUnavailable: 0`); `docs/deployment.md` DP21; README AI Use Summary;
+  the first #323 entry above gains a "superseded" line; PR description.
+- **Prompt(s):** "address the latest pr comments and resolve the final
+  threads". Claude reviewer: no-surge at one replica means an outage per
+  deploy, and neither pod uses the database; the first log entry still
+  said `minAvailable: 1`. The author was asked to keep no-surge or switch
+  and chose `maxSurge: 1` / `maxUnavailable: 0`, no reasons given.
 - **Author review:** `kubectl kustomize infra/k8s` renders. The author
   reviews via pull request.
