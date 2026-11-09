@@ -17,6 +17,9 @@
   node for RabbitMQ and Redis (DP3) in the intro, checks, operating and
   troubleshooting rows. Author review: Leong Wei Zhi, pending pull request
   review.
+  Later round (Sinnez1): three public subnets (the balancer in zone c);
+  the psql image pinned to 17.9. Author review: Leong Wei Zhi, pending
+  pull request review.
   2026-11-09, Claude Code (Opus 5.5), continuous deployment (DP20): step 4
   covers the automatic runs, `changed-images.sh` in the layout table.
   Author review: Leong Wei Zhi, pending pull request review.
@@ -46,7 +49,7 @@ flowchart TD
 | Path | What |
 | --- | --- |
 | `terraform/bootstrap/` | S3 state bucket (local state, applied once) |
-| `terraform/` | network (`network.tf`: two public + three private subnets), NAT instance (`nat.tf`), EKS cluster, the Spot and on-demand node groups, add-ons and the deploy role's access entry (`eks.tf`), RDS (`rds.tf`), ACM certificate + Application Load Balancer (`tls.tf`), GitHub OIDC deploy role (`iam.tf`), Secrets Manager (`secrets.tf`) |
+| `terraform/` | network (`network.tf`: three public + three private subnets), NAT instance (`nat.tf`), EKS cluster, the Spot and on-demand node groups, add-ons and the deploy role's access entry (`eks.tf`), RDS (`rds.tf`), ACM certificate + Application Load Balancer (`tls.tf`), GitHub OIDC deploy role (`iam.tf`), Secrets Manager (`secrets.tf`) |
 | `k8s/` | kustomization applied by the Deploy job: gp3 StorageClass, RabbitMQ and Redis StatefulSets, app Deployments, Traefik Ingress, HPAs; `data/db-init.yaml` is the Job that creates the seven database roles |
 | `k8s/secrets.sh` | copies `foc/app` and `foc/ghcr` from Secrets Manager into the k8s Secrets `foc-secrets`, `foc-db-admin` (the RDS master credentials, mounted by db-init only) and `ghcr-pull` (every deploy, from the Deploy job) |
 | `k8s/deploy.sh` | run by the Deploy workflow: kubeconfig, Traefik chart, secrets, db-init, apply, rollouts |
@@ -216,7 +219,7 @@ must be out of reach and the database connection encrypted:
 
 ```sh
 kubectl -n foc exec deploy/user-service -- curl -s -m 2 http://169.254.169.254/ || echo "IMDS unreachable (expected)"
-kubectl -n foc run psql --rm -it --restart=Never --image=postgres:17 --env=PGPASSWORD=<USER_DB_PASSWORD from foc/app> -- \
+kubectl -n foc run psql --rm -it --restart=Never --image=postgres:17.9 --env=PGPASSWORD=<USER_DB_PASSWORD from foc/app> -- \
   psql "host=<rds_endpoint> user=user dbname=user sslmode=require" -c "select ssl from pg_stat_ssl where pid = pg_backend_pid()"   # t
 ```
 
@@ -249,7 +252,7 @@ one that ran the apply, and the deploy role): `aws eks update-kubeconfig
 | Pods, HPAs, volumes | `kubectl -n foc get pods,hpa,pvc -o wide` (rabbitmq-0 and redis-0 sit on the `stable` node) |
 | Logs | `kubectl -n foc logs deploy/<name>` |
 | Restart one service | `kubectl -n foc rollout restart deploy/<name>` |
-| Database shell | `kubectl -n foc run psql --rm -it --restart=Never --image=postgres:17 -- psql "host=<rds_endpoint> user=<svc> dbname=<svc> sslmode=require"` (password from `foc/app`) |
+| Database shell | `kubectl -n foc run psql --rm -it --restart=Never --image=postgres:17.9 -- psql "host=<rds_endpoint> user=<svc> dbname=<svc> sslmode=require"` (password from `foc/app`) |
 | Spot took a node | nothing to redeploy: the pods are recreated on the other nodes as soon as the drain evicts them, and the group launches a replacement that joins in 2 to 3 min (on a rebalance recommendation the replacement comes first). RabbitMQ and Redis are on the on-demand node and unaffected. Open WebSockets drop and the browsers reconnect once chat/notification are back (1 to 2 min). Both Spot nodes at once: what fits on the on-demand node keeps running, the rest returns in 5 to 10 min; see `docs/deployment.md`, Spot behaviour |
 | The on-demand node is replaced (hardware failure, node group update) | `kubectl get nodes -L foc.dev/pool` | RabbitMQ and Redis are down for the minutes it takes; the new node comes up in zone a and their volumes reattach by themselves |
 | NAT instance shell | `aws ssm start-session --target <id of the foc-nat instance>` |

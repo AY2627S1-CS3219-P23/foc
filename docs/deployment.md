@@ -32,6 +32,11 @@
   was removed: it is fixed at node_count. Then the Spot group gained a
   third zone (facts given: pools, cross-zone traffic, rebalancing).
   Author review: Leong Wei Zhi, pending pull request review.
+  PR #316 review (Sinnez1), options round: the load balancer gains zone c
+  (DP18, over returning the Spot group to a and b); Redis without a
+  password and no NetworkPolicies kept as they are, recorded below
+  (Leong Wei Zhi). Author review: Leong Wei Zhi, pending pull request
+  review.
   2026-11-09, Claude Code (Opus 5.5), continuous deployment: DP20 and
   its options table, transcribed from a further options round (Leong Wei
   Zhi; facts only, including that reading the cluster costs nothing
@@ -60,7 +65,7 @@ flowchart LR
   browser["Browser"] -->|"HTTPS :443<br/>(:80 answers 301)"| alb["ALB<br/>ACM certificate<br/>foc23.ddnsfree.com"]
   dns["Dynu<br/>2 CNAME records"] -.-> alb
   subgraph vpc["VPC 10.20.0.0/16, ap-southeast-1"]
-    subgraph pub["public subnets (2 zones)"]
+    subgraph pub["public subnets (3 zones)"]
       alb
       nat["NAT instance<br/>t4g.nano, Elastic IP"]
     end
@@ -94,6 +99,12 @@ node calls when it joins) leaves through the NAT instance's one Elastic
 IP. The Deploy workflow talks to the cluster's API endpoint directly with
 `kubectl` and `helm`.
 
+Inside the cluster nothing is fenced: Redis has no password and there are
+no NetworkPolicies, so any pod can reach Redis, RabbitMQ (which has a
+password) and the services directly. Kept as is on review (Leong Wei Zhi,
+2026-11-09, over a Redis password or default-deny NetworkPolicies, which
+the VPC CNI enforces only with its network policy agent on).
+
 ## Decisions
 
 Decider: Leong Wei Zhi, by options Q&A, on 2026-11-05, 2026-11-08 and
@@ -120,7 +131,7 @@ on 2026-11-09). The AI tool presented facts and prices only.
 | DP15 | Ingress path | The Terraform-owned load balancer targets the node group's Auto Scaling group on **NodePort 30080**; **Traefik from its Helm chart** (42.3.1) is the ingress controller, same class name and routes as before |
 | DP16 | Database credentials | **Seven roles, one per service**, each owning its database, with the `foc/app` passwords; a `db-init` Job creates them with the master credentials on every deploy and re-applies the passwords. The master credentials sit in their own Secret (`foc-db-admin`) that only this Job mounts; the services read single keys of `foc-secrets` |
 | DP17 | Domain | `foc23.ddnsfree.com`, a free Dynu hostname (records added by hand in Dynu's panel). The sandbox SCP denies Route 53 domain registration. First `foc23.mooo.com` on FreeDNS, revised when FreeDNS refused CNAME records on its shared domains |
-| DP18 | TLS endpoint | Application Load Balancer in `ap-southeast-1` with a free ACM certificate (DNS validation); its port 80 answers **301** to https; plain HTTP to Traefik behind it |
+| DP18 | TLS endpoint | Application Load Balancer in `ap-southeast-1`, enabled in **zones a, b and c** (c added on 2026-11-09 after review, since a balancer sends nothing to targets in a zone it is not enabled in and the Spot group spans c), with a free ACM certificate (DNS validation); its port 80 answers **301** to https; plain HTTP to Traefik behind it |
 | DP19 | Connection pool | Hikari capped at **5 connections per service** (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`): `db.t4g.micro` allows about 110 connections, and 7 services x 10 (the default) x 2 replicas would exceed it |
 | DP20 | Continuous deployment | Deploy runs **by itself when CI succeeds on a push to `main`** (`workflow_run`), with **no approval gate**; changes touching only docs (`*.md`, `docs/`, `ai/`) **do not deploy**. Only the images whose sources changed since the commit **running in the cluster** (read with `kubectl` in a plan job) are built; the others are retagged. The manual run stays (always deploys; `rebuild_all` input). Each rollout is recorded as a deployment of **`production`** through the **Deployments API** (status and site link on the repo page) |
 
