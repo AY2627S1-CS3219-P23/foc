@@ -8149,3 +8149,34 @@ Entry template:
 - **Author review:** `./mvnw verify` in `supplier-service` — 90 tests, 0
   failures (14 new), run with JDK 22 locally since JDK 21 is not
   installed (CI uses 21). The author reviews via pull request.
+
+## 2026-11-09 — Leong Wei Zhi (N5 cloud deployment, issue #48: EBS CSI add-on create fix)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debugging
+- **Scope:** `infra/terraform/eks.tf` (`aws_eks_addon.ebs_csi` drops the
+  `controller.env` `AWS_REGION` entry added in 3aa99430; keeps
+  `node.metadataSources`) and the PVC `Pending` runbook row in
+  `infra/README.md`.
+- **Prompt(s):** the `terraform apply eks.tfplan` error "UnsupportedAddonModification
+  ... containers[name="ebs-plugin"].env: duplicate entries for key
+  [name="AWS_REGION"]". The managed add-on manifest (v1.67.2-eksbuild.1)
+  already sets `AWS_REGION` on the controller, so the extra entry
+  collided; the schema has no separate region key.
+- **Then (same day):** the re-apply timed out with the add-on `CREATING`;
+  `ebs-csi-controller` crash-looped on `AccessDeniedException ...
+  eks-auth:AssumeRoleForPodIdentity ... explicit deny in a service control
+  policy` (the ISB organization SCP). The tool laid out three options as
+  facts (IRSA; node role + hop limit 2; no EBS volumes, emptyDir); the
+  author chose IRSA. `eks.tf`: `aws_iam_openid_connect_provider.cluster`
+  for the cluster issuer, `foc-ebs-csi` trusts
+  `system:serviceaccount:kube-system:ebs-csi-controller-sa` via
+  `sts:AssumeRoleWithWebIdentity`, the add-on gets
+  `service_account_role_arn`; the Pod Identity agent add-on and
+  association are removed. DP2 in `docs/deployment.md` and the add-on
+  `DEGRADED` runbook row updated.
+- **Author review:** `terraform fmt`, `terraform validate`; `terraform
+  plan` = 2 to add, 1 to change, 3 to destroy (tainted add-on replaced,
+  OIDC provider, role trust, Pod Identity agent + association gone),
+  saved as `eks.tfplan`. Apply owed by the author; whether the SCP allows
+  web identity for the cluster issuer is only shown by the apply. The
+  author reviews via pull request.

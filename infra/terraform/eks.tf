@@ -7,13 +7,16 @@
 # (PR #316 review, re-decided 2026-11-09; the Spot group is fixed at
 # node_count, no headroom slot), DP8 cluster-admin access entry for the GitHub deploy role, DP9
 # metrics-server for the HPAs, the EBS CSI driver for the RabbitMQ and
-# Redis volumes (the only workload holding an AWS role, through Pod
-# Identity). IMDS hop limit 1 on the nodes carries DP7's posture: pods
+# Redis volumes (the only workload holding an AWS role, through IRSA:
+# the ISB SCP denies Pod Identity's eks-auth:AssumeRoleForPodIdentity). IMDS hop limit 1 on the nodes carries DP7's posture: pods
 # cannot use the node role.
 # Author review: Leong Wei Zhi, pending pull request review.
 # PR #316 review (Claude reviewer): the EBS CSI add-on is configured not to
 # need IMDS (the controller's region, the node plugin's metadata from the
 # Kubernetes API), since the hop limit blocks it for the driver's pods too.
+# Apply fix (2026-11-09): no AWS_REGION on the controller (the managed
+# manifest sets it), and IRSA instead of Pod Identity (SCP explicit deny,
+# option chosen by Leong Wei Zhi).
 # Author review: Leong Wei Zhi, pending pull request review.
 
 locals {
@@ -200,12 +203,6 @@ resource "aws_eks_node_group" "stable" {
 
 # --- add-ons ----------------------------------------------------------------
 
-data "aws_eks_addon_version" "pod_identity" {
-  addon_name         = "eks-pod-identity-agent"
-  kubernetes_version = aws_eks_cluster.main.version
-  most_recent        = true
-}
-
 data "aws_eks_addon_version" "metrics_server" {
   addon_name         = "metrics-server"
   kubernetes_version = aws_eks_cluster.main.version
@@ -216,14 +213,6 @@ data "aws_eks_addon_version" "ebs_csi" {
   addon_name         = "aws-ebs-csi-driver"
   kubernetes_version = aws_eks_cluster.main.version
   most_recent        = true
-}
-
-resource "aws_eks_addon" "pod_identity" {
-  cluster_name                = aws_eks_cluster.main.name
-  addon_name                  = "eks-pod-identity-agent"
-  addon_version               = data.aws_eks_addon_version.pod_identity.version
-  resolve_conflicts_on_update = "OVERWRITE"
-  depends_on                  = [aws_eks_node_group.main, aws_eks_node_group.stable]
 }
 
 # the HorizontalPodAutoscalers read CPU from it (k3s shipped it built in)
@@ -237,14 +226,32 @@ resource "aws_eks_addon" "metrics_server" {
 
 # EBS CSI driver: gp3 volumes for the RabbitMQ and Redis StatefulSets. Its
 # controller is the one pod with an AWS role, bound to its service account
+# through IRSA (the cluster's OIDC issuer). Pod Identity is not an option:
+# the ISB organization SCP denies eks-auth:AssumeRoleForPodIdentity
+locals {
+  cluster_oidc_issuer = trimprefix(aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://")
+}
+
+# IAM fetches the issuer's thumbprint itself (none listed)
+resource "aws_iam_openid_connect_provider" "cluster" {
+  url            = aws_eks_cluster.main.identity[0].oidc[0].issuer
+  client_id_list = ["sts.amazonaws.com"]
+}
+
 resource "aws_iam_role" "ebs_csi" {
   name = "foc-ebs-csi"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { Service = "pods.eks.amazonaws.com" }
-      Action    = ["sts:AssumeRole", "sts:TagSession"]
+      Principal = { Federated = aws_iam_openid_connect_provider.cluster.arn }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${local.cluster_oidc_issuer}:aud" = "sts.amazonaws.com"
+          "${local.cluster_oidc_issuer}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+        }
+      }
     }]
   })
 }
@@ -254,29 +261,23 @@ resource "aws_iam_role_policy_attachment" "ebs_csi" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }
 
-resource "aws_eks_pod_identity_association" "ebs_csi" {
-  cluster_name    = aws_eks_cluster.main.name
-  namespace       = "kube-system"
-  service_account = "ebs-csi-controller-sa"
-  role_arn        = aws_iam_role.ebs_csi.arn
-  depends_on      = [aws_eks_addon.pod_identity]
-}
-
 # The nodes' IMDS hop limit of 1 (DP3) keeps the driver's pods (not on the
 # host network) from reading instance metadata too, so they are told where
-# they are instead: the controller gets the region, and the node plugin
-# reads its instance and zone from its Node object first (PR #316 review;
-# keys from the add-on's configuration schema)
+# they are instead: the node plugin reads its instance and zone from its
+# Node object first (PR #316 review; key from the add-on's configuration
+# schema). The controller needs nothing: the managed manifest already sets
+# AWS_REGION on it, and a second entry fails the create (duplicate key)
 resource "aws_eks_addon" "ebs_csi" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "aws-ebs-csi-driver"
   addon_version               = data.aws_eks_addon_version.ebs_csi.version
   resolve_conflicts_on_update = "OVERWRITE"
+  # the add-on annotates ebs-csi-controller-sa with the role (IRSA)
+  service_account_role_arn = aws_iam_role.ebs_csi.arn
   configuration_values = jsonencode({
-    controller = { env = [{ name = "AWS_REGION", value = var.region }] }
-    node       = { metadataSources = "kubernetes,imds" }
+    node = { metadataSources = "kubernetes,imds" }
   })
-  depends_on = [aws_eks_pod_identity_association.ebs_csi]
+  depends_on = [aws_iam_role_policy_attachment.ebs_csi, aws_eks_node_group.stable]
 }
 
 # --- deploy access (DP8) -----------------------------------------------------
