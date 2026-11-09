@@ -8162,6 +8162,21 @@ Entry template:
   [name="AWS_REGION"]". The managed add-on manifest (v1.67.2-eksbuild.1)
   already sets `AWS_REGION` on the controller, so the extra entry
   collided; the schema has no separate region key.
-- **Author review:** `terraform fmt -check`; re-plan and apply owed by
-  the author (the failed add-on is tainted and is replaced on the next
-  apply). The author reviews via pull request.
+- **Then (same day):** the re-apply timed out with the add-on `CREATING`;
+  `ebs-csi-controller` crash-looped on `AccessDeniedException ...
+  eks-auth:AssumeRoleForPodIdentity ... explicit deny in a service control
+  policy` (the ISB organization SCP). The tool laid out three options as
+  facts (IRSA; node role + hop limit 2; no EBS volumes, emptyDir); the
+  author chose IRSA. `eks.tf`: `aws_iam_openid_connect_provider.cluster`
+  for the cluster issuer, `foc-ebs-csi` trusts
+  `system:serviceaccount:kube-system:ebs-csi-controller-sa` via
+  `sts:AssumeRoleWithWebIdentity`, the add-on gets
+  `service_account_role_arn`; the Pod Identity agent add-on and
+  association are removed. DP2 in `docs/deployment.md` and the add-on
+  `DEGRADED` runbook row updated.
+- **Author review:** `terraform fmt`, `terraform validate`; `terraform
+  plan` = 2 to add, 1 to change, 3 to destroy (tainted add-on replaced,
+  OIDC provider, role trust, Pod Identity agent + association gone),
+  saved as `eks.tfplan`. Apply owed by the author; whether the SCP allows
+  web identity for the cluster issuer is only shown by the apply. The
+  author reviews via pull request.
