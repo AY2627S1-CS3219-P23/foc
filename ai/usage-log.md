@@ -8444,3 +8444,9 @@ Entry template:
   User Service and Order Service calls shown as direct. Transcribed from
   `gateway/nginx.conf`, `SupplierBookmarkCleanupClient` and order-service's
   `application.yaml`; the author chose to show it. No code changed.
+- **Follow-up 4 (same day):** at the author's instruction,
+  `supplier-service/README.md` was rewritten from "Scaffold only for now"
+  to describe the implemented service (endpoint table read from
+  `SupplierController`, `BookmarkController`, `PurgeController` and
+  `SecurityConfig`; configuration variables; Docker note for the NFR
+  tests). Docs only; no decision made by the tool.
