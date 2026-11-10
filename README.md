@@ -347,6 +347,9 @@
   2026-11-09: AI Use Summary extended for the balance refresh on
   request.created by Claude Code (Opus 5.5). Author review: Ryan Ang,
   pending pull request review.
+  2026-11-10: AI Use Summary extended for the credit-service component
+  diagram refresh by Claude Code (Opus 5.5). Author review: Ryan Ang,
+  pending pull request review.
 -->
 
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
@@ -1632,6 +1635,12 @@ fields, the recipients and the wording were team decisions. Recorded in
 Later (2026-11-09) Claude Code (Opus 5.5) also had a pushed
 `request.created` refresh the balance, so a new request's reserve shows
 at once; refreshing on that event was a team decision.
+Later (2026-11-10) Claude Code (Opus 5.5) redrew
+`docs/credit-service.mmd` to match the merged code (admin and expiries
+endpoints, the user-events listener, dispute settlement, the
+credit-change replies to notification-service, the query, expiry and
+redistribution services, the outbox purge and reservation slices). It
+records components the team already built; no design was changed.
 
 Claude Code (Opus 5.5, 2026-11-09) made switching the notification sound
 on preview the chime once, from the Notification Center header and the
