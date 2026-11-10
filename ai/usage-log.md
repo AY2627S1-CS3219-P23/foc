@@ -8361,3 +8361,18 @@ Entry template:
   and chose `maxSurge: 1` / `maxUnavailable: 0`, no reasons given.
 - **Author review:** `kubectl kustomize infra/k8s` renders. The author
   reviews via pull request.
+
+## 2026-11-10 — Ryan Ang (credit-service component diagram refresh)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** documentation
+- **Scope:** `docs/credit-service.mmd` (redrawn from the merged
+  credit-service code: Admin Credit Controller, `/credits/me/expiries`,
+  User Events Listener/Handler, Request Event Handler with
+  `request.dispute-resolved`, credit-events replies to Notification
+  Service, query services, Lot Expiry and Redistribution services,
+  Outbox Retention Scheduler, reservation slices, API Gateway; header
+  attribution line); README AI Use Summary.
+- **Prompt(s):** asked whether the credit-service architecture diagram
+  was current, then to update it to the latest code.
+- **Author review:** the diagram records components already built from
+  team decisions; no design changes. The author reviews via pull request.
