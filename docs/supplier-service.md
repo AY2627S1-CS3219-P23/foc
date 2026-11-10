@@ -39,6 +39,8 @@
   the Order Service call reworded, to match the code (no such endpoint;
   order-service reads GET /suppliers for Order F8.1, PR #322).
   Transcription only; no decision made by the tool.
+  2026-11-10, issue #326: browse/search component gains GET /suppliers/categories
+  and the optional lat/lng nearest-first sort, as built. Transcription only.
   Reviewed by: XXX
 -->
 
@@ -116,7 +118,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 
 | Component | Responsibility |
 | --- | --- |
-| **Browse/search REST API** | List (F1.2), details (F1.2.1), search by name (F2.1), filter by category (F2.2), empty-state (F2.2.1); also returns each supplier's `bookmarked` flag for the caller and applies the bookmarks-first default order (D13, N8.3-N8.4); Order Service also calls it for pickup coordinates (Order F8.1, D6) |
+| **Browse/search REST API** | List (F1.2), details (F1.2.1), search by name (F2.1), filter by category (F2.2) with the category list from `GET /suppliers/categories`, empty-state (F2.2.1); when the optional `lat` and `lng` query params are both sent, orders nearest-first (sorted in the service); also returns each supplier's `bookmarked` flag for the caller and applies the bookmarks-first default order (D13, N8.3-N8.4); Order Service also calls it for pickup coordinates (Order F8.1, D6) |
 | **Admin CRUD REST API** (JWT role-gated, D2) | Create/read/update/delete on suppliers (F1.1–F1.1.4) |
 | **Bookmark REST API** (JWT, per-user; N8) | List, add and remove the caller's own bookmarks and enforce the cap (D10) and the parallel-add guard (D14). The caller's id comes from the verified JWT, never from the request. Endpoints in the Bookmark API section below |
 | **Internal purge API** (`SERVICE` role only; N8.5) | Removes every bookmark of the accounts the User Service has purged (D12). Not a user endpoint: no login token can call it, and the gateway returns `404` for it |

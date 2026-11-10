@@ -8389,7 +8389,10 @@ Entry template:
   say Order Service reads `GET /suppliers` for Order F8.1),
   `docs/architecture.md` and `docs/architecture.mmd` (the Order -> Supplier
   row and edge relabelled the same way). File-header disclosure notes added
-  to all four. Docs only; no code changed.
+  to all four. The browse/search node and component also gained
+  `GET /suppliers/categories` and the optional `lat`/`lng` nearest-first
+  sort, as built (supplier-service.md and .mmd only). Docs only; no code
+  changed.
 - **Prompt(s):** "can u check and verify if supplier-service mmd is
   accurate and as per our implementation?", "ok in a new branch, first lets
   fix Mismatch: the Order Service -> Validation API arrow", "i believe this

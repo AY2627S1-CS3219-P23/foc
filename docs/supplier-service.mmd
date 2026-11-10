@@ -20,6 +20,8 @@ title: "FoC — Supplier Service Component Diagram"
 %% service reads pickup coordinates from the existing GET /suppliers
 %% (PR #322, Order F8.1), so the Order Service arrow now points at the
 %% browse/search API. Transcription only.
+%% 2026-11-10, issue #326: browse/search node gains GET /suppliers/categories
+%% and the optional lat/lng nearest-first sort (as built). Transcription only.
 %% Reviewed by: XXX
 flowchart TB
     WEB["Web App<br/>(web/)"]
@@ -27,7 +29,7 @@ flowchart TB
     USER_SVC["User Service<br/>(external)"]
 
     subgraph SUP["Supplier Service"]
-        API["Browse/search REST API<br/>F1.2, F1.2.1, F2.1, F2.2, F2.2.1<br/>bookmarked flag + default order — D13, N8.3-N8.4"]
+        API["Browse/search REST API<br/>F1.2, F1.2.1, F2.1, F2.2, F2.2.1; GET /suppliers/categories<br/>nearest-first when lat + lng are sent<br/>bookmarked flag + default order — D13, N8.3-N8.4"]
         ADMIN_API["Admin CRUD REST API<br/>JWT role-gated (D2) — F1.1-F1.1.4"]
         BOOKMARK_API["Bookmark REST API<br/>JWT, per-user — N8.1-N8.4, D10, D14"]
         PURGE_API["Internal purge API<br/>SERVICE role only — D12, N8.5"]
