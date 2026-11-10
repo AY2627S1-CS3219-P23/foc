@@ -8037,6 +8037,77 @@ Entry template:
   order-service, `npm test` green in web (389 tests, 20 files), eslint
   clean. Leong Wei Zhi reviews via pull request.
 
+## 2026-11-01 — Ko-Khan (chat-service: purge test for deleteEmptyClosedBefore, N6 chat PR review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `chat-service` — `ChatServiceTests` gains
+  `thePurgeDeletesAChatClosedBeforeTheCutoffOnceItsMessagesAreGone`: a
+  chat closed 31 days ago whose only message is older than the cutoff
+  is gone after `purge()`, while an empty chat closed yesterday stays
+  (the `closedAt < :cutoff` half of the query). Test only.
+- **Prompt(s):** PR review: the existing purge test only asserts the
+  chat stays, and the CI log shows `chats=0`, so the hand-written JPQL
+  `delete … not exists (…)` never removed a row; asked for this second
+  case.
+- **Author review:** `./mvnw verify` green in chat-service (37 tests, none
+  skipped, in a Temurin 21 container); the run logs `chats=1` for the
+  new case. Ko-Khan reviews via pull request.
+
+## 2026-11-04 — Ko-Khan (web: timed refetch on the order pages)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `web` — `features/order/usePollWhileActive.ts` (new): calls
+  a page's refetch every 5 s while active and the tab is visible,
+  pausing while hidden and catching up at once when shown again. My
+  Requests polls while a listed request is not terminal, and re-reads a
+  card's detail only when its status moved between list responses;
+  Active Delivery polls while its request is not terminal, as a
+  background reload (a failed one keeps the view). Tests in
+  `test/order-polling.test.tsx` (new).
+- **Prompt(s):** "For order service, when there is an order in progress,
+  can we refresh the page every few seconds to ensure page is always up
+  to date without user needing to manually refresh". The tool asked two
+  options questions; the author chose a 5 s interval, and My Requests +
+  Active Delivery only, paused while the tab is hidden. The tool's
+  choices: "in progress" = not terminal (isTerminal), the per-card
+  detail re-read on a status change (keeping PR #264's one-GET-per-
+  touched-card rule), and an interval rather than response-timed
+  ticks.
+- **Author review:** web lint, build and `npm test` green (431 tests);
+  the new tests fail (5 of 6) with the hook disabled. Ko-Khan reviews
+  via pull request.
+
+## 2026-11-04 — Ko-Khan (order-service + web: Order F8.1 pickup proximity on accept)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate
+- **Scope:** `order-service` — accept refuses (409) a request whose
+  pickup is more than 1 km (straight-line, Haversine) from the pickup of
+  any request the courier holds (ACCEPTED, COLLECTED, ARRIVED); a
+  courier holding nothing is not checked. Coordinates come from
+  supplier-service's public `GET /suppliers`, paged, with the courier's
+  own bearer token (`SupplierLocations` / `HttpSupplierLocations`,
+  `SUPPLIER_SERVICE_URL`); if they can't be read, accept fails closed
+  with 503. List items gain `supplierId`. Tests: `AcceptProximityTests`,
+  `HttpSupplierLocationsTests`, `ProximityTests`, two controller cases,
+  and `FakeSupplierLocations` standing in for supplier-service. `web` —
+  Open Requests shows the wireframe's disabled "Too far (>1 km)" button
+  for such requests (`usePickupProximity`, advisory; the server
+  decides), tested in `open-requests-proximity.test.tsx`. compose and
+  `.env.example` comments updated.
+- **Prompt(s):** "Can we implement location check for orders as
+  described in frs". The tool found Order F8.1 ("A courier cannot hold
+  two requests whose suppliers are more than 1 km (straight-line)
+  apart") and asked four options questions. The author chose: the
+  existing public supplier API rather than a new internal endpoint;
+  held = ACCEPTED, COLLECTED, ARRIVED; fail closed; and marking far
+  requests in the web app too. The tool's choices: exactly 1 km is
+  allowed (F8.1 refuses only "more than"), the check runs inside the
+  accept transaction after the existing checks, 2 s / 3 s timeouts,
+  100 suppliers per page, and the web leaves unknown pickups unmarked.
+- **Author review:** order-service `./mvnw verify` green (211 tests,
+  none skipped, Temurin 21 container); web lint, build and `npm test`
+  green (435 tests); the web marking test fails with marking disabled.
+  Ko-Khan reviews via pull request.
 ## 2026-11-02 — Leong Wei Zhi (docs: N1 rating-service documentation checklist, issue #258)
 - **Tool:** Claude Code (Fable 5)
 - **Mode:** docs
@@ -8198,6 +8269,18 @@ Entry template:
   applies: "Ready to accept connections"); `kubectl kustomize infra/k8s`
   renders. The author reviews via pull request.
 
+## 2026-11-10 — Ko-Khan (infra: SUPPLIER_SERVICE_URL for order-service on EKS, Order F8.1 PR review)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** debug
+- **Scope:** `infra/k8s/apps/order-service.yaml` — `SUPPLIER_SERVICE_URL`
+  set to `http://supplier-service:8080` next to `CHAT_SERVICE_URL`, the
+  value `user-service.yaml` already uses.
+- **Prompt(s):** PR review (blocking): the manifest did not set the
+  variable, so on EKS order-service fell back to `http://localhost:8080`
+  (itself) and every accept by a courier already holding a delivery
+  answered 503. The reviewer gave the fix; the tool applied it.
+- **Author review:** the manifest parses (js-yaml); not yet deployed to
+  the cluster. Ko-Khan reviews via pull request.
 ## 2026-11-10 — Leong Wei Zhi (N5 cloud deployment, issue #48: replicas, spread and PDBs)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** implementation + documentation of team decisions

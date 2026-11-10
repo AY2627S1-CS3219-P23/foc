@@ -22,6 +22,9 @@
  * over HTTP with their 400 / 401 / 403 / 404 / 409 answers (DSP-5),
  * including a second dispute on the same request. Author review: Ryan
  * Ang, pending pull request review.
+ * 2026-11-04, Claude Code (Opus 5.5), Order F8.1: a too-far accept is
+ * 409 with the service's message, and one whose distance can't be
+ * checked is 503. Author review: Ko-Khan, pending pull request review.
  */
 package foc.order;
 
@@ -29,6 +32,7 @@ import foc.order.model.Requests;
 import foc.order.repository.RequestsRepository;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -39,6 +43,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.Date;
 
@@ -68,6 +73,14 @@ class RequestsControllerTests extends PostgresTestContainer {
 
 	@Autowired
 	private RequestsService requestsService;
+
+	@Autowired
+	private FakeSupplierLocations suppliers;
+
+	@AfterEach
+	void resetSuppliers() {
+		suppliers.reset();
+	}
 
 	@Test
 	void createStoresRowFromBodyWithTheCallerAsRequester() throws Exception {
@@ -112,6 +125,37 @@ class RequestsControllerTests extends PostgresTestContainer {
 		send("/complete", idBody(id), REQUESTER).andExpect(status().isOk());
 
 		assertEquals(OrderStates.COMPLETED, stored(id).getStatus());
+	}
+
+	@Test
+	void acceptingAPickupMoreThanOneKilometreFromAHeldOneIsConflict() throws Exception {
+		long courier = 800_001L;
+		suppliers.place(9101, 1.2966, 103.7764);
+		suppliers.place(9102, 1.3066, 103.7764);
+		Long held = openRequestAt(9101);
+		send("/accept", idBody(held), courier).andExpect(status().isOk());
+		Long far = openRequestAt(9102);
+
+		send("/accept", idBody(far), courier)
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value(
+						"This pickup is more than 1 km from the pickup of request #" + held
+								+ ", which you are delivering"));
+		assertEquals(OrderStates.CREATED, stored(far).getStatus());
+	}
+
+	@Test
+	void acceptWhoseDistanceCannotBeCheckedIsServiceUnavailable() throws Exception {
+		long courier = 800_002L;
+		send("/accept", idBody(openRequestAt(9101)), courier).andExpect(status().isOk());
+		Long next = openRequestAt(9101);
+		suppliers.down();
+
+		send("/accept", idBody(next), courier)
+				.andExpect(status().isServiceUnavailable())
+				.andExpect(jsonPath("$.message").value(
+						"Could not check the distance to your other pickups. Try again shortly."));
+		assertEquals(OrderStates.CREATED, stored(next).getStatus());
 	}
 
 	@Test
@@ -284,6 +328,21 @@ class RequestsControllerTests extends PostgresTestContainer {
 				.andExpect(status().isOk());
 		return requestsRepository.findAll().stream()
 				.map(Requests::getId).max(Comparator.naturalOrder()).orElseThrow();
+	}
+
+	// A request open for couriers with the given pickup.
+	private Long openRequestAt(long supplierId) {
+		Requests request = new Requests();
+		request.setRequesterId(REQUESTER);
+		request.setSupplierId(supplierId);
+		request.setSupplierName("Supplier " + supplierId);
+		request.setDropoffLocation("COM3 Level 2");
+		request.setItem("Chicken rice");
+		request.setCreditAmount(3);
+		request.setDeadline(Instant.now().plus(1, ChronoUnit.HOURS));
+		Long id = requestsService.create(request).getId();
+		requestsService.reserve(id);
+		return id;
 	}
 
 	// A created request whose reward is reserved, as after credit.reserved.

@@ -21,6 +21,9 @@
 # 2026-10-31, Claude Code (Opus 5.5), N6 chat: order.chat.*, with the
 # dispatcher off (ChatCallDispatcherTests drives it). Author review:
 # Ko-Khan, pending pull request review.
+# 2026-11-04, Claude Code (Opus 5.5), Order F8.1: order.supplier.base-url;
+# no supplier-service in the tests, FakeSupplierLocations stands in.
+# Author review: Ko-Khan, pending pull request review.
 
 spring:
   # The datasource comes from PostgresTestContainer's @ServiceConnection.
@@ -48,6 +51,9 @@ order:
     retry:
       ttl-ms: 2000
       max-attempts: 5
+  supplier:
+    # never called: FakeSupplierLocations replaces the HTTP adapter
+    base-url: http://supplier.invalid
   chat:
     base-url: http://chat.invalid
     internal-token: test-internal-token

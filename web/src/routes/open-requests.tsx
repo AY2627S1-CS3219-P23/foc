@@ -5,7 +5,7 @@
 // strip of the courier's own active deliveries. When two couriers race,
 // the loser gets the service's conflict message and the feed refreshes.
 // The wireframe's "Too far (>1 km)" state is not built — no distance rule
-// has been decided.
+// has been decided. (Built 2026-11-04 for Order F8.1, below.)
 // 2026-10-18, Claude Code (Opus 5.5), Aung Ko Khant: on order-service's real
 // API — GET /requests?sort=deadline (open, deadline still ahead, nearest
 // first), POST /accept {requestId}, and the strip from
@@ -19,6 +19,12 @@
 // strip ids match (e.g. a requester cancels an accepted delivery, which
 // also puts the reopened request back in the feed); strangers' new open
 // requests still arrive only via Refresh or paging.
+// 2026-11-04, Claude Code (Opus 5.5), Order F8.1: the wireframe's "Too
+// far (>1 km)" state — a request whose pickup is more than 1 km from
+// that of a delivery in the strip gets a disabled "Too far (>1 km)"
+// button instead of Accept (usePickupProximity, the author's decision).
+// order-service refuses such an accept (409) regardless. Author review:
+// Ko-Khan, pending pull request review.
 
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -29,6 +35,7 @@ import { Banner } from '@/features/order/components/Banner'
 import { StatusChip } from '@/features/order/components/StatusChip'
 import { credits, formatDateTime, relativeTime } from '@/features/order/status'
 import type { RequestStatus, RequestSummary } from '@/features/order/types'
+import { usePickupProximity } from '@/features/order/usePickupProximity'
 import { errorMessage } from '@/lib/api/http'
 import { Pagination } from '@/shared/components/Pagination'
 
@@ -97,6 +104,8 @@ export function OpenRequests() {
       cancelled = true
     }
   }, [page, refreshKey])
+
+  const tooFar = usePickupProximity(deliveries)
 
   useRequestRefetch(
     [...requests, ...deliveries].map((r) => r.id),
@@ -222,14 +231,25 @@ export function OpenRequests() {
                 {relativeTime(request.deadline)})
               </p>
 
-              <button
-                type="button"
-                onClick={() => accept(request)}
-                disabled={acceptingId !== null}
-                className="mt-auto rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500"
-              >
-                {acceptingId === request.id ? 'Accepting…' : 'Accept'}
-              </button>
+              {tooFar(request) ? (
+                <button
+                  type="button"
+                  disabled
+                  title="More than 1 km from the pickup of a delivery you hold"
+                  className="mt-auto cursor-not-allowed rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-500"
+                >
+                  Too far (&gt;1 km)
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => accept(request)}
+                  disabled={acceptingId !== null}
+                  className="mt-auto rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500"
+                >
+                  {acceptingId === request.id ? 'Accepting…' : 'Accept'}
+                </button>
+              )}
             </li>
           ))}
         </ul>

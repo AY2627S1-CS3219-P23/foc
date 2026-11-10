@@ -43,13 +43,16 @@
 // on a card while the request is ACCEPTED, COLLECTED or ARRIVED (C3, C14).
 // 2026-11-01, merge with main fixed: #257's courier profile link now sits
 // in the chat row (the merge had left both rows and an unclosed block).
+// 2026-11-04: the list is also refetched every 5 s while a listed
+// request is not terminal and the tab is visible (usePollWhileActive,
+// the author's decision); a card whose status moved re-reads its detail.
 // Author review: Ko-Khan, pending pull request review.
 // 2026-10-30, Claude Code (Fable 5), issue #257: the assigned courier's
 // name links to their public profile (/users/:id) — the detail already
 // carries the id the link needs.
 // Author review: [pending]
 
-import { useEffect, useLayoutEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 
 import { useRequestRefetch } from '@/features/notifications/useRequestRefetch'
@@ -81,6 +84,7 @@ import type {
   RequestStatus,
   RequestSummary,
 } from '@/features/order/types'
+import { usePollWhileActive } from '@/features/order/usePollWhileActive'
 import { useUsername } from '@/features/order/useUsername'
 import { errorMessage } from '@/lib/api/http'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
@@ -153,11 +157,10 @@ export function MyRequests() {
     {},
   )
   const bumpDetails = (ids: number[]) =>
-    setDetailVersions((prev) => {
-      const next = { ...prev }
-      for (const id of ids) next[id] = (next[id] ?? 0) + 1
-      return next
-    })
+    setDetailVersions((prev) => bumped(prev, ids))
+  // each listed request's status as of the last list response, so a
+  // timed refetch re-reads the detail of only the cards that moved
+  const lastStatuses = useRef(new Map<number, RequestStatus>())
   const [page, setPage] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   // only ARRIVED and COLLECTED cards change with the time
@@ -180,6 +183,16 @@ export function MyRequests() {
         // (push or PENDING poll) that failed once must not leave the
         // banner up once the next one succeeds (PR #264 review)
         setError(null)
+        const moved = result.content
+          .filter((r) => {
+            const before = lastStatuses.current.get(r.id)
+            return before !== undefined && before !== r.status
+          })
+          .map((r) => r.id)
+        lastStatuses.current = new Map(
+          result.content.map((r) => [r.id, r.status]),
+        )
+        if (moved.length > 0) setDetailVersions((prev) => bumped(prev, moved))
         setRequests(result.content)
         setTotalPages(result.totalPages)
         // an action can empty the last page (e.g. a cancel under a state
@@ -208,6 +221,13 @@ export function MyRequests() {
     const timer = setTimeout(() => setRefreshKey((k) => k + 1), PENDING_POLL_MS)
     return () => clearTimeout(timer)
   }, [requests])
+
+  // Every few seconds while a listed request is still in progress, in
+  // case a push never arrives (the courier accepting, picking up…).
+  usePollWhileActive(
+    requests.some((r) => !isTerminal(r.status)),
+    () => setRefreshKey((k) => k + 1),
+  )
 
   useRequestRefetch(
     requests.map((r) => r.id),
@@ -623,6 +643,16 @@ function RequestCard({
       </div>
     </li>
   )
+}
+
+// one more read of each given card's detail
+function bumped(
+  versions: Record<number, number>,
+  ids: number[],
+): Record<number, number> {
+  const next = { ...versions }
+  for (const id of ids) next[id] = (next[id] ?? 0) + 1
+  return next
 }
 
 // The list items carry no courier, so an in-progress card reads its

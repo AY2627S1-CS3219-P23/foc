@@ -73,6 +73,11 @@
  * through ChatCalls in the transition's own transaction; transition() is
  * an instance method so it can. Author review: Ko-Khan, pending pull
  * request review.
+ * 2026-11-04, Claude Code (Opus 5.5), Order F8.1: accept refuses (409) a
+ * request whose pickup is more than 1 km from that of any request the
+ * courier holds (ACCEPTED, COLLECTED, ARRIVED), and fails closed (503)
+ * when the coordinates can't be read — the author's decisions. Author
+ * review: Ko-Khan, pending pull request review.
  */
 package foc.order;
 
@@ -95,8 +100,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.stream.Stream;
 
 @Service
@@ -119,18 +127,21 @@ public class RequestsService {
     private final OutboxEventRepository outboxEvents;
     private final RequestDisputeRepository disputes;
     private final ChatCalls chatCalls;
+    private final SupplierLocations supplierLocations;
     // how long an ARRIVED request may wait for the requester (F7.2); also
     // how long they have to dispute it
     private final Duration autoCompleteDelay;
 
     public RequestsService(RequestsRepository requestsRepository, EventOutbox outbox,
             OutboxEventRepository outboxEvents, RequestDisputeRepository disputes, ChatCalls chatCalls,
+            SupplierLocations supplierLocations,
             @Value("${order.auto-complete.after-ms}") long autoCompleteDelayMs) {
         this.requestsRepository = requestsRepository;
         this.outbox = outbox;
         this.outboxEvents = outboxEvents;
         this.disputes = disputes;
         this.chatCalls = chatCalls;
+        this.supplierLocations = supplierLocations;
         this.autoCompleteDelay = Duration.ofMillis(autoCompleteDelayMs);
     }
 
@@ -190,6 +201,7 @@ public class RequestsService {
         if (!request.getDeadline().isAfter(Instant.now())) {
             throw new IllegalStateException("The request's deadline has passed");
         }
+        checkProximity(request, courierId);
         request.setCourierId(courierId);
         request.setAcceptedAt(Instant.now());
         outbox.enqueue(RequestEvents.accepted(request), request.getId());
@@ -197,6 +209,43 @@ public class RequestsService {
         // not in transition()
         chatCalls.accepted(request);
         return request;
+    }
+
+    // The states in which a request is the courier's to deliver (F8.1).
+    static final List<OrderStates> HELD_STATES =
+            List.of(OrderStates.ACCEPTED, OrderStates.COLLECTED, OrderStates.ARRIVED);
+
+    // F8.1: no two held pickups more than 1 km apart. A courier holding
+    // nothing is not checked, so supplier-service is asked only then.
+    // Runs before this request gets its courier, so it is not among the
+    // held ones.
+    private void checkProximity(Requests request, Long courierId) {
+        List<Requests> held = requestsRepository.findByCourierIdAndStatusIn(courierId, HELD_STATES);
+        if (held.isEmpty()) return;
+
+        Set<Long> supplierIds = new HashSet<>();
+        supplierIds.add(request.getSupplierId());
+        held.forEach(h -> supplierIds.add(h.getSupplierId()));
+        supplierIds.remove(null);
+        Map<Long, SupplierLocations.Coordinates> at = supplierLocations.of(supplierIds);
+
+        SupplierLocations.Coordinates pickup = coordinatesOf(request, at);
+        for (Requests h : held) {
+            if (Proximity.tooFarApart(pickup, coordinatesOf(h, at))) {
+                throw new IllegalStateException("This pickup is more than 1 km from the pickup of request #"
+                        + h.getId() + ", which you are delivering");
+            }
+        }
+    }
+
+    // fail closed: a pickup whose place is unknown can't be checked
+    private static SupplierLocations.Coordinates coordinatesOf(Requests r,
+            Map<Long, SupplierLocations.Coordinates> at) {
+        SupplierLocations.Coordinates c = r.getSupplierId() == null ? null : at.get(r.getSupplierId());
+        if (c == null) {
+            throw new SupplierLookupException("No location for the pickup of request #" + r.getId());
+        }
+        return c;
     }
 
     @Transactional

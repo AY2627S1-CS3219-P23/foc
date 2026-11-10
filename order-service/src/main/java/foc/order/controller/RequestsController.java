@@ -55,6 +55,10 @@
  * 2026-10-31, Claude Code (Fable 5), issue #280: GET
  * /requests/completed-count (any authenticated caller), for the public
  * profile's deliveries-completed tile. Author review: pending.
+ * 2026-11-04, Claude Code (Opus 5.5), Order F8.1: an accept whose
+ * proximity check could not be made answers 503; list items carry
+ * supplierId, so the web can mark far requests. Author review: Ko-Khan,
+ * pending pull request review.
  */
 package foc.order.controller;
 
@@ -63,11 +67,14 @@ import foc.order.OrderStates;
 import foc.order.RequestFilter;
 import foc.order.RequestsQueryService;
 import foc.order.RequestsService;
+import foc.order.SupplierLookupException;
 import foc.order.dto.PageResponse;
 import foc.order.dto.RequestDetail;
 import foc.order.dto.RequestSummary;
 import foc.order.model.RequestDispute;
 import foc.order.model.Requests;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -90,6 +97,8 @@ import java.util.NoSuchElementException;
 
 @RestController
 public class RequestsController {
+
+    private static final Logger log = LoggerFactory.getLogger(RequestsController.class);
 
     // JSON request bodies, one per endpoint shape.
     // The requester and courier are never in a body: they are the caller.
@@ -320,6 +329,15 @@ public class RequestsController {
     @ResponseStatus(HttpStatus.CONFLICT)
     public MessageResponse handleIllegalTransition(IllegalStateException e) {
         return new MessageResponse(e.getMessage());
+    }
+
+    // Accept's F8.1 check could not be made (supplier-service down, or a
+    // pickup without coordinates); it fails closed, so try again later.
+    @ExceptionHandler(SupplierLookupException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public MessageResponse handleSupplierLookup(SupplierLookupException e) {
+        log.warn("accept refused, proximity not checked: {}", e.getMessage());
+        return new MessageResponse("Could not check the distance to your other pickups. Try again shortly.");
     }
 
     // Another step changed the request between this one's read and its
