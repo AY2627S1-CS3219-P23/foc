@@ -367,8 +367,8 @@ withdrawn, or exchanged for money, and only circulate within the platform.
 | ----- | ----- | ----- |
 | Kwey Xiu Xi | User Service | Cloud Deployment and DevOps |
 | Alastair Tan Choon Wei | Supplier Service | Supplier Bookmarks |
-| Aung Ko Khant | Order Service | Centralized Logging |
-| Ryan Ang Jun Wen | Credit Service | Order History |
+| Aung Ko Khant | Order Service | Requester-Courier Chat |
+| Ryan Ang Jun Wen | Credit Service | Dispute Resolution |
 | Leong Wei Zhi | Notification Service | Rating System |
 
 ---
@@ -383,6 +383,7 @@ microservice (`user-service/`, `supplier-service/`, `order-service/`,
 ```text
 .
 ├── web/
+├── gateway/
 ├── user-service/
 ├── supplier-service/
 ├── order-service/
@@ -391,12 +392,10 @@ microservice (`user-service/`, `supplier-service/`, `order-service/`,
 ├── rating-service/
 ├── chat-service/
 ├── foc-contracts/
+├── infra/
 └── README.md
 ```
 
-- Any **nice-to-have (N2H)** feature that warrants its own service should
-  be added as an **additional folder** at the same level, following the
-  same per-service structure.
 - `foc-contracts/` is a shared library (not a service) holding
   cross-service contract constants such as broker exchange names and
   the typed event contracts (event records + registry + fixtures) —
