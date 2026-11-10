@@ -8450,3 +8450,12 @@ Entry template:
   `SupplierController`, `BookmarkController`, `PurgeController` and
   `SecurityConfig`; configuration variables; Docker note for the NFR
   tests). Docs only; no decision made by the tool.
+- **Follow-up 5 (same day):** at the author's instruction, two new sequence
+  diagrams were added, `docs/supplier-service-bookmark-add.mmd` (D10, D14:
+  PUT /suppliers/{id}/bookmark) and `docs/supplier-service-bookmark-purge.mmd`
+  (D12: account-purge cleanup), with a pointer line in
+  `docs/supplier-service.md`. Transcribed from `BookmarkService`,
+  `BookmarkLock`, `SecurityConfig`, `PurgeController`, user-service's
+  `AccountPurgeScheduler`, `SupplierBookmarkCleanupClient` and `JwtIssuer`,
+  and `gateway/nginx.conf`. Both rendered with mermaid-cli to check they
+  parse. No decision made by the tool.

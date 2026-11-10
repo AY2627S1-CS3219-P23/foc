@@ -138,6 +138,8 @@ All endpoints take the caller from the verified JWT. Errors are problem+json.
 
 `GET /suppliers` also returns `bookmarked` on each supplier and orders bookmarks first in the default view (D13). The `PUT`/`DELETE` bookmark routes are open to any signed-in user, unlike the other writes under `/suppliers/**`, which are admin-only (D2).
 
+Flow diagrams: adding a bookmark (D10, D14) in [`supplier-service-bookmark-add.mmd`](supplier-service-bookmark-add.mmd); the account-purge cleanup (D12) in [`supplier-service-bookmark-purge.mmd`](supplier-service-bookmark-purge.mmd).
+
 ## Entities
 
 | Entity | Key fields | Grounded in |
