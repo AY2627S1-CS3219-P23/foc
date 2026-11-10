@@ -8,8 +8,28 @@
 # the k3s host, docs/gateway.md). The Ingress in infra/k8s/ingress.yaml
 # keeps ingressClassName traefik.
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision DP21, Leong
+# Wei Zhi, options Q&A): two replicas, a PodDisruptionBudget and the same
+# soft per-node spread as the Deployments.
+# Author review: Leong Wei Zhi, pending pull request review.
+# two replicas so a node loss does not cut every request; a drain evicts
+# one at a time
 deployment:
-  replicas: 1
+  replicas: 2
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# replicas prefer different nodes, but still schedule when only one node
+# has room (DP21)
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: traefik
 
 # every node answers this port; infra/terraform (local.traefik_node_port)
 # and the cluster security group rule use the same number

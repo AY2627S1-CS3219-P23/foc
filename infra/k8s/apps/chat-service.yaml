@@ -10,7 +10,9 @@
 # carries the foc-secrets version as an annotation (set by deploy.sh);
 # second round (Sinnez1): the foc-config hash too.
 # Author review: Leong Wei Zhi, pending pull request review.
-# Same day, review follow-up: replicas pinned to 1 (DP10, issue #305).
+# Same day, review follow-up: replicas pinned to 1 (DP10, issue #305;
+# lifted by issue #305 below, HPA min 2 / max 3 since DP9's 2026-11-10
+# revision).
 # Same day, issue #48 (HTTPS): the WebSocket origin is https (DP19, DP21).
 # 2026-11-08, Claude Code (Fable 5.1), issue #305 (team decision, Leong Wei
 # Zhi via options Q&A): the pin removed — pushes fan out over AMQP, so the
@@ -28,6 +30,13 @@
 # PR #316 review (Claude reviewer): Hikari keeps one idle connection
 # (team decision DP19, Leong Wei Zhi). Author review: Leong Wei Zhi,
 # pending pull request review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision DP21,
+# Leong Wei Zhi, options Q&A): soft spread of the replicas across nodes;
+# HPA min 2 / max 3 (DP9), Hikari note updated (DP19).
+# Author review: Leong Wei Zhi, pending pull request review.
+# PR #323 review (Copilot), team decision DP21 (Leong Wei Zhi): rolling
+# update without surge (maxSurge 0, maxUnavailable 1).
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1
 kind: Service
@@ -49,6 +58,14 @@ spec:
   selector:
     matchLabels:
       app: chat-service
+  # no surge pod: a rollout replaces one replica at a time, so it never
+  # needs memory or database connections beyond HPA max (DP21, PR #323
+  # review)
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   template:
     metadata:
       labels:
@@ -61,6 +78,18 @@ spec:
         # rolls the pods too
         foc/config-hash: "__CONFIG_HASH__"
     spec:
+      # replicas prefer different nodes, but still schedule when only one
+      # node has room (DP21); pod-template-hash keeps a rollout's old
+      # pods out of the count
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: chat-service
+          matchLabelKeys:
+            - pod-template-hash
       imagePullSecrets:
         - name: ghcr-pull
       containers:
@@ -89,9 +118,9 @@ spec:
                   name: foc-secrets
                   key: CHAT_DB_PASSWORD
             # seven services share one db.t4g.micro (max_connections about
-            # 110): 7 x 5 x 2 replicas stays under it, and one idle
-            # connection per pod keeps a deploy's surge pods (a third
-            # replica each) from opening 5 apiece (DP19)
+            # 110): 7 x 5 x 3 replicas (HPA max) is 105, accepted; a rollout
+            # adds no surge pod (strategy below, DP21), and one idle
+            # connection per pod keeps a fresh pod light (DP19)
             - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
               value: "5"
             - name: SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE

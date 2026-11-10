@@ -9,6 +9,13 @@
 # carries the foc-secrets version as an annotation (set by deploy.sh);
 # second round (Sinnez1): the foc-config hash too.
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision DP21,
+# Leong Wei Zhi, options Q&A): soft spread of the replicas across nodes.
+# Author review: Leong Wei Zhi, pending pull request review.
+# PR #323 review (Copilot), team decision DP21 (Leong Wei Zhi): rolling
+# update without surge (maxSurge 0, maxUnavailable 1); revised on the
+# Claude reviewer's round to maxSurge 1, maxUnavailable 0.
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1
 kind: Service
@@ -31,6 +38,15 @@ spec:
   selector:
     matchLabels:
       app: gateway
+  # a surge pod first, the old one stops once it is Ready: no outage per
+  # deploy (DP21, PR #323 review). The pod is small; it waits Pending only
+  # when every node is full, bounded by deploy.sh's deadline. No database,
+  # so the backends' connection budget does not apply
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     metadata:
       labels:
@@ -43,6 +59,18 @@ spec:
         # rolls the pods too
         foc/config-hash: "__CONFIG_HASH__"
     spec:
+      # replicas prefer different nodes, but still schedule when only one
+      # node has room (DP21); pod-template-hash keeps a rollout's old
+      # pods out of the count
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: gateway
+          matchLabelKeys:
+            - pod-template-hash
       imagePullSecrets:
         - name: ghcr-pull
       containers:

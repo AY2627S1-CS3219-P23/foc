@@ -22,6 +22,13 @@
 # without it accept's pickup check called order-service's own
 # localhost:8080 and answered 503. Author review: Ko-Khan, pending pull
 # request review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision DP21,
+# Leong Wei Zhi, options Q&A): soft spread of the replicas across nodes;
+# HPA min 2 / max 3 (DP9), Hikari note updated (DP19).
+# Author review: Leong Wei Zhi, pending pull request review.
+# PR #323 review (Copilot), team decision DP21 (Leong Wei Zhi): rolling
+# update without surge (maxSurge 0, maxUnavailable 1).
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: v1
 kind: Service
@@ -44,6 +51,14 @@ spec:
   selector:
     matchLabels:
       app: order-service
+  # no surge pod: a rollout replaces one replica at a time, so it never
+  # needs memory or database connections beyond HPA max (DP21, PR #323
+  # review)
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   template:
     metadata:
       labels:
@@ -56,6 +71,18 @@ spec:
         # rolls the pods too
         foc/config-hash: "__CONFIG_HASH__"
     spec:
+      # replicas prefer different nodes, but still schedule when only one
+      # node has room (DP21); pod-template-hash keeps a rollout's old
+      # pods out of the count
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: order-service
+          matchLabelKeys:
+            - pod-template-hash
       imagePullSecrets:
         - name: ghcr-pull
       containers:
@@ -84,9 +111,9 @@ spec:
                   name: foc-secrets
                   key: ORDER_DB_PASSWORD
             # seven services share one db.t4g.micro (max_connections about
-            # 110): 7 x 5 x 2 replicas stays under it, and one idle
-            # connection per pod keeps a deploy's surge pods (a third
-            # replica each) from opening 5 apiece (DP19)
+            # 110): 7 x 5 x 3 replicas (HPA max) is 105, accepted; a rollout
+            # adds no surge pod (strategy below, DP21), and one idle
+            # connection per pod keeps a fresh pod light (DP19)
             - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
               value: "5"
             - name: SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE

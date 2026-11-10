@@ -13,6 +13,8 @@
 # deploy.sh on its own, before this kustomization, so the roles exist when
 # the services start. Author review: Leong Wei Zhi, pending pull request
 # review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (DP21): pdb.yaml added.
+# Author review: Leong Wei Zhi, pending pull request review.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 # namespaces are set per manifest; secrets.sh applies namespace.yaml on
@@ -35,6 +37,7 @@ resources:
   - apps/web.yaml
   - ingress.yaml
   - hpa.yaml
+  - pdb.yaml
 # __IMAGE_TAG__ is replaced by deploy.sh with the commit SHA
 images:
   - name: ghcr.io/ay2627s1-cs3219-p23/foc-user-service

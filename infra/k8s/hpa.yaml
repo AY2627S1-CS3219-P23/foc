@@ -1,7 +1,8 @@
 # AI-assisted (CS3219 AI Usage Policy disclosure):
 # Tool: Claude Code (Opus 5.5), 2026-11-05, issue #48 (N5 cloud deployment).
-# Scope: HPA min 1 / max 2 on CPU for every Deployment (team decision;
-# k3s ships metrics-server). The services' scheduled jobs run on both
+# Scope: HPAs on CPU 70 % for every Deployment: the seven backends min 2 /
+# max 3, gateway and web min 1 / max 2 (DP9, revised 2026-11-10; min 1 /
+# max 2 everywhere before). The services' scheduled jobs run on both
 # replicas, accepted as idempotent; chat and notification fan their STOMP
 # pushes out over AMQP so a push reaches the replica holding the socket
 # (docs/deployment.md, DP10; issue #305).
@@ -15,9 +16,17 @@
 # 2026-11-08, Claude Code (Fable 5.1), issue #305 (team decision, Leong Wei
 # Zhi via options Q&A): the chat and notification HPAs back, same values.
 # 2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform): CPU
-# metrics come from the EKS metrics-server add-on; two t3a.medium Spot nodes fit HPA
-# max 2 only in part unless node_count is raised (docs/deployment.md,
-# scaling).
+# metrics come from the EKS metrics-server add-on. The nodes (2 Spot + 1
+# on-demand t3a.medium) fit every HPA minimum but not every maximum at
+# once (docs/deployment.md, scaling).
+# Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision, Leong Wei
+# Zhi, options Q&A): the seven backends run HPA min 2 / max 3 (DP9), so a
+# node loss leaves one replica answering when the soft spread placed the
+# two apart (best effort, DP21); gateway and web stay 1 to 2. The
+# backends' PodDisruptionBudgets are in pdb.yaml (DP21).
+# Author review: Leong Wei Zhi, pending pull request review.
+# PR #323 review (Copilot): scope line and node-fit note corrected.
 # Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: autoscaling/v2
@@ -30,8 +39,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: user-service
-  minReplicas: 1
-  maxReplicas: 2
+  minReplicas: 2
+  maxReplicas: 3
   metrics:
     - type: Resource
       resource:
@@ -50,8 +59,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: supplier-service
-  minReplicas: 1
-  maxReplicas: 2
+  minReplicas: 2
+  maxReplicas: 3
   metrics:
     - type: Resource
       resource:
@@ -70,8 +79,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: order-service
-  minReplicas: 1
-  maxReplicas: 2
+  minReplicas: 2
+  maxReplicas: 3
   metrics:
     - type: Resource
       resource:
@@ -90,8 +99,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: credit-service
-  minReplicas: 1
-  maxReplicas: 2
+  minReplicas: 2
+  maxReplicas: 3
   metrics:
     - type: Resource
       resource:
@@ -110,8 +119,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: rating-service
-  minReplicas: 1
-  maxReplicas: 2
+  minReplicas: 2
+  maxReplicas: 3
   metrics:
     - type: Resource
       resource:
@@ -130,8 +139,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: notification-service
-  minReplicas: 1
-  maxReplicas: 2
+  minReplicas: 2
+  maxReplicas: 3
   metrics:
     - type: Resource
       resource:
@@ -150,8 +159,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: chat-service
-  minReplicas: 1
-  maxReplicas: 2
+  minReplicas: 2
+  maxReplicas: 3
   metrics:
     - type: Resource
       resource:
