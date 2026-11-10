@@ -95,6 +95,14 @@ Entry template:
 ```
 
 ---
+## 2026-11-10 — Leong Wei Zhi (README cleanup)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** docs
+- **Scope:** `README.md`: rewritten as a project overview (features, architecture diagram and service table, local setup, demo accounts, development commands, cloud deployment, repository structure, team). The AI Use Summary body is replaced by a short paragraph linking this log, which keeps every entry; the file's disclosure header is kept and extended.
+- **Prompt(s):** "clean up the readme, replace ai use summary section content with a link to ai/usage-log.md, the readme should have more meaningful content". Content was taken from `compose.yaml`, `.env.example`, `docs/architecture.md`, `docs/deployment.md`, the demo-account seeder and GitHub issue states; no design decision was made.
+- **Author review:** Leong Wei Zhi reviews via pull request.
+- **PR #327 review (Sinnez1):** the demo passwords are dropped from the README (usernames stay, passwords via `user-service/README.md`) and the section says the cloud seeds them too; the disclosure header is condensed to the tools, scope and a pointer here, since it described AI Use Summary paragraphs the PR removes. Both choices Leong Wei Zhi's, via options Q&A; the cloud seeding is unchanged.
+
 ## 2026-11-09 — Ryan Ang (credit balance refresh on request.created)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** debug, generate
