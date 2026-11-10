@@ -350,1336 +350,205 @@
   2026-11-10: AI Use Summary extended for the credit-service component
   diagram refresh by Claude Code (Opus 5.5). Author review: Ryan Ang,
   pending pull request review.
+  2026-11-10, Claude Code (Opus 5.5): README rewritten as a project
+  overview (features, architecture, local setup, demo accounts, tests,
+  deployment, docs index); the AI Use Summary body replaced by a link to
+  ai/usage-log.md, which keeps every entry. Author review: Leong Wei Zhi,
+  pending pull request review.
 -->
 
-# CS3219 — Software Design and Architecture (AY2627 Sem 1)
+# Favours on Campus (FoC)
 
-## Favours on Campus (FoC)
+A peer-to-peer campus errand platform (CS3219 AY2627 Sem 1, Team 23).
+Students post requests to have an item collected from a store or facility
+on campus; other students accept and deliver them. Every favour is paid in
+**credits**, a closed economy: credits cannot be bought, withdrawn or
+exchanged for money.
 
-**Favours on Campus (FoC)** is a peer-to-peer campus errand platform where
-students can request items to be collected from stores or facilities on
-campus, and other students can fulfil (and deliver) those requests. The
-platform runs on a closed credit economy — credits cannot be bought,
-withdrawn, or exchanged for money, and only circulate within the platform.
-
----
-
-## Team Members
-
-| Name | Service In-Charge | Nice-to-have |
-| ----- | ----- | ----- |
-| Kwey Xiu Xi | User Service | Cloud Deployment and DevOps |
-| Alastair Tan Choon Wei | Supplier Service | Supplier Bookmarks |
-| Aung Ko Khant | Order Service | Requester-Courier Chat |
-| Ryan Ang Jun Wen | Credit Service | Dispute Resolution |
-| Leong Wei Zhi | Notification Service | Rating System |
+**Live deployment:** <https://foc23.ddnsfree.com>
 
 ---
 
-## Repository Structure
+## Features
 
-This repository follows a **one-service-per-folder** structure: each
-microservice (`user-service/`, `supplier-service/`, `order-service/`,
-`credit-service/`, `notification-service/`, `rating-service/`,
-`chat-service/`) lives in its own top-level folder. The frontend lives in `web/`.
+| Who | What they can do |
+| --- | --- |
+| Requester | Browse and search campus suppliers, post a delivery request with a credit reward, track it live, cancel it, confirm completion, report a problem, rate the courier |
+| Courier | Browse open requests, accept one, mark it collected and delivered, chat with the requester, rate the requester |
+| Admin | Manage suppliers, users and roles; review disputes, failed and stuck orders; view the common credit pool |
+| Everyone | OTP-verified sign-up, password reset and account recovery, real-time notifications, credit balance and history, public profiles with ratings |
+
+Selected nice-to-haves: N1 ratings, N2 request history, N3 disputes,
+N4 centralized logging, N5 cloud deployment with CI/CD on Kubernetes,
+N6 requester–courier chat, N7 admin dashboard, N8 supplier bookmarks.
+
+---
+
+## Architecture
+
+Microservices, one per top-level folder, each with its own PostgreSQL
+database. The browser reaches every backend through one API gateway;
+services talk to each other through RabbitMQ events.
+
+```mermaid
+flowchart LR
+    web[web<br/>React SPA] --> gw[gateway<br/>OpenResty, JWT + denylist]
+    gw --> user[user-service]
+    gw --> supplier[supplier-service]
+    gw --> order[order-service]
+    gw --> credit[credit-service]
+    gw --> notif[notification-service]
+    gw --> rating[rating-service]
+    gw --> chat[chat-service]
+    gw -. denylist .-> redis[(Redis)]
+    user -- revoke --> redis
+    order <--> mq{{RabbitMQ}}
+    credit <--> mq
+    user --> mq
+    rating <--> mq
+    mq --> notif
+    mq --> chat
+    notif -. STOMP push .-> web
+```
+
+| Service | Responsibility | Design doc |
+| --- | --- | --- |
+| `user-service` | Accounts, JWT auth, OTP email, roles, profiles | [wiki](https://github.com/AY2627S1-CS3219-P23/foc/wiki) |
+| `supplier-service` | Supplier/landmark CRUD, search, filters, bookmarks | [`docs/supplier-service.md`](docs/supplier-service.md) |
+| `order-service` | Request lifecycle: create, accept, collect, complete, expire, disputes | [`docs/disputes.md`](docs/disputes.md) |
+| `credit-service` | Balances, reservations, transfers, expiry, history | [`docs/credit-service.md`](docs/credit-service.md) |
+| `notification-service` | Event-driven in-app notifications, retries, live push | [`docs/notification-service.md`](docs/notification-service.md) |
+| `rating-service` | Ratings for completed orders, profile summaries, user reports | [`docs/rating-service.md`](docs/rating-service.md) |
+| `chat-service` | Requester–courier chat on accepted orders | [`docs/chat-service.md`](docs/chat-service.md) |
+| `gateway` | Single entry point, token check, logout denylist | [`docs/gateway.md`](docs/gateway.md) |
+
+**Async workflow (M6):** creating a request runs a saga: order-service
+asks credit-service to reserve the reward, and on the reply publishes
+`request.created`. Later state changes (`accepted`, `collected`,
+`completed`, `cancelled`, ...) move or release the credits and fan out
+to notifications and ratings. Events go through transactional outboxes
+and are processed idempotently. Full picture:
+[`docs/architecture.md`](docs/architecture.md).
+
+**Tech stack:** React + TypeScript (Vite, Tailwind) · Java + Spring Boot
+(Spring Data JPA, Maven) · PostgreSQL · RabbitMQ · Redis · OpenResty ·
+Docker Compose · AWS EKS + RDS (Terraform).
+
+---
+
+## Running locally
+
+Prerequisite: Docker with Compose.
+
+```sh
+cp .env.example .env
+# fill in at least: JWT_SECRET (32+ bytes), RABBITMQ_PASSWORD,
+# CHAT_INTERNAL_TOKEN and the seven *_DB_PASSWORD values;
+# set USER_SEED_DEMO=true for demo accounts
+docker compose up --build
+```
+
+| URL | What |
+| --- | --- |
+| <http://localhost:5173> | Web app |
+| <http://localhost:8090/api/&lt;service&gt;/> | API gateway (the only way into the backends) |
+| <http://localhost:8025> | Mailpit inbox: sign-up and reset OTP emails land here |
+
+Each service database is published on a loopback port for inspection; the
+port table is in [`AGENTS.md`](AGENTS.md#mcp-servers-agent-tooling).
+Suppliers are seeded from [`data/`](data/).
+
+### Demo accounts
+
+With `USER_SEED_DEMO=true` the user service seeds, on first start:
+
+| Role | Username(s) | Password |
+| --- | --- | --- |
+| Owner | `daniel_koh` | `OwnerPass123` |
+| Admin | `priya_menon`, `farhan_ismail`, `chloe_ng` | `AdminPass123` |
+| Student | `weiling_tan`, `arjun_nair`, ... (100 users) | `StudentPass123` |
+
+The passwords are public: never enable the seeder on a real deployment.
+The full list is in [`user-service/README.md`](user-service/README.md); a
+runnable Postman walkthrough of the request flow is in
+[`docs/postman/`](docs/postman/README.md).
+
+---
+
+## Development
+
+Backends build with each service's own Maven wrapper. Install the shared
+contracts library first:
+
+```sh
+(cd foc-contracts && ./mvnw install)
+cd order-service && ./mvnw test      # integration tests need Docker (Testcontainers)
+```
+
+Frontend:
+
+```sh
+cd web && npm ci
+npm run dev       # Vite dev server
+npm test          # Vitest
+npm run lint
+```
+
+Service-specific notes live in each folder's `AGENTS.md` / `README.md`.
+CI (`.github/workflows/ci.yml`) runs every suite and builds every image on
+each pull request; `main` is protected and needs one approval.
+
+---
+
+## Cloud deployment
+
+The same images run on an AWS EKS cluster with one RDS PostgreSQL
+instance, provisioned by Terraform in [`infra/`](infra/). Merges to
+`main` deploy automatically once CI passes, rebuilding only the images
+that changed.
+
+- Design and decisions: [`docs/deployment.md`](docs/deployment.md)
+- Runbook: [`infra/README.md`](infra/README.md)
+
+---
+
+## Repository structure
 
 ```text
 .
-├── web/
-├── gateway/
+├── web/                    React frontend
+├── gateway/                API gateway (OpenResty)
 ├── user-service/
 ├── supplier-service/
 ├── order-service/
 ├── credit-service/
 ├── notification-service/
-├── rating-service/
-├── chat-service/
-├── foc-contracts/
-├── infra/
-└── README.md
+├── rating-service/         N1
+├── chat-service/           N6
+├── foc-contracts/          shared event contracts (library, not a service)
+├── infra/                  Terraform + Kubernetes manifests (N5)
+├── data/                   supplier seed data
+├── docs/                   design docs and Postman collection
+├── ai/usage-log.md         AI usage log
+└── compose.yaml            local stack
 ```
 
-- `foc-contracts/` is a shared library (not a service) holding
-  cross-service contract constants such as broker exchange names and
-  the typed event contracts (event records + registry + fixtures) —
-  team decision D15 (`docs/notification-service.md`).
-- Files for agentic coding tools (e.g. agent configs, prompts, skills)
-  may be added as needed, but must still **respect the
-  one-service-per-folder skeleton** for core implementation.
+---
+
+## Team
+
+| Name | Service in charge | Nice-to-have |
+| ----- | ----- | ----- |
+| Kwey Xiu Xi | User Service | Cloud Deployment and DevOps |
+| Alastair Tan Choon Wei | Supplier Service | Supplier Bookmarks |
+| Aung Ko Khant | Order Service | Centralized Logging |
+| Ryan Ang Jun Wen | Credit Service | Order History |
+| Leong Wei Zhi | Notification Service | Rating System |
 
 ---
 
 ## AI Use Summary
 
-This section is the consolidated AI-use disclosure required by the CS3219
-AI Usage Policy (project document, Appendix 2). The detailed log with
-prompts and timestamps lives in [`ai/usage-log.md`](ai/usage-log.md).
-
-**Tools:** Claude Code (Fable 5, Opus 5, Opus 5.5, Sonnet 4.6, Sonnet 5, Sonnet 5.5), Claude (Sonnet 5)
-
-**Prohibited phases avoided:** requirements elicitation and
-prioritization; architecture and design decisions. Requirements, service
-boundaries, allocation, and the tech stack were decided by the team; AI
-tools were used only afterwards.
-
-**Used for:** transcribing the team-written D1 backlog into labelled
-GitHub issues; repository documentation (README, AGENTS.md); project
-scaffolding (service folder skeletons); drawing the high-level
-architecture diagram (`docs/architecture.md`) from the team-decided
-service boundaries and D1 requirements — open design decisions are
-marked TBD in the diagram and remain with the team; implementation
-scaffolding code (Spring Boot service skeletons, Docker/compose
-wiring, JPA entities, message-broker topology declarations, the
-shared `foc-contracts` library — contract constants and the typed
-event records/registry with their canonical JSON fixtures and contract
-tests) and the notification event pipeline (AMQP listener, idempotent
-event processor, broker-native retry/dead-letter failure handling,
-STOMP push gateway with JWT-authenticated sessions, retention purge
-scheduler, an ArchUnit test enforcing the broker-isolation boundary,
-unit and integration tests) written strictly from the team's
-finalized design docs and issue specifications, with per-file
-attribution headers; developer tooling configuration (the
-project-scoped MCP servers declared in `.mcp.json`, documented in
-`AGENTS.md`); the user-service Spring Boot scaffold (issue #84) —
-pom, application config, Dockerfile, and application/test classes
-mirroring the notification-service pattern, with the dependency-set,
-Dockerfile-shape, and config-scope choices made by the author via
-neutral-options Q&A; and the supplier-service Spring Boot scaffold —
-pom (completed from the author's own partial postgres/opencsv
-dependency fragment), application config, Dockerfile, and
-application/test classes mirroring the same pattern, plus the
-compose.yaml supplier-db/supplier-service wiring, `.env.example`
-section, and `AGENTS.md` port-table entry that went with it, with
-scope confirmed by the author via options Q&A (including how to
-resolve a pre-existing compose.yaml anomaly found in the working
-tree); the `web/` SPA scaffold (issue #108) —
-Vite/React/TypeScript project skeleton, react-router route table with
-the shared app shell (wireframe top bar and mobile tab bar) and 404,
-shared API fetch wrapper, tooling configuration, and Docker/compose
-wiring, deliberately without a data-fetching library, with the stack,
-tooling, scope, and port choices made by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`; and the
-user-service first-owner bootstrap (issue #97) — request/response DTOs,
-the `User` entity transcribed from the team's schema, repository,
-service, controller, setup-token gate, and its unit and Testcontainers
-integration tests, plus the fixes from the PR #126 review; and the
-user-db infrastructure and user-service JPA schema (issues #85/#86) —
-compose.yaml user-service/user-db wiring with the `.env.example`
-section and `AGENTS.md` port-table entry that went with it, datasource
-configuration, the `Otp`/`AccountToken`/`TokenDenylistEntry` entities
-transcribed from the team's design-doc erDiagram, the `Role` enum
-conversion of the merged String role column, and per-entity
-persistence round-trip tests, with the image-version, port,
-role-representation, FK-shape, and test-scope choices made by the
-author via neutral-options Q&A and recorded in `ai/usage-log.md`; and
-the user-service profile endpoints (issue #95) — `GET /users/me` and
-`GET /users/{id}`, their service, DTO, not-found exception, repository
-query, and unit and Testcontainers integration tests, with the paths,
-response fields, not-found behaviour, and caller-identity choices made
-by the author and recorded in `ai/usage-log.md`, plus the PR #131
-review fixes (guarded caller-id parse, problem+json 404, shared
-`UserResponse` mapping, shared Testcontainers base, and added test
-assertions), each chosen by the author; and the removal of the
-existing-owner check from user-service owner setup, decided by the
-author, with the matching test, comment, and `.env.example` updates;
-a setup token expiry and a setup log line were also built, then
-removed by the author, with expiry deferred to a later issue; and the
-supplier-service list endpoint (issue #133) — `GET /suppliers` with
-search-by-name, category filtering (joined against the
-`supplier_categories` table), paging, and sorting, plus the response
-DTOs and CORS configuration, with the default page size, sort field,
-and response-envelope shape chosen by the author; alongside this, the
-`web/` suppliers page's remaining zone-feature wiring (the `Zone` type,
-the filter bar's zone dropdown, the edit form's required Campus Zone
-field, and a call to a `/zones` endpoint the backend never implemented)
-was removed, per the team's decision to drop the zone feature, since
-the unpopulatable required field was blocking every supplier edit.
-user-service admin endpoints (issue #96) — user list with search, role
-filter, sorting and fixed page sizes, promote/demote, and soft-delete
-removal, with their service, request DTO, URL-based role rules,
-and unit and Testcontainers integration tests, following rules decided
-by the team and recorded in `ai/usage-log.md`, plus the PR #135 review
-fixes (fail-closed /users security rules, shared caller-id,
-active-user lookup and problem+json handling, optimistic locking on
-users with a 409 on a lost race, per team decision); and the
-user-service soft delete and day-31 purge (issue #93) — `DELETE
-/users/me`, the shared `User.softDelete` entity method, the
-`AccountPurgeScheduler` with its purge repositories and
-config/compose/`.env.example` wiring (mirroring the notification
-retention purge), and the unit, integration, and reuse-block tests,
-with the endpoint-confirmation, shared-path, and FK-cleanup choices
-made by the author via neutral-options Q&A and recorded in
-`ai/usage-log.md` (the 30-day reuse block itself needed no new code
-and was pinned with tests); and the 2026-09-27 "Nearest to Me" distance-sort feature (PR #134) —
-`SuppliersRepository.searchOrderedByDistance` (a native query, since
-the Haversine distance calculation needs trig functions JPQL doesn't
-expose), the controller's optional `lat`/`lng` params, the client-side
-`distance.ts` display formatting, the sort control UI, and a required-
-field asterisk added to the supplier form, with the query approach and
-the geolocation-denied/unavailable fallback (name-sort with a notice)
-decided by the author; the "Nearest to Me" sort fallback fix
-(PR #134 review, LeongWZ) — the render-phase guard falling back to
-name-sort on an unsupported browser only fired once (it self-gated on
-the notice it set), leaving the sort stuck and the supplier list frozen
-on any later filter change; fixed by rejecting the sort selection in
-the `onSortChange` handler instead, per the reviewer's suggested
-approach; and the supplier-service `GET /suppliers` sort-validation fix
-(same PR's review) — an unrecognized `sort` value threw an unhandled
-`PropertyReferenceException` (500) because Spring Data resolves Sort
-against the JPA entity, not the response DTO's field names, and the
-service had no error handler for it; fixed with an explicit sortable-
-property allow-list returning a 400 problem+json body instead, plus
-unit tests, per the reviewer's suggested approach; and a supplier
-image-URL fix — the seed CSV's `ImageURL` column points at GitHub's
-file-viewer page (`github.com/.../blob/...`), which serves an HTML
-page, not the image itself, so those supplier photos rendered as a
-broken image; since the course-provided CSV can't be edited, the fix
-rewrites the URL to its `raw.githubusercontent.com` equivalent at the
-API response boundary instead, with tests, verified live in-browser; and
-the web Admin Dashboard user management (issue #113) — the Users section wired to the #96
-endpoints with debounced server-side search, a role filter and
-paging, a shared `Pagination` component, a dev-only in-memory mock
-behind `VITE_MOCK_ADMIN_API`, the Suppliers section reduced to a
-placeholder and the credit mock removed, the merge with PR #139's auth
-routes (with its `ProtectedRoute` lint fix and the 404 route moved
-outside it), the PR #140 review fixes, and the admin page tests, with
-the behaviour chosen by the team and recorded in `ai/usage-log.md`;
-and user-service sign-up, login and JWT issuance (issues #87, #89, #90)
-— `POST /auth/signup`, `POST /auth/login` with the 5-failure lockout,
-HS256 token minting, CORS, their tests, the removal of PR #139's
-separate `user-auth` server and the login/register pages pointed at
-user-service, plus the PR #141 review fixes (shared sign-up and
-owner-setup rules, case-insensitive usernames, the token lifetime unit,
-login-only race handling, `apiFetch` on the login and register pages),
-with auth placement, OTP deferral, username case and response shapes
-decided by the team and recorded in `ai/usage-log.md`; and the
-supplier-service JWT verification + role gate (issue #106) — a Spring
-Security filter chain (`JwtVerifier` mirroring notification-service's,
-a `JwtAuthenticationFilter`, and problem+json 401/403 handlers) gating
-`GET /suppliers*` on any authenticated user and every other method on
-ADMIN or OWNER, per the team's design doc D2, with the JWT `role`
-claim's name/shape confirmed against user-service's already-merged
-token issuer rather than invented, the GET-authentication requirement
-(which breaks browser supplier-browsing until the frontend's separate
-auth-wiring task lands) confirmed with the author before implementing,
-and OWNER's inclusion in the gate (PR #143 review, LeongWZ) decided by
-the author to match user-service's own admin-equivalent treatment of
-OWNER — each per AGENTS.md's restriction on agents making
-interface/design decisions; tested live against running containers and
-recorded in `ai/usage-log.md`; and the login/sign-up page restyle to the
-wireframes (PR #142) — card layout, stacked labels, error alert boxes,
-a live password checklist mirroring the server's password rules, the
-`react-router-dom`-to-`react-router` import cleanup, the JWT wiring
-into the shared `apiFetch` (the stored session's access token now sent
-as the Authorization header, with the session types corrected), the
-distinct 429 lockout response in user-service (issue #145, decided by
-the author: the wireframe's lockout message wins over fully
-non-revealing login failures), and the PR's Copilot-review
-accessibility fixes, with the wireframe target and checklist scope
-chosen by the author via neutral-options Q&A and recorded in
-`ai/usage-log.md`; and the
-user-service Spring Security filter chain (issue #91) — bearer JWT
-verification mirroring notification-service's `JwtVerifier`, role claim
-to `ROLE_*` authorities, stateless sessions, problem+json 401/403
-responses, and their unit and integration tests, following design doc
-§3, with the skipped routes (`/auth/**` except `/auth/logout`, and
-`/actuator/health`) and the denylist deferral decided by the author and
-recorded in `ai/usage-log.md`; and the issue #147 clean-up — a shared
-`errorMessage` helper and `ConfirmModal`, the suppliers page on the
-shared `Pagination`, `axios` removed, Prettier on the auth pages,
-review headers and the admin mock comment updated, and login/sign-up
-page tests, recorded in `ai/usage-log.md`; and the issue #147
-team-decision items — Flyway for user-service with a case-insensitive
-username index and duplicate clean-up, an `includeDeleted` admin list
-filter with a "Show removed accounts" toggle, one validation error
-format across user-service, bcrypt outside the database transaction
-with row-locked login counters, an "account created" notice, and an
-admin-only route guard on `/admin` that checks the role with
-`GET /users/me`, an Admin Dashboard nav link shown to admins and
-owners only, fixes to the admin Users section's reload after an
-action, and a read-only supplier list on the admin dashboard, with the
-behaviour decided by the team and recorded in `ai/usage-log.md` (that
-supplier list later removed, leaving the dashboard with only the Users
-section for now, also recorded there); and
-the login errors that name their
-cause (issue #146) — an unknown account, a wrong password with the
-attempts left before the lock, and a lockout that counts down the
-minutes left and repeats them in `Retry-After`, with their tests and the
-first tests for the web login page, the wording and the trade-off (login
-now reveals whether an account exists, reversing #89's non-revealing
-failures) chosen by the author via neutral-options Q&A and recorded in
-`ai/usage-log.md`; and user-service OTP email sending (issue #88, PR
-#150) — sign-up reworked to the design doc's insert-after-verify shape
-(`POST /auth/signup` now parks a `pending_signups` row and emails a
-6-digit code, new `POST /auth/signup/verify` creates the account), the
-generic `otps` table removed for per-operation pending tables, an
-`OtpService`/`OtpEmailSender` pair sending over SMTP (Gmail SMTP as the
-provider, a pinned Mailpit compose container as the local target), the
-purge scheduler's expired-pending sweep, their unit and integration
-tests, and the PR #150 Copilot-review fixes (locked verify reads,
-timing-equalized unknown emails, expiry boundary, sub-minute TTL
-wording, finite SMTP timeouts), plus the PR #150 author-review fixes
-(a repeat sign-up can no longer rewrite a live pending sign-up's
-username and password — only a repeat of its own details resends, other
-details are a 409, and an expired row may be taken over — with a resend
-cooldown answering 429 + `Retry-After` and the wrong-code attempts now
-surviving a resend), with the provider, scope, local-mail,
-pending-tables and repeat-sign-up decisions made by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`; and that PR's
-re-review fixes — a pending sign-up whose email or username was taken
-meanwhile is discarded instead of blocking its address, a resend no longer
-extends the code's expiry (so a pending sign-up can no longer be held
-open indefinitely), the resend cooldown now travels in the 202 body with
-`Retry-After` exposed through CORS, and the sign-up OTP screen in `web/`
-(a six-box code dialog over the register page with resend and cooldown,
-part of issue #109) without which registration through the site
-dead-ended at a failed login — with the fix-versus-restructure choice,
-the dialog's shape and the cooldown's route all decided by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`. Claude Code (Opus 5)
-then applied @Sinnez1's PR #264 review: a background reload no longer
-tears a page down on a transient failure, the expanded cards' detail
-fetches are keyed per request rather than off every list refetch, the
-pushed frame's fields are read defensively, and a push-channel
-reconnect — exposed as `pushReconnects` — is a refetch trigger too, so
-frames missed while the socket was down no longer leave a page stale.
-`ai/usage-log.md`; and an
-opt-in demo-account seeder for user-service (`USER_SEED_DEMO`: 1
-owner, 3 admins, 100 users), with the mechanism, the off-by-default
-flag and per-role passwords decided by the team and recorded in
-`ai/usage-log.md`; and the user-service account-update flows
-(issue #92) — a gate code emailed to the account's current address
-before any change, `PATCH /users/me` as an allow-list DTO (username
-applies at once, an email change parks in `pending_email_changes`
-until a second code sent to the new address is verified), an
-OTP-gated password change with server-side double-entry and the
-sign-up policy re-checked, machine-readable problem+json `type` URIs
-on the OTP errors (sign-up's included), the V4/V5 migrations, purge
-sweeps, and unit and integration tests, with the scope, endpoint
-shapes, gating and response choices made by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`; and the `web/`
-profile screens (issue #112, PR #149) — the protected `/profile` page
-built on those endpoints: the details card, an OTP-gated Edit Account
-card, an OTP-gated password change, the second code step a new address
-confirms itself with, the delete-account confirmation, a shared
-code-step component and countdown module, a problem+json `type`
-classifier that replaced the sign-up dialog's matching on error
-sentences, and the page's tests, with the deviations from
-`docs/wireframes/profile.png` (no Current Password field, the new-email
-confirmation as a modal, the parked change snapshotted in
-localStorage) chosen by the author via neutral-options Q&A and
-recorded in `web/AGENTS.md` and `ai/usage-log.md`; plus that PR's two
-Copilot-review rounds — pending-email snapshots scoped to the account
-that parked them, the code step restored after a retryable save,
-Spring's `about:blank` read as "no type", body-validation refusals
-returning to the editable fields with the unspent code, an expired
-email change offering a restart instead of the resend user-service can
-only refuse, and the retained-code tests asserting the call that was
-meant to prove them; and that PR's team review (@Sinnez1) — the delete
-dialog sealed while its request is in flight, the page reading the
-session's one `GET /users/me` and writing saves back into it instead of
-keeping a private copy that went stale for the nav bar and the `/admin`
-guard, a resend-cooldown 429 counted down on the submit button rather
-than read as a wrong code, a kept code offered only while it is still
-alive, and an untyped 429 ending a pending sign-up on its status;
-followed by issue #167 from the same review — the account's single gate
-code moved out of the two cards into one `useGateCode` hook the page
-owns, so a code either card requests, spends or replaces is the same
-code for the other, and their drifted-apart request paths became one,
-with the shape (hook, placement, what stays per card) decided by the
-reviewer; and the user-service and web review follow-ups (issues #154 and #138, PR #162)
-— problem+json on every user-service endpoint (the shared
-`ResponseStatusException`, wrong-type-parameter and 415 handlers), a
-generic owner-setup 503, the demo seeder's `Locale.ROOT` formatting and its handling of
-a lost insert race (a duplicate key only; any other integrity failure
-still stops startup), tests that load the main `application.yaml`
-through a `test` profile, the "account created" notice on the login
-page showing once, and the nav bar border class — with the items taken
-from the team's review issues and recorded in `ai/usage-log.md`,
-and that PR's review fixes (test values pinned against the
-environment, the 415's `Accept` header kept, and the login attempt
-counter's read-then-refresh restored by the author's choice) and
-re-review fixes (the purge cron and owner setup token pinned as well,
-a seeding run that loses the insert race seeding once more by the
-author's choice among the reviewer's options, the unconfigured setup
-token logged server-side, once per process, the login page keeping
-the URL's query and hash when it clears the notice state, and a 405
-problem+json handler); and the
-Credit Service saga event contracts in `foc-contracts` (PR #163) —
-four event records, the `credit-events` exchange name, their
-fixtures and the registry tests — together with that PR's review
-fixes to `docs/credit-service.md`, the high-level architecture doc
-and diagram, the notification design doc and the foc-contracts
-convention wording, which were brought in line with it, and the
-notification-service contract test generalized to the two event
-domains; the saga, the
-event names and fields, and the database schema are the team's
-decisions, recorded in `docs/credit-service.md` and
-`ai/usage-log.md`; and the credit-service scaffold (Spring Boot app,
-Dockerfile, credit-db in compose, the Flyway V1 schema transcribed
-from the design doc, JWT verification copied from supplier-service,
-and their tests), with the ports, image, dependency scope, schema
-scope and test database chosen by the author via options Q&A and
-recorded in `ai/usage-log.md`, plus `note` made `@Nullable` on the
-request event records (the author's decision, issue #165), and the
-scaffold's JPA entities (one per V1 table), empty repositories and the
-`CreditOperations` / `ReplyOutbox` interfaces with stubs that throw —
-the interface signatures and the `ReserveResult` values supplied by the
-author, with no business logic; and that PR's review fixes (a slice
-amount check and index in V1, the team's decision that the release
-path get-or-creates the requester's account written into
-`docs/credit-service.md`, a `SettleResult` returned by transfer and
-release by the author's choice among the reviewer's options, an index
-on unsent outbox rows, and tighter schema and contract tests), and its
-request event handler and broker topology (the handler, a message
-converter and topology initializer copied from notification-service,
-the queues and bindings, their configuration and tests), written to
-the author's plan, with the decisions recorded in
-`docs/credit-service.md` and `ai/usage-log.md`; and that PR's review
-fixes (#168: the reserve result split by refusal cause and an
-unhandled event logged, both the team's decisions among the reviewer's
-options, tests tying the bound events to the handler and exercising
-its transaction, and the disclosure headers the review found
-missing); and the credit operations (issue #169: get-or-create,
-reserve, transfer and release, their repository queries and tests),
-written to the team's design in `docs/credit-service.md`, with the
-readings the tool took where the doc is silent listed in
-`ai/usage-log.md` for the author to confirm, together with the task
-issues #169 to #174 that split the remaining Credit Service work; and
-that work's team-review fixes (released credits returned to the lots
-they came from, with the V1 schema amended so a slice references its
-lot, the sign-up amount and earned-credit lifetime made configuration,
-a log line per operation, and further tests), all the team's decisions,
-recorded in `docs/credit-service.md` and `ai/usage-log.md`; and that
-PR's review fixes (#175: a completion that finds no reservation is
-retried instead of dead-lettered at once, a removed race test restored,
-and the expiry and rejected-record rules moved from open items into the
-design doc), the team's decisions on the reviewers' findings; and the
-reply outbox and outbox publisher (issue #170: the outbox row written
-in the caller's transaction, the scheduled publisher with publisher
-confirms and the mandatory flag, and their tests), written to D10 of
-`docs/credit-service.md`, with the poll interval, the batch cap, the
-confirm wait and what a failed publish does to the rest of a poll
-decided by the team and recorded there and in `ai/usage-log.md`; and
-that PR's review fixes (#188: a returned reply waits 30 s before its
-next attempt, on a new `next_attempt_at` column, so that unroutable
-replies cannot fill every batch; the reply row inserted, not saved; no
-returns callback on the shared template; a second scheduler thread),
-the approach to each decided by the team; the read API (issue #172:
-the balance and history routes, the history filters as a JPA
-Specification, the 400 problem+json mapping, and their tests),
-transcribed from the "Read API contract" the team wrote in
-`docs/credit-service.md`, with its PR #189 review follow-ups made as
-the reviewer suggested; and the request event
-listener (issue #171: manual acknowledgement after the handler's
-commit, a conflicting event dead-lettered, failures retried through
-the retry queue up to the attempt cap, and its unit and broker
-integration tests), written to D11 of `docs/credit-service.md` and
-following notification-service's listener, with the team's review
-decisions (a retry copy the broker refuses requeues the original;
-dead-letters logged at ERROR) recorded in that doc's failure table,
-and its PR #190 review fixes (a returned retry copy dead-letters the
-original, a nacked or unconfirmed one requeues it after a 5 s pause,
-and a timed-out confirm documented as possibly running the event
-twice), the approach to each decided by the team, and its re-review
-follow-ups (the confirm timeout's environment variable, an
-unresolvable broker host in the test profile, and doc wording);
-and the expiry and redistribution scheduler
-(issue #173: the daily expiry into the common pool and the monthly
-redistribution, their locking queries, and their unit and Postgres
-tests), written to D2, D4 and D12 of `docs/credit-service.md`, with the
-run times and zone, the per-account expiry transaction, the empty
-month recorded and the startup catch-up decided by the team and
-recorded there, and its PR #193 review fixes (one routine, daily and
-at startup, that sweeps then redistributes a missing month, so a
-failed run is retried the next day; the earned-credit expiry shared;
-a test made independent of test order), the approach decided by the
-team; and the upcoming-expiry route (issue #196:
-`GET /credits/me/expiries`, read from the lots in spend order, and its
-controller tests), written to the design doc's Read API contract, with
-the route, the response shape, the order, which credits count, no
-window and how often the web app reads it decided by the team and
-recorded there, and its web half (the Available card's line for the
-soonest credits to expire and a notice when they expire within 7
-days, in Singapore dates, with their tests), where they are shown and
-the wording also decided by the team; and the outbox retention purge
-(issue #218: a daily job deleting sent replies past the retention
-window, its bulk delete, the V3 partial index on `sent_at`, the
-configuration in compose and `.env.example`, and their unit and
-Postgres tests), written to D13 of `docs/credit-service.md`, with
-which rows go, the column the window counts from, the window and
-schedule, the startup check, the index and keeping every other table
-decided by the team and recorded there.
-
-The logout denylist and API gateway (issue #151): the user-service
-logout endpoint, Redis denylist writer and V6 migration with their
-tests, the redis and gateway containers in compose, the OpenResty
-gateway (`gateway/` — nginx config and the Lua auth check), the web
-logout call and gateway base-URL cutover, and the documentation
-(`docs/gateway.md`, architecture doc/diagram updates). Every design
-decision (G1–G10: gateway technology, Redis-only store, full routing
-cutover, gateway-only enforcement, anonymous pass-through, fail-open,
-AOF persistence, logout placement, best-effort 204, revoked-token
-wording) was made by Leong Wei Zhi via neutral options Q&A, recorded in
-`docs/gateway.md` and `ai/usage-log.md`.
-
-Password reset and account recovery (issue #94, PR #179): the
-user-service reset endpoints, `PasswordResetService`, the
-`password_reset_otps` entity/repository and V7 migration, the login
-change (no silent recovery; `deletionScheduledFor`) with
-`POST /users/me/recover`, and the purge-sweep addition (the web
-screens moved to PR #180, which discloses them). Every
-flow decision — OTP-code credential (revisited from an emailed link
-the same day), login-plus-explicit-restore recovery, reset leaving a
-deleted account deleted, the always-202/one-400 non-revealing error
-contract, the storage's `password_reset_otps` shape without a kind
-column, and the backend-only scope with the web half split to
-PR #180 — was made by Leong Wei Zhi
-via neutral options Q&A, recorded in `ai/usage-log.md` and the files'
-disclosure headers; the PR #179 Copilot-review fixes (stale-credential
-login recheck, lock-first email reads, purge lock ordering, form-state
-clearing) followed the same pattern, as did the PR #179 human-review
-round (@Sinnez1): the carried OTP guess budget, the post-commit email
-send, the per-user session eviction on reset (gateway decision G11 —
-`TokenDenylist`, `gateway/lua/auth.lua`), the accepted 30-day
-deleted-account access, admin removal staying self-restorable, and the
-Windows test-precision fix, each chosen by Leong Wei Zhi via neutral
-options Q&A on 2026-10-12, and the approval round's follow-ups the
-same day (admin removal demoting to USER, a failed renewal send
-restoring the pre-renewal OTP row — both chosen by Leong Wei Zhi via
-neutral options Q&A — plus the reviewer-flagged documentation and
-test-isolation corrections).
-
-The order-service frontend pages (Create Request, My Requests, Open
-Requests, Active Delivery, Request History) were generated in `web/` from
-the committed wireframes, against a placeholder API contract and a
-dev-only in-memory mock; the backend was not touched.
-The order-service Spring Boot
-scaffold — pom, application config, Dockerfile, and application/test
-classes mirroring the supplier-service and notification-service
-pattern (including the broker connection settings and the
-`foc-contracts` dependency, with no publisher code), plus the
-compose.yaml order-db/order-service wiring, `.env.example` section,
-and `AGENTS.md` port-table entry that went with it, with the database
-engine and image version, host ports, and broker-wiring scope chosen
-by the author via neutral-options Q&A and recorded in
-`ai/usage-log.md`; and the order-service `Requests` entity and
-repository (table name and columns given by the author as an ER
-diagram, which the tool transcribed into the entity unchanged); and
-the order-service request state machine (a plain-Java transition table
-and its unit tests over the author's own state and event enums, with
-the DROP target, the no-library form, the PENDING/REJECTED saga
-transitions' names and the ARRIVED step chosen by the author via
-neutral-options Q&A and recorded in `ai/usage-log.md`), and a
-`createdAt` default on the `Requests` entity (PR review fix); and
-the order-service request events — `RequestsService` applying the state
-machine, a transactional outbox and publisher and a credit reply
-listener with retry and dead-letter queues copied from credit-service
-and notification-service, the pending-timeout sweep, events on
-submit / reserve / reject / timeout / arrive / complete / cancel /
-expire, and `status` as the `OrderStates` enum with a database check —
-with the event names, which transitions publish, the field mapping and
-parties, the copy-not-share choice, the timeout values and the check's
-form chosen by the author via neutral-options Q&A and recorded in
-`ai/usage-log.md`; and the `RequestsController` (seven POST endpoints
-delegating to `RequestsService`, with tests; paths, parameters and
-request/response shapes specified by the author); and order-service's
-bearer-token auth (copied from credit-service) with the ownership rules
-for each step and the self-accept refusal, the rules, the ids-from-token
-choice and the 409 / 404 answers chosen by the author; and the
-`order-event.ps1` / `order-curl.ps1` / `order-e2e.ps1` manual-testing
-helpers, the `credit-stub.ps1` / `stub-users.psd1` stand-ins for the
-Credit and User Services, and the gateway's `/api/order` route
-replacing the reserved stub; and `/create`'s field checks (400 listing
-missing fields, a reward below 1 and a past deadline), the
-`request.accepted` / `request.collected` events and the deadline-expiry
-and auto-complete timers, with the required fields, the 400 answer, the
-events' parties, the 5 min sweeps and the configurable 1 h delay chosen
-by the author; and the read endpoints (open errands, a request's
-detail, the caller's requests by role, the admin view), whose paths,
-results and access rules were designed by the author and whose
-remaining details (CREATED-only open list, trimmed lists, newest first,
-page size 20, both roles in the admin view) the author chose; and the
-lists' filters (supplier, reward, deadline and created ranges) and sort,
-chosen by the author; and past-deadline requests hidden from the open list
-and refused on accept (409), as the author chose; and the order pages in `web/` moved onto
-order-service's real API (types, calls, states, the dev mock and tests
-rewritten; dispute and re-release removed), with the username lookup, the
-state filters and keeping the mock chosen by the author; and the
-comma-separated `state` list on order-service's request lists, with My
-Requests holding the active requests and History the finished ones, and
-My Requests refetching every 2 seconds while a request is PENDING, as
-the author chose; and a step that loses a race on a request (caught by
-the `@Version` check) answered 409 "This request's state has changed",
-with tests staging the races, the code and message chosen by the author.
-
-The issue #67 remaining scope (the server-side STOMP push gateway had
-merged earlier in PR #74): the web notification client
-(`web/src/features/notifications/` — the app's single STOMP client with
-reconnect/backoff, and the bell's unread badge), the notification-service
-JWT verifier's missing-expiry fix, and the D23 CONNECT-time Redis
-denylist read (port + adapter, interceptor check, ArchUnit rule,
-compose/.env wiring) with the matching doc updates
-(`docs/notification-service.md` D23, `docs/gateway.md` known-limit
-retirement).
-The scope decisions (badge-only UI, native WebSocket without
-sockjs-client, folding the expiry fix in, service-side denylist read as
-a narrow G4 exception) were made by Leong Wei Zhi via neutral options
-Q&A, recorded in `docs/notification-service.md` and `ai/usage-log.md`.
-The PR #185 review round (@Sinnez1) extended that denylist read to the
-G11 per-user reset cutoff (the jti lookup alone let a pre-reset token
-still open a socket), recorded the CONNECT-only timing as an accepted
-limit in both design docs, and switched off the Redis starter's
-repository scan; the Copilot round before it fixed the bell's
-accessible name. The re-review rounds that followed added the
-interceptor's frame policing (a STOMP-command session authenticated
-like CONNECT, every client SEND refused, SUBSCRIBE confined to the one
-destination — together they had let an untokened client push a spoofed
-notification to any user ID) and the client's ERROR-frame policy: three
-retries 30 s apart, then a stop the bell reports as paused updates
-rather than a frozen count. That policy was chosen by Leong Wei Zhi
-from four options via neutral options Q&A; the rest were mechanical
-fixes to reviewer-identified gaps.
-
-The web revoked-session sign-out (issue #178, PR #182): the shared
-fetch wrapper's unauthorized handler (a 401 on a token-bearing request
-forces a sign-out to /login with a one-time notice; the login call
-itself opts out of the token injection so its wrong-credentials 401
-stays an inline error) and its tests. The mechanism (any token-bearing
-401, no detail matching), the sign-out UX and the scope were decided
-by Leong Wei Zhi via neutral options Q&A, recorded in
-`ai/usage-log.md`. The PR #182 human-review round (@Sinnez1) added two
-defect fixes with no new design decisions: the handler is given the
-token the refused request carried, so a 401 answering a replaced token
-no longer ends the session the user has just started; and the notice
-is published to the login page rather than read at mount only, so a
-401 arriving while that page is open shows it there instead of saving
-it for a later visit. The second review round (@Sinnez1) added four
-more defect fixes — the refused token is compared with what
-localStorage holds rather than with the last rendered session (so
-neither another tab's newer session nor one stored a render ago is
-cleared), the handler and token source are unregistered when the
-provider unmounts, a failing handler no longer replaces the ApiError
-callers match on, and the bearer scheme is matched case-insensitively
-as the gateway matches it — plus one behaviour question put to Leong
-Wei Zhi via neutral options Q&A (2026-10-14): on a page that needs no
-session the dead token is now dropped in place, with no redirect and
-no notice, and the redirect for a session-gated page is
-ProtectedRoute's own bounce.
-
-The server half of the same issue (#178, PR #183): `AdminService`
-writes the per-user revocation stamp after an admin role change (any
-actual change) or an admin removal, so the target's outstanding tokens
-are refused at the gateway on their next request instead of lasting to
-their `exp`; its service and controller tests; and decision G12 in
-`docs/gateway.md`, which needed no gateway code because PR #179's G11
-check already enforces the stamp. The mechanism (option A of the
-issue's options table, a Redis epoch stamp over a per-request role
-lookup or refresh tokens) and the scope (those two paths only) were
-decided by Leong Wei Zhi via neutral options Q&A, recorded in
-`ai/usage-log.md`. Rebasing that branch onto the merged #179 also
-corrected a sentence #179's own follow-up had added — that a token
-minted before a removal keeps ADMIN until it expires — in
-`user-service/README.md` and the `AdminService` comment. The PR #183
-human-review round (@Sinnez1) added one defect fix with no new design
-decision: the reviewer showed the stamp being written inside the
-caller's transaction, before the role change or removal committed, so a
-login in that gap could still mint a token carrying the old role —
-every stamp now runs after the commit, including the identical call
-site in the password reset from #179. Which of the two mechanisms the
-review named to use, and whether to extend the fix to that reset call
-site, were decided by Leong Wei Zhi via neutral options Q&A
-(2026-10-17).
-
-The web half of issue #94 (PR #180), generated with Claude Code
-(Fable 5; main sync with Opus 5), adds the forgot-password and explicit
-account-recovery screens, login link and arrival notice, recovery session
-flag handling, and support for bodyless 202 reset responses. The
-2026-10-16 sync reconciled the routes with #182/#185, opted both reset
-calls out of bearer authentication, and added local session clearing on
-successful reset with regression coverage. The PR #180 review fixes
-(Codex, GPT-6, 2026-10-17) extend the recovery hold to public routes,
-reject malformed nonempty 202 bodies, move the recovery request into
-profileApi, remove the duplicate home redirect, reuse the six-box
-CodeInput, and require the reset email field. The reset API returns no
-cooldown or expiry timings; the screen does not display those values.
-
-Issue #98's user-service test fix (Codex, GPT-6.1 Sol, 2026-10-17) adds
-inherited automatic skips when Docker is unavailable and guards shared PostgreSQL
-container startup. Unit tests still run without Docker; integration tests
-retain their existing shared container when Docker is available. The
-service README documents both modes and their coverage. The PR #197 review
-follow-up adds a CI check that rejects skipped user-service tests and
-missing test reports, enforcing the full suite on the runner.
-
-The web credit balance and history (issue #174): the credit feature
-folder (`web/src/features/credit/`: the read API calls, a
-`CreditBalanceProvider` layout route that polls the balance for the
-whole app, the `/credits` page with its balance cards, amount and
-date-range filters and paged transaction list), the live top-bar badge
-and the profile card's Credit Status, and their tests. Written to the
-"Read API contract" in `docs/credit-service.md` and the
-`credit-history.png` wireframe; the deviations from the wireframe (no
-lifetime-earned card or running-balance column, which the API does not
-provide, and min/max amount fields in place of the amount dropdown),
-the page's route and how it is reached, and the 30 s poll that pauses
-in a hidden tab were decided by the team via options Q&A, recorded in
-`web/AGENTS.md` and `ai/usage-log.md`. On the same branch, the admin
-dashboard's Common Pool box and the credit service's two admin routes
-behind it (`/credits/admin/pool` and `/credits/admin/redistributions`,
-`ADMIN` and `OWNER` only) with their tests, added to the design doc's
-Read API contract; the routes' shape, access, the share preview and
-the branch were decided by the team via options Q&A.
-
-Claude Code (Fable 5 and Opus 5) wrote the web half of issue #66, the
-Notification Center: the `/notifications` page and its feature folder
-(`web/src/features/notifications/`: the REST calls, one display
-template per cataloged request event, the paged list with its All and
-Unread filters, click-to-mark-read and "Mark all as read"), the bell
-badge seeded and re-synced from `GET /notifications/me/unread-count`,
-and frames pushed over STOMP joining the open list live, with their
-tests. Written to the `notification-center.png` wireframe and the REST
-contract in `docs/notification-service.md`; the interactions the
-wireframe does not draw (the filter toggle, the "Load more" pager, a
-click marking a row read, and — after the PR #199 review — a read row
-leaving the Unread view) were decided by the author via options Q&A and
-recorded in `web/AGENTS.md` and `ai/usage-log.md`. The same tool
-addressed that review's bot findings, including the paging and
-count-sync races it and a live browser run surfaced. For issue #232
-Claude Code (Fable 5) made rows that reference a request clickable:
-the click opens the request at the delivery-detail page and an unread
-row is marked read on the way, while rows without a request keep the
-mark-read-only click — the landing target and the read behavior were
-the author's decisions via options Q&A, recorded in the same two
-files.
-
-Claude Code (Opus 5.5) applied follow-ups from Leong Wei Zhi's PR #163
-re-review (issue #165), each the reviewer's suggestion taken by the
-team: a redelivered `request.submitted` whose reservation is already
-held or refused sends its reply again, rebuilt from the event with the
-record's decision; the notification-service contract test again
-requires request events to name their parties; the credit design doc's
-diagram legend states where it differs from `architecture.md`; and, at
-the author's instruction, the implementation column of that doc's
-Credit F2.1.3 row was reworded. The same tool then applied Leong Wei
-Zhi's PR #212 review suggestions: the Credit F2.1.3 requirement text
-restored and left in "Requirements to revise" for the team, the resent
-reply's comments and docs corrected, and the reserve and `parties()`
-comments extended.
-
-Claude Code (Sonnet 5.5) drafted the documentation for the supplier
-bookmarks nice-to-have (N8, issues #225-#227): this README's team table,
-`docs/architecture.md`, `docs/supplier-service.md` and its diagram. It
-transcribed only what Alastair Tan Choon Wei decided (bookmarks owned by
-supplier-service, a 5-bookmark cap enforced in both frontend and backend
-with a 409 response, a bookmark removed when its supplier is deleted, and how the supplier
-list flags and orders bookmarks);
-the mechanism for cleaning up bookmarks when an account is purged is
-marked open for the team.
-
-Copilot SDK in VS Code (model not exposed) corrected Mockito matcher
-misuse in the user-service `AuthServiceTest`: boolean constructor values
-are now literals, preventing matcher leakage into repository stubs.
-
-Claude Code (Fable 5) removed the system's only synchronous
-inter-service call (issue #221): notification-service's ingest-time
-username enrichment and its internal-token credential
-(`docs/notification-service.md` D30/D31) are superseded by D32 —
-notifications store party IDs only, and the web resolves `courierId` to
-a username at read time through the gateway with the caller's own JWT
-(`web/src/features/user/usernames.ts`: per-id lookups behind a TTL
-cache with in-flight dedupe), the actor-less copy doubling as the
-loading and lookup-failed rendering. The design (per-id + SPA cache
-over a batch endpoint, removing the token machinery in the same PR,
-ignoring the stored name keys of old rows) was decided by Leong Wei Zhi
-via neutral options Q&A, recorded in the design doc and
-`ai/usage-log.md`.
-
-Claude Code (Fable 5) transcribed the wiki's D3 Demo Script page into a
-runnable Postman collection (`docs/postman/`): a Collection v2.1 JSON
-with per-step assertions, the local-gateway environment file, and a
-README, with bodies, paths, and status codes taken from the merged
-contracts (order-service README, `docs/credit-service.md`,
-`docs/notification-service.md`). The format, step scope, and location
-were chosen by Leong Wei Zhi via options Q&A; the mechanical deviations
-from the wiki page (polls for the sleeps, captured ids, delta balance
-checks, a sequential accept pair, the real seeded account names,
-2-credit cancel/drop amounts) are listed in `docs/postman/README.md`
-and recorded in `ai/usage-log.md`.
-
-Claude Code (Opus 5.5) wrote the `foc-contracts` side of N3 dispute
-resolution (issue #234): the `RequestDisputed` and
-`RequestDisputeResolved` records with their registry entries and
-fixtures, and a `reasonCode` on `CreditReservationRejected`, which
-credit-service now sets; the tests in foc-contracts, credit-service and
-order-service, and the contract docs, were updated to match. The fields,
-their nullability, the category and code values, and the choice to make
-`reasonCode` `@Nullable` under D18 and to keep `note` as the request's
-note (adding `disputeNote` and `resolutionNote`) are team decisions
-(DSP-12), made after the tool flagged where the first draft conflicted
-with D18 and the PR #166 note rule; they are recorded in
-`ai/usage-log.md`. The team's full N3 decision list (DSP-1 to DSP-17,
-with the reasons given) was transcribed into `docs/disputes.md`.
-
-Claude Code (Opus 5.5) moved order-service onto Flyway (issue #238,
-team decision DSP-16): a `V1__baseline.sql` reproducing the schema
-Hibernate had generated (checked against an existing `order-db`), with
-Hibernate now only validating it, and the order-service tests moved
-from H2 to Testcontainers Postgres. In the same branch it applied the
-PR #243 review follow-ups: distinct names for credit-service's
-rejection reason texts, `RequestDropped` in the foc-contracts README,
-a note on the contracts value-set test, a notification-service check
-that fixtures use a value from their record's value set, and matching
-reason/code pairs in an order-service test helper. Recorded in
-`ai/usage-log.md`. For the PR #244 review it then added the outbox
-index and the `text` payload to V1 (team decisions), restored the test
-that every order state passes the status CHECK, made the documented
-volume reset recreate every service's volume, ran CI's skipped-tests
-guard on every Java module, and tightened the fixture value-set test.
-
-Claude Code (Opus 5.5) implemented order-service's failed-order
-management (issue #240, team decisions DSP-1, DSP-5, DSP-10, DSP-17):
-Flyway V2 with `requests.close_reason` and `outbox_event.request_id`
-(back-filled), the close reason recorded on each abnormal ending and
-returned in the request lists and detail, the rejection's `reasonCode`
-mapped in one place, and three ADMIN / OWNER endpoints (all-users list,
-batch statuses, retry settlement with the original event id). The four
-API and schema points the issue left open were decided by the team and
-transcribed into `docs/disputes.md`. Recorded in `ai/usage-log.md`.
-
-Claude Code (Opus 5.5) implemented credit-service's split settlement
-of `request.dispute-resolved` (issue #235, team decisions DSP-4, DSP-8,
-DSP-13): Flyway V4 with the `RESOLVED` status and `courier_share`, the
-reward divided between a new lot for the courier and the requester's
-slices latest expiry first, repeats and conflicts answered from the
-stored split, and the event bound to the work queue. What the other
-events do on a `RESOLVED` record, and the duplicate-or-contradiction
-rule behind the event table, were decided by the team and transcribed
-into `docs/credit-service.md`. Recorded in `ai/usage-log.md`.
-
-Claude Code (Sonnet 5.5) added the supplier bookmark table for N8
-(issues #225/#227): the `SupplierBookmarks` entity with a composite key,
-cascade on supplier deletion and a per-user index, and its repository.
-Key, cascade and cap were decided by the team; table and column names
-were chosen by the tool for review. Recorded in `ai/usage-log.md`.
-
-Claude Code (Sonnet 5.5) added the N8 frontend (issues #225/#227): a
-bookmark flag on every supplier card, the detail panel's Create Request
-button, the `?supplierId=` prefill on the create-request form, the
-bookmark API calls and their tests. Behaviour (reload to page 1 in the
-default view, the client-side cap, the button's placement) was decided
-by the team. Recorded in `ai/usage-log.md`.
-
-Claude Code (Sonnet 5.5) added the N8 backend in supplier-service
-(issues #225/#227): the bookmark list, add and remove endpoints, the cap
-of 5 with a per-user PostgreSQL advisory lock against simultaneous adds,
-the `bookmarked` flag and bookmarks-first default order on the supplier
-list, and their tests. Endpoint shapes, the cap and the "too fast" refusal
-were decided by the team; the lock mechanism was the tool's choice for
-the team to confirm. Recorded in `ai/usage-log.md`.
-
-Claude Code (Sonnet 5.5) implemented the N8.5 account-purge cleanup
-(issues #225/#227, decision D12): supplier-service's internal
-`POST /purge/bookmarks` (SERVICE-role token only), user-service's purge
-job calling it before deleting the accounts and skipping the delete for a
-run if the call fails, and a gateway rule answering 404 for the path from
-outside. The mechanism, protection and timing were decided by the team;
-the failure handling, batch size and timeouts were the tool's choices for
-the team to review. Recorded in `ai/usage-log.md`.
-
-Claude Code (Sonnet 5.5) recorded the N8 supplier-bookmark decisions in
-`docs/supplier-service.md` (D12 and D14, the Bookmark API section, the
-bookmark table), its diagram, the architecture note, the gateway routing
-row and the web wireframe notes (transcription only; the decisions and
-their rationale are the team's). Recorded in `ai/usage-log.md`.
-Claude Code (Opus 5.5) implemented credit-service's admin list of
-long-held reservations (issue #236, team decisions DSP-5, DSP-11):
-`GET /credits/admin/reservations/held?olderThan=`, HELD only, oldest
-first, at most 100, with a `truncated` flag, served by a partial index
-in Flyway V5. The body shape, the handling of a negative or zero
-`olderThan`, the flag and the index were decided by the team. With it
-came the PR #247 review follow-ups: in the same V5, the review's
-suggested CHECK that only a `RESOLVED` record carries a courier share
-(taken by the team), race tests pinning the resolution's lock order,
-and doc and usage-log corrections; and the PR #210 follow-up, a stale
-controller comment. Recorded in `ai/usage-log.md`.
-
-Claude Code (Opus 5.5) wrote notification-service's tests for the two
-N3 dispute events (issue #237): a broker integration test replaying
-the `request.disputed` and `request.dispute-resolved` fixtures (one
-notification per party, acked, redelivery deduped) and a contract test
-pinning the fields they add, and adjusted the `request.dispute-resolved`
-example fixture's amounts in `foc-contracts`. Recorded in
-`ai/usage-log.md`.
-Claude Code (Fable 5) scaffolded the rating-service walking skeleton
-(issue #250, the first N1 PR under #44): pom, security chain, JWT
-verifier and application/test classes copied from the order-service /
-supplier-service pattern, an empty Flyway baseline (the schema lands
-with the feature issues), the contracts-aware Dockerfile, and the
-rating-db / gateway-route / compose / `.env.example` wiring, with the
-Flyway-baseline and lean-pom scope decided by the author via
-neutral-options Q&A. Recorded in `ai/usage-log.md`.
-
-Claude Code (Opus 5.5) implemented order-service's disputes (issue
-#239, team decisions DSP-2, DSP-5 to DSP-8, DSP-14): Flyway V3 with the
-`DISPUTED` and `RESOLVED` states and the `request_dispute` table,
-`POST /dispute` for the requester, escalation of orders still collected
-a grace period after their deadline in the expiry sweep, and `POST
-/resolve` for an admin who is not a party. Each step writes its event
-to the outbox in the same transaction. A `dispute` object was added to
-the request lists and detail, loaded once per page. The table's
-constraints, the dispute window, the resolution note and the read
-shape were decided by the team and transcribed into
-`docs/disputes.md`. Recorded in `ai/usage-log.md`.
-
-Claude Code (Opus 5.5) built the admin dashboard's Failed Orders and
-Stuck Orders sections (issue #242, DSP-10, DSP-11). Failed Orders lists
-every user's rejected, cancelled and expired requests with why and when
-each closed, filtered by close reason, by one user and by a created or
-closed date range, all together. Stuck Orders checks credit-service's
-long-held reservations against order-service in one batch call, flags
-those whose order is finished (never a disputed one), and offers
-"Retry settlement". For these, order-service gained Flyway V4's
-`closed_at`, set on every move into a final state, `closedAt` and the
-`closedFrom` / `closedTo` filter on its lists, and `userId` on the admin
-list. The filters, the close time and its fallback, and the threshold
-presets were decided by the team and transcribed into
-`docs/disputes.md`. After review, Stuck Orders also names held credits
-for orders order-service has no record of, and the user lookup lists its
-matches for the admin to pick from (team decisions). Recorded in
-`ai/usage-log.md`.
-
-Claude Code (Opus 5.5) built the web side of N3 disputes (issue #241,
-DSP-3, DSP-5, DSP-7 to DSP-9): a "Report a problem" dialog on My
-Requests, a confirm dialog before "Confirm delivery", a countdown to
-auto-completion on arrived orders, the admin dashboard's Disputes
-section with its count badge and resolve dialog (pay the courier, refund
-the requester, or split), resolved orders in History with the courier's
-share, and notification copy for the two dispute events. For the countdown, order-service's lists and detail gained
-`autoCompleteAt`, worked out in the one method its dispute check also
-uses, and it refuses a dispute on an arrived order with no arrival time.
-Where the time comes from, when the button shows, the History amounts
-and that refusal were decided by the team and transcribed into
-`docs/disputes.md`. Recorded in
-`ai/usage-log.md`.
-
-Claude Code (Fable 5) made the order pages live-refresh when a pushed
-notification concerns a request they show (issue #233): a
-`useRequestRefetch` hook in `web/src/features/notifications/` consumes
-the existing STOMP stream, matches `payload.requestId` against the
-page's shown ids, and debounces matches into one re-run of the page's
-existing REST fetch — the push is only the trigger, REST stays the
-source of truth (D32's read-side pattern). The issue's open questions
-(all four order pages in scope, bursts debounced, the provider's stream
-reused over a second subscription) were decided by Leong Wei Zhi via
-options Q&A and recorded in `ai/usage-log.md`.
-
-Claude Code (Opus 5) added the rating domain to the shared
-`foc-contracts` library (issue #249, the merge-first N1 contract under
-#44): the `rating-events` topic exchange constant, the `RatingEvent`
-marker and the `RatingSubmitted` record, its `EventTypeRegistry` entry
-and canonical JSON fixture, and the registry-driven tests in
-`foc-contracts` and notification-service widened to a third producing
-domain. The event's identity, its field list (IDs only, per D32), the
-ratee-only `parties`, and the decision to leave the review write-up out
-of the payload are the issue author's, recorded on #44; `stars` is
-boxed following the PR #163 review decision on `CreditReserved.amount`.
-Recorded in `ai/usage-log.md`.
-
-Claude Code (Opus 5.5) implemented the user events behind credit
-accounts (issue #267). foc-contracts gained `user.created`, `user.purged`
-and the `user-events` exchange; user-service publishes them through an
-outbox copied from order-service's, `user.created` when a verified
-sign-up inserts the user and `user.purged` inside the day-31 purge; and
-credit-service consumes them on its own queue: it opens the account,
-or closes it by moving every available credit to the common pool with a
-new `CLOSURE` history row (Flyway V6), sends credits that reach a closed
-account on to the pool, and shares redistribution among open accounts
-only. The event names and fields, the outbox, the account states and
-their handling, and the deploy order were decided by the team (USR-1 to
-USR-9) and transcribed into `docs/credit-service.md` as D14, with the
-review's follow-ups (user id as correlationId, an event naming no user
-dead-lettered at once, a User Service that neither waits for nor reports
-on the broker, and a 30-day purge of its sent events), and every path
-that inserts a user (sign-up, owner setup, the demo seeder) writing
-`user.created` through one shared method. Recorded in
-`ai/usage-log.md`.
-
-Claude Code (Fable 5) implemented rating-service's `request.completed`
-ingest (issue #251, the N1.1 prerequisite under #44): the consumer
-topology (work/retry/dlq queues bound to `request-events` on the one
-registry key), the message converter, retrying listener and startup
-initializer copied from the credit-/notification-service patterns, an
-idempotent processor storing one `rateable_request` eligibility row per
-completed request behind the `processed_events` event-ID dedupe (Flyway
-V2), and the broker/Postgres tests (fixture replay, FIFO-sentinel
-redelivery dedupe, unknown and unconsumed types dead-lettered intact,
-retry/DLQ attempt evidence, V2 on real Postgres). The listener pattern
-(credit's hardened retry base over notification's original) and the
-upsert stance on a repeated completion were decided by the author via
-neutral-options Q&A. After review, the dedupe insert persists instead
-of merging so the PK backstop holds under concurrency, an upsert that
-changes a row's parties warns, duplicates log apart from applied
-events, the settled delivery's rethrow is wrapped non-fatal, and a
-schema-validation test pins the entities to the Flyway migrations
-(reviewer suggestions). Recorded in `ai/usage-log.md`.
-
-Claude Code (Fable 5) implemented rating-service's submit rating API
-(issue #252, N1.1/N1.2 under #44): `POST /ratings` (either party of a
-completed request rates the other once — stars 1–5 required, write-up
-optional and capped at 1000 characters, immutable after submit) and
-`GET /ratings/mine` for the UI's rate button, with problem+json
-refusals (400/403/404/409); Flyway V3 (`rating` with the one-per-
-direction unique key, stars check and FK to `rateable_request`, plus
-`outbox_event`); and a `rating.submitted` publish to the new
-`rating-events` exchange through a transactional outbox copied from
-order-service's (publisher off in tests). The response shapes
-(200-with-null `/mine`, 201 without a Location), the text cap, and
-keeping the FK were the author's decisions via neutral-options Q&A;
-the event shape is #249's contract (the ratee alone in `parties`, no
-write-up in the payload, D32). After review, the race handler answers
-409 only for the `rating_once_per_rater` constraint (matched by name)
-and leaves every other integrity violation a 500, with the race test
-driving the database's real exception through the advice (reviewer
-suggestion). Recorded in `ai/usage-log.md`.
-
-Claude Code (Opus 5.5) built requester–courier chat (nice-to-have N6,
-`docs/chat-service.md`): a new `chat-service` (its own `chat-db`, REST
-history and image reads, its own STOMP WebSocket with CONNECT-frame JWT
-and denylist checks, text and base64 images up to 2 MB in the frame,
-read-only admin access, a configurable 30-day retention purge, and
-Testcontainers tests including a real-socket 2 MB image test);
-order-service's `chat_call` table and dispatcher, which open the chat on
-accept and close it when the request leaves ACCEPTED/COLLECTED/ARRIVED,
-retrying every 15 s up to 20 times with a shared internal token; the
-gateway route, compose and `.env.example` wiring; and the web chat
-pop-up on the requester's, courier's and admins' order views. Every
-design decision (a separate service, its own socket, the open states,
-closing on drop and dispute, text+image limits, images in Postgres and
-in the frame, retention, the call/retry/token scheme, admin read-only,
-the denylist check, the pop-up) was the author's, via the chat prompt
-and neutral-options Q&A, recorded as C1–C15; the tool's own
-implementation choices are listed separately in the doc. Recorded in
-`ai/usage-log.md`. The same day it added unread notifications through
-chat-service alone: per-party read markers (Flyway V2), unread counts and
-a mark-read endpoint, a push to the receiver's own STOMP queue, and in
-the web a badge on the Chat button, a toast and a background browser
-notification for the first unread message with the sender's name and a
-text preview, and usernames in place of "Requester"/"Courier" — each the
-author's decision via options Q&A (C16-C21).
-Claude Code (Fable 5) implemented rating-service's profile read APIs
-(issue #253, N1.3 under #44): `GET /users/{id}/ratings/summary` (the
-star-row aggregate via JPQL avg/count) and `GET /users/{id}/ratings`
-(the newest-first review history, paged with the platform's
-`PageResponse` shape and credit-service's page/size bounds), both open
-to any authenticated user, with Flyway V4 adding the
-`(ratee_id, created_at desc, id desc)` read index. The null average for
-a user with no ratings and the raw (unrounded) mean were the author's
-decisions via neutral-options Q&A; the list returns rater ids only
-(D32 — the web hydrates usernames at read time). Recorded in
-`ai/usage-log.md`.
-
-Claude Code (Fable 5) implemented rating-service's report-a-user API
-(issue #254, N1.4 under #44): `POST /reports` (reason from the issue's
-fixed list, optional details and request reference, self-reports
-refused with 400) and the ADMIN/OWNER-gated `GET /reports` (newest
-first, paged like the review history), with Flyway V5 adding the
-`user_report` table. The ADMIN+OWNER pair for the gate (the repo-wide
-precedent over the issue's literal "ADMIN only"), the paged list shape,
-and storing `requestId` as an opaque unverified reference (no FK —
-`rateable_request` holds completed requests only, and reports often
-concern requests that never completed) were the author's decisions via
-neutral-options Q&A. After review, `reportedUserId` is trimmed before
-the self-check and the save, so a padded self-id can neither dodge the
-400 nor store an id matching no user (reviewer finding). Recorded in
-`ai/usage-log.md`.
-
-Claude Code (Fable 5) implemented the notification on `rating.submitted`
-(issue #255, N1 under #44): notification-service's second queue trio
-(`notification-service.rating-events` + retry/dlq) bound to the
-`rating-events` exchange on the registry's exact key, the listener
-generalized to derive each delivery's retry queue from its consuming
-queue (the hard-coded request retry queue would have parked a failed
-rating event in the wrong trio), a broker integration test mirroring the
-request one (ratee-only row, redelivery dedupe, cross-exchange
-isolation, retry/DLQ evidence through the rating trio), and the web's ⭐
-review template with the rater's name hydrated at read time via the
-`actorIdOf` generalization of D32's courier lookup. The retry-queue
-derivation and shipping the web template in the same PR were the
-author's decisions via neutral-options Q&A; the ratee-only recipient is
-#249's contract (`parties`, decided on #44). Recorded in
-`ai/usage-log.md`.
-
-Claude Code (Fable 5) implemented the notification-service prune for
-issue #266: ingesting `request.dropped` now deletes the dropping
-courier's stored rows for that request (they are no longer a party, so
-the rows could only dead-end on the detail 404), via a payload-pattern
-bulk delete in the same transaction as the event-ID dedupe — ordered
-before it, since the bulk query's context clear would discard the
-dedupe row's unflushed insert. The direction (prune, over past-party
-read access or web-only 404 softening — D33,
-`docs/notification-service.md`) and folding in the #263 review's two
-timing nits were the author's decisions via neutral-options Q&A. On the
-web, the click-to-navigate mark-read moved into the provider as an
-optimistic `pendingReadIds` overlay (a quick Back no longer flashes the
-row unread; a failed PATCH resurfaces as unread on the next fetch), and
-the `marking` gate left the per-row PATCH so a row pushed during an
-in-flight mark-all can still be marked. Recorded in `ai/usage-log.md`.
-
-Claude Code (Fable 5) applied the PR #277 review's fixes (issue #266):
-the prune is bounded to rows at or before the drop and the ingest
-skips a courier's row when a stored `request.dropped` already covers
-it, so retry-queue reordering neither deletes a re-accept's fresh rows
-nor re-creates the dead-end row; on the web, the Notification Center's
-rows and their total merged into one state, read-pending rows leave
-the Unread view through the same bookkeeping as an in-page click, and
-the badge re-syncs when the Center opens. The guard-vs-documented-
-limitation and badge-signal choices were the author's via
-neutral-options Q&A. Recorded in `ai/usage-log.md`.
-
-Claude Code (Fable 5) built the Rate Your Experience modal (issue
-#256, N1.1/N1.2 under #44): an Actions column on Request History's
-COMPLETED rows — both tabs — opens the wireframe's dialog (required
-stars, "Write a review (optional)" with a 1000-char counter matching
-rating-service's cap), posting `POST /ratings` and flipping the entry
-point to "Rated ★n" once `GET /ratings/mine` answers; the subtitle
-names the other party and reads "Requested by {name}" on the courier
-tab. A session cache keyed by viewer and request holds the immutable
-answers (a 404 is never cached — a just-completed request can trail
-rating-service's ingest, so the lookup retries on the page's push
-refresh), a 409 locks the form into close-only, and the PR #278 review
-(@Sinnez1) made the modal unclosable while a submit is in flight. The
-Request History entry point (not My Requests, which lists only active
-states) and the cache policy were the author's decisions via
-neutral-options Q&A. Recorded in `ai/usage-log.md`.
-
-Claude Code (Fable 5) built the public profile page (issue #257,
-N1.3/N1.4 under #44): `/users/:id` with the username from
-user-service's public profile (a 404 there reads "user not found"),
-the star row and Avg-rating tile from the rounded raw mean, paged
-Recent Reviews whose rater names hydrate at read time (D32), and the
-Report User dialog posting rating-service's fixed reason list, hidden
-on the viewer's own profile; the assigned courier's name on My
-Requests and the requester's name on Active Delivery link here.
-Stacking on PR #278's branch, omitting the wireframe's joined-date and
-deliveries-completed tiles (no API carried either at the time; filed
-as issue #280 and built there) and the choice of entry links were the
-author's decisions via neutral-options Q&A. Recorded in
-`ai/usage-log.md`.
-
-Claude Code (Fable 5) closed that wireframe gap (issue #280, follow-up
-to #257): user-service's public profile now carries `joinedAt` — a
-deliberate re-widening of the F8.1.1 username-only response, which had
-dropped `createdAt` in the PR #131 review — order-service answers
-`GET /requests/completed-count?courierId=` (COMPLETED requests only,
-so an admin's RESOLVED dispute split never counts; any authenticated
-caller), and `/users/:id` draws the Joined and deliveries-completed
-tiles in a three-tile row with Avg rating, shown even before the first
-review (the count is only fetched once the profile gate succeeds). The
-PR #282 review (@Sinnez1) took the Joined month to a short month in
-Singapore time — a long month crossed the tile border on a phone, and
-the viewer's zone could shift the month — with an em dash if the
-profile carries no usable `joinedAt`; the count goes through `orderApi`
-(so the order-service mock covers it) and degrades to its own Try
-again, since its tile can fail while the rest of the page loads. The full-instant `joinedAt`
-(the web formats the month-year), the endpoint's query-param shape in
-order-service (not rating-service's `rateable_request`, which has no
-backfill for completions before the #251 ingest shipped) and the
-single PR stacked on PR #279's branch were the author's decisions via
-neutral-options Q&A. Recorded in `ai/usage-log.md`.
-
-Claude Code (Fable 5) wrote the N1 documentation pass (issue #258, the
-docs checklist under #44): `docs/rating-service.md` + `.mmd` — the
-service's decision record (D1–D17) transcribed from the merged code's
-disclosure headers, the issues and the PR reviews, with the decisions
-table attributing each to its issue — plus the Rating Service's entry
-into `docs/architecture.md`/`.mmd` (the first nice-to-have drawn in the
-runtime diagram), the rating-events trio in
-`docs/notification-service.mmd`, the rating-service README's
-Configuration/Events/Status sections, a filled
-`rating-service/AGENTS.md`, the web README/feature-README/AGENTS
-catch-ups (gateway wording, folder lists, the Rating service row in the
-screen mapping), and this summary. Every decision documented was made
-by Leong Wei Zhi on the cited issues and PRs; the tool transcribed and
-formatted. Recorded in `ai/usage-log.md`.
-
-Claude Code (Opus 5) closed the two ends of the rating flow that had no
-way back to a rating once it was made (issue #284, follow-up to #256 and
-#257): `/profile`'s details card links to `/users/<own id>`, the
-account's own entry into the public profile (nothing pointed there
-before — the nav's Profile item is account settings — so a ratee had to
-type the URL to read the reviews they had received), and Request
-History's `Rated ★n` chip is a button opening a read-only Your Review
-dialog with the stars, the write-up and the date. Ratings are immutable,
-so no edit screen ever showed a rater their own text; the text was
-already in the `GET /ratings/mine` answer each row holds, so neither
-part adds an API call. Both placements, and the dialog over a `title`
-tooltip or an inline expand, were the author's decisions via
-neutral-options Q&A. Recorded in `ai/usage-log.md`.
-
-Claude Code (Fable 5.1) implemented notification decision D34
-(2026-11-04): the `parties` recipient list left every foc-contracts
-event, `request.expired` gained a nullable `courierId`, and the
-Notification Service now derives who is told per event type
-(`RecipientResolver`), with the four publishing services, their tests,
-and the docs updated in one coordinated release. Asked which option was
-better, the tool declined under the AI policy and laid the options out
-as factual property comparisons; Leong Wei Zhi chose the model, the
-expiry field and the one-release rollout, and supplied the reasoning
-recorded in `docs/notification-service.md`. Recorded in
-`ai/usage-log.md`.
-
-2026-11-07: Claude Code (Sonnet 5.5) appended the author's 44 new supplier
-rows to the two supplier seed CSV copies (issue #299), timed the supplier
-list and search endpoints at 65 and 1,000 rows on a throwaway database,
-and updated `docs/supplier-service.md`, `docs/architecture.md` and
-`docs/architecture.mmd` to record the team's decision to remove the
-caching requirement (NFR1.1.1, issue #298; D15). Asked whether caching
-was worth doing, the tool declined under the AI policy and offered
-measurements; the team decided and supplied the wording. Recorded in
-`ai/usage-log.md`.
-
-2026-11-07: Claude Code (Sonnet 5.5) wrote the Supplier Service's NFR1.1
-(5-second listings) and NFR2.1 (1,000-supplier capacity) tests, issue
-#300, as a Testcontainers PostgreSQL test following the other services'
-pattern, with its Maven test dependencies. The tool compared the H2 and
-Testcontainers options as facts and the author chose Testcontainers; the
-NFR bounds are the team's. Recorded in `ai/usage-log.md`.
-
-Claude Code (Opus 5.5) gave the user-service demo seed realistic,
-fictional usernames (issue #48, DP11): fixed lists of `firstname_lastname`
-names for the owner, 3 admins and 100 users, with the emails, passwords
-and counts unchanged, plus the seeder test and the docs that name the
-accounts. Realistic names everywhere was Leong Wei Zhi's decision; the
-tool picked the names and wrote the change. First opened as PR #295 on
-the closed issue-#48 stack, it ships as its own PR off `main` (DP17,
-2026-11-08). Recorded in `ai/usage-log.md`.
-Claude Code (Opus 5.5, 2026-11-05) wrote the N5 cloud deployment (issue
-#48): the `infra/` Terraform and Kubernetes manifests, the Deploy
-workflow, the gateway's resolver/upstream-suffix change and
-`docs/deployment.md`. The tool asked the deployment decisions as neutral
-options rounds and priced the options from AWS's public price files; the
-platform, sizing, data-store, secrets, rollout and lifetime choices
-(DP1–DP13) were Leong Wei Zhi's, including replacing a first EKS design
-with the single Spot + k3s host to fit the team's $50 budget. On
-2026-11-08, after the seven-PR stack was closed, Claude Code (Fable 5.1)
-ran three more options rounds; Leong Wei Zhi kept the infra design,
-dropped the five backend multi-replica PRs, chose fresh PRs, a decision
-page plus a short runbook, and the host-side secrets copy with IMDS hop
-limit 1 (DP7 and DP10 re-decided), and chose to record the alternatives
-as facts without reasons. The tool then rebuilt the branch, removed
-External Secrets Operator, fixed the two review findings in the Deploy
-workflow and rewrote the two documents; `docs/deployment.md` carries no
-PR history, by request. On the first cloud deploy the same day, it
-diagnosed the rollout's OIDC refusal (GitHub's immutable subject claim)
-and switched the deploy role's trust to it (the plain form dropped on
-review, by team decision). Later that day it put the site behind an
-Application Load Balancer with an AWS Certificate Manager certificate for
-`foc23.ddnsfree.com` (DP18 to DP21; first `foc23.mooo.com` on FreeDNS, moved to
-Dynu the same day when FreeDNS refused CNAME records): the domain source, the TLS endpoint, the
-port-80 redirect, the host's exposure and the pipeline variable were
-Leong Wei Zhi's choices from neutral options rounds; the tool wrote the
-Terraform, flipped the four baked origins to https and extended the two
-documents. Recorded in `ai/usage-log.md`.
-On 2026-11-09, with the budget known to be $250 and the deadline
-2026-12-11, Claude Code (Fable 5.1) re-platformed the cloud stack (issue
-#48): an EKS cluster with a t3a.medium Spot node group in private subnets
-behind a fck-nat NAT instance, one RDS PostgreSQL 17 instance holding the
-seven service databases (a `db-init` Job creates the roles), RabbitMQ and
-Redis on EBS volumes, Traefik from its Helm chart on a NodePort behind the
-existing load balancer, `secrets.sh` and `deploy.sh` run from the Deploy
-job under an EKS access entry. Every choice was Leong Wei Zhi's, taken in
-five neutral options rounds with prices from the public price files
-(platform, nodes, purchase model, network, Postgres, RabbitMQ and Redis,
-ingress, secrets, deploy access, controller, credentials, lifetime, docs
-shape); Aurora Serverless v2 and Amazon MQ were chosen first and dropped
-after the tool reported the 0.5 ACU floor and the unavailable
-`mq.t3.micro`, and the network layout was settled after the tool answered
-four questions on private subnets and NAT with facts only. The tool wrote
-the Terraform, manifests, chart values, scripts and workflow, tested the
-init script against a local Postgres, planned against the live state, and
-replaced `docs/deployment.md` and `infra/README.md`, quoting the reasons
-Leong Wei Zhi gave. The PR #316 review round (same day) added a third,
-on-demand node that RabbitMQ and Redis select (chosen by Leong Wei Zhi
-after the reviewers' zone-bound-volume finding, from options incl. Amazon
-MQ + ElastiCache and SQS, recorded as facts), a separate Secret for the
-RDS master credentials, a pinned RDS minor and one deploy deadline, and
-restored the issue #305 state of DP9/DP10; both node groups then moved to
-t3a.medium on request. Recorded in `ai/usage-log.md`.
-
-2026-11-08: Claude Code (Fable 5.1) made the Admin Dashboard tests wait for a
-section's first load to settle before asserting on it, after one case
-flaked in CI on an unrelated branch. Test-only. Recorded in
-`ai/usage-log.md`.
-
-Claude Code (Opus 5.5, 2026-11-08) wrote the owner upgrade (issue #308):
-`POST /users/me/owner` in user-service, with the owner setup token check
-moved into a shared `OwnerSetupToken` bean, and the profile page's Become
-an Owner card, plus tests and docs. The endpoint shape, the gate-code
-requirement, the 403/503 answers, the session revoke and re-login, the
-log-line audit, keeping `/register-owner` and the OWNER caller's
-unchanged 200 were Leong Wei Zhi's decisions via neutral options rounds;
-the tool implemented them. After the PR #309 review, Leong Wei Zhi also
-chose to check the gate code before the token (it was token first), so a
-wrong token spends the code. Recorded in `ai/usage-log.md`.
-
-The credit-change notification (Credit NFR1.1, PR #313): Claude Code
-(Opus 5.5) added the `credit.transferred`, `credit.released` and
-`credit.dispute-settled` contracts, had credit-service write them to its
-outbox when a transfer, release or dispute split settles,
-notification-service bind them and tell each party, and the web show the
-viewer's side of the change, open `/credits` on click and refresh the
-balance on the push, with tests and the design docs' D37 (notification)
-and D15 (credit). Which movements notify, the contract names and
-fields, the recipients and the wording were team decisions. Recorded in
-`ai/usage-log.md`.
-Later (2026-11-09) Claude Code (Opus 5.5) also had a pushed
-`request.created` refresh the balance, so a new request's reserve shows
-at once; refreshing on that event was a team decision.
-Later (2026-11-10) Claude Code (Opus 5.5) redrew
-`docs/credit-service.mmd` to match the merged code (admin and expiries
-endpoints, the user-events listener, dispute settlement, the
-credit-change replies to notification-service, the query, expiry and
-redistribution services, the outbox purge and reservation slices). It
-records components the team already built; no design was changed.
-
-Claude Code (Opus 5.5, 2026-11-09) made switching the notification sound
-on preview the chime once, from the Notification Center header and the
-profile's Preferences switch alike, plus tests. Covering both surfaces
-was Leong Wei Zhi's choice via a neutral options question. Recorded in
-`ai/usage-log.md`.
-
-**Verification:** all AI-assisted output is reviewed by the team through
-pull requests before merging.
-
-Issue #305 (chat and notification safe at two replicas, 2026-11-08) —
-Claude Code (Fable 5.1) implemented the team's decisions (Leong Wei Zhi,
-neutral options Q&A): STOMP pushes fan out over a per-service AMQP
-exchange so the replica holding the browser's socket delivers them
-(notification D35, chat), notification-service acks a concurrent
-duplicate on its `processed_events` key and moves to a Flyway baseline
-(D36), the two HPAs return and the one-replica pins go (DP9/DP10); unit
-and Testcontainers tests, compose and k8s wiring, and the docs. The
-alternatives (STOMP broker relay, insert-first dedupe, single active
-consumer, ShedLock) were declined by the author and are recorded in
-`ai/usage-log.md`. The PR #306 review rounds (Sinnez1, the Claude
-reviewer) added a 5 s broker connect timeout, an ack scoped to the
-`processed_events_pkey` constraint with a real-Postgres race test, a V2
-migration for legacy volumes and smaller hardening.
-
-Continuous deployment (issue #48, DP20, 2026-11-09) — Claude Code (Opus
-5.5) implemented the team's decisions (Leong Wei Zhi, neutral options
-Q&A): the Deploy workflow runs after CI succeeds on `main`, skips
-docs-only changes, builds only the images changed since the commit
-running in the cluster (read by a plan job, `infra/k8s/changed-images.sh`)
-and retags the rest; the runbook and `docs/deployment.md` follow.
-Recorded in `ai/usage-log.md`.
-
-Availability on EKS (issue #48, DP9 revised and DP21, 2026-11-10) —
-Claude Code (Opus 5.5) implemented the team's decisions (Leong Wei Zhi,
-neutral options Q&A, facts only): the seven backends run HPA min 2 /
-max 3, every Deployment and Traefik prefer one replica per node
-(soft topology spread), the backends get PodDisruptionBudgets
-(`maxUnavailable: 1`) and Traefik one (`minAvailable: 1`), Traefik runs 2
-replicas, the backends roll without surge (`maxSurge: 0`), gateway and web with
-one surge pod; `docs/deployment.md`
-follows. Recorded in `ai/usage-log.md`.
+AI tools were used under the CS3219 AI Usage Policy (project document,
+Appendix 2). Every AI-assisted change, with its tool, prompt, scope and
+author review, is recorded in [`ai/usage-log.md`](ai/usage-log.md).
