@@ -8197,3 +8197,84 @@ Entry template:
   `lost+found`: the same error; with group 1000, mode 2775 as fsGroup
   applies: "Ready to accept connections"); `kubectl kustomize infra/k8s`
   renders. The author reviews via pull request.
+
+## 2026-11-10 — Leong Wei Zhi (N5 cloud deployment, issue #48: replicas, spread and PDBs)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** implementation + documentation of team decisions
+- **Scope:** `infra/k8s/hpa.yaml` (seven backends HPA min 2 / max 3),
+  `infra/k8s/apps/*.yaml` (soft `topologySpreadConstraints` per node on
+  all nine Deployments; Hikari comment notes 105 of ~110 at max 3), new
+  `infra/k8s/pdb.yaml` (seven `minAvailable: 1` PDBs) +
+  `kustomization.yaml`, `infra/helm/traefik-values.yaml` (2 replicas,
+  chart PDB, same spread), `docs/deployment.md` (DP9 revised, DP21 new,
+  DP10/DP14/DP19, fit, scaling and Spot tables), README AI Use Summary.
+- **Prompt(s):** "create a plan to improve availability of services, min
+  two replicas and at max three replicas (under high load) im not sure
+  affinity goes as the k8 cluster involves one on demand instance (needed
+  for shared redis and rabbitmq broker) and two spot instances". Under
+  the policy, the placement, capacity, connection-pool, supplier
+  first-boot, scope, PDB and Traefik choices were put to the author as
+  two neutral options rounds (factual properties only, no
+  recommendation); the author chose soft spread per node, nodes
+  unchanged, pool unchanged, supplier min 2 accepted, backends only,
+  PDB minAvailable 1, Traefik 2 replicas + PDB, and gave no reasons.
+- **Author review:** `kubectl kustomize infra/k8s` renders 42 objects
+  (7 PDBs, 7 HPAs at 2/3, spread on 9 Deployments); `helm template` of
+  traefik 42.3.1 with the values renders 2 replicas, the PDB and the
+  spread. Rollout through CD after merge; the author checks
+  `kubectl -n foc get hpa,pdb` and pod placement, and reviews via pull
+  request.
+- **Superseded in review (PR #323, entries below):** the backend PDBs
+  became `maxUnavailable: 1` (Traefik keeps `minAvailable: 1`); the
+  backends roll with `maxSurge: 0` / `maxUnavailable: 1`; gateway and web
+  with `maxSurge: 1` / `maxUnavailable: 0`.
+
+## 2026-11-10 — Leong Wei Zhi (N5 cloud deployment, issue #48: PR #323 review round)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** review fixes from team decisions
+- **Scope:** the seven backend Deployments gain `strategy: RollingUpdate`
+  with `maxSurge: 0`, `maxUnavailable: 1` (Hikari comments updated);
+  `infra/k8s/pdb.yaml` moves to `maxUnavailable: 1`; `infra/k8s/hpa.yaml`,
+  `docs/deployment.md` (DP9, DP19, DP21, Spot table) and `infra/README.md`
+  say the spread is best effort and the rollout adds no surge.
+- **Prompt(s):** "address the latest pr comments". Copilot: surge pods at
+  HPA max reach 112 connections; surge pods can stall a rollout at full
+  memory; `ScheduleAnyway` gives no guarantee; `minAvailable: 1` lets two
+  go at 3 replicas. The wording fix was made directly; the rollout
+  strategy and PDB form were put to the author as a neutral options round
+  (default surge kept / maxSurge 0 / pool 4 / db.t4g.small; minAvailable
+  with corrected docs / maxUnavailable). The author chose maxSurge 0 and
+  maxUnavailable 1, no reasons given.
+- **Author review:** `kubectl kustomize infra/k8s` renders 42 objects with
+  7 no-surge strategies and 7 `maxUnavailable: 1` PDBs. The author reviews
+  via pull request.
+
+## 2026-11-10 — Leong Wei Zhi (N5 cloud deployment, issue #48: PR #323 review round 2)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** review fixes from team decisions
+- **Scope:** `infra/k8s/apps/gateway.yaml`, `web.yaml` (`maxSurge: 0`,
+  `maxUnavailable: 1`); `infra/k8s/hpa.yaml` header (scope line, node
+  fit); chat/notification headers (the old 'pinned to 1' note marked as
+  lifted); README AI Use Summary (PDB values); `docs/deployment.md` DP21.
+- **Prompt(s):** "address the latest pr comments". Copilot: the summary's
+  PDB values, the stale hpa.yaml header, gateway/web left on the default
+  surge; Claude reviewer: the 'pinned to 1' headers. The wording fixes
+  were made directly; the gateway/web strategy was put to the author as a
+  neutral options round (default surge documented / no surge / default
+  surge + min 2). The author chose no surge, no reasons given.
+- **Author review:** `kubectl kustomize infra/k8s` renders. The author
+  reviews via pull request.
+
+## 2026-11-10 — Leong Wei Zhi (N5 cloud deployment, issue #48: PR #323 review round 3)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** review fixes from team decisions
+- **Scope:** `infra/k8s/apps/gateway.yaml`, `web.yaml` (`maxSurge: 1`,
+  `maxUnavailable: 0`); `docs/deployment.md` DP21; README AI Use Summary;
+  the first #323 entry above gains a "superseded" line; PR description.
+- **Prompt(s):** "address the latest pr comments and resolve the final
+  threads". Claude reviewer: no-surge at one replica means an outage per
+  deploy, and neither pod uses the database; the first log entry still
+  said `minAvailable: 1`. The author was asked to keep no-surge or switch
+  and chose `maxSurge: 1` / `maxUnavailable: 0`, no reasons given.
+- **Author review:** `kubectl kustomize infra/k8s` renders. The author
+  reviews via pull request.

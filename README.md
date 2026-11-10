@@ -28,6 +28,10 @@
   2026-11-09, Claude Code (Fable 5.1), issue #48 (EKS re-platform): a
   cloud deployment paragraph added for the move to EKS and RDS. Author
   review: Leong Wei Zhi, pending pull request review.
+  2026-11-10, Claude Code (Opus 5.5), issue #48 (DP9, DP21): an
+  availability paragraph added. Author review: Leong Wei Zhi, pending
+  pull request review. PR #323 review: the PDB values corrected and the
+  no-surge rollouts added.
   2026-11-09, Claude Code (Opus 5.5), issue #48 (DP20): AI Use Summary
   extended for continuous deployment. Author review: Leong Wei Zhi,
   pending pull request review.
@@ -1661,3 +1665,13 @@ docs-only changes, builds only the images changed since the commit
 running in the cluster (read by a plan job, `infra/k8s/changed-images.sh`)
 and retags the rest; the runbook and `docs/deployment.md` follow.
 Recorded in `ai/usage-log.md`.
+
+Availability on EKS (issue #48, DP9 revised and DP21, 2026-11-10) —
+Claude Code (Opus 5.5) implemented the team's decisions (Leong Wei Zhi,
+neutral options Q&A, facts only): the seven backends run HPA min 2 /
+max 3, every Deployment and Traefik prefer one replica per node
+(soft topology spread), the backends get PodDisruptionBudgets
+(`maxUnavailable: 1`) and Traefik one (`minAvailable: 1`), Traefik runs 2
+replicas, the backends roll without surge (`maxSurge: 0`), gateway and web with
+one surge pod; `docs/deployment.md`
+follows. Recorded in `ai/usage-log.md`.
