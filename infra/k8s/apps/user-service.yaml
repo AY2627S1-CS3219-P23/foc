@@ -24,19 +24,15 @@
 # PR #323 review (Copilot), team decision DP21 (Leong Wei Zhi): rolling
 # update without surge (maxSurge 0, maxUnavailable 1).
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision DP22,
+# Leong Wei Zhi, options Q&A): the Service moved to services.yaml; this
+# Deployment is the base that pools/spot (-spot, HPA 1 to 2) and
+# pools/stable (-stable, one replica on the on-demand node) render;
+# CPU request 100m (was 200m).
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: user-service
-  namespace: foc
-spec:
-  selector:
-    app: user-service
-  ports:
-    - port: 8080
----
-# no replicas: the HorizontalPodAutoscaler in hpa.yaml owns the count
+# no replicas: pools/stable sets 1, and the HorizontalPodAutoscaler in
+# hpa.yaml owns the -spot count (DP22)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -106,7 +102,8 @@ spec:
                   name: foc-secrets
                   key: USER_DB_PASSWORD
             # seven services share one db.t4g.micro (max_connections about
-            # 110): 7 x 5 x 3 replicas (HPA max) is 105, accepted; a rollout
+            # 110): 7 x 5 x 3 replicas (1 stable +
+            # HPA max 2) is 105, accepted; a rollout
             # adds no surge pod (strategy below, DP21), and one idle
             # connection per pod keeps a fresh pod light (DP19)
             - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
@@ -169,7 +166,10 @@ spec:
               value: "60s"
           resources:
             requests:
-              cpu: 200m
+              # 100m since DP22: one replica of every service shares the
+              # on-demand node's 2 vCPU with RabbitMQ, Redis, Traefik and
+              # the cluster's own pods (about 0.7 vCPU)
+              cpu: 100m
               memory: 384Mi
             limits:
               memory: 768Mi

@@ -31,15 +31,25 @@
   Author review: Leong Wei Zhi, pending pull request review.
   PR #323 review: the too-many-connections row names maxSurge 0.
   Author review: Leong Wei Zhi, pending pull request review.
+  2026-11-10, Claude Code (Opus 5.5), issue #48 (DP22): the -spot and
+  -stable Deployments in the counts, checks and rows; the t3a.large
+  on-demand node and its apply. Author review: Leong Wei Zhi, pending
+  pull request review.
+  PR #329 review (Copilot): the rollback past the split.
+  Author review: Leong Wei Zhi, pending pull request review.
+  Round 2 (Sinnez1), Leong Wei Zhi's choices: the rollback deletes -spot
+  first and -stable after; the deploy sequence follows the new order.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # infra: cloud deployment runbook
 
 Design and decisions: [`docs/deployment.md`](../docs/deployment.md).
 An EKS cluster (two t3a.medium Spot nodes across three zones plus one
-on-demand node in zone a, all in private subnets, a NAT instance for egress), one RDS PostgreSQL instance
+t3a.large on-demand node in zone a, all in private subnets, a NAT instance for egress), one RDS PostgreSQL instance
 with the seven service databases, RabbitMQ and Redis on the on-demand
-node with EBS volumes, behind a load balancer that serves
+node with EBS volumes and one replica of every service beside them
+(DP22), behind a load balancer that serves
 `https://foc23.ddnsfree.com`.
 
 ```mermaid
@@ -56,7 +66,7 @@ flowchart TD
 | --- | --- |
 | `terraform/bootstrap/` | S3 state bucket (local state, applied once) |
 | `terraform/` | network (`network.tf`: three public + three private subnets), NAT instance (`nat.tf`), EKS cluster, the Spot and on-demand node groups, add-ons and the deploy role's access entry (`eks.tf`), RDS (`rds.tf`), ACM certificate + Application Load Balancer (`tls.tf`), GitHub OIDC deploy role (`iam.tf`), Secrets Manager (`secrets.tf`) |
-| `k8s/` | kustomization applied by the Deploy job: gp3 StorageClass, RabbitMQ and Redis StatefulSets, app Deployments, Traefik Ingress, HPAs, PodDisruptionBudgets; `data/db-init.yaml` is the Job that creates the seven database roles |
+| `k8s/` | kustomization applied by the Deploy job: gp3 StorageClass, RabbitMQ and Redis StatefulSets, app Deployments (`apps/`, rendered as `<svc>-spot` and `<svc>-stable` by `pools/`), their Services, Traefik Ingress, HPAs, PodDisruptionBudgets; `data/db-init.yaml` is the Job that creates the seven database roles |
 | `k8s/secrets.sh` | copies `foc/app` and `foc/ghcr` from Secrets Manager into the k8s Secrets `foc-secrets`, `foc-db-admin` (the RDS master credentials, mounted by db-init only) and `ghcr-pull` (every deploy, from the Deploy job) |
 | `k8s/deploy.sh` | run by the Deploy workflow: kubeconfig, Traefik chart, secrets, db-init, apply, rollouts |
 | `k8s/changed-images.sh` | the Deploy workflow's plan: compares the commit the cluster runs with the target, lists the images to build and the ones to retag (DP20) |
@@ -130,7 +140,7 @@ cluster admin):
 
 ```sh
 aws eks update-kubeconfig --name "$(terraform output -raw cluster_name)"
-kubectl get nodes -L foc.dev/pool                  # 3 Ready, t3a.medium: 2 spot, 1 stable
+kubectl get nodes -L foc.dev/pool                  # 3 Ready: 2 spot (t3a.medium), 1 stable (t3a.large)
 kubectl -n kube-system get pods                    # aws-node, kube-proxy, coredns, metrics-server, ebs-csi-*, eks-pod-identity-agent
 ```
 
@@ -183,11 +193,13 @@ sequenceDiagram
   A->>K: plan: read the live image tags, diff their commit with the target
   A->>G: build + push the changed images, retag the rest, tagged commit-runid (web has the public URL baked in)
   A->>K: aws eks update-kubeconfig (OIDC role, access entry)
-  A->>K: helm upgrade --install traefik (NodePort 30080)
   A->>K: secrets.sh: Secrets Manager -> foc-secrets, ghcr-pull
   A->>K: db-init Job
   K->>R: create or update the 7 roles and databases
-  A->>K: kubectl apply -k, wait for every rollout
+  A->>K: kubectl apply -k everything but -stable, wait (data stores, -spot)
+  A->>K: delete the pre-split Deployments (first deploy after DP22 only)
+  A->>K: kubectl apply -k, wait for -stable
+  A->>K: helm upgrade --install traefik (NodePort 30080)
   K->>G: pull the images (through the NAT instance)
 ```
 
@@ -198,7 +210,15 @@ differs is rebuilt there (a re-run is not subject to the older-commit
 skip). A new dispatch always builds the head of
 `main`. To retry a failed rollout, re-run its **failed jobs** or
 dispatch: a full re-run finds the cluster already on its tag (the apply
-happened) and skips the deploy.
+happened) and skips the deploy. Rolling back to a commit from before the
+split into `-spot` and `-stable` (DP22, PR #329): that commit's manifests
+bring back the unsuffixed Deployments (HPA 2 to 3) but remove nothing,
+and the Services route to every pod with the `app` label. Left in place,
+a backend could run 6 pods (210 connections at full pools, against about
+110). So, first `kubectl -n foc delete deployment -l foc.dev/pool=spot`
+(`-stable` keeps serving), then re-run the old Deploy run, and once it is
+Ready `kubectl -n foc delete deployment -l foc.dev/pool=stable`: at most
+4 pods per backend on the way, no outage.
 
 ## 5. Smoke test
 
@@ -207,7 +227,7 @@ curl -sI http://<public_host>/ | head -3                          # 301, Locatio
 curl -s https://<public_host>/api/user/actuator/health           # {"status":"UP"}
 openssl s_client -connect <public_host>:443 -servername <public_host> </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer
 aws elbv2 describe-target-health --target-group-arn "$(aws elbv2 describe-target-groups --names foc-traefik-np --query 'TargetGroups[0].TargetGroupArn' --output text)"   # 2 healthy
-kubectl -n foc get pods,hpa,pvc                                  # 18 pods Running, 7 HPAs at 2 + gateway/web at 1, 2 PVCs Bound
+kubectl -n foc get pods,hpa,pvc                                  # 20 pods Running (9 -stable, 9 -spot, rabbitmq, redis), 9 HPAs at 1, 2 PVCs Bound
 kubectl -n foc logs job/db-init | tail -1                        # db-init: chat ready
 ```
 
@@ -224,7 +244,7 @@ proves the socket survived the hops. From inside a pod, the node role
 must be out of reach and the database connection encrypted:
 
 ```sh
-kubectl -n foc exec deploy/user-service -- curl -s -m 2 http://169.254.169.254/ || echo "IMDS unreachable (expected)"
+kubectl -n foc exec deploy/user-service-spot -- curl -s -m 2 http://169.254.169.254/ || echo "IMDS unreachable (expected)"
 kubectl -n foc run psql --rm -it --restart=Never --image=postgres:17.9 --env=PGPASSWORD=<USER_DB_PASSWORD from foc/app> -- \
   psql "host=<rds_endpoint> user=user dbname=user sslmode=require" -c "select ssl from pg_stat_ssl where pid = pg_backend_pid()"   # t
 ```
@@ -255,14 +275,14 @@ one that ran the apply, and the deploy role): `aws eks update-kubeconfig
 
 | Task | Command |
 | --- | --- |
-| Pods, HPAs, volumes | `kubectl -n foc get pods,hpa,pdb,pvc -o wide` (rabbitmq-0 and redis-0 sit on the `stable` node; a backend's two replicas usually on different nodes, DP21) |
-| Logs | `kubectl -n foc logs deploy/<name>` |
-| Restart one service | `kubectl -n foc rollout restart deploy/<name>` |
+| Pods, HPAs, volumes | `kubectl -n foc get pods,hpa,pdb,pvc -o wide` (rabbitmq-0, redis-0 and every `-stable` pod sit on the `stable` node, every `-spot` pod on a `spot` node, DP22) |
+| Logs | `kubectl -n foc logs deploy/<name>-spot` (or `-stable`) |
+| Restart one service | `kubectl -n foc rollout restart deploy/<name>-spot deploy/<name>-stable` |
 | Database shell | `kubectl -n foc run psql --rm -it --restart=Never --image=postgres:17.9 -- psql "host=<rds_endpoint> user=<svc> dbname=<svc> sslmode=require"` (password from `foc/app`) |
-| Spot took a node | nothing to redeploy: the pods are recreated on the other nodes as soon as the drain evicts them, and the group launches a replacement that joins in 2 to 3 min (on a rebalance recommendation the replacement comes first). RabbitMQ and Redis are on the on-demand node and unaffected. The backends and Traefik keep answering from their replica on another node (DP21); WebSockets held on the lost node drop and the browsers reconnect. Both Spot nodes at once: what fits on the on-demand node keeps running, the rest returns in 5 to 10 min; see `docs/deployment.md`, Spot behaviour |
+| Spot took a node | nothing to redeploy: the pods are recreated on the other nodes as soon as the drain evicts them, and the group launches a replacement that joins in 2 to 3 min (on a rebalance recommendation the replacement comes first). RabbitMQ and Redis are on the on-demand node and unaffected. Every service and Traefik keeps answering from its on-demand replica (DP22); WebSockets held on the lost node drop and the browsers reconnect. Both Spot nodes at once: every service runs on its on-demand replica, the Spot replicas return in 5 to 10 min; see `docs/deployment.md`, Spot behaviour |
 | The on-demand node is replaced (hardware failure, node group update) | `kubectl get nodes -L foc.dev/pool` | RabbitMQ and Redis are down for the minutes it takes; the new node comes up in zone a and their volumes reattach by themselves |
 | NAT instance shell | `aws ssm start-session --target <id of the foc-nat instance>` |
-| An HPA shows 3 replicas (backends) or 2 (gateway, web) | expected under load (chat and notification fan their STOMP pushes out over AMQP, issue #305). The repeated scheduled runs are idempotent (DP10). It goes back to the minimum about five minutes after CPU drops below 70 %. The nodes are not grown for it (DP21): the extra replica may stay `Pending` on memory unless `node_count` is raised and applied |
+| An HPA shows 2 replicas (its `-spot` Deployment; 3 in total with `-stable`) | expected under load (chat and notification fan their STOMP pushes out over AMQP, issue #305). The repeated scheduled runs are idempotent (DP10). It goes back to the minimum about five minutes after CPU drops below 70 %. The nodes are not grown for it (DP21): the extra replica may stay `Pending` on memory unless `node_count` is raised and applied |
 
 ## Troubleshooting
 
@@ -276,7 +296,7 @@ one that ran the apply, and the deploy role): `aws eks update-kubeconfig
 | Deploy job: `kubectl` gets `Unauthorized` or `403` | `aws eks list-access-entries --cluster-name foc` | the deploy role's access entry or its `AmazonEKSClusterAdminPolicy` association is missing (`eks.tf`); `terraform apply` |
 | Deploy job: `helm` cannot reach `traefik.github.io` | the runner's network | GitHub-side; re-run the job |
 | `db-init` Job fails | `kubectl -n foc logs job/db-init` | RDS still creating or `DB_HOST` stale in `foc/app` (apply, then redeploy); `password authentication failed` means `RDS_MASTER_PASSWORD` in `foc/app` differs from the instance (apply again) |
-| Backend `CrashLoopBackOff` with `FATAL: too many connections` | `kubectl -n foc logs <pod> -p` | the pool cap (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`, 5) was raised or removed, or `SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE` (1) dropped, so a deploy's surge pods open 5 each; or the backends' `maxSurge: 0` was dropped while they sit at HPA max 3 with full pools (105 + surge, DP19, DP21); db.t4g.micro allows about 110 |
+| Backend `CrashLoopBackOff` with `FATAL: too many connections` | `kubectl -n foc logs <pod> -p` | the pool cap (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`, 5) was raised or removed, or `SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE` (1) dropped, so a deploy's surge pods open 5 each; or the backends' `maxSurge: 0` was dropped while they sit at 3 replicas (1 stable + HPA max 2) with full pools (105 + surge, DP19, DP21); db.t4g.micro allows about 110 |
 | Backend `CrashLoopBackOff` with `password authentication failed` | `kubectl -n foc logs job/db-init` | the Job did not run after the password changed; re-run Deploy |
 | `foc-secrets`, `foc-db-admin` or `ghcr-pull` missing | the Deploy job's `secrets.sh` output | the deploy role was denied `secretsmanager:GetSecretValue`, or the secret is not in `ap-southeast-1` |
 | `ImagePullBackOff` on every pod | `aws ec2 describe-instances --filters Name=tag:Name,Values=foc-nat --query 'Reservations[].Instances[].State.Name'` | the NAT instance is stopped (start it), its interface has source/destination checking on, or the private route table lost its default route |

@@ -1,0 +1,42 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-11-10, issue #48 (N5 cloud deployment).
+# Scope: the on-demand half of every service (team decision DP22, Leong
+# Wei Zhi, options Q&A, recorded in docs/deployment.md): <svc>-stable,
+# exactly one replica on the on-demand node, so a Spot interruption never
+# takes a service's last replica. No HPA: the count stays 1.
+# Author review: Leong Wei Zhi, pending pull request review.
+# PR #329 review (Copilot), team decision (Leong Wei Zhi, options Q&A):
+# no surge on any -stable rollout. Author review: Leong Wei Zhi, pending
+# pull request review.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../apps
+nameSuffix: -stable
+# in the selector too, so <svc>-spot and <svc>-stable never select each
+# other's pods; the Services and PDBs select app alone and see both
+labels:
+  - pairs:
+      foc.dev/pool: stable
+    includeSelectors: true
+patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/replicas
+        value: 1
+      - op: add
+        path: /spec/template/spec/nodeSelector
+        value:
+          foc.dev/pool: stable
+      # never a second pod on the on-demand node, not even for a rollout
+      # (gateway and web surge in the base): the old one stops first and
+      # the -spot replicas serve meanwhile (PR #329 review)
+      - op: add
+        path: /spec/strategy
+        value:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1

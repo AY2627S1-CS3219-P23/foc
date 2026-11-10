@@ -8,10 +8,16 @@
 # PR #323 review (Copilot), team decision (Leong Wei Zhi): maxUnavailable 1
 # instead of minAvailable 1, which allowed two evictions at 3 replicas.
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (DP22): note on the split
+# Deployments. Author review: Leong Wei Zhi, pending pull request review.
+# PR #329 review round 2 (Sinnez1), team decision (Leong Wei Zhi, options
+# Q&A): gateway and web gain a budget too. Author review: Leong Wei Zhi,
+# pending pull request review.
 # maxUnavailable counts against the HPA's desired count: while a replica is
 # Pending (2 of 3 running, or 1 of 2) no eviction is allowed and a drain
-# waits. gateway and web have none: they run one replica at rest, and a
-# budget on a single replica would never allow an eviction
+# waits. Each budget selects app alone, so it counts the -spot and
+# -stable replicas together (DP22). gateway and web run 2 to 3 since
+# DP22 and have the same budget (PR #329 review)
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
@@ -89,3 +95,25 @@ spec:
   selector:
     matchLabels:
       app: chat-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gateway
+  namespace: foc
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: gateway
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web
+  namespace: foc
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: web

@@ -15,6 +15,10 @@
 # the cluster, node group, NAT instance and database inputs (DP2 to DP4,
 # Leong Wei Zhi, 2026-11-09, options Q&A). Author review: Leong Wei Zhi,
 # pending pull request review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision DP22, Leong
+# Wei Zhi, options Q&A): the on-demand node is a t3a.large, room for one
+# replica of every service beside RabbitMQ and Redis. Author review: Leong
+# Wei Zhi, pending pull request review.
 
 variable "region" {
   type    = string
@@ -71,9 +75,9 @@ variable "node_count" {
 }
 
 variable "stable_node_instance_type" {
-  description = "the one on-demand node in zone a that RabbitMQ and Redis select"
+  description = "the one on-demand node in zone a: RabbitMQ, Redis and one replica of every service (DP22)"
   type        = string
-  default     = "t3a.medium"
+  default     = "t3a.large"
 }
 
 variable "nat_instance_type" {

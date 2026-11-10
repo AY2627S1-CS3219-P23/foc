@@ -10,6 +10,9 @@
 # PR #317 review (Claude reviewer, Copilot): an automatic run whose commit
 # is older than the live one deploys nothing (CI runs on main can finish
 # out of order); the root .dockerignore rebuilds the root-context images.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (DP22): the live tag is
+# read from <image>-stable. Author review: Leong Wei Zhi, pending pull
+# request review.
 #
 # Usage: changed-images.sh <target-commit> <rebuild-all: true|false> <newer-only: true|false>
 # Needs a kubeconfig whose current context is the cluster and a checkout
@@ -77,7 +80,10 @@ build=()
 retag="[]"
 relevant=false
 for image in "${images[@]}"; do
-    ref="$(awk -v n="$image" '$1 == n { print $2 }' <<<"$live")"
+    # <image>-stable since DP22; the unsuffixed name before the split, so
+    # the first deploy after it retags instead of rebuilding everything
+    ref="$(awk -v n="$image" '$1 == n "-stable" { print $2; exit }' <<<"$live")"
+    [ -n "$ref" ] || ref="$(awk -v n="$image" '$1 == n { print $2 }' <<<"$live")"
     tag=""
     [[ "$ref" == *:* ]] && tag="${ref##*:}"
     commit="${tag%%-*}"

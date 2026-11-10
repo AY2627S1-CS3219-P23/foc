@@ -1,0 +1,18 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-11-10, issue #48 (N5 cloud deployment).
+# Scope: the nine Deployments as one base, rendered twice by pools/spot
+# and pools/stable (team decision DP22, Leong Wei Zhi, options Q&A,
+# recorded in docs/deployment.md).
+# Author review: Leong Wei Zhi, pending pull request review.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - user-service.yaml
+  - supplier-service.yaml
+  - order-service.yaml
+  - credit-service.yaml
+  - notification-service.yaml
+  - rating-service.yaml
+  - chat-service.yaml
+  - gateway.yaml
+  - web.yaml

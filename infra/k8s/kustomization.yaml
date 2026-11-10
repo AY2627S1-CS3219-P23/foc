@@ -15,6 +15,10 @@
 # review.
 # 2026-11-10, Claude Code (Opus 5.5), issue #48 (DP21): pdb.yaml added.
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision DP22, Leong
+# Wei Zhi, options Q&A): the Services in services.yaml, the Deployments
+# through pools/spot and pools/stable.
+# Author review: Leong Wei Zhi, pending pull request review.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 # namespaces are set per manifest; secrets.sh applies namespace.yaml on
@@ -26,15 +30,10 @@ resources:
   - data/storageclass.yaml
   - data/rabbitmq.yaml
   - data/redis.yaml
-  - apps/user-service.yaml
-  - apps/supplier-service.yaml
-  - apps/order-service.yaml
-  - apps/credit-service.yaml
-  - apps/notification-service.yaml
-  - apps/rating-service.yaml
-  - apps/chat-service.yaml
-  - apps/gateway.yaml
-  - apps/web.yaml
+  - services.yaml
+  # every Deployment twice: <svc>-spot and <svc>-stable (DP22)
+  - pools/spot
+  - pools/stable
   - ingress.yaml
   - hpa.yaml
   - pdb.yaml

@@ -18,6 +18,10 @@
 # manifest sets it), and IRSA instead of Pod Identity (SCP explicit deny,
 # option chosen by Leong Wei Zhi).
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision DP22, Leong
+# Wei Zhi, options Q&A): the on-demand node holds one replica of every
+# service and is a t3a.large. Author review: Leong Wei Zhi, pending pull
+# request review.
 
 locals {
   # cluster ENIs and the database subnet group: zones a and b
@@ -167,7 +171,9 @@ resource "aws_eks_node_group" "main" {
 # One on-demand node in zone a (DP3, 2026-11-09): RabbitMQ and Redis select
 # it by label, so their EBS volumes, bound to that zone, always have a node
 # to attach to, and a Spot squeeze never takes the broker or the logout
-# denylist. Not tainted: application pods may land here too
+# denylist. Not tainted: every service runs exactly one replica here, its
+# <svc>-stable Deployment (DP22, 2026-11-10: a t3a.large since, for the
+# memory and the 35-pod limit)
 resource "aws_eks_node_group" "stable" {
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = "foc-stable"
