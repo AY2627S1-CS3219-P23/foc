@@ -369,9 +369,9 @@ exchanged for money.
 
 ---
 
-## Team
+## Team Members
 
-| Name | Service in charge | Nice-to-have |
+| Name | Service In-Charge | Nice-to-have |
 | ----- | ----- | ----- |
 | Kwey Xiu Xi | User Service | Cloud Deployment and DevOps |
 | Alastair Tan Choon Wei | Supplier Service | Supplier Bookmarks |
