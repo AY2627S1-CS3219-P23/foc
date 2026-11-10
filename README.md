@@ -369,6 +369,18 @@ exchanged for money.
 
 ---
 
+## Team
+
+| Name | Service in charge | Nice-to-have |
+| ----- | ----- | ----- |
+| Kwey Xiu Xi | User Service | Cloud Deployment and DevOps |
+| Alastair Tan Choon Wei | Supplier Service | Supplier Bookmarks |
+| Aung Ko Khant | Order Service | Requester-Courier Chat |
+| Ryan Ang Jun Wen | Credit Service | Dispute Resolution |
+| Leong Wei Zhi | Notification Service | Rating System |
+
+---
+
 ## Features
 
 | Who | What they can do |
@@ -378,9 +390,8 @@ exchanged for money.
 | Admin | Manage suppliers, users and roles; review disputes, failed and stuck orders; view the common credit pool |
 | Everyone | OTP-verified sign-up, password reset and account recovery, real-time notifications, credit balance and history, public profiles with ratings |
 
-Selected nice-to-haves: N1 ratings, N2 request history, N3 disputes,
-N4 centralized logging, N5 cloud deployment with CI/CD on Kubernetes,
-N6 requester–courier chat, N7 admin dashboard, N8 supplier bookmarks.
+Nice-to-haves: N1 ratings, N3 disputes, N5 cloud deployment with CI/CD
+on Kubernetes, N6 requester–courier chat, N8 supplier bookmarks.
 
 ---
 
@@ -532,18 +543,6 @@ that changed.
 ├── ai/usage-log.md         AI usage log
 └── compose.yaml            local stack
 ```
-
----
-
-## Team
-
-| Name | Service in charge | Nice-to-have |
-| ----- | ----- | ----- |
-| Kwey Xiu Xi | User Service | Cloud Deployment and DevOps |
-| Alastair Tan Choon Wei | Supplier Service | Supplier Bookmarks |
-| Aung Ko Khant | Order Service | Centralized Logging |
-| Ryan Ang Jun Wen | Credit Service | Order History |
-| Leong Wei Zhi | Notification Service | Rating System |
 
 ---
 
