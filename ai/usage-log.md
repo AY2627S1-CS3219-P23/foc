@@ -97,6 +97,13 @@ Entry template:
 ```
 
 ---
+## 2026-11-10 — Leong Wei Zhi (README AI Use Summary)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** docs
+- **Scope:** `README.md`: the AI Use Summary section, which PR #327 had reduced to a link, rewritten in the project document's project-level disclosure format (tools, prohibited phases avoided, used for, retained/rejected, verification, prompts link); the disclosure header notes it. This log.
+- **Prompt(s):** "https://github.com/AY2627S1-CS3219-P23/foc/pull/327 this pr removed [the project-level disclosure example] make a new pr to update the readme". The tool list was tallied from the `Tool:` lines in this log and the file headers; the retained/rejected example (PR #118 closed, redone as #123) from GitHub history; no design decision was made.
+- **Author review:** Leong Wei Zhi reviews via pull request.
+
 ## 2026-11-10 — Leong Wei Zhi (issue #48: one replica per service on the on-demand node, DP22)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** generate, docs
