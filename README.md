@@ -9,6 +9,9 @@
   overview, the former AI Use Summary paragraphs replaced by a link to
   ai/usage-log.md. The per-change record for this file, including every
   paragraph that summary held, is in ai/usage-log.md and git history.
+  2026-11-10 (Claude Code, Opus 5.5): AI Use Summary restored in the
+  project document's project-level disclosure format (tools, prohibited
+  phases avoided, used for, verification, prompts link).
   Author review: Leong Wei Zhi, pending pull request review.
 -->
 
@@ -199,6 +202,50 @@ that changed.
 
 ## AI Use Summary
 
-AI tools were used under the CS3219 AI Usage Policy (project document,
-Appendix 2). Every AI-assisted change, with its tool, prompt, scope and
-author review, is recorded in [`ai/usage-log.md`](ai/usage-log.md).
+Project-level disclosure under the CS3219 AI Usage Policy (project
+document, Appendix 2).
+
+**Tools:** Claude Code (Fable 5, Fable 5.1, Opus 5, Opus 5.5, Sonnet 4.6,
+Sonnet 5, Sonnet 5.5), Claude (Sonnet 5), Codex (GPT-6, GPT-6.1 Sol),
+GitHub Copilot (Copilot SDK in VS Code; Copilot pull request review),
+Claude pull request review in CI.
+
+**Prohibited phases avoided:** requirements elicitation and
+prioritization; sprint planning; architecture and design decisions.
+Requirements, service boundaries, data schemas, interfaces and
+trade-offs were decided by the team (decision IDs in `docs/`); AI was
+used only afterwards, to implement and document those decisions. Where a
+task needed a choice, the tool listed neutral options and the member
+chose; the choice is recorded in the log.
+
+**Used for:**
+
+- Generating boilerplate and scaffolding: Spring Boot service skeletons,
+  Dockerfiles and `compose.yaml` wiring, the Vite/React SPA shell, the
+  `foc-contracts` event records.
+- Implementing team-specified features from issues and design docs, with
+  unit and integration tests (JUnit, Testcontainers, Vitest).
+- Infrastructure for the cloud deployment: Terraform, Kubernetes
+  manifests, GitHub Actions CI and continuous deployment.
+- Debugging, refactoring, and addressing pull request review comments.
+- Documentation: design-doc transcription, READMEs, the Postman demo
+  collection, this disclosure.
+- Pull request review: Copilot and Claude reviewers comment on pull
+  requests; the author accepts or declines each comment, and a human
+  teammate approves the merge.
+
+**Retained / rejected:** AI output was edited or discarded when it did
+not fit the team's decisions. For example, the first web scaffold (PR
+#118) was closed as over-built and redone barebones in PR #123; AI
+review suggestions that conflicted with team decisions were declined in
+the review thread.
+
+**Verification:** all AI output reviewed, edited and tested by the
+authors: the service test suites and web lint/build/tests run locally
+and in CI, and every change merges through a pull request approved by a
+teammate. AI-influenced files carry an attribution header (tool, date,
+scope, author review).
+
+**Prompts / key exchanges:** see [`ai/usage-log.md`](ai/usage-log.md),
+one entry per AI-assisted change with its tool, prompts, scope and
+author review.
