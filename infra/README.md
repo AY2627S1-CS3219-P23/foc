@@ -35,6 +35,8 @@
   -stable Deployments in the counts, checks and rows; the t3a.large
   on-demand node and its apply. Author review: Leong Wei Zhi, pending
   pull request review.
+  PR #329 review (Copilot): the rollback past the split.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # infra: cloud deployment runbook
@@ -203,7 +205,12 @@ differs is rebuilt there (a re-run is not subject to the older-commit
 skip). A new dispatch always builds the head of
 `main`. To retry a failed rollout, re-run its **failed jobs** or
 dispatch: a full re-run finds the cluster already on its tag (the apply
-happened) and skips the deploy.
+happened) and skips the deploy. Rolling back to a commit from before the
+split into `-spot` and `-stable` (DP22, PR #329): that commit's manifests
+bring back the unsuffixed Deployments and point the HPAs at them, but
+nothing removes the split ones, which the Services would keep routing to
+(and which hold database connections). Once the rollback is Ready, delete
+them: `kubectl -n foc delete deployment -l foc.dev/pool`.
 
 ## 5. Smoke test
 

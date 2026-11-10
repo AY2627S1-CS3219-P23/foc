@@ -23,6 +23,11 @@
 # Wei Zhi, options Q&A): removes the unsuffixed Deployments the split
 # into <svc>-spot and <svc>-stable replaced. Author review: Leong Wei
 # Zhi, pending pull request review.
+# PR #329 review (Claude reviewer, Copilot), team decision (Leong Wei
+# Zhi, options Q&A): the old Deployments are scaled to 1 right after the
+# apply and each is deleted once its service's new halves are Ready,
+# instead of all after every rollout. Author review: Leong Wei Zhi,
+# pending pull request review.
 #
 # Usage: deploy.sh <image-tag> <public-host> <cluster-name>
 # <public-host> is the hostname the load balancer serves over https; the
@@ -106,16 +111,33 @@ done
 
 kubectl apply -k "$work"
 
+# once, on the first deploy of the split into -spot and -stable (DP22):
+# the Deployments from before it. The apply above moved their HPAs to
+# -spot, so each is scaled to one replica at once, freeing room and
+# database connections for the new pods, and deleted as soon as both new
+# halves of its service are Ready: a service is never without a replica.
+# Finds nothing on every later deploy
+pre_split=()
+for svc in user-service supplier-service order-service credit-service \
+    notification-service rating-service chat-service gateway web; do
+    found="$(kubectl -n foc get deployment "$svc" --ignore-not-found -o name)"
+    if [ -n "$found" ]; then
+        pre_split+=("$svc")
+        kubectl -n foc scale deployment "$svc" --replicas=1
+    fi
+done
+for svc in ${pre_split[@]+"${pre_split[@]}"}; do
+    for half in spot stable; do
+        remaining "deployment/$svc-$half"
+        kubectl -n foc rollout status "deployment/$svc-$half" --timeout="${left}s"
+    done
+    kubectl -n foc delete deployment "$svc"
+done
+
 for kind in statefulset deployment; do
     for name in $(kubectl -n foc get "$kind" -o name); do
         remaining "$name"
         kubectl -n foc rollout status "$name" --timeout="${left}s"
     done
 done
-# the Deployments from before the split into -spot and -stable (DP22):
-# deleted only once their replacements are Ready, so a service is never
-# without a replica. A no-op on every later deploy
-kubectl -n foc delete deployment --ignore-not-found \
-    user-service supplier-service order-service credit-service \
-    notification-service rating-service chat-service gateway web
 kubectl -n foc get pods -o wide
