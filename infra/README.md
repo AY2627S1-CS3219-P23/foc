@@ -37,6 +37,9 @@
   pull request review.
   PR #329 review (Copilot): the rollback past the split.
   Author review: Leong Wei Zhi, pending pull request review.
+  Round 2 (Sinnez1), Leong Wei Zhi's choices: the rollback deletes -spot
+  first and -stable after; the deploy sequence follows the new order.
+  Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # infra: cloud deployment runbook
@@ -190,11 +193,13 @@ sequenceDiagram
   A->>K: plan: read the live image tags, diff their commit with the target
   A->>G: build + push the changed images, retag the rest, tagged commit-runid (web has the public URL baked in)
   A->>K: aws eks update-kubeconfig (OIDC role, access entry)
-  A->>K: helm upgrade --install traefik (NodePort 30080)
   A->>K: secrets.sh: Secrets Manager -> foc-secrets, ghcr-pull
   A->>K: db-init Job
   K->>R: create or update the 7 roles and databases
-  A->>K: kubectl apply -k, wait for every rollout
+  A->>K: kubectl apply -k everything but -stable, wait (data stores, -spot)
+  A->>K: delete the pre-split Deployments (first deploy after DP22 only)
+  A->>K: kubectl apply -k, wait for -stable
+  A->>K: helm upgrade --install traefik (NodePort 30080)
   K->>G: pull the images (through the NAT instance)
 ```
 
@@ -207,10 +212,13 @@ skip). A new dispatch always builds the head of
 dispatch: a full re-run finds the cluster already on its tag (the apply
 happened) and skips the deploy. Rolling back to a commit from before the
 split into `-spot` and `-stable` (DP22, PR #329): that commit's manifests
-bring back the unsuffixed Deployments and point the HPAs at them, but
-nothing removes the split ones, which the Services would keep routing to
-(and which hold database connections). Once the rollback is Ready, delete
-them: `kubectl -n foc delete deployment -l foc.dev/pool`.
+bring back the unsuffixed Deployments (HPA 2 to 3) but remove nothing,
+and the Services route to every pod with the `app` label. Left in place,
+a backend could run 6 pods (210 connections at full pools, against about
+110). So, first `kubectl -n foc delete deployment -l foc.dev/pool=spot`
+(`-stable` keeps serving), then re-run the old Deploy run, and once it is
+Ready `kubectl -n foc delete deployment -l foc.dev/pool=stable`: at most
+4 pods per backend on the way, no outage.
 
 ## 5. Smoke test
 
