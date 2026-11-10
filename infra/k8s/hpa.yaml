@@ -28,6 +28,11 @@
 # Author review: Leong Wei Zhi, pending pull request review.
 # PR #323 review (Copilot): scope line and node-fit note corrected.
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision DP22, Leong
+# Wei Zhi, options Q&A): every HPA scales <svc>-spot, min 1 / max 2; the
+# one <svc>-stable replica on the on-demand node is outside it, so each
+# service runs 2 to 3 in total (gateway and web were 1 to 2).
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -38,9 +43,9 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: user-service
-  minReplicas: 2
-  maxReplicas: 3
+    name: user-service-spot
+  minReplicas: 1
+  maxReplicas: 2
   metrics:
     - type: Resource
       resource:
@@ -58,9 +63,9 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: supplier-service
-  minReplicas: 2
-  maxReplicas: 3
+    name: supplier-service-spot
+  minReplicas: 1
+  maxReplicas: 2
   metrics:
     - type: Resource
       resource:
@@ -78,9 +83,9 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: order-service
-  minReplicas: 2
-  maxReplicas: 3
+    name: order-service-spot
+  minReplicas: 1
+  maxReplicas: 2
   metrics:
     - type: Resource
       resource:
@@ -98,9 +103,9 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: credit-service
-  minReplicas: 2
-  maxReplicas: 3
+    name: credit-service-spot
+  minReplicas: 1
+  maxReplicas: 2
   metrics:
     - type: Resource
       resource:
@@ -118,9 +123,9 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: rating-service
-  minReplicas: 2
-  maxReplicas: 3
+    name: rating-service-spot
+  minReplicas: 1
+  maxReplicas: 2
   metrics:
     - type: Resource
       resource:
@@ -138,9 +143,9 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: notification-service
-  minReplicas: 2
-  maxReplicas: 3
+    name: notification-service-spot
+  minReplicas: 1
+  maxReplicas: 2
   metrics:
     - type: Resource
       resource:
@@ -158,9 +163,9 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: chat-service
-  minReplicas: 2
-  maxReplicas: 3
+    name: chat-service-spot
+  minReplicas: 1
+  maxReplicas: 2
   metrics:
     - type: Resource
       resource:
@@ -178,7 +183,7 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: gateway
+    name: gateway-spot
   minReplicas: 1
   maxReplicas: 2
   metrics:
@@ -198,7 +203,7 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: web
+    name: web-spot
   minReplicas: 1
   maxReplicas: 2
   metrics:

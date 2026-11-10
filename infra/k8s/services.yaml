@@ -1,0 +1,106 @@
+# AI-assisted (CS3219 AI Usage Policy disclosure):
+# Tool: Claude Code (Opus 5.5), 2026-11-10, issue #48 (N5 cloud deployment).
+# Scope: the nine ClusterIP Services, moved here from apps/*.yaml when
+# every Deployment split into -spot and -stable (team decision DP22,
+# Leong Wei Zhi, options Q&A, recorded in docs/deployment.md). Each
+# selects app only, so it routes to the replicas of both pools.
+# Author review: Leong Wei Zhi, pending pull request review.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: foc
+spec:
+  selector:
+    app: user-service
+  ports:
+    - port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supplier-service
+  namespace: foc
+spec:
+  selector:
+    app: supplier-service
+  ports:
+    - port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+  namespace: foc
+spec:
+  selector:
+    app: order-service
+  ports:
+    - port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: credit-service
+  namespace: foc
+spec:
+  selector:
+    app: credit-service
+  ports:
+    - port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: foc
+spec:
+  selector:
+    app: notification-service
+  ports:
+    - port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rating-service
+  namespace: foc
+spec:
+  selector:
+    app: rating-service
+  ports:
+    - port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat-service
+  namespace: foc
+spec:
+  selector:
+    app: chat-service
+  ports:
+    - port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: foc
+spec:
+  selector:
+    app: gateway
+  ports:
+    - port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: foc
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 80

@@ -15,19 +15,14 @@
 # update without surge (maxSurge 0, maxUnavailable 1); revised on the
 # Claude reviewer's round to maxSurge 1, maxUnavailable 0.
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision DP22,
+# Leong Wei Zhi, options Q&A): the Service moved to services.yaml; this
+# Deployment is the base that pools/spot (-spot, HPA 1 to 2) and
+# pools/stable (-stable, one replica on the on-demand node) render.
+# Author review: Leong Wei Zhi, pending pull request review.
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: web
-  namespace: foc
-spec:
-  selector:
-    app: web
-  ports:
-    - port: 80
----
-# no replicas: the HorizontalPodAutoscaler in hpa.yaml owns the count
+# no replicas: pools/stable sets 1, and the HorizontalPodAutoscaler in
+# hpa.yaml owns the -spot count (DP22)
 apiVersion: apps/v1
 kind: Deployment
 metadata:

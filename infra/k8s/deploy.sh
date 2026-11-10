@@ -19,6 +19,10 @@
 # 50-min deadline. Later rounds (Claude reviewer, Sinnez1): a failed
 # db-init Job stops the deploy at once instead of waiting out the
 # deadline, and the deadline check exits the script, not a subshell.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision DP22, Leong
+# Wei Zhi, options Q&A): removes the unsuffixed Deployments the split
+# into <svc>-spot and <svc>-stable replaced. Author review: Leong Wei
+# Zhi, pending pull request review.
 #
 # Usage: deploy.sh <image-tag> <public-host> <cluster-name>
 # <public-host> is the hostname the load balancer serves over https; the
@@ -108,4 +112,10 @@ for kind in statefulset deployment; do
         kubectl -n foc rollout status "$name" --timeout="${left}s"
     done
 done
+# the Deployments from before the split into -spot and -stable (DP22):
+# deleted only once their replacements are Ready, so a service is never
+# without a replica. A no-op on every later deploy
+kubectl -n foc delete deployment --ignore-not-found \
+    user-service supplier-service order-service credit-service \
+    notification-service rating-service chat-service gateway web
 kubectl -n foc get pods -o wide

@@ -12,6 +12,10 @@
 # Wei Zhi, options Q&A): two replicas, a PodDisruptionBudget and the same
 # soft per-node spread as the Deployments.
 # Author review: Leong Wei Zhi, pending pull request review.
+# 2026-11-10, Claude Code (Opus 5.5), issue #48 (team decision DP22, Leong
+# Wei Zhi, options Q&A): the spread is hard and per node pool, so exactly
+# one replica runs on the on-demand node.
+# Author review: Leong Wei Zhi, pending pull request review.
 # two replicas so a node loss does not cut every request; a drain evicts
 # one at a time
 deployment:
@@ -21,12 +25,13 @@ podDisruptionBudget:
   enabled: true
   minAvailable: 1
 
-# replicas prefer different nodes, but still schedule when only one node
-# has room (DP21)
+# one replica on the on-demand node and one on Spot, never both on the
+# same pool (DP22): a Spot interruption leaves the on-demand one serving.
+# When no Spot node has room, the Spot replica stays Pending
 topologySpreadConstraints:
   - maxSkew: 1
-    topologyKey: kubernetes.io/hostname
-    whenUnsatisfiable: ScheduleAnyway
+    topologyKey: foc.dev/pool
+    whenUnsatisfiable: DoNotSchedule
     labelSelector:
       matchLabels:
         app.kubernetes.io/name: traefik

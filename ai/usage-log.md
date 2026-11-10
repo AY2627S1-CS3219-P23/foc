@@ -75,6 +75,8 @@
   2026-11-09, Claude Code (Opus 5.5): prepended the balance refresh on
   request.created entry below. Author review: Ryan Ang, pending pull
   request review.
+  2026-11-10, Claude Code (Opus 5.5): prepended the issue #48 DP22 entry
+  below. Author review: Leong Wei Zhi, pending pull request review.
 -->
 
 # AI Usage Log
@@ -95,6 +97,13 @@ Entry template:
 ```
 
 ---
+## 2026-11-10 — Leong Wei Zhi (issue #48: one replica per service on the on-demand node, DP22)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** generate, docs
+- **Scope:** branch `feat/48-od-replica`. `infra/k8s/`: the nine Services moved to `services.yaml`; `apps/` is a kustomize base rendered by `pools/spot` (`<svc>-spot`, Spot nodeSelector) and `pools/stable` (`<svc>-stable`, 1 replica, on-demand nodeSelector); JVM CPU request 150m; `hpa.yaml` scales `<svc>-spot` 1 to 2; `pdb.yaml` note; `deploy.sh` deletes the pre-split Deployments after the rollout; `changed-images.sh` reads the live tag from `<svc>-stable`. `infra/helm/traefik-values.yaml`: hard spread per `foc.dev/pool`. `infra/terraform`: the on-demand node a t3a.large. `docs/deployment.md` (DP22; DP3, DP9, DP14, node fit, Spot behaviour, cost), `infra/README.md`, this log.
+- **Prompt(s):** "readjust the deployment such that one (at most one) replica is on the on demand node so that availability is guaranteed" (with CloudWatch CPU/network screenshots of the nodes); "does the new plan fit within $250 budget?" (answered with facts: ~$246 of $250, the Spot price risk); "what is the difference between 1 and 2" (facts on lowering the CPU request on `-stable` only or everywhere). Leong Wei Zhi chose in options rounds, no reasons given: split Deployments, Spot HPA 1 to 2 for all nine, t3a.large on-demand node, Traefik hard spread per pool, CPU request 150m everywhere.
+- **Author review:** `kubectl kustomize infra/k8s` renders 18 Deployments with disjoint selectors and 9 Services; `helm template` shows the Traefik spread; `terraform validate` and `fmt` clean; `bash -n` on both scripts; `changed-images.sh` against a stubbed `kubectl` retags from old and new names. Not yet applied: the Terraform plan (node replacement) and the Deploy run are Leong Wei Zhi's to run. Leong Wei Zhi reviews via pull request.
+
 ## 2026-11-10 — Leong Wei Zhi (README cleanup)
 - **Tool:** Claude Code (Opus 5.5)
 - **Mode:** docs

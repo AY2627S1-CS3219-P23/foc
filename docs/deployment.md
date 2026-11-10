@@ -55,6 +55,12 @@
   too (Leong Wei Zhi); third round (Claude reviewer): revised to one surge
   pod for them (Leong Wei Zhi). Author review: Leong Wei Zhi, pending pull request
   review.
+  2026-11-10, Claude Code (Opus 5.5), availability: DP22 added and DP3,
+  DP9, DP14, the node fit, Spot behaviour and the cost table revised from
+  three options rounds (Leong Wei Zhi; facts only: pool-level spread
+  limits, the on-demand node's memory, pod and CPU fit, the budget
+  headroom; no reasons given). Author review: Leong Wei Zhi, pending pull
+  request review.
 -->
 
 # Cloud deployment (N5, issue #48)
@@ -82,10 +88,10 @@ flowchart LR
       nat["NAT instance<br/>t4g.nano, Elastic IP"]
     end
     subgraph priv["private subnets (3 zones; RDS and the on-demand node in a and b / a)"]
-      subgraph eks["EKS: t3a.medium Spot x2 (three zones) + t3a.medium on-demand x1 (zone a)"]
+      subgraph eks["EKS: t3a.medium Spot x2 (three zones) + t3a.large on-demand x1 (zone a)"]
         traefik["Traefik<br/>NodePort 30080"] -->|"/api"| gateway
         traefik -->|"/"| web["web (nginx SPA)"]
-        gateway --> svc["7 backend Deployments<br/>(HPA 2 to 3)"]
+        gateway --> svc["7 backends, each 1 on-demand<br/>+ HPA 1 to 2 on Spot"]
         svc --> mq[("RabbitMQ<br/>EBS gp3, on-demand node")]
         gateway --> redis[("Redis AOF<br/>EBS gp3, on-demand node")]
         svc --> redis
@@ -122,24 +128,24 @@ the VPC CNI enforces only with its network policy agent on).
 Decider: Leong Wei Zhi, by options Q&A, on 2026-11-05, 2026-11-08 and
 2026-11-09 (the platform, nodes, network, data stores, secrets, deploy
 access, ingress, credentials, lifetime and the pool size were re-decided
-on 2026-11-09), and 2026-11-10 (replicas, DP9 and DP21). The AI tool presented facts and prices only.
+on 2026-11-09), and 2026-11-10 (replicas, DP9, DP21 and DP22). The AI tool presented facts and prices only.
 
 | # | Topic | Choice |
 | --- | --- | --- |
 | DP1 | Account, region | NUS Innovation Sandbox account, `ap-southeast-1` (its SCPs allow writes there and in `us-east-1` only) |
 | DP2 | Platform | **Amazon EKS**, Kubernetes 1.37, authentication by access entries (`API` mode); vpc-cni, kube-proxy and CoreDNS as EKS installs them; add-ons: metrics-server, EBS CSI driver (its controller's role through IRSA: the ISB SCP denies Pod Identity, 2026-11-09) |
-| DP3 | Nodes | Two managed node groups of **t3a.medium** (AMD; same 2 vCPU / 4 GB shape as t3.medium, chosen 2026-11-09 for its lower on-demand rate): **Spot, exactly 2** (minimum, desired and maximum; the earlier headroom slot for a third node was removed on 2026-11-09) across **three zones** (a, b, c: three Spot capacity pools, chosen 2026-11-09 over the two zones the load balancer needed), and **one on-demand node in zone a** labelled `foc.dev/pool: stable`, which RabbitMQ and Redis select and application pods may also use (not tainted). x86, since the images are built for `linux/amd64`; IMDS hop limit 1 so pods cannot use the node role. The on-demand node was added on 2026-11-09 after review: the EBS volumes are zone-bound, and a Spot replacement in the other zone would have left the broker or Redis `Pending` |
+| DP3 | Nodes | Two managed node groups of **t3a.medium** (AMD; same 2 vCPU / 4 GB shape as t3.medium, chosen 2026-11-09 for its lower on-demand rate): **Spot, exactly 2** (minimum, desired and maximum; the earlier headroom slot for a third node was removed on 2026-11-09) across **three zones** (a, b, c: three Spot capacity pools, chosen 2026-11-09 over the two zones the load balancer needed), and **one on-demand node in zone a** labelled `foc.dev/pool: stable`, which RabbitMQ and Redis select and which holds one replica of every service (DP22; not tainted), a **t3a.large** (2 vCPU / 8 GB, 35 pods) since 2026-11-10. x86, since the images are built for `linux/amd64`; IMDS hop limit 1 so pods cannot use the node role. The on-demand node was added on 2026-11-09 after review: the EBS volumes are zone-bound, and a Spot replacement in the other zone would have left the broker or Redis `Pending` |
 | DP4 | Network and data stores | Nodes and the database in **private subnets** (zones a and b; a zone-c subnet for the Spot group only); egress through a **NAT instance** (fck-nat on an on-demand `t4g.nano`, one Elastic IP). **One RDS PostgreSQL 17 `db.t4g.micro`** with the seven service databases. RabbitMQ and Redis (AOF, G7 unchanged) stay StatefulSets on **EBS gp3** volumes, on the on-demand node (DP3) |
 | DP5 | Public access | `https://foc23.ddnsfree.com` through the load balancer (DP17, DP18). No node has a public address; the cluster API endpoint is public for GitHub Actions and private for the nodes |
 | DP6 | IaC | Terraform, state in S3 (`use_lockfile`), a bootstrap stack for the bucket |
 | DP7 | Secrets | AWS Secrets Manager (`foc/app`, `foc/ghcr`); `secrets.sh` copies them into k8s Secrets **from the Deploy job**, with the deploy role, on every deploy. `foc/app` also carries the database address and the RDS master credentials; the script writes the master credentials to their own Secret (`foc-db-admin`), which only the db-init Job mounts |
 | DP8 | Images, rollout, cluster access | GHCR, pushed by GitHub Actions and tagged `<commit>-<run id>`; the Deploy job runs `deploy.sh` itself: `kubectl` and `helm` against the EKS API under an **access entry with cluster-admin** for the OIDC role trusted for `main` only. The job installs Traefik's chart, runs `secrets.sh` and the db-init Job, applies the kustomization and waits. A pod rolls when its image tag, the Secret version or the ConfigMap hash changed |
-| DP9 | Replicas | The **seven backends: HPA min 2 / max 3**, so a node loss leaves one replica answering whenever the spread placed the two on different nodes, which is best effort (DP21) (2026-11-10, over keeping 1 to 2); **gateway and web: HPA min 1 / max 2**; all on CPU 70 % (N5.4), from the metrics-server add-on. **Traefik: 2 replicas** (chart values). Before 2026-11-10 every Deployment ran HPA 1 to 2 |
+| DP9 | Replicas | **Every service runs 2 to 3**: one `<svc>-stable` replica on the on-demand node plus `<svc>-spot` at **HPA min 1 / max 2** (DP22, 2026-11-10); on CPU 70 % (N5.4) of the 150m request, from the metrics-server add-on. **Traefik: 2 replicas** (chart values), one per pool. Earlier on 2026-11-10: the seven backends HPA min 2 / max 3 with a best-effort spread (DP21), gateway and web HPA min 1 / max 2; before that every Deployment ran HPA 1 to 2 |
 | DP10 | Backends at 2 replicas | Scheduled jobs run on both replicas per tick, accepted because the jobs are idempotent (Leong Wei Zhi, 2026-11-08, on review). chat and notification were first pinned to one replica because a STOMP push reached only the replica holding the socket; issue #305 (same day, options Q&A) lifted the pin with the smallest change: pushes fan out over an AMQP exchange per service, notification acks a concurrent duplicate on its `processed_events` key and moves to a Flyway baseline. No ShedLock, no single active consumer |
 | DP11 | Demo data | Seed on in the cloud; realistic usernames everywhere, same passwords and counts |
 | DP12 | Lifetime | Up to **2026-12-11**, then `terraform destroy`, nothing kept (revised from about 2026-11-19 on 2026-11-09) |
 | DP13 | Repo layout | `infra/` (Terraform, manifests, Helm values), the second non-service top-level folder |
-| DP14 | Spot on the WebSocket path | **All nodes stay Spot.** A Spot interruption drops the STOMP sockets held by the pods on that node (chat, notification, gateway or Traefik) for the 1 to 2 minutes a replacement pod takes to start elsewhere; since DP21 the other replica of chat, notification and Traefik keeps answering, so only the sockets held on the lost node reconnect; the web clients reconnect (1 s exponential back-off, 10 s heartbeats) and refetch, and nothing is lost server-side |
+| DP14 | Spot on the WebSocket path | **All nodes stay Spot.** A Spot interruption drops the STOMP sockets held by the pods on that node (chat, notification, gateway or Traefik) for the 1 to 2 minutes a replacement pod takes to start elsewhere; since DP22 the on-demand replica of every service and of Traefik keeps answering, so only the sockets held on the lost node reconnect; the web clients reconnect (1 s exponential back-off, 10 s heartbeats) and refetch, and nothing is lost server-side |
 | DP15 | Ingress path | The Terraform-owned load balancer targets the node group's Auto Scaling group on **NodePort 30080**; **Traefik from its Helm chart** (42.3.1) is the ingress controller, same class name and routes as before |
 | DP16 | Database credentials | **Seven roles, one per service**, each owning its database, with the `foc/app` passwords; a `db-init` Job creates them with the master credentials on every deploy and re-applies the passwords. The master credentials sit in their own Secret (`foc-db-admin`) that only this Job mounts; the services read single keys of `foc-secrets` |
 | DP17 | Domain | `foc23.ddnsfree.com`, a free Dynu hostname (records added by hand in Dynu's panel). The sandbox SCP denies Route 53 domain registration. First `foc23.mooo.com` on FreeDNS, revised when FreeDNS refused CNAME records on its shared domains |
@@ -147,6 +153,7 @@ on 2026-11-09), and 2026-11-10 (replicas, DP9 and DP21). The AI tool presented f
 | DP19 | Connection pool | Hikari capped at **5 connections per service** (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`): `db.t4g.micro` allows about 110 connections, and 7 services x 10 (the default) x 2 replicas would exceed it. **One idle connection per pod** (`SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=1`, added 2026-11-09 on review over `maxSurge: 0` or no change): a deploy rolls every Deployment at once, and a third surge replica per service with 5 open connections each would have reached about 105. Since DP9's max 3 (2026-11-10) every backend at 3 replicas with full pools also reaches **105 of about 110**, accepted with the pool unchanged (over a pool of 4 or 3, or `db.t4g.small`). The backends' rollouts have **no surge pod** since the PR #323 review (DP21), so a deploy at HPA max no longer adds 7 more (112) |
 | DP20 | Continuous deployment | Deploy runs **by itself when CI succeeds on a push to `main`** (`workflow_run`), with **no approval gate**; changes touching only docs (`*.md`, `docs/`, `ai/`) **do not deploy**. Only the images whose sources changed since the commit **running in the cluster** (read with `kubectl` in a plan job) are built; the others are retagged. The manual run stays (always deploys; `rebuild_all` input). Each rollout is recorded as a deployment of **`production`** through the **Deployments API** (status and site link on the repo page) |
 | DP21 | Availability | Every Deployment and Traefik **prefers one replica per node**: `topologySpreadConstraints` on `kubernetes.io/hostname`, max skew 1, **`ScheduleAnyway`** (a replica still schedules when only one node has room), chosen over the scheduler default, a hard spread, or a soft spread per capacity type. **PodDisruptionBudgets**: **`maxUnavailable: 1`** on the seven backends (PR #323 review, over `minAvailable: 1`, which allows two evictions at 3 replicas), so a drain (Spot rebalance or interruption, node group update) evicts one replica at a time, and while a replica is `Pending` it allows none and the drain waits; `minAvailable: 1` on Traefik's two replicas; none on gateway and web, where a budget on one replica would never allow an eviction. **Backend rollouts without surge** (`maxSurge: 0`, `maxUnavailable: 1`, PR #323 review, over the default surge, a pool of 4 or `db.t4g.small`): a rollout needs no memory or connections beyond HPA max, and a backend at 2 replicas serves from one while the other restarts. **gateway and web roll with one surge pod** (`maxSurge: 1`, `maxUnavailable: 0`; PR #323 review, first decided as no surge, revised the same day over no surge or HPA min 2 for them): no outage per deploy; the small surge pod (64 Mi / 32 Mi) waits `Pending` only when every node is full, bounded by `deploy.sh`'s deadline; neither uses the database. The spread is best effort: when only one node has room both replicas share it, and a node loss then takes both. **Nodes unchanged** (2 Spot + 1 on-demand): replicas that do not fit stay `Pending` (over a third Spot node, t3a.large, or the Cluster Autoscaler). supplier at min 2 accepts the first-boot race on an empty database (DP10 table) |
+| DP22 | One replica on on-demand | **Every service keeps exactly one replica on the on-demand node, never more**: each Deployment is split into **`<svc>-stable`** (`replicas: 1`, `nodeSelector foc.dev/pool: stable`) and **`<svc>-spot`** (`nodeSelector foc.dev/pool: spot`, HPA 1 to 2, the DP21 spread across the Spot nodes), rendered from one manifest by two kustomize overlays (`infra/k8s/pools/`); the Services and PDBs select `app` and see both. Chosen over one replica per node by hard anti-affinity with a preference for the on-demand node (at most one there, but landing there only scored) and a hard spread per pool (one there at 2 replicas, possibly 2 at 3). **gateway and web: Spot HPA 1 to 2** too (2 to 3 in total, over a fixed 1 on Spot or on-demand only). **Traefik**: a hard spread on `foc.dev/pool` (max skew 1, `DoNotSchedule`), one replica per pool. **The on-demand node becomes a t3a.large** (over keeping t3a.medium or leaving gateway and web out): one replica of everything requests more memory and pods than a medium holds. **JVM CPU request 150m** (was 200m) on both pools (over lowering it on `-stable` only, keeping 200m, or a t3a.xlarge over budget): the large still has 2 vCPU. Budget about $246 of $250 with it (cost table) |
 
 ## Options considered
 
@@ -204,6 +211,14 @@ Since DP9's revision (2026-11-10: backends 2 to 3, gateway and web 1 to
 with every Deployment at its HPA maximum about 5.5 vCPU / 10.0 GB, which
 does not fit, so the last replicas stay `Pending` until load drops (DP21).
 Pods at the maximum: about 43 of the 51 the three nodes allow.
+
+Since DP22 (2026-11-10; estimates, the live placement unchecked): the
+on-demand t3a.large (about 1.9 vCPU / 7.2 GB allocatable, 35 pods)
+requests about 1.45 vCPU / 3.2 GB with one replica of all nine services
+at 150m, Traefik, RabbitMQ, Redis and its DaemonSets, about 15 pods; at
+200m it would have been about 1.8 vCPU, too close to fit a stray coredns,
+metrics-server or EBS CSI controller pod beside it. The Spot pair at the
+`-spot` maximum requests about 2.4 vCPU / 6.0 GB of its 3.8 / 6.6.
 
 ### Host purchase model
 
@@ -375,15 +390,15 @@ on-demand rate ($0.0472/h for t3a.medium; $0.024/h was the sample of
 2026-11-09). Interruptions come per capacity pool (one instance type in
 one zone); the Spot node group lists three zones, so its two nodes sit in
 two of three pools and a replacement can come from any of the three. The
-on-demand node (RabbitMQ, Redis and
-whatever apps the scheduler put there) is never reclaimed.
+on-demand node (RabbitMQ, Redis, one replica of every service and one of
+Traefik, DP22) is never reclaimed.
 
 | Event | What happens | Gap seen by users |
 | --- | --- | --- |
 | Rebalance recommendation (AWS warns that a pool is tightening) | the node group launches a replacement node first, then drains the old one once the new one is Ready (capacity rebalancing is on for managed node groups) | none beyond the pod restart below |
-| Interruption notice (two minutes) | EKS cordons and drains the node: its pods are evicted and recreated at once on any node with room; the instance terminates; the group, now below its minimum of 2, launches a replacement, which joins after about 2 to 3 minutes and takes the pods still `Pending` | the backends and Traefik keep their replica on another node (DP21 spread, PDB one eviction at a time), so they keep answering when the spread placed their replicas apart while the evicted replica restarts (1 to 2 minutes); gateway or web, if on that node, are down for that restart; WebSockets held on the node drop and the browsers reconnect (DP14) |
-| Both Spot nodes reclaimed together (their two pools tightening in the same hour) | the group launches two replacements as capacity allows; the evicted apps are recreated on the on-demand node as far as its memory allows (about 2.5 GB free), the rest wait, then pull their images through the NAT instance | services that fit on the on-demand node keep answering; the others return after about 5 to 10 minutes; RabbitMQ, Redis and RDS are untouched |
-| No Spot capacity for t3a.medium in any of the three zones | the Spot group stays at zero nodes until capacity returns; AWS gives no bound | only what fits on the on-demand node runs, until capacity returns or `node_instance_type` is changed and applied |
+| Interruption notice (two minutes) | EKS cordons and drains the node: its pods are evicted and recreated at once on any node with room; the instance terminates; the group, now below its minimum of 2, launches a replacement, which joins after about 2 to 3 minutes and takes the pods still `Pending` | every service and Traefik keeps answering from its on-demand replica (DP22; PDB one eviction at a time) while the evicted replica restarts (1 to 2 minutes); WebSockets held on the node drop and the browsers reconnect (DP14) |
+| Both Spot nodes reclaimed together (their two pools tightening in the same hour) | the group launches two replacements as capacity allows; the `-spot` replicas wait `Pending` (they select Spot nodes), then pull their images through the NAT instance | every service keeps answering from its on-demand replica (DP22), at reduced capacity; the Spot replicas return after about 5 to 10 minutes; RabbitMQ, Redis and RDS are untouched |
+| No Spot capacity for t3a.medium in any of the three zones | the Spot group stays at zero nodes until capacity returns; AWS gives no bound | every service runs on its on-demand replica only, until capacity returns or `node_instance_type` is changed and applied |
 
 The interruption frequency for t3a.medium here is visible only in the
 console's Spot Instance Advisor, not from the CLI. Ways to widen the odds,
@@ -418,16 +433,19 @@ applies to them.
 | --- | --- |
 | EKS control plane ($0.10/h) | 77 |
 | 2 x t3a.medium Spot (~$0.024/h each on 2026-11-09; floats, never above the $0.0472/h on-demand rate) | 37 |
-| 1 x t3a.medium on-demand ($0.0472/h), zone a, RabbitMQ and Redis | 36 |
+| 1 x on-demand node, zone a, RabbitMQ, Redis and one replica of every service: t3a.medium ($0.0472/h) on 2026-11-09, t3a.large ($0.0944/h, DP22) from 2026-11-10 | 71 |
 | NAT instance t4g.nano on-demand ($0.0053/h) + its Elastic IP ($0.005/h) | 8 |
 | Application Load Balancer ($0.0252/h plus LCU; demo traffic stays under one LCU) | 21 |
 | RDS db.t4g.micro ($0.025/h) + 20 GB gp3 ($0.138/GB-month) | 22 |
 | EBS gp3 for RabbitMQ and Redis (2 GB) + node root volumes (3 x 20 GB, $0.096/GB-month) | 6 |
 | Secrets Manager (2 secrets), ACM certificate | 1 |
-| **Total** | **~208** |
+| **Total** | **~243** |
 
 About $3 was spent on
-the k3s host before the re-platform.
+the k3s host before the re-platform, so about $246 of the $250 budget
+(DP22 raised the total from ~208). The margin is about $4: the Spot
+price floats up to the on-demand rate ($0.0472/h), which over the period
+would add up to about $35.
 
 ## Lifetime
 
