@@ -8,8 +8,10 @@
  * carries (login never issues it), and the gateway answers 404 for the
  * path from outside. Idempotent — ids with no bookmarks, or repeated
  * calls, just delete nothing — so a purge retried after a failure is safe.
- * Batch limit chosen by the tool (user-service sends 500 at a time).
- * Reviewed by: [pending]
+ * Batch limit suggested by the tool and adopted by the author (user-service
+ * sends 500 at a time). The design (D12) is the author's; no design
+ * decision was made by the tool.
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.controller;
 

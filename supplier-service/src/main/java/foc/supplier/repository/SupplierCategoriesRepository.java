@@ -22,7 +22,7 @@
  * per-row DELETE's key from a @MapsId association combined with
  * @IdClass. A bulk @Modifying @Query issues one DELETE statement
  * directly and sidesteps the per-row path entirely.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.repository;
 

@@ -26,7 +26,7 @@
  * takes the caller's id; added tests for the bookmarks-first default view
  * and the bookmarked flag. The image-URL and allow-list tests now use a
  * non-default sort so they keep exercising the search query.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.service;
 

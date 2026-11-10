@@ -4,7 +4,7 @@
  * Scope: issue #225 (N8), thrown when another bookmark request from the
  * same user is still in flight, so the cap cannot be checked safely;
  * nothing is saved. BookmarkController maps it to 409.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.exception;
 

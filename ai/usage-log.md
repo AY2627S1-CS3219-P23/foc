@@ -8384,3 +8384,86 @@ Entry template:
   was current, then to update it to the latest code.
 - **Author review:** the diagram records components already built from
   team decisions; no design changes. The author reviews via pull request.
+
+---
+
+## 2026-11-10 — Alastair Tan Choon Wei (supplier docs: align Order -> Supplier edge with the code, issue #326)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** documentation
+- **Scope:** `docs/supplier-service.mmd` (the internal validation/lookup
+  API box removed; the Order Service arrow now points at the browse/search
+  API), `docs/supplier-service.md` (that component, the Order F1.1.1 rows
+  and references removed; D6 and the browse/search component reworded to
+  say Order Service reads `GET /suppliers` for Order F8.1),
+  `docs/architecture.md` and `docs/architecture.mmd` (the Order -> Supplier
+  row and edge relabelled the same way). File-header disclosure notes added
+  to all four. The browse/search node and component also gained
+  `GET /suppliers/categories` and the optional `lat`/`lng` nearest-first
+  sort, as built (supplier-service.md and .mmd only). Docs only; no code
+  changed.
+- **Prompt(s):** "can u check and verify if supplier-service mmd is
+  accurate and as per our implementation?", "ok in a new branch, first lets
+  fix Mismatch: the Order Service -> Validation API arrow", "i believe this
+  is in implementation (pending PR approval) -> can u check?". The tool
+  first compared against a stale local branch and wrongly reported that
+  order-service never calls supplier-service; after the author's pointer it
+  found PR #322 on main (HttpSupplierLocations reads GET /suppliers) and
+  corrected the docs. The design is the order-service author's; no
+  decision or rationale drafted by the tool.
+- **Author review:** the author reviews via pull request.
+
+---
+
+## 2026-11-10 — Alastair Tan Choon Wei (supplier-service: review-line triage, issue #326)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** documentation (disclosure headers)
+- **Scope:** read the 38 `Reviewed by: [pending]` headers in
+  `supplier-service/` and the two `Reviewed by: XXX` headers in
+  `docs/supplier-service.md` / `.mmd`. Only the review line was changed, in
+  two files whose headers state the design decision was the author's and
+  record no decision made by the tool:
+  `supplier-service/src/main/java/foc/supplier/model/SupplierBookmarkId.java`
+  and `.../dto/PageResponse.java` (now `Reviewed by: Alastair Tan Choon
+  Wei`). The other 38 files were left unchanged and listed for the author
+  to review manually.
+- **Prompt(s):** "help me review and check all these Reviewed by: [pending]
+  or XXX files. if the disclosure states that it is all 100% team or user
+  decisions ... change the Reviewed by to my name ... flag out all files
+  that contains AI decisions". No code changed.
+- **Author review:** the author reviews the flagged files manually and the
+  two changed lines via pull request.
+- **Follow-up (same day):** at the author's instruction, the three headers
+  that said a detail was "chosen by"/"left to" the tool, or "suggested"
+  by it (`PurgeController.java`, `SupplierBookmarks.java`,
+  `BookmarkLock.java`), were reworded to say the tool only suggested it and
+  the author adopted it (D12, D11/D13, D14), and their review line set to
+  Alastair Tan Choon Wei. The original wording about who proposed each
+  detail was kept, not removed.
+- **Follow-up 2 (same day):** at the author's instruction, `Reviewed by:
+  [pending]` was replaced with `Reviewed by: Alastair Tan Choon Wei` in the
+  remaining 33 `supplier-service/` files whose headers do not attribute a
+  decision to the tool (the author attests to reviewing them). Only that
+  line changed in each. The two `Reviewed by: XXX` lines in
+  `docs/supplier-service.md` and `.mmd` were left, since their headers
+  record D1-D8 as AI proposals pending sign-off.
+- **Follow-up 3 (same day):** at the author's instruction,
+  `docs/supplier-service.mmd` gained the API Gateway node: web traffic via
+  `/api/supplier/**`, the gateway's 404 for `/api/supplier/purge`, and the
+  User Service and Order Service calls shown as direct. Transcribed from
+  `gateway/nginx.conf`, `SupplierBookmarkCleanupClient` and order-service's
+  `application.yaml`; the author chose to show it. No code changed.
+- **Follow-up 4 (same day):** at the author's instruction,
+  `supplier-service/README.md` was rewritten from "Scaffold only for now"
+  to describe the implemented service (endpoint table read from
+  `SupplierController`, `BookmarkController`, `PurgeController` and
+  `SecurityConfig`; configuration variables; Docker note for the NFR
+  tests). Docs only; no decision made by the tool.
+- **Follow-up 5 (same day):** at the author's instruction, two new sequence
+  diagrams were added, `docs/supplier-service-bookmark-add.mmd` (D10, D14:
+  PUT /suppliers/{id}/bookmark) and `docs/supplier-service-bookmark-purge.mmd`
+  (D12: account-purge cleanup), with a pointer line in
+  `docs/supplier-service.md`. Transcribed from `BookmarkService`,
+  `BookmarkLock`, `SecurityConfig`, `PurgeController`, user-service's
+  `AccountPurgeScheduler`, `SupplierBookmarkCleanupClient` and `JwtIssuer`,
+  and `gateway/nginx.conf`. Both rendered with mermaid-cli to check they
+  parse. No decision made by the tool.

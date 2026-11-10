@@ -8,10 +8,11 @@
  * serves the per-user list and count); supplier_id is a foreign key with a DB-level
  * ON DELETE CASCADE (D11); bookmarked_at orders the list, most recent
  * first (D13). user_id has no FK because users live in user-service.
- * Table/column names were left to the tool and follow the Suppliers /
- * SupplierCategories entities. The schema comes from ddl-auto: update,
+ * Table/column names were suggested by the tool, following the Suppliers /
+ * SupplierCategories entities, and adopted by the author. No design
+ * decision was made by the tool. The schema comes from ddl-auto: update,
  * as for the other entities.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.model;
 

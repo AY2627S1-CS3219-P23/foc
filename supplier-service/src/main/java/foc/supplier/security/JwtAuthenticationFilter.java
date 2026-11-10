@@ -15,7 +15,7 @@
  * escaping the catch below and surfacing as an unhandled 500 instead of
  * the intended 401. Fixed by catching IllegalArgumentException too and
  * trimming the token, matching user-service's merged filter.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.security;
 

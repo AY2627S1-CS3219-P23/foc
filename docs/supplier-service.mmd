@@ -15,16 +15,27 @@ title: "FoC — Supplier Service Component Diagram"
 %% 2026-10-26 (Claude Code, Sonnet 5.5): internal purge API and the User
 %% Service's call to it added (D12); table name in the DB label.
 %% Transcription only.
-%% Reviewed by: XXX
+%% 2026-11-10 (Claude Code, Sonnet 5.5), issue #326: the internal
+%% validation/lookup API box removed - no such endpoint exists; order-
+%% service reads pickup coordinates from the existing GET /suppliers
+%% (PR #322, Order F8.1), so the Order Service arrow now points at the
+%% browse/search API. Transcription only.
+%% 2026-11-10, issue #326: browse/search node gains GET /suppliers/categories
+%% and the optional lat/lng nearest-first sort (as built). Transcription only.
+%% 2026-11-10, issue #326: API Gateway node added - web traffic reaches the
+%% service through /api/supplier/**, the gateway answers 404 for
+%% /api/supplier/purge, and the User and Order Service calls bypass it (as
+%% built; docs/gateway.md). Transcription only.
+%% Reviewed by: Alastair Tan Choon Wei
 flowchart TB
     WEB["Web App<br/>(web/)"]
+    GATEWAY["API Gateway<br/>(gateway/) — /api/supplier/**"]
     ORDER_SVC["Order Service<br/>(external)"]
     USER_SVC["User Service<br/>(external)"]
 
     subgraph SUP["Supplier Service"]
-        API["Browse/search REST API<br/>F1.2, F1.2.1, F2.1, F2.2, F2.2.1<br/>bookmarked flag + default order — D13, N8.3-N8.4"]
+        API["Browse/search REST API<br/>F1.2, F1.2.1, F2.1, F2.2, F2.2.1; GET /suppliers/categories<br/>nearest-first when lat + lng are sent<br/>bookmarked flag + default order — D13, N8.3-N8.4"]
         ADMIN_API["Admin CRUD REST API<br/>JWT role-gated (D2) — F1.1-F1.1.4"]
-        VALID_API["Internal validation/lookup API<br/>D6 — serves Order F1.1.1, Order F8.1"]
         BOOKMARK_API["Bookmark REST API<br/>JWT, per-user — N8.1-N8.4, D10, D14"]
         PURGE_API["Internal purge API<br/>SERVICE role only — D12, N8.5"]
         SEED["Seed loader<br/>issue #102"]
@@ -32,15 +43,16 @@ flowchart TB
 
     SUP_DB[("Supplier DB<br/>PostgreSQL — D1<br/>suppliers, supplier_categories, supplier_bookmarks")]
 
-    WEB -->|"REST/JSON: browse, search, filter"| API
-    WEB -->|"REST/JSON: admin CRUD"| ADMIN_API
-    WEB -->|"REST/JSON: bookmark, list bookmarks"| BOOKMARK_API
-    USER_SVC -->|"REST/JSON: remove purged accounts' bookmarks<br/>(account-purge job, SERVICE token) — D12"| PURGE_API
-    ORDER_SVC -->|"REST/JSON: validate pickup location<br/>(F1.1.1); get coordinates (F8.1)"| VALID_API
+    WEB -->|"REST/JSON via /api/supplier/**"| GATEWAY
+    GATEWAY -->|"browse, search, filter"| API
+    GATEWAY -->|"admin CRUD"| ADMIN_API
+    GATEWAY -->|"bookmark, list bookmarks"| BOOKMARK_API
+    GATEWAY -.-x|"/api/supplier/purge answers 404,<br/>never proxied (D12)"| PURGE_API
+    USER_SVC -->|"REST/JSON: remove purged accounts' bookmarks<br/>(account-purge job, direct over the compose network,<br/>SERVICE token) — D12"| PURGE_API
+    ORDER_SVC -->|"REST/JSON, direct (not via the gateway): GET /suppliers<br/>with the caller's token, pickup coordinates for the 1 km check (Order F8.1, D6)"| API
 
     API ---|"Spring Data JPA"| SUP_DB
     ADMIN_API ---|"Spring Data JPA"| SUP_DB
-    VALID_API ---|"Spring Data JPA"| SUP_DB
     BOOKMARK_API ---|"Spring Data JPA"| SUP_DB
     PURGE_API ---|"Spring Data JPA"| SUP_DB
     SEED -.->|"on first startup"| SUP_DB

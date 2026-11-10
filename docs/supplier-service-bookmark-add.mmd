@@ -1,0 +1,51 @@
+---
+title: "FoC — Supplier Service: add a bookmark (N8, D10, D14)"
+---
+%% AI-assisted (CS3219 AI Usage Policy disclosure):
+%% Tool: Claude Code (Sonnet 5.5), 2026-11-10, issue #326.
+%% Scope: sequence diagram of PUT /suppliers/{id}/bookmark, transcribed from
+%% BookmarkController, BookmarkService and BookmarkLock and from the
+%% author's decisions D10 (cap of 5, 409) and D14 (per-user advisory lock,
+%% 409 "too fast", not retried) in docs/supplier-service.md. Transcription
+%% only; no design decision made by the tool.
+%% Author review: Alastair Tan Choon Wei to review via pull request.
+sequenceDiagram
+    autonumber
+    actor U as Signed-in user
+    participant W as Web App
+    participant G as API Gateway
+    participant B as Bookmark API (BookmarkService)
+    participant L as BookmarkLock
+    participant DB as Supplier DB (PostgreSQL)
+
+    U->>W: click the bookmark flag on a supplier
+    W->>G: PUT /api/supplier/suppliers/{id}/bookmark (bearer JWT)
+    G->>B: PUT /suppliers/{id}/bookmark
+    Note over B: user id = verified JWT subject,<br/>never taken from the request
+    B->>DB: find supplier by id
+    alt supplier does not exist
+        B-->>W: 404 problem+json
+    else supplier exists
+        Note over B,DB: one transaction from here
+        B->>L: tryLock(userId)
+        L->>DB: SELECT pg_try_advisory_xact_lock(userId)
+        alt lock not acquired (parallel add by the same user)
+            B-->>W: 409 "You are bookmarking too fast, please try again."<br/>(nothing saved, not retried, D14)
+        else lock acquired
+            B->>DB: find bookmark (userId, supplierId) and count the user's bookmarks
+            alt already bookmarked
+                B-->>W: 200 existing bookmark, count unchanged<br/>(no-op, does not count against the cap)
+            else count is already 5
+                B-->>W: 409 "You have reached the limit of 5 bookmarks." (D10)
+            else room left
+                B->>DB: insert bookmark and flush
+                alt foreign key violation (supplier deleted since the lookup)
+                    B-->>W: 404 problem+json
+                else saved
+                    B-->>W: 200 {supplierId, bookmarked, bookmarkedAt, count}
+                end
+            end
+        end
+        Note over B,DB: commit or rollback releases the advisory lock
+    end
+    W-->>U: star shown, or the error message

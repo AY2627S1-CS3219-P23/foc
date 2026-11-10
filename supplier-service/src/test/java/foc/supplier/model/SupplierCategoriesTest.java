@@ -3,7 +3,7 @@
  * Tool: Claude Code (Sonnet 5), 2026-10-05.
  * Scope: unit tests for SupplierCategories.normalizeCategory (issue #160 —
  * case normalisation of category names).
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.model;
 

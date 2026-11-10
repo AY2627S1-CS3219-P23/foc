@@ -78,7 +78,7 @@
  * location, name-ascending or unsorted) it lists the caller's bookmarks
  * first, newest first, and every response carries the `bookmarked` flag.
  * Any other sort or filter keeps its own order.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.service;
 

@@ -5,7 +5,7 @@
  * user is the verified JWT subject and is never taken from the request,
  * so one user cannot read or change another's bookmarks. Errors are
  * RFC 9457 problem+json like the rest of the service.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.controller;
 

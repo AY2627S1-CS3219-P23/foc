@@ -4,7 +4,7 @@
  * Scope: 403 problem+json responses for issue #106, the counterpart to
  * RestAuthEntryPoint. Triggered when an authenticated caller's role
  * doesn't satisfy a route's role gate (design doc D2).
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.security;
 

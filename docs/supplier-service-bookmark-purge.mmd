@@ -1,0 +1,45 @@
+---
+title: "FoC — Supplier Service: bookmark cleanup on account purge (N8.5, D12)"
+---
+%% AI-assisted (CS3219 AI Usage Policy disclosure):
+%% Tool: Claude Code (Sonnet 5.5), 2026-11-10, issue #326.
+%% Scope: sequence diagram of the account-purge bookmark cleanup, transcribed
+%% from user-service's AccountPurgeScheduler, SupplierBookmarkCleanupClient
+%% and JwtIssuer, supplier-service's SecurityConfig, PurgeController and
+%% BookmarkService, gateway/nginx.conf, and the author's decision D12 in
+%% docs/supplier-service.md (service token, gateway 404, all or nothing,
+%% retried on the next run). Transcription only; no design decision made
+%% by the tool.
+%% Author review: Alastair Tan Choon Wei to review via pull request.
+sequenceDiagram
+    autonumber
+    participant P as User Service<br/>(AccountPurgeScheduler)
+    participant UDB as User DB
+    participant C as SupplierBookmarkCleanupClient
+    participant S as Supplier Service<br/>(PurgeController)
+    participant SDB as Supplier DB
+    participant G as API Gateway
+    actor X as Caller outside the platform
+
+    Note over P: scheduled purge run
+    P->>UDB: read ids of accounts deleted before the cutoff<br/>(past the 30-day recovery window)
+    alt no condemned accounts
+        Note over P: nothing to clean, go to the account purge below
+    else some condemned accounts
+        P->>C: purgeBookmarks(ids)
+        loop each batch of up to 500 ids
+            C->>C: issueServiceToken() (role SERVICE, 1 minute)
+            C->>S: POST /purge/bookmarks {userIds} + SERVICE token<br/>(direct over the compose network, not via the gateway)
+            Note over S: SecurityConfig: /purge/** requires the SERVICE role,<br/>a login token (USER, ADMIN, OWNER) gets 403, none gets 401
+            S->>SDB: delete every bookmark of these user ids<br/>(idempotent, safe to repeat)
+            S-->>C: 200 {deleted}
+        end
+    end
+    alt every batch succeeded
+        P->>UDB: in one transaction delete the accounts and their dependents,<br/>and write the user.purged events
+    else a call failed or timed out (5 s connect, 15 s read)
+        Note over P: error logged, no account deleted in this run (all or nothing),<br/>the accounts and their bookmarks stay and the next run tries again
+    end
+
+    X->>G: POST /api/supplier/purge/bookmarks
+    G-->>X: 404 (the route is never proxied to the Supplier Service)

@@ -20,7 +20,7 @@
  * /suppliers/{id}/bookmark open to any authenticated user, ahead of the
  * admin rule that would otherwise cover them. /purge/** requires the
  * SERVICE role (the account-purge cleanup, D12).
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.config;
 

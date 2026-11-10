@@ -4,7 +4,7 @@
  * Scope: issue #225 (N8), GET /bookmarks body: the caller's own bookmarks,
  * newest first, with their count and the per-user cap so the web client
  * never hard-codes 5.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.dto;
 

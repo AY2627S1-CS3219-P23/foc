@@ -10,7 +10,7 @@
  * recent first) only in the default view. The PostgreSQL advisory lock is
  * replaced by a mock, since H2 has no such function; the lock itself was
  * checked against the compose database.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.controller;
 

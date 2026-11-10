@@ -12,7 +12,7 @@
  * creatingWithAMissingLatitudeReturns400, pinning SupplierRequest's new
  * @NotNull/@DecimalMin/@DecimalMax on latitude/longitude — the form
  * previously had no way to enter coordinates and silently sent 0/0.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.controller;
 

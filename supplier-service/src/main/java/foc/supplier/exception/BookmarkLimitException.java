@@ -4,7 +4,7 @@
  * Scope: issue #225 (N8), thrown when a user already holds the maximum
  * number of bookmarks (D10); BookmarkController maps it to 409 with the
  * limit in the message.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.exception;
 
