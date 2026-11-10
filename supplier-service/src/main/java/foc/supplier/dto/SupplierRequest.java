@@ -19,7 +19,7 @@
  * silently sent 0/0 on create, so every new supplier broke "Nearest to
  * Me" sorting. Now required, range-validated server-side (defense in
  * depth; the form's own inputs enforce the same range client-side).
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.dto;
 

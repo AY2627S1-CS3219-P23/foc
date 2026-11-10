@@ -8403,3 +8403,38 @@ Entry template:
   corrected the docs. The design is the order-service author's; no
   decision or rationale drafted by the tool.
 - **Author review:** the author reviews via pull request.
+
+---
+
+## 2026-11-10 — Alastair Tan Choon Wei (supplier-service: review-line triage, issue #326)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** documentation (disclosure headers)
+- **Scope:** read the 38 `Reviewed by: [pending]` headers in
+  `supplier-service/` and the two `Reviewed by: XXX` headers in
+  `docs/supplier-service.md` / `.mmd`. Only the review line was changed, in
+  two files whose headers state the design decision was the author's and
+  record no decision made by the tool:
+  `supplier-service/src/main/java/foc/supplier/model/SupplierBookmarkId.java`
+  and `.../dto/PageResponse.java` (now `Reviewed by: Alastair Tan Choon
+  Wei`). The other 38 files were left unchanged and listed for the author
+  to review manually.
+- **Prompt(s):** "help me review and check all these Reviewed by: [pending]
+  or XXX files. if the disclosure states that it is all 100% team or user
+  decisions ... change the Reviewed by to my name ... flag out all files
+  that contains AI decisions". No code changed.
+- **Author review:** the author reviews the flagged files manually and the
+  two changed lines via pull request.
+- **Follow-up (same day):** at the author's instruction, the three headers
+  that said a detail was "chosen by"/"left to" the tool, or "suggested"
+  by it (`PurgeController.java`, `SupplierBookmarks.java`,
+  `BookmarkLock.java`), were reworded to say the tool only suggested it and
+  the author adopted it (D12, D11/D13, D14), and their review line set to
+  Alastair Tan Choon Wei. The original wording about who proposed each
+  detail was kept, not removed.
+- **Follow-up 2 (same day):** at the author's instruction, `Reviewed by:
+  [pending]` was replaced with `Reviewed by: Alastair Tan Choon Wei` in the
+  remaining 33 `supplier-service/` files whose headers do not attribute a
+  decision to the tool (the author attests to reviewing them). Only that
+  line changed in each. The two `Reviewed by: XXX` lines in
+  `docs/supplier-service.md` and `.mmd` were left, since their headers
+  record D1-D8 as AI proposals pending sign-off.

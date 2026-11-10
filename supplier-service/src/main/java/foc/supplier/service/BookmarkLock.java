@@ -12,8 +12,9 @@
  * the bare user id is the key.
  * Design (D14, docs/supplier-service.md): the advisory lock was suggested
  * during implementation and reviewed and confirmed by the author/team as
- * the accepted design (2026-10-26, PR #259 review).
- * Reviewed by: [pending]
+ * the accepted design (2026-10-26, PR #259 review). The tool only suggested
+ * it; the decision is the author's/team's.
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.service;
 

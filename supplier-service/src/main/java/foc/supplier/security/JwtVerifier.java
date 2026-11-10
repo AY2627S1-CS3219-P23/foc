@@ -12,7 +12,7 @@
  * present, so a signed token with no exp at all verified indefinitely
  * — Copilot flagged the same gap. Fixed by requiring exp explicitly,
  * mirroring user-service's merged JwtVerifier (issue #91).
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.security;
 

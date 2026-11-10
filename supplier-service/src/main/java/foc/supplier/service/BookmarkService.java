@@ -10,7 +10,7 @@
  * PR review: the insert is flushed inside add, so a supplier deleted between
  * the lookup and the insert (a foreign-key violation) answers 404 like any
  * unknown supplier instead of surfacing as a 500 at commit.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.service;
 

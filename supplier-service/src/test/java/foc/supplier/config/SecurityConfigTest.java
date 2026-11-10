@@ -24,7 +24,7 @@
  * what these two now demonstrate. Full CRUD correctness (valid bodies,
  * 400/404 on bad input) is covered separately in
  * SupplierControllerCrudTest.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.config;
 

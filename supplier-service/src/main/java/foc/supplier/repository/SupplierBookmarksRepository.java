@@ -7,7 +7,7 @@
  * than derived deletes, since a derived delete cannot build its key from a
  * @MapsId association combined with @IdClass (see
  * SupplierCategoriesRepository).
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.repository;
 

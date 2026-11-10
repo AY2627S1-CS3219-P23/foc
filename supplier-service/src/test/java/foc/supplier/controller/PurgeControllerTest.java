@@ -6,7 +6,7 @@
  * call it (a USER, ADMIN or OWNER login token is 403, no token is 401),
  * it removes every bookmark of the given users and nobody else's, it is
  * idempotent, and a malformed or oversized body is a 400.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.controller;
 

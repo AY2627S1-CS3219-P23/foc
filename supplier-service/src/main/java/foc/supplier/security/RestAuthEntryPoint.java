@@ -6,7 +6,7 @@
  * SupplierController's existing 400 handling and user-service's
  * ProblemDetail pattern). Triggered for missing or invalid bearer
  * tokens on a route that requires authentication.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.security;
 

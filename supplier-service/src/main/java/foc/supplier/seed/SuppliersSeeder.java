@@ -43,7 +43,7 @@
  * 2026-10-07 (PR #161 review, LeongWZ): a CSV row with an empty Type cell
  * (category bound to null) no longer throws an NPE that aborts startup;
  * that supplier is seeded with no categories.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.seed;
 

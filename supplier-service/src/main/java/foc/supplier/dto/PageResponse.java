@@ -5,7 +5,7 @@
  * serializing Spring Data's Page directly (which emits a verbose,
  * Pageable-shaped body) — author decision to keep the wire format
  * small and stable for the frontend to consume.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.dto;
 

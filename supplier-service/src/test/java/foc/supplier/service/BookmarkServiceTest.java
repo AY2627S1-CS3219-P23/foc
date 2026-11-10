@@ -6,7 +6,7 @@
  * per-user lock refusing a simultaneous request without saving, remove,
  * and the list's count/limit.
  * PR review: a supplier deleted between the lookup and the insert is a 404.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.service;
 

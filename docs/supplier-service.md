@@ -41,7 +41,7 @@
   Transcription only; no decision made by the tool.
   2026-11-10, issue #326: browse/search component gains GET /suppliers/categories
   and the optional lat/lng nearest-first sort, as built. Transcription only.
-  Reviewed by: XXX
+  Reviewed by: Alastair Tan Choon Wei
 -->
 
 # FoC Supplier Service — Architecture Design

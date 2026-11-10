@@ -36,7 +36,7 @@
  * caller's bookmarked suppliers first, most recently bookmarked first,
  * then the rest by name. The pageable must be unsorted — the ordering is
  * in the query, and Spring Data would append a Sort after it.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.repository;
 

@@ -9,7 +9,7 @@
  * rejectsTokenWithoutExpiry — jjwt only checks exp when the claim is
  * present, so a validly-signed token with none at all previously
  * verified forever.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.security;
 

@@ -4,7 +4,7 @@
  * Scope: thrown by SupplierService when a category name contains "/",
  * the delimiter of the flat Suppliers.category column, so the column and
  * the SupplierCategories rows cannot disagree.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.exception;
 

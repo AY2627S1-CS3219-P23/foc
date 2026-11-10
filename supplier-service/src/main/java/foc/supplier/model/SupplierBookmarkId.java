@@ -5,7 +5,7 @@
  * primary key (userId, supplierId), per the author's decision to use the
  * pair as the key rather than a surrogate id. Field names must match
  * SupplierBookmarks' @Id fields exactly.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.model;
 

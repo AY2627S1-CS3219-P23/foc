@@ -4,7 +4,7 @@
  * Scope: issue #225 (N8.5, D12), POST /purge/bookmarks body: the ids of
  * accounts user-service has purged. A body rather than a query string, so
  * a long list cannot run into URL length limits.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.dto;
 

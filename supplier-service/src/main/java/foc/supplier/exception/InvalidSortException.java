@@ -5,7 +5,7 @@
  * names a property that either doesn't exist on the `Suppliers` entity
  * or isn't meant to be sortable — see SupplierService for why this
  * needs to be caught before Spring Data ever sees the Sort.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.exception;
 

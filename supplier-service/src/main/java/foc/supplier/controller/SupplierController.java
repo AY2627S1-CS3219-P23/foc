@@ -40,7 +40,7 @@
  * 2026-10-26 (PR #259 review, Copilot): added a 401 handler for
  * NumberFormatException — a non-numeric JWT subject (e.g. a SERVICE
  * token) reaching the list is rejected, mirroring BookmarkController.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.controller;
 

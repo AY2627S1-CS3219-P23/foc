@@ -5,7 +5,7 @@
  * supplier id that doesn't exist (issue #104), mirroring
  * InvalidSortException's plain-RuntimeException-plus-controller-handler
  * pattern already established in this service.
- * Reviewed by: [pending]
+ * Reviewed by: Alastair Tan Choon Wei
  */
 package foc.supplier.exception;
 
