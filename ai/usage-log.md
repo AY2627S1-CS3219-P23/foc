@@ -8376,3 +8376,27 @@ Entry template:
   was current, then to update it to the latest code.
 - **Author review:** the diagram records components already built from
   team decisions; no design changes. The author reviews via pull request.
+
+---
+
+## 2026-11-10 — Alastair Tan Choon Wei (supplier docs: align Order -> Supplier edge with the code, issue #326)
+- **Tool:** Claude Code (Sonnet 5.5)
+- **Mode:** documentation
+- **Scope:** `docs/supplier-service.mmd` (the internal validation/lookup
+  API box removed; the Order Service arrow now points at the browse/search
+  API), `docs/supplier-service.md` (that component, the Order F1.1.1 rows
+  and references removed; D6 and the browse/search component reworded to
+  say Order Service reads `GET /suppliers` for Order F8.1),
+  `docs/architecture.md` and `docs/architecture.mmd` (the Order -> Supplier
+  row and edge relabelled the same way). File-header disclosure notes added
+  to all four. Docs only; no code changed.
+- **Prompt(s):** "can u check and verify if supplier-service mmd is
+  accurate and as per our implementation?", "ok in a new branch, first lets
+  fix Mismatch: the Order Service -> Validation API arrow", "i believe this
+  is in implementation (pending PR approval) -> can u check?". The tool
+  first compared against a stale local branch and wrongly reported that
+  order-service never calls supplier-service; after the author's pointer it
+  found PR #322 on main (HttpSupplierLocations reads GET /suppliers) and
+  corrected the docs. The design is the order-service author's; no
+  decision or rationale drafted by the tool.
+- **Author review:** the author reviews via pull request.

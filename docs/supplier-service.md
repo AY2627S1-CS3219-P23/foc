@@ -34,6 +34,11 @@
   struck and D15 added, transcribing the team's decision (relayed by
   Alastair Tan Choon Wei) not to implement caching; the wording of D15
   is the team's. Transcription only; no decision made by the tool.
+  2026-11-10 (Claude Code, Sonnet 5.5), issue #326: the internal
+  validation/lookup API and the Order F1.1.1 references removed, D6 and
+  the Order Service call reworded, to match the code (no such endpoint;
+  order-service reads GET /suppliers for Order F8.1, PR #322).
+  Transcription only; no decision made by the tool.
   Reviewed by: XXX
 -->
 
@@ -42,9 +47,8 @@
 **Scope:** component-level design of `supplier-service/`, covering the
 finalized Supplier Service requirements (F1 supplier management, F2
 search and filtering, NFR1 performance, NFR2 capacity), and the
-requirements it serves for other services: pickup-location validation
-(Order F1.1.1) and supplier-distance lookups for the courier
-proximity rule (Order F8.1). \
+requirement it serves for another service: supplier-distance lookups
+for the courier proximity rule (Order F8.1). \
 Companion diagram: [`supplier-service.mmd`](supplier-service.mmd) \
 High-level system architecture: [`architecture.md`](architecture.md)
 
@@ -84,7 +88,6 @@ High-level system architecture: [`architecture.md`](architecture.md)
 
 | ID | Requirement | Owning service |
 | --- | --- | --- |
-| Order F1.1.1 | Pickup location must be a supplier/location from the Supplier service | Order Service |
 | Order F8.1 | A courier cannot hold two requests whose suppliers are more than 1 km (straight-line) apart | Order Service |
 
 `Order F8.1` is why supplier records need real, precise latitude/longitude — it's not just a display detail, it's the input to a distance calculation Order Service depends on.
@@ -98,7 +101,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D3 | Categories | Many-to-many: a `supplier_categories` join table, not a single field, since F1.1.1 says "categories" (plural) | Grounded in F1.1.1 wording |
 | D4 | Zone modeling | ~~Zone as a lookup table, not a hardcoded enum, for configurability~~ | **Removed (2026-09-27):** team dropped the zone feature |
 | D5 | Deletion | **Team decision (2026-09-29):** hard delete — `DELETE /suppliers/{id}` removes the row. F1.1.3's "delete suppliers" is implemented literally; the team accepted that a supplier referenced by past/active orders loses its detail in order history as a consequence, rather than adding a `status: ACTIVE/INACTIVE` soft-delete column. | **Decided** |
-| D6 | Distance support | Supplier records store `latitude`/`longitude`; Supplier Service exposes an endpoint (or the raw coordinates) Order Service can use to compute the F8.1 distance check | Grounded in Order F8.1 |
+| D6 | Distance support | Supplier records store `latitude`/`longitude`; Order Service reads the coordinates through the existing public `GET /suppliers` (the caller's own bearer token, no dedicated supplier endpoint) to compute the F8.1 distance check | **Decided** (Order Service author's decision, as built in PR #322). The earlier proposal of a dedicated validation/lookup endpoint was not implemented (issue #326) |
 | D7 | Indexing | Not required at NFR2.1's revised 1,000-supplier target — a sequential scan comfortably clears NFR1.1's 5-second bound at that size, including for the search endpoint's leading-wildcard `LIKE '%...%'` query, which a standard btree index can't accelerate regardless (would need a trigram/GIN index, only worth the added complexity at a much larger row count). Revisit if NFR2.1 is raised again. | Revised 2026-09-27 (was: index on `name`/`category` to hit the original 100,000-row NFR2.1 target) |
 | D8 | Seeding | Initial data load is an implementation task (tracked as issue #102 — CSV loader), not a numbered FR in the finalized brief | Confirmed: not in scope as an FR |
 | D9 | Bookmark ownership | **Decided (2026-10-19, Alastair Tan Choon Wei):** the Supplier Service owns the bookmark table, so a supplier's deletion (D5) can remove its bookmarks in the same service. No gateway change: endpoints sit under the existing `/api/supplier/**` route. | **Decided** |
@@ -113,9 +116,8 @@ High-level system architecture: [`architecture.md`](architecture.md)
 
 | Component | Responsibility |
 | --- | --- |
-| **Browse/search REST API** | List (F1.2), details (F1.2.1), search by name (F2.1), filter by category (F2.2), empty-state (F2.2.1); also returns each supplier's `bookmarked` flag for the caller and applies the bookmarks-first default order (D13, N8.3-N8.4) |
+| **Browse/search REST API** | List (F1.2), details (F1.2.1), search by name (F2.1), filter by category (F2.2), empty-state (F2.2.1); also returns each supplier's `bookmarked` flag for the caller and applies the bookmarks-first default order (D13, N8.3-N8.4); Order Service also calls it for pickup coordinates (Order F8.1, D6) |
 | **Admin CRUD REST API** (JWT role-gated, D2) | Create/read/update/delete on suppliers (F1.1–F1.1.4) |
-| **Internal validation/lookup API** | For Order Service: confirm a supplier exists (Order F1.1.1) and return its coordinates for distance checks (Order F8.1, D6) |
 | **Bookmark REST API** (JWT, per-user; N8) | List, add and remove the caller's own bookmarks and enforce the cap (D10) and the parallel-add guard (D14). The caller's id comes from the verified JWT, never from the request. Endpoints in the Bookmark API section below |
 | **Internal purge API** (`SERVICE` role only; N8.5) | Removes every bookmark of the accounts the User Service has purged (D12). Not a user endpoint: no login token can call it, and the gateway returns `404` for it |
 | **Seed loader** (issue #102) | Parses the supplier seed CSV and populates the database on first startup |
