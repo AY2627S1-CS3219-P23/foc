@@ -28,7 +28,7 @@
 # Leong Wei Zhi, options Q&A): the Service moved to services.yaml; this
 # Deployment is the base that pools/spot (-spot, HPA 1 to 2) and
 # pools/stable (-stable, one replica on the on-demand node) render;
-# CPU request 150m (was 200m).
+# CPU request 100m (was 200m).
 # Author review: Leong Wei Zhi, pending pull request review.
 ---
 # no replicas: pools/stable sets 1, and the HorizontalPodAutoscaler in
@@ -136,9 +136,10 @@ spec:
               value: "0 0 3 * * *"
           resources:
             requests:
-              # 150m since DP22: one replica of every service shares the
-              # on-demand node's 2 vCPU with RabbitMQ, Redis and Traefik
-              cpu: 150m
+              # 100m since DP22: one replica of every service shares the
+              # on-demand node's 2 vCPU with RabbitMQ, Redis, Traefik and
+              # the cluster's own pods (about 0.7 vCPU)
+              cpu: 100m
               memory: 384Mi
             limits:
               memory: 768Mi
