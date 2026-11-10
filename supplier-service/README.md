@@ -9,6 +9,8 @@
   from the controllers and SecurityConfig). Docs only; no decision made
   by the tool. Author review: Alastair Tan Choon Wei to review via pull
   request.
+  2026-11-10 (Claude Code, Opus 5.5), PR #328 review: the JWT line
+  now notes the open /actuator/health. Author review: Leong Wei Zhi.
 -->
 
 # Supplier Service
@@ -24,8 +26,9 @@ JPA). The database is seeded from the course CSV
 
 ## Endpoints
 
-Reached through the gateway as `/api/supplier/**`. Every route needs a
-bearer JWT (HS256, the shared `JWT_SECRET`); errors are problem+json.
+Reached through the gateway as `/api/supplier/**`. Every route below
+needs a bearer JWT (HS256, the shared `JWT_SECRET`); only
+`/actuator/health` is open. Errors are problem+json.
 
 | Endpoint | Who | Purpose |
 | --- | --- | --- |

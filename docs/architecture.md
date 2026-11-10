@@ -69,6 +69,8 @@
   Supplier Service row reworded to what PR #322 built (GET /suppliers for
   Order F8.1); the Order F1.1.1 pickup validation is no longer claimed.
   Transcription only.
+  2026-11-10 (Claude Code, Opus 5.5), PR #328 review: that row no
+  longer calls GET /suppliers public (it needs a JWT). Wording only.
 -->
 
 # Favours on Campus (FoC) — High-Level Service Architecture
@@ -164,7 +166,7 @@ TBD = to be decided.
 | Web → Rating Service (via gateway) | sync REST | submit the one immutable rating per direction of a completed request; the caller's own rating; any user's rating summary + paged review history for the public profile; report a user, admins list reports (see [`rating-service.md`](rating-service.md)) | N1.1–N1.4; User F8.1 |
 | Notification Service → Web (socket via gateway) | async WebSocket (STOMP) push, per-user destinations | request state-change updates to requester and assigned courier within 5 seconds; the system's **only standing connection** — all other Web ↔ service traffic is stateless REST (see [`notification-service.md`](notification-service.md), "Connection topology") | Notif F1.2; Order NFR1.1–1.2 |
 | User Service → Email Provider | async email (Gmail SMTP; a Mailpit container is the local dev/demo target) | OTP for sign-up verification, email-change confirmation, password reset | User F1.1.3, F2.1.1, F2.1.3, F4.2 |
-| Order Service → Supplier Service | sync REST | read supplier coordinates from the public `GET /suppliers` (the caller's token) for the 1 km acceptance-proximity check | Order F8.1 |
+| Order Service → Supplier Service | sync REST | read supplier coordinates from the browse endpoint `GET /suppliers` (authenticated, with the caller's token) for the 1 km acceptance-proximity check | Order F8.1 |
 | Order Service → Broker (RabbitMQ) → Credit Service | **async events** | reserve the reward on `request.submitted`, transfer on `request.completed`, release on `request.cancelled` / `request.expired`; repeated events for the same request processed once (see [`credit-service.md`](credit-service.md)) | Credit F2.1, F2.1.1, F3.1, F5.1, NFR1.1, NFR2.2, NFR2.2.1; **M6** |
 | Credit Service → Broker (RabbitMQ) → Order Service | **async events** | reservation reply: `credit.reserved` moves the request from pending to created, `credit.reservation-rejected` moves it to rejected when the available balance is insufficient (see [`credit-service.md`](credit-service.md), D7–D8) | Credit F2.1.3; Order F1.1.4; **M6** |
 | User Service → Broker (RabbitMQ) → Credit Service | **async events** | `user.created` when a verified sign-up inserts the user row opens the credit account (get-or-create stays the fallback); `user.purged` for each account the day-31 purge deletes closes it, moving its balance to the common pool so redistribution skips it (see [`credit-service.md`](credit-service.md), D14) | Credit F1.1, F6.1.1; User F3.1.3 |

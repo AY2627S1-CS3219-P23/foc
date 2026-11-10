@@ -11,6 +11,9 @@ title: "FoC — Supplier Service: bookmark cleanup on account purge (N8.5, D12)"
 %% retried on the next run). Transcription only; no design decision made
 %% by the tool.
 %% Author review: Alastair Tan Choon Wei to review via pull request.
+%% 2026-11-10 (Claude Code, Opus 5.5), PR #328 review: failure branch
+%% corrected (earlier batches stay committed), network label covers EKS.
+%% Transcription only. Author review: Leong Wei Zhi.
 sequenceDiagram
     autonumber
     participant P as User Service<br/>(AccountPurgeScheduler)
@@ -29,7 +32,7 @@ sequenceDiagram
         P->>C: purgeBookmarks(ids)
         loop each batch of up to 500 ids
             C->>C: issueServiceToken() (role SERVICE, 1 minute)
-            C->>S: POST /purge/bookmarks {userIds} + SERVICE token<br/>(direct over the compose network, not via the gateway)
+            C->>S: POST /purge/bookmarks {userIds} + SERVICE token<br/>(direct, service to service over the compose network /<br/>cluster DNS, not via the gateway)
             Note over S: SecurityConfig: /purge/** requires the SERVICE role,<br/>a login token (USER, ADMIN, OWNER) gets 403, none gets 401
             S->>SDB: delete every bookmark of these user ids<br/>(idempotent, safe to repeat)
             S-->>C: 200 {deleted}
@@ -38,7 +41,7 @@ sequenceDiagram
     alt every batch succeeded
         P->>UDB: in one transaction delete the accounts and their dependents,<br/>and write the user.purged events
     else a call failed or timed out (5 s connect, 15 s read)
-        Note over P: error logged, no account deleted in this run (all or nothing),<br/>the accounts and their bookmarks stay and the next run tries again
+        Note over P: error logged, no account deleted in this run, later batches not sent.<br/>Bookmarks of batches already answered stay deleted (each batch commits on its own),<br/>the rest stay, and the next run retries every account (the delete is idempotent)
     end
 
     X->>G: POST /api/supplier/purge/bookmarks

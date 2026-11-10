@@ -41,6 +41,8 @@
   Transcription only; no decision made by the tool.
   2026-11-10, issue #326: browse/search component gains GET /suppliers/categories
   and the optional lat/lng nearest-first sort, as built. Transcription only.
+  2026-11-10 (Claude Code, Opus 5.5), PR #328 review: D6 no longer
+  calls GET /suppliers public (it needs a JWT). Wording only.
   Reviewed by: Alastair Tan Choon Wei
 -->
 
@@ -103,7 +105,7 @@ High-level system architecture: [`architecture.md`](architecture.md)
 | D3 | Categories | Many-to-many: a `supplier_categories` join table, not a single field, since F1.1.1 says "categories" (plural) | Grounded in F1.1.1 wording |
 | D4 | Zone modeling | ~~Zone as a lookup table, not a hardcoded enum, for configurability~~ | **Removed (2026-09-27):** team dropped the zone feature |
 | D5 | Deletion | **Team decision (2026-09-29):** hard delete — `DELETE /suppliers/{id}` removes the row. F1.1.3's "delete suppliers" is implemented literally; the team accepted that a supplier referenced by past/active orders loses its detail in order history as a consequence, rather than adding a `status: ACTIVE/INACTIVE` soft-delete column. | **Decided** |
-| D6 | Distance support | Supplier records store `latitude`/`longitude`; Order Service reads the coordinates through the existing public `GET /suppliers` (the caller's own bearer token, no dedicated supplier endpoint) to compute the F8.1 distance check | **Decided** (Order Service author's decision, as built in PR #322). The earlier proposal of a dedicated validation/lookup endpoint was not implemented (issue #326) |
+| D6 | Distance support | Supplier records store `latitude`/`longitude`; Order Service reads the coordinates through the existing browse endpoint `GET /suppliers` (authenticated: the caller's own bearer token, no dedicated supplier endpoint) to compute the F8.1 distance check | **Decided** (Order Service author's decision, as built in PR #322). The earlier proposal of a dedicated validation/lookup endpoint was not implemented (issue #326) |
 | D7 | Indexing | Not required at NFR2.1's revised 1,000-supplier target — a sequential scan comfortably clears NFR1.1's 5-second bound at that size, including for the search endpoint's leading-wildcard `LIKE '%...%'` query, which a standard btree index can't accelerate regardless (would need a trigram/GIN index, only worth the added complexity at a much larger row count). Revisit if NFR2.1 is raised again. | Revised 2026-09-27 (was: index on `name`/`category` to hit the original 100,000-row NFR2.1 target) |
 | D8 | Seeding | Initial data load is an implementation task (tracked as issue #102 — CSV loader), not a numbered FR in the finalized brief | Confirmed: not in scope as an FR |
 | D9 | Bookmark ownership | **Decided (2026-10-19, Alastair Tan Choon Wei):** the Supplier Service owns the bookmark table, so a supplier's deletion (D5) can remove its bookmarks in the same service. No gateway change: endpoints sit under the existing `/api/supplier/**` route. | **Decided** |

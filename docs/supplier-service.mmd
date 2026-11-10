@@ -26,6 +26,8 @@ title: "FoC — Supplier Service Component Diagram"
 %% service through /api/supplier/**, the gateway answers 404 for
 %% /api/supplier/purge, and the User and Order Service calls bypass it (as
 %% built; docs/gateway.md). Transcription only.
+%% 2026-11-10 (Claude Code, Opus 5.5), PR #328 review: User Service
+%% edge label covers the EKS path too. Transcription only.
 %% Reviewed by: Alastair Tan Choon Wei
 flowchart TB
     WEB["Web App<br/>(web/)"]
@@ -48,7 +50,7 @@ flowchart TB
     GATEWAY -->|"admin CRUD"| ADMIN_API
     GATEWAY -->|"bookmark, list bookmarks"| BOOKMARK_API
     GATEWAY -.-x|"/api/supplier/purge answers 404,<br/>never proxied (D12)"| PURGE_API
-    USER_SVC -->|"REST/JSON: remove purged accounts' bookmarks<br/>(account-purge job, direct over the compose network,<br/>SERVICE token) — D12"| PURGE_API
+    USER_SVC -->|"REST/JSON: remove purged accounts' bookmarks<br/>(account-purge job, direct over the compose network /<br/>cluster DNS, SERVICE token) — D12"| PURGE_API
     ORDER_SVC -->|"REST/JSON, direct (not via the gateway): GET /suppliers<br/>with the caller's token, pickup coordinates for the 1 km check (Order F8.1, D6)"| API
 
     API ---|"Spring Data JPA"| SUP_DB

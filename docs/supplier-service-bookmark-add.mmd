@@ -9,6 +9,8 @@ title: "FoC — Supplier Service: add a bookmark (N8, D10, D14)"
 %% 409 "too fast", not retried) in docs/supplier-service.md. Transcription
 %% only; no design decision made by the tool.
 %% Author review: Alastair Tan Choon Wei to review via pull request.
+%% 2026-11-10 (Claude Code, Opus 5.5), PR #328 review: transaction note
+%% moved above the supplier lookup. Author review: Leong Wei Zhi.
 sequenceDiagram
     autonumber
     actor U as Signed-in user
@@ -22,11 +24,11 @@ sequenceDiagram
     W->>G: PUT /api/supplier/suppliers/{id}/bookmark (bearer JWT)
     G->>B: PUT /suppliers/{id}/bookmark
     Note over B: user id = verified JWT subject,<br/>never taken from the request
+    Note over B,DB: one transaction for the whole call (@Transactional add)
     B->>DB: find supplier by id
     alt supplier does not exist
         B-->>W: 404 problem+json
     else supplier exists
-        Note over B,DB: one transaction from here
         B->>L: tryLock(userId)
         L->>DB: SELECT pg_try_advisory_xact_lock(userId)
         alt lock not acquired (parallel add by the same user)

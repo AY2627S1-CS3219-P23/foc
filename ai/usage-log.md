@@ -8459,3 +8459,27 @@ Entry template:
   `AccountPurgeScheduler`, `SupplierBookmarkCleanupClient` and `JwtIssuer`,
   and `gateway/nginx.conf`. Both rendered with mermaid-cli to check they
   parse. No decision made by the tool.
+
+---
+
+## 2026-11-10 — Leong Wei Zhi (supplier docs: PR #328 review fixes, issue #326)
+- **Tool:** Claude Code (Opus 5.5)
+- **Mode:** documentation
+- **Scope:** factual fixes from the PR #328 review, on a branch stacked on
+  `docs/326-remove-validation-api`. `docs/supplier-service-bookmark-purge.mmd`:
+  the failure branch now says batches already answered stay deleted (each
+  `/purge/bookmarks` call commits on its own, per
+  `SupplierBookmarkCleanupClient`) and later batches are not sent; the
+  network label covers the EKS cluster DNS path too (also in
+  `docs/supplier-service.mmd`). `docs/supplier-service-bookmark-add.mmd`:
+  the transaction note moved above the supplier lookup (`add` is
+  `@Transactional` at method level). `docs/supplier-service.md` D6 and the
+  `docs/architecture.md` Order -> Supplier row no longer call
+  `GET /suppliers` public (it is `.authenticated()`).
+  `supplier-service/README.md`: the JWT line notes `/actuator/health` is
+  open. Diagrams rendered with mermaid-cli to check they parse. Left for
+  the PR author and team: the `Reviewed by` sign-off of D1-D8, the removed
+  Order F1.1.1 row, D6's status, and the usage-log wording on the three
+  reworded headers.
+- **Prompt(s):** "address the latest pr comments".
+- **Author review:** Leong Wei Zhi reviews via pull request.
