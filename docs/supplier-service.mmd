@@ -22,9 +22,14 @@ title: "FoC — Supplier Service Component Diagram"
 %% browse/search API. Transcription only.
 %% 2026-11-10, issue #326: browse/search node gains GET /suppliers/categories
 %% and the optional lat/lng nearest-first sort (as built). Transcription only.
-%% Reviewed by: XXX
+%% 2026-11-10, issue #326: API Gateway node added - web traffic reaches the
+%% service through /api/supplier/**, the gateway answers 404 for
+%% /api/supplier/purge, and the User and Order Service calls bypass it (as
+%% built; docs/gateway.md). Transcription only.
+%% Reviewed by: Alastair Tan Choon Wei
 flowchart TB
     WEB["Web App<br/>(web/)"]
+    GATEWAY["API Gateway<br/>(gateway/) — /api/supplier/**"]
     ORDER_SVC["Order Service<br/>(external)"]
     USER_SVC["User Service<br/>(external)"]
 
@@ -38,11 +43,13 @@ flowchart TB
 
     SUP_DB[("Supplier DB<br/>PostgreSQL — D1<br/>suppliers, supplier_categories, supplier_bookmarks")]
 
-    WEB -->|"REST/JSON: browse, search, filter"| API
-    WEB -->|"REST/JSON: admin CRUD"| ADMIN_API
-    WEB -->|"REST/JSON: bookmark, list bookmarks"| BOOKMARK_API
-    USER_SVC -->|"REST/JSON: remove purged accounts' bookmarks<br/>(account-purge job, SERVICE token) — D12"| PURGE_API
-    ORDER_SVC -->|"REST/JSON: GET /suppliers with the caller's token,<br/>pickup coordinates for the 1 km check (Order F8.1, D6)"| API
+    WEB -->|"REST/JSON via /api/supplier/**"| GATEWAY
+    GATEWAY -->|"browse, search, filter"| API
+    GATEWAY -->|"admin CRUD"| ADMIN_API
+    GATEWAY -->|"bookmark, list bookmarks"| BOOKMARK_API
+    GATEWAY -.-x|"/api/supplier/purge answers 404,<br/>never proxied (D12)"| PURGE_API
+    USER_SVC -->|"REST/JSON: remove purged accounts' bookmarks<br/>(account-purge job, direct over the compose network,<br/>SERVICE token) — D12"| PURGE_API
+    ORDER_SVC -->|"REST/JSON, direct (not via the gateway): GET /suppliers<br/>with the caller's token, pickup coordinates for the 1 km check (Order F8.1, D6)"| API
 
     API ---|"Spring Data JPA"| SUP_DB
     ADMIN_API ---|"Spring Data JPA"| SUP_DB

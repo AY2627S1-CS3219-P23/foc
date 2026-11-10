@@ -8438,3 +8438,9 @@ Entry template:
   line changed in each. The two `Reviewed by: XXX` lines in
   `docs/supplier-service.md` and `.mmd` were left, since their headers
   record D1-D8 as AI proposals pending sign-off.
+- **Follow-up 3 (same day):** at the author's instruction,
+  `docs/supplier-service.mmd` gained the API Gateway node: web traffic via
+  `/api/supplier/**`, the gateway's 404 for `/api/supplier/purge`, and the
+  User Service and Order Service calls shown as direct. Transcribed from
+  `gateway/nginx.conf`, `SupplierBookmarkCleanupClient` and order-service's
+  `application.yaml`; the author chose to show it. No code changed.
